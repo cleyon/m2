@@ -37,6 +37,7 @@
 #           @ignore DELIM          Ignore input until line that begins with DELIM
 #           @shell DELIM [SHELL]   Read input until DELIM, send to SHELL (default /bin/sh)
 #                                    Note: input data is evaluated before being sent to shell
+#           @typeout               Print entire remainder of input literally,
 #           @warn/@echo STUFF      Send STUFF to standard error, continue
 #           @error STUFF           Send STUFF to standard error, exit 2
 #           @exit [CODE]           Stop parsing input immediately, exit CODE (default 0)
@@ -577,15 +578,19 @@ function builtin_if(    cond, op, val2, val4)
 # If delimiter is not found, return EOF marker.  Intermediate lines are
 # terminated with a newline character, but last line has it stripped
 # away.  The lines read are NOT macro-expanded; if desired, the caller
-# can invoke dosubs() on the returned buffer.
+# can invoke dosubs() on the returned buffer.  Special case if delim is
+# "" - read until end of file and return whatever is found, without error.
 function read_lines_until(delim,    buf, delim_len)
 {
     buf = ""
     delim_len = length(delim)
     while (TRUE) {
         if (readline() == EOF)
-            return EOF
-        if (substr($0, 1, delim_len) == delim)
+            if (delim_len == 0)
+                break
+            else
+                return EOF
+        if (delim_len > 0 && substr($0, 1, delim_len) == delim)
             break
         buf = buf $0 "\n"
     }
@@ -716,6 +721,16 @@ function builtin_shell(    buf, delim, save_line, save_lineno, shell)
 }
 
 
+function builtin_typeout(    buf)
+{
+    if (! currently_active())
+        return
+    buf = read_lines_until("")
+    if (length(buf) > 0)
+        print buf
+}
+
+
 function builtin_undefine(    sym)
 {
     if (NF != 2)
@@ -804,6 +819,7 @@ function process_line(read_literally,    newstring)
     else if (/^@longend([ \t]|$)/)           { builtin_longend()  }
     else if (/^@paste([ \t]|$)/)             { builtin_include()  }
     else if (/^@shell([ \t]|$)/)             { builtin_shell()    }
+    else if (/^@typeout([ \t]|$)/)           { builtin_typeout()  }
     else if (/^@undef(ine)?([ \t]|$)/)       { builtin_undefine() }
     else if (/^@(warn|echo)([ \t]|$)/)       { builtin_error()    }
 
@@ -1106,6 +1122,7 @@ BEGIN {
         dofile("-")
     else {
         for (i = 1; i < ARGC; i++) {
+            # print_stderr("Debug: ARGV[" i "]='" ARGV[i] "'")
             if (ARGV[i] ~ /^([A-Za-z_][A-Za-z0-9_]*)=(.*)/) {
                 eq = index(ARGV[i], "=")
                 name = substr(ARGV[i], 1, eq-1)

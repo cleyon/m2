@@ -13,35 +13,41 @@
 #       modified by certain "macro expressions."  The following lines
 #       define macros for subsequent processing:
 #
-#           @comment ...           Comment - line is ignored
-#           @@.../@#.../@rem ...   Same as @comment
-#           @define NAME VALUE     Set NAME to VALUE
-#           @default NAME VALUE    As @define, but only if NAME not already defined
-#           @longdef NAME          Define NAME to <lines> until @longend
-#             ...                    Don't use other @ commands inside def!
-#           @longend                 But simple @VAR@ references should be okay
 #           @append NAME MORE      Add to the body of an already defined macro
-#           @undefine NAME         Remove definition of NAME
-#           @include FILENAME      Read and process FILENAME
-#           @paste FILENAME        Read FILENAME literally, do not process any macros
-#           @if NAME               Include subsequent text if NAME != 0
-#           @unless NAME           Include subsequent text if NAME == 0 (or undefined)
-#           @if NAME OP OTHER      Test if NAME compares to OTHER (names or values)
-#           @if(not)env ENV        Test if ENV is defined in the environment (or not)
-#           @if(not)exists PATH    Test if PATH exists (or not)
-#           @if(not)in KEY ARR     Test if symbol ARR[KEY] is defined
+#           @comment ...           Comment -- line is ignored
+#           @decr NAME [N]         Subtract 1 (or N) from an already defined NAME
+#           @default NAME VALUE    As @define, but only if NAME not already defined
+#           @define NAME VALUE     Set NAME to VALUE
+#           @dump(all) [FILE]      Print (all) symbol names and definitions
+#           @echo STUFF            Same as @warn
 #           @else                  Switch to the other branch of an @if statement
-#           @fi/@endif             Terminate @if or @unless
-#           @incr/@decr NAME [N]   Add or subtract 1 (or N) from an already defined NAME
-#           @input [NAME]          Read a single line from keyboard and define NAME
-#           @ignore DELIM          Ignore input until line that begins with DELIM
-#           @shell DELIM [SHELL]   Read input until DELIM, send to SHELL (default /bin/sh)
-#                                    Note: input data is evaluated before being sent to shell
-#           @typeout               Print entire remainder of input literally,
-#           @warn/@echo STUFF      Send STUFF to standard error, continue
+#           @endif                 Terminate @if or @unless
 #           @error STUFF           Send STUFF to standard error, exit 2
 #           @exit [CODE]           Stop parsing input immediately, exit CODE (default 0)
-#           @dump [FILE]           Print defined NAMEs and their definitions
+#           @fi                    Same as @endif
+#           @if NAME               Include subsequent text if NAME is true (!= 0)
+#           @if NAME <OP> AAA      Test if NAME compares to AAA (names or values)
+#           @if(_not)_defined NAME Test if NAME is defined
+#           @if(_not)_env ENV      Test if ENV is defined in the environment (or not)
+#           @if(_not)_exists PATH  Test if PATH exists (or not)
+#           @if(_not)_in KEY ARR   Test if symbol ARR[KEY] is defined
+#           @if(n)def NAME         Same as @if_defined/@if_not_defined
+#           @ignore DELIM          Ignore input until line that begins with DELIM
+#           @include FILENAME      Read and process contents of FILENAME
+#           @incr NAME [N]         Add 1 (or N) from an already defined NAME
+#           @input [NAME]          Read a single line from keyboard and define NAME
+#           @longdef NAME          Define NAME to <...> lines until @longend
+#             ...                    Don't use other @ commands inside def!
+#           @longend                 But simple @VAR@ references should be okay
+#           @paste FILENAME        Read FILENAME literally, do not process any macros
+#           @rem ...               Same as @comment
+#           @shell DELIM [SHELL]   Read input until DELIM, send to SHELL (default /bin/sh)
+#                                    Note: input data is evaluated before being sent to shell
+#           @typeout               Print remainder of input literally, no processing
+#           @undef(ine) NAME       Remove definition of NAME
+#           @unless NAME           Include subsequent text if NAME == 0 (or undefined)
+#           @warn STUFF            Send STUFF to standard error, continue
+#           @@.../@#...            Same as @comment
 #
 #       A definition may extend across many lines by ending each line
 #       with a backslash, thus quoting the following newline.
@@ -57,9 +63,9 @@
 #       supplied when the macro is called.  The definition should refer to
 #       $1, $2, etc; $0 refers to the name of the macro name itself.
 #       Example:
-#           @define greet Hello, $1!  I send you $0ings.
+#           @define greet Hello, $1!  m2 sends you $0ings.
 #           @greet world@
-#               => Hello, world!  I send you greetings.
+#               => Hello, world!  m2 sends you greetings.
 #       You may supply more parameters than needed, but it is an error
 #       for a definition to refer to a parameter which is not supplied.
 #
@@ -84,28 +90,30 @@
 #       output (i.e., the replacement text is the empty string) and no
 #       error is generated.  (Depending on __STRICT__.)
 #
-#       The following symbols are pre-defined:
+#       Symbols that start and end with "__" (like __FOO__) are called
+#       "internal" symbols.  The following internal symbols are pre-defined;
+#       example values or defaults are shown:
 #           __DATE__               Current date (19450716)
 #           __FILE__               Current file name
-#           __GENSYMPREFIX__       Prefix for generated symbols ("g")
 #           __GENSYMCOUNT__        Count for generated symbols (0)
-#           __GID__                (effective) Groupd id
-#           __HOST__               Short host name
-#           __HOSTNAME__           FQDN host name
+#           __GENSYMPREFIX__       Prefix for generated symbols (gen)
+#           __GID__                [effective] Group id
+#           __HOST__               Short host name (myhost)
+#           __HOSTNAME__           FQDN host name (myhost.example.com)
 #           __INPUT__              The characters read by @input
 #           __LINE__               Current line number in file
 #           __NFILE__              Number of files processed (0)
 #           __STRICT__             Strict mode (TRUE)
 #           __TIME__               Current time (053000)
 #           __TIMESTAMP__          ISO 8601 timestamp (1945-07-16T05:30:00-0600)
-#           __UID__                (effective) User id
+#           __UID__                [effective] User id
 #           __USER__               Username
 #           __VERSION__            m2 version
 #
-#       Except for __INPUT__ and __STRICT__, these built-in symbols
-#       cannot be modified by the user.  The values of __DATE__,
-#       __TIME__, and __TIMESTAMP__ are fixed at the start of the
-#       program and do not change.
+#       Except for __INPUT__ and __STRICT__, internal symbols cannot be
+#       modified by the user.  The values of __DATE__, __TIME__, and
+#       __TIMESTAMP__ are fixed at the start of the program and do not
+#       change.
 #
 # ERROR MESSAGES
 #       Bad parameters [in 'XXX']
@@ -190,7 +198,7 @@
 #*****************************************************************************
 
 BEGIN {
-    version = "2.0.1"
+    version = "2.0.2"
 }
 
 
@@ -257,12 +265,19 @@ function integerp(pat)
 }
 
 
+# Internal symbols start and end with double underscores
+function symbol_internal_p(sym)
+{
+    return sym ~ /^__.*__$/
+}
+
+
 # Protected symbols cannot be changed by the user.
 function symbol_protected_p(sym)
 {
     if (sym == "__STRICT__" || sym == "__INPUT__")
         return FALSE
-    return sym ~ /^__.*__$/
+    return symbol_internal_p(sym)
 }
 
 
@@ -415,16 +430,19 @@ function builtin_define(    append_flag, sym)
 }
 
 
-function builtin_dump(    buf, cnt, definition, dumpfile, i, key, keys, sym_name)
+# @dump, @dumpall
+function builtin_dump(    buf, cnt, definition, dumpfile, i, key, keys, sym_name, all_flag)
 {
     if (! currently_active())
         return
     dumpfile = (NF >= 2) ? $2 : ""
+    all_flag = ($1 == "@dumpall")
 
     # Count and sort the symbol table keys
     cnt = 0
     for (key in symtab) {
-        keys[++cnt] = key
+        if (all_flag || ! symbol_internal_p(key))
+            keys[++cnt] = key
     }
     qsort(keys, 1, cnt)
 
@@ -529,39 +547,39 @@ function builtin_if(    cond, op, val2, val4)
                 error("Comparison operator '" op "' invalid:" $0)
         } else
             error("Bad parameters:" $0)
-    } else if ($1 == "ifdef") {
+    } else if ($1 == "ifdef" || $1 == "if_defined") {
         if (NF < 2)
             error("Bad parameters:" $0)
         cond = symbol_defined_p($2)
-    } else if ($1 == "ifnotdef" || $1 == "ifndef") {
+    } else if ($1 == "ifndef" || $1 == "if_not_defined") {
         if (NF < 2)
             error("Bad parameters:" $0)
         cond = ! symbol_defined_p($2)
-    } else if ($1 == "ifenv") {
+    } else if ($1 == "if_env") {
         if (NF < 2)
             error("Bad parameters:" $0)
         cond = $2 in ENVIRON
-    } else if ($1 == "ifnotenv") {
+    } else if ($1 == "if_not_env") {
         if (NF < 2)
             error("Bad parameters:" $0)
         cond = ! ($2 in ENVIRON)
-    } else if ($1 == "ifexists") {
+    } else if ($1 == "if_exists") {
         if (NF < 2)
             error("Bad parameters:" $0)
         cond = path_exists_p($2)
-    } else if ($1 == "ifnotexists") {
+    } else if ($1 == "if_not_exists") {
         if (NF < 2)
             error("Bad parameters:" $0)
         cond = ! path_exists_p($2)
-    } else if ($1 == "ifin") {   # @ifin us-east-1 VALID_REGIONS
+    } else if ($1 == "if_in") {   # @if_in us-east-1 VALID_REGIONS
         if (NF < 3)
             error("Bad parameters:" $0)
         cond = symbol_defined_p($3 "[" $2 "]")
-    } else if ($1 == "ifnotin") {
+    } else if ($1 == "if_not_in") {
         if (NF < 3)
             error("Bad parameters:" $0)
         cond = ! symbol_defined_p($3 "[" $2 "]")
-    } else if ($1 == "ifnot" || $1 == "unless") {
+    } else if ($1 == "if_not" || $1 == "unless") {
         if (NF < 2)
             error("Bad parameters:" $0)
         cond = ! symbol_true_p($2)
@@ -796,32 +814,35 @@ function process_line(read_literally,    newstring)
     }
 
     # Look for built-in commands
-    if      (/^@(@|#)/)                      { } # Comments are ignored
-    else if (/^@append([ \t]|$)/)            { builtin_define()   }
-    else if (/^@(c(omment)|rem)([ \t]|$)/)   { } # Comments are ignored
-    else if (/^@default([ \t]|$)/)           { builtin_default()  }
-    else if (/^@define([ \t]|$)/)            { builtin_define()   }
-    else if (/^@dump([ \t]|$)/)              { builtin_dump()     }
-    else if (/^@else([ \t]|$)/)              { builtin_else()     }
-    else if (/^@(endif|fi)([ \t]|$)/)        { builtin_endif()    }
-    else if (/^@error([ \t]|$)/)             { builtin_error()    }
-    else if (/^@exit([ \t]|$)/)              { builtin_exit()     }
-    else if (/^@(if(not)?|unless)([ \t]|$)/) { builtin_if()       }
-    else if (/^@if(n(ot)?)?def([ \t]|$)/)    { builtin_if()       }
-    else if (/^@if(not)?env([ \t]|$)/)       { builtin_if()       }
-    else if (/^@if(not)?exists([ \t]|$)/)    { builtin_if()       }
-    else if (/^@if(not)?in([ \t]|$)/)        { builtin_if()       }
-    else if (/^@ignore([ \t]|$)/)            { builtin_ignore()   }
-    else if (/^@include([ \t]|$)/)           { builtin_include()  }
-    else if (/^@(incr|decr)([ \t]|$)/)       { builtin_incr()     }
-    else if (/^@input([ \t]|$)/)             { builtin_input()    }
-    else if (/^@longdef([ \t]|$)/)           { builtin_longdef()  }
-    else if (/^@longend([ \t]|$)/)           { builtin_longend()  }
-    else if (/^@paste([ \t]|$)/)             { builtin_include()  }
-    else if (/^@shell([ \t]|$)/)             { builtin_shell()    }
-    else if (/^@typeout([ \t]|$)/)           { builtin_typeout()  }
-    else if (/^@undef(ine)?([ \t]|$)/)       { builtin_undefine() }
-    else if (/^@(warn|echo)([ \t]|$)/)       { builtin_error()    }
+    if      (/^@(@|#)/)                { } # Comments are ignored
+    else if (/^@append([ \t]|$)/)      { builtin_define() }
+    else if (/^@c(omment)([ \t]|$)/)   { } # Comments are ignored
+    else if (/^@decr([ \t]|$)/)        { builtin_incr() }
+    else if (/^@default([ \t]|$)/)     { builtin_default() }
+    else if (/^@define([ \t]|$)/)      { builtin_define() }
+    else if (/^@dump(all)?([ \t]|$)/)  { builtin_dump() }
+    else if (/^@echo([ \t]|$)/)        { builtin_error() }
+    else if (/^@else([ \t]|$)/)        { builtin_else() }
+    else if (/^@endif([ \t]|$)/)       { builtin_endif() }
+    else if (/^@error([ \t]|$)/)       { builtin_error() }
+    else if (/^@exit([ \t]|$)/)        { builtin_exit() }
+    else if (/^@fi([ \t]|$)/)          { builtin_endif() }
+    else if (/^@if(_not)?(_(defined|env|exists|in))?([ \t]|$)/)
+                                       { builtin_if() }
+    else if (/^@ifn?def([ \t]|$)/)     { builtin_if() }
+    else if (/^@ignore([ \t]|$)/)      { builtin_ignore() }
+    else if (/^@include([ \t]|$)/)     { builtin_include() }
+    else if (/^@incr([ \t]|$)/)        { builtin_incr() }
+    else if (/^@input([ \t]|$)/)       { builtin_input() }
+    else if (/^@longdef([ \t]|$)/)     { builtin_longdef() }
+    else if (/^@longend([ \t]|$)/)     { builtin_longend() }
+    else if (/^@paste([ \t]|$)/)       { builtin_include() }
+    else if (/^@rem([ \t]|$)/)         { } # Comments are ignored
+    else if (/^@shell([ \t]|$)/)       { builtin_shell() }
+    else if (/^@typeout([ \t]|$)/)     { builtin_typeout() }
+    else if (/^@undef(ine)?([ \t]|$)/) { builtin_undefine() }
+    else if (/^@unless([ \t]|$)/)      { builtin_if() }
+    else if (/^@warn([ \t]|$)/)        { builtin_error() }
 
     # Process @
     else {
@@ -933,8 +954,8 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, params, r, sym)
             r = expand r
 
         # gensym : Generate symbol
-        #   @gensym@ => g66
-        #   @gensym 42@ (prefix unchanged, counter now 42) => g42
+        #   @gensym@ => gen66
+        #   @gensym 42@ (prefix unchanged, counter now 42) => gen42
         #   @gensym foo 42@ => (prefix now "foo", counter now 42) => foo42
         } else if (sym == "gensym") {
             if (nparam == 1) {
@@ -1099,11 +1120,12 @@ function initialize(    d, dateout, egid, euid, host, hostname, user)
     "id -un"                       | getline user
 
     set_symbol("__DATE__",         d[1] d[2] d[3])
-    set_symbol("__GENSYMPREFIX__", "g")
+    set_symbol("__GENSYMPREFIX__", "gen")
     set_symbol("__GENSYMCOUNT__",  0)
     set_symbol("__GID__",          egid)
     set_symbol("__HOST__",         host)
     set_symbol("__HOSTNAME__",     hostname)
+    set_symbol("__INPUT__",        "")
     set_symbol("__NFILE__",        0)
     set_symbol("__STRICT__",       TRUE)
     set_symbol("__TIME__",         d[4] d[5] d[6])

@@ -16,9 +16,9 @@
 #           @append NAME MORE      Add to the body of an already defined macro
 #           @comment ...           Comment -- line is ignored
 #           @decr NAME [N]         Subtract 1 (or N) from an already defined NAME
-#           @default NAME VALUE    As @define, but only if NAME not already defined
+#           @default NAME VALUE    As @define, but no-op if NAME already defined
 #           @define NAME VALUE     Set NAME to VALUE
-#           @dump(all) [FILE]      Print (all) symbol names and definitions
+#           @dump(all) [FILE]      Print symbol names & definitions to FILE (stderr)
 #           @echo STUFF            Same as @warn
 #           @else                  Switch to the other branch of an @if statement
 #           @endif                 Terminate @if or @unless
@@ -35,6 +35,7 @@
 #           @ignore DELIM          Ignore input until line that begins with DELIM
 #           @include FILENAME      Read and process contents of FILENAME
 #           @incr NAME [N]         Add 1 (or N) from an already defined NAME
+#           @initialize NAME VALUE As @default, but errors if NAME already defined
 #           @input [NAME]          Read a single line from keyboard and define NAME
 #           @longdef NAME          Define NAME to <...> lines until @longend
 #             ...                    Don't use other @ commands inside def!
@@ -117,7 +118,7 @@
 #
 # ERROR MESSAGES
 #       Bad parameters [in 'XXX']
-#           - A command was not given the expected number of parameters.
+#           - A command was not provided the expected number of parameters.
 #
 #       Cannot recursively read 'XXX'
 #           - Attempt to @include the same file multiple times.
@@ -152,7 +153,7 @@
 #             no value was supplied.
 #
 #       Symbol 'XXX' already defined
-#           - A @default attempted to define a previously defined symbol.
+#           - @initialize attempted to define a previously defined symbol.
 #
 #       Symbol 'XXX' not defined
 #           - A symbol name without a value was passed to a function
@@ -182,14 +183,18 @@
 #
 #       Positional parameters are parsed by splitting on white space.
 #               @foo "aaa bbb" ccc
-#       contains 3 arguments ('"aaa', 'bbb"', and 'ccc'), not two.
+#       has 3 arguments ('"aaa', 'bbb"', 'ccc') not 2.
 #
 # EXAMPLE
 #       @define Condition under
 #          ...
 #       You are clearly @Condition@worked.
 #
-# AUTHOR
+# FILES
+#       $HOME/.m2rc
+#           - Init file automatically read if available.
+#
+# AUTHOR(S)
 #       Jon L. Bentley, jlb@research.bell-labs.com
 #
 # SEE ALSO
@@ -244,7 +249,7 @@ function remove_brackets(sym,    lbracket, rbracket)
     lbracket = index(sym, "[")
     rbracket = index(sym, "]")
     return substr(sym, 1,          lbracket-1) \
-           SUBSEP \
+           SUBSEP                              \
            substr(sym, lbracket+1, rbracket-lbracket-1)
 }
 
@@ -261,7 +266,7 @@ function restore_brackets(sym,    idx)
 
 function integerp(pat)
 {
-    return pat ~ /^-?[0-9]+$/
+    return pat ~ /^[-+]?[0-9]+$/
 }
 
 
@@ -320,7 +325,7 @@ function delete_symbol(sym)
 }
 
 
-function currently_active()
+function currently_active_p()
 {
     return active[ifdepth]
 }
@@ -338,6 +343,7 @@ function path_exists_p(path)
 }
 
 
+# Return a string of N random hex digits [0-9A-F].
 function hex_digits(n,    i, s)
 {
     s = ""
@@ -399,18 +405,19 @@ function swap(A, i, j,    t)
 }
 
 
+# @default, @initialize
 function builtin_default(    sym)
 {
-    if (NF < 2)
-        error("Bad parameters:" $0)
+    if (NF < 2) error("Bad parameters:" $0)
     sym = $2
     if (symbol_protected_p(sym))
         error("Symbol '" sym "' protected:" $0)
-    if (! currently_active())
+    if (! currently_active_p())
         return
-    if (symbol_defined_p(sym))
-        print_stderr(format_message("Symbol '" sym "' already defined:" $0))
-    else
+    if (symbol_defined_p(sym)) {
+        if ($1 == "@init" || $1 == "@initialize")
+            error("Symbol '" sym "' already defined:" $0)
+    } else
         dodef(FALSE)
 }
 
@@ -418,12 +425,11 @@ function builtin_default(    sym)
 # @define, @append
 function builtin_define(    append_flag, sym)
 {
-    if (NF < 2)
-        error("Bad parameters:" $0)
+    if (NF < 2) error("Bad parameters:" $0)
     sym = $2
     if (symbol_protected_p(sym))
         error("Symbol '" sym "' protected:" $0)
-    if (! currently_active())
+    if (! currently_active_p())
         return
     append_flag = ($1 == "@append")
     dodef(append_flag)
@@ -433,7 +439,7 @@ function builtin_define(    append_flag, sym)
 # @dump, @dumpall
 function builtin_dump(    buf, cnt, definition, dumpfile, i, key, keys, sym_name, all_flag)
 {
-    if (! currently_active())
+    if (! currently_active_p())
         return
     dumpfile = (NF >= 2) ? $2 : ""
     all_flag = ($1 == "@dumpall")
@@ -477,7 +483,7 @@ function builtin_else()
     if (seen_else[ifdepth])
         error("Duplicate '@else' not allowed:" $0)
     seen_else[ifdepth] = TRUE
-    active[ifdepth] = active[ifdepth-1] ? ! currently_active() : FALSE
+    active[ifdepth] = active[ifdepth-1] ? ! currently_active_p() : FALSE
 }
 
 
@@ -491,7 +497,7 @@ function builtin_endif()
 # @error, @warn, @echo
 function builtin_error(    exit_flag, message)
 {
-    if (! currently_active())
+    if (! currently_active_p())
         return
     exit_flag = ($1 == "@error")
     if (NF == 1) {
@@ -509,7 +515,7 @@ function builtin_error(    exit_flag, message)
 
 function builtin_exit()
 {
-    if (! currently_active())
+    if (! currently_active_p())
         return
     exit (NF > 1 && integerp($2)) ? $2 : 0
 }
@@ -547,47 +553,48 @@ function builtin_if(    cond, op, val2, val4)
                 error("Comparison operator '" op "' invalid:" $0)
         } else
             error("Bad parameters:" $0)
-    } else if ($1 == "ifdef" || $1 == "if_defined") {
-        if (NF < 2)
-            error("Bad parameters:" $0)
-        cond = symbol_defined_p($2)
-    } else if ($1 == "ifndef" || $1 == "if_not_defined") {
-        if (NF < 2)
-            error("Bad parameters:" $0)
-        cond = ! symbol_defined_p($2)
-    } else if ($1 == "if_env") {
-        if (NF < 2)
-            error("Bad parameters:" $0)
-        cond = $2 in ENVIRON
-    } else if ($1 == "if_not_env") {
-        if (NF < 2)
-            error("Bad parameters:" $0)
-        cond = ! ($2 in ENVIRON)
-    } else if ($1 == "if_exists") {
-        if (NF < 2)
-            error("Bad parameters:" $0)
-        cond = path_exists_p($2)
-    } else if ($1 == "if_not_exists") {
-        if (NF < 2)
-            error("Bad parameters:" $0)
-        cond = ! path_exists_p($2)
-    } else if ($1 == "if_in") {   # @if_in us-east-1 VALID_REGIONS
-        if (NF < 3)
-            error("Bad parameters:" $0)
-        cond = symbol_defined_p($3 "[" $2 "]")
-    } else if ($1 == "if_not_in") {
-        if (NF < 3)
-            error("Bad parameters:" $0)
-        cond = ! symbol_defined_p($3 "[" $2 "]")
+
     } else if ($1 == "if_not" || $1 == "unless") {
-        if (NF < 2)
-            error("Bad parameters:" $0)
+        if (NF < 2) error("Bad parameters:" $0)
         cond = ! symbol_true_p($2)
+
+    } else if ($1 == "if_defined" || $1 == "ifdef") {
+        if (NF < 2) error("Bad parameters:" $0)
+        cond = symbol_defined_p($2)
+
+    } else if ($1 == "if_not_defined" || $1 == "ifndef") {
+        if (NF < 2) error("Bad parameters:" $0)
+        cond = ! symbol_defined_p($2)
+
+    } else if ($1 == "if_env") {
+        if (NF < 2) error("Bad parameters:" $0)
+        cond = $2 in ENVIRON
+
+    } else if ($1 == "if_not_env") {
+        if (NF < 2) error("Bad parameters:" $0)
+        cond = ! ($2 in ENVIRON)
+
+    } else if ($1 == "if_exists") {
+        if (NF < 2) error("Bad parameters:" $0)
+        cond = path_exists_p($2)
+
+    } else if ($1 == "if_not_exists") {
+        if (NF < 2) error("Bad parameters:" $0)
+        cond = ! path_exists_p($2)
+
+    } else if ($1 == "if_in") {   # @if_in us-east-1 VALID_REGIONS
+        if (NF < 3) error("Bad parameters:" $0)
+        cond = symbol_defined_p($3 "[" $2 "]")
+
+    } else if ($1 == "if_not_in") {
+        if (NF < 3) error("Bad parameters:" $0)
+        cond = ! symbol_defined_p($3 "[" $2 "]")
+
     } else
         # Should not happen
         error("builtin_if(): '" $1 "' not matched:" $0)
 
-    active[++ifdepth] = currently_active() ? cond : FALSE
+    active[++ifdepth] = currently_active_p() ? cond : FALSE
     seen_else[ifdepth] = FALSE
 }
 
@@ -623,9 +630,8 @@ function read_lines_until(delim,    buf, delim_len)
 # works.
 function builtin_ignore(    buf, delim, save_line, save_lineno)
 {
-    if (NF != 2)
-        error("Bad parameters:" $0)
-    if (! currently_active())
+    if (NF != 2) error("Bad parameters:" $0)
+    if (! currently_active_p())
         return
     save_line = $0
     save_lineno = get_symbol("__LINE__")
@@ -639,9 +645,8 @@ function builtin_ignore(    buf, delim, save_line, save_lineno)
 # @include, @paste
 function builtin_include(    error_text, filename, read_literally)
 {
-    if (NF != 2)
-        error("Bad parameters:" $0)
-    if (! currently_active())
+    if (NF != 2) error("Bad parameters:" $0)
+    if (! currently_active_p())
         return
     read_literally = ($1 == "@paste")   # @paste does not process macros
     filename = dosubs($2)
@@ -658,14 +663,13 @@ function builtin_include(    error_text, filename, read_literally)
 # @incr, @decr
 function builtin_incr(    incr, sym)
 {
-    if (NF < 2)
-        error("Bad parameters:" $0)
+    if (NF < 2) error("Bad parameters:" $0)
     sym = $2
     if (symbol_protected_p(sym))
         error("Symbol '" sym "' protected:" $0)
     if (NF >= 3 && !integerp($3))
         error("Value '" $3 "' must be numeric:" $0)
-    if (! currently_active())
+    if (! currently_active_p())
         return
     if (! symbol_defined_p(sym))
         error("Symbol '" sym "' not defined:" $0)
@@ -682,7 +686,7 @@ function builtin_input(    getstat, input, sym)
     sym = (NF < 2) ? "__INPUT__" : $2
     if (symbol_protected_p(sym))
         error("Symbol '" sym "' protected:" $0)
-    if (! currently_active())
+    if (! currently_active_p())
         return
     getstat = getline input < "/dev/tty"
     if (getstat < 0)
@@ -693,12 +697,11 @@ function builtin_input(    getstat, input, sym)
 
 function builtin_longdef(    buf, save_line, save_lineno, sym)
 {
-    if (NF != 2)
-        error("Bad parameters:" $0)
+    if (NF != 2) error("Bad parameters:" $0)
     sym = $2
     if (symbol_protected_p(sym))
         error("Symbol '" sym "' protected:" $0)
-    if (! currently_active())
+    if (! currently_active_p())
         return
     save_line = $0
     save_lineno = get_symbol("__LINE__")
@@ -727,7 +730,7 @@ function builtin_shell(    buf, delim, save_line, save_lineno, shell)
         shell = $3
     } else
         error("Bad parameters:" $0)
-    if (! currently_active())
+    if (! currently_active_p())
         return
     save_line = $0
     save_lineno = get_symbol("__LINE__")
@@ -741,7 +744,7 @@ function builtin_shell(    buf, delim, save_line, save_lineno, shell)
 
 function builtin_typeout(    buf)
 {
-    if (! currently_active())
+    if (! currently_active_p())
         return
     buf = read_lines_until("")
     if (length(buf) > 0)
@@ -751,12 +754,11 @@ function builtin_typeout(    buf)
 
 function builtin_undefine(    sym)
 {
-    if (NF != 2)
-        error("Bad parameters:" $0)
+    if (NF != 2) error("Bad parameters:" $0)
     sym = $2
     if (symbol_protected_p(sym))
         error("Symbol '" sym "' protected:" $0)
-    if (! currently_active())
+    if (! currently_active_p())
         return
     delete_symbol(sym)
 }
@@ -808,7 +810,7 @@ function process_line(read_literally,    newstring)
 {
     # Short circuit if we're not processing macros, or no @ found
     if (read_literally ||
-        (currently_active() && index($0, "@") == 0)) {
+        (currently_active_p() && index($0, "@") == 0)) {
         print $0
         return
     }
@@ -833,6 +835,7 @@ function process_line(read_literally,    newstring)
     else if (/^@ignore([ \t]|$)/)      { builtin_ignore() }
     else if (/^@include([ \t]|$)/)     { builtin_include() }
     else if (/^@incr([ \t]|$)/)        { builtin_incr() }
+    else if (/^@init(ialize)?([ \t]|$)/) { builtin_default() }
     else if (/^@input([ \t]|$)/)       { builtin_input() }
     else if (/^@longdef([ \t]|$)/)     { builtin_longdef() }
     else if (/^@longend([ \t]|$)/)     { builtin_longend() }
@@ -848,7 +851,7 @@ function process_line(read_literally,    newstring)
     else {
         newstring = dosubs($0)
         if ($0 == newstring || index(newstring, "@") == 0) {
-            if (currently_active())
+            if (currently_active_p())
                 print newstring
         } else {
             buffer = newstring "\n" buffer
@@ -904,7 +907,7 @@ function readline(    getstat, i, status)
 #             L = L "@" M
 #             R = "@" R
 #         return L R
-function dosubs(s,    expand, i, j, l, m, nparam, p, params, r, sym)
+function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, sym)
 {
     if (index(s, "@") == 0)
         return s
@@ -921,16 +924,22 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, params, r, sym)
         m = substr(r, 1, i-1)
         r = substr(r, i+1)
 
-        nparam = split(m, params) - 1
-        sym = params[1]
+        # nparam is the number of parameters supplied to the sym-function
+        # @foo@       --> nparam == 0
+        # @foo BAR@   --> nparam == 1
+        # @foo A B C@ --> nparam == 3
+        #
+        # In general, param N is available in param[N+1].
+        # if (sym=="foo"), B is found in param[3].
+        nparam = split(m, param) - 1
         if (nparam > 9)
             error("Too many parameters in '" m "':" $0)
+        sym = param[1]
 
         # basename : Return base name of file
         if (sym == "basename") {
-            if (nparam != 1)
-                error("Bad parameters in '" m "':" $0)
-            p = params[2]
+            if (nparam != 1) error("Bad parameters in '" m "':" $0)
+            p = param[2]
             if (symbol_defined_p(p))
                 p = get_symbol(p)
             "/usr/bin/basename " p | getline expand
@@ -939,15 +948,13 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, params, r, sym)
         # boolval : Return 1 if symbol is true, else 0
         #   @boolval SYM@ => 0 or 1
         } else if (sym == "boolval") {
-            if (nparam != 1)
-                error("Bad parameters in '" m "':" $0)
-            r = (symbol_true_p(params[2]) ? "1" : "0") r
+            if (nparam != 1) error("Bad parameters in '" m "':" $0)
+            r = (symbol_true_p(param[2]) ? "1" : "0") r
 
         # dirname : Return directory name of file
         } else if (sym == "dirname") {
-            if (nparam != 1)
-                error("Bad parameters in '" m "':" $0)
-            p = params[2]
+            if (nparam != 1) error("Bad parameters in '" m "':" $0)
+            p = param[2]
             if (symbol_defined_p(p))
                 p = get_symbol(p)
             "/usr/bin/dirname " p | getline expand
@@ -959,26 +966,25 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, params, r, sym)
         #   @gensym foo 42@ => (prefix now "foo", counter now 42) => foo42
         } else if (sym == "gensym") {
             if (nparam == 1) {
-                if (! integerp(params[2]))
+                if (! integerp(param[2]))
                     error("Value '" m "' must be numeric:" $0)
-                set_symbol("__GENSYMCOUNT__", params[2])
+                set_symbol("__GENSYMCOUNT__", param[2])
             } else if (nparam == 2) {
-                if (! integerp(params[3]))
+                if (! integerp(param[3]))
                     error("Value '" m "' must be numeric:" $0)
-                set_symbol("__GENSYMPREFIX__", params[2])
-                set_symbol("__GENSYMCOUNT__",  params[3])
+                set_symbol("__GENSYMPREFIX__", param[2])
+                set_symbol("__GENSYMCOUNT__",  param[3])
             } else if (nparam > 2)
                 error("Bad parameters in '" m "':" $0)
-            # 0, 1, or 2 params
+            # 0, 1, or 2 param
             r = get_symbol("__GENSYMPREFIX__") get_symbol("__GENSYMCOUNT__") r
             incr_symbol("__GENSYMCOUNT__")
 
         # getenv : Get environment variable
         #   @getenv HOME@ => /home/user
         } else if (sym == "getenv") {
-            if (nparam != 1)
-                error("Bad parameters in '" m "':" $0)
-            env = params[2]
+            if (nparam != 1) error("Bad parameters in '" m "':" $0)
+            env = param[2]
             if (env in ENVIRON)
                 r = ENVIRON[env] r
             else if (strictp())
@@ -986,9 +992,8 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, params, r, sym)
 
         # lc : Lower case
         } else if (sym == "lc") {
-            if (nparam != 1)
-                error("Bad parameters in '" m "':" $0)
-            p = params[2]
+            if (nparam != 1) error("Bad parameters in '" m "':" $0)
+            p = param[2]
             if (! symbol_defined_p(p))
                 error("Symbol '" p "' not defined:" $0)
             r = tolower(get_symbol(p)) r
@@ -996,9 +1001,8 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, params, r, sym)
         # len : Length
         #   @len SYM@ => N
         } else if (sym == "len") {
-            if (nparam != 1)
-                error("Bad parameters in '" m "':" $0)
-            p = params[2]
+            if (nparam != 1) error("Bad parameters in '" m "':" $0)
+            p = param[2]
             if (! symbol_defined_p(p))
                 error("Symbol '" p "' not defined:" $0)
             r = length(get_symbol(p)) r
@@ -1009,24 +1013,23 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, params, r, sym)
         } else if (sym == "substr") {
             if (nparam != 2 && nparam != 3)
                 error("Bad parameters in '" m "':" $0)
-            p = params[2]
+            p = param[2]
             if (! symbol_defined_p(p))
                 error("Symbol '" p "' not defined:" $0)
-            if (! integerp(params[3]))
+            if (! integerp(param[3]))
                 error("Value '" m "' must be numeric:" $0)
             if (nparam == 2) {
-                r = substr(get_symbol(p), params[3]+1) r
+                r = substr(get_symbol(p), param[3]+1) r
             } else if (nparam == 3) {
-                if (! integerp(params[4]))
+                if (! integerp(param[4]))
                     error("Value '" m "' must be numeric:" $0)
-                r = substr(get_symbol(p), params[3]+1, params[4]) r
+                r = substr(get_symbol(p), param[3]+1, param[4]) r
             }
 
         # trim : Remove leading and trailing whitespace
         } else if (sym == "trim") {
-            if (nparam != 1)
-                error("Bad parameters in '" m "':" $0)
-            p = params[2]
+            if (nparam != 1) error("Bad parameters in '" m "':" $0)
+            p = param[2]
             if (! symbol_defined_p(p))
                 error("Symbol '" p "' not defined:" $0)
             expand = get_symbol(p)
@@ -1036,9 +1039,8 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, params, r, sym)
 
         # uc : Upper case
         } else if (sym == "uc") {
-            if (nparam != 1)
-                error("Bad parameters in '" m "':" $0)
-            p = params[2]
+            if (nparam != 1) error("Bad parameters in '" m "':" $0)
+            p = param[2]
             if (! symbol_defined_p(p))
                 error("Symbol '" p "' not defined:" $0)
             r = toupper(get_symbol(p)) r
@@ -1055,7 +1057,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, params, r, sym)
                 if (index(expand, "$" j) > 0) {
                     if (j > nparam)
                         error("Parameter " j " not supplied in '" m "':" $0)
-                    gsub("\\$" j, params[j+1], expand)
+                    gsub("\\$" j, param[j+1], expand)
                 }
             r = expand r
 
@@ -1134,6 +1136,10 @@ function initialize(    d, dateout, egid, euid, host, hostname, user)
     set_symbol("__UID__",          euid)
     set_symbol("__USER__",         user)
     set_symbol("__VERSION__",      version)
+
+    # Try to read an init file: $HOME/.m2rc
+    if ("HOME" in ENVIRON)
+        dofile(ENVIRON["HOME"] "/.m2rc")
 }
 
 
@@ -1144,18 +1150,15 @@ BEGIN {
         dofile("-")
     else {
         for (i = 1; i < ARGC; i++) {
-            # print_stderr("Debug: ARGV[" i "]='" ARGV[i] "'")
-            if (ARGV[i] ~ /^([A-Za-z_][A-Za-z0-9_]*)=(.*)/) {
+            if (ARGV[i] ~ /^([A-Za-z_][A-Za-z_0-9]*)=(.*)/) {
                 eq = index(ARGV[i], "=")
                 name = substr(ARGV[i], 1, eq-1)
                 val  = substr(ARGV[i], eq+1)
-                if (symbol_protected_p(name)) {
-                    print_stderr("Symbol '" name "' protected")
-                    exit 1
-                }
+                if (symbol_protected_p(name))
+                    error("Symbol '" name "' protected:" ARGV[i], i, "ARGV")
                 set_symbol(name, val)
             } else if (! dofile(ARGV[i]))
-                print_stderr("File '" ARGV[i] "' does not exist")
+                print_stderr(format_message("File '" ARGV[i] "' does not exist", i, "ARGV"))
         }
     }
 }

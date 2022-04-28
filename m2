@@ -1183,11 +1183,12 @@ function dodef(append_flag,    name, str, x)
 
 
 # Try to read init file: $HOME/.m2rc
-# Okay if it doesn't exist.
+# No worries if it doesn't exist.
 function load_home_m2rc()
 {
     if ("HOME" in ENVIRON)
         dofile(ENVIRON["HOME"] "/.m2rc")
+    init_needed = FALSE
 }
 
 
@@ -1197,6 +1198,7 @@ function initialize(    d, dateout, egid, euid, host, hostname, user)
     FALSE           = 0
     EOF             = "EOF" SUBSEP "EOF" # Unlikely to occur in normal text
     ifdepth         = 0
+    init_needed     = TRUE
     active[ifdepth] = TRUE
     buffer          = ""
 
@@ -1238,33 +1240,40 @@ BEGIN {
         # Delay loading $HOME/.m2rc as long as possible.  This allows us
         # to set symbols on the command line (e.g., debug=1) which will
         # have taken effect by the time the init file loads.
-        init_needed = TRUE
         for (i = 1; i < ARGC; i++) {
+            # Show each arg as we process it
+            arg = ARGV[i]
             if (symbol_true_p("__DEBUG__"))
-                print_stderr("BEGIN: ARGV[" i "]:" ARGV[i])
-            if (ARGV[i] ~ /^([^= ][^= ]*)=(.*)/) {
+                print_stderr("BEGIN: ARGV[" i "]:" arg)
+            if (arg ~ /^([^= ][^= ]*)=(.*)/) {
                 # Define a symbol on the command line
-                eq = index(ARGV[i], "=")
-                name = substr(ARGV[i], 1, eq-1)
-                val  = substr(ARGV[i], eq+1)
+                eq = index(arg, "=")
+                name = substr(arg, 1, eq-1)
+                val  = substr(arg, eq+1)
                 if (symbol_protected_p(name))
-                    error("Symbol '" name "' protected:" ARGV[i], i, "ARGV")
+                    error("Symbol '" name "' protected:" arg, i, "ARGV")
                 if (! symbol_valid_p(name))
-                    error("Symbol name '" name "' invalid:" ARGV[i], i, "ARGV")
+                    error("Symbol name '" name "' invalid:" arg, i, "ARGV")
                 set_symbol(name, val)
                 if (name == "strict")
                     set_symbol("__STRICT__", val)
             } else {
                 # Load a file
-                if (init_needed) {
+                if (init_needed)
                     load_home_m2rc()
-                    init_needed = FALSE
-                }
-                if (! dofile(ARGV[i])) {
-                    print_stderr(format_message("File '" ARGV[i] "' does not exist", i, "ARGV"))
+                if (! dofile(arg)) {
+                    print_stderr(format_message("File '" arg "' does not exist", i, "ARGV"))
                     my_exit = 66 # EX_NOINPUT
                 }
             }
+        }
+        # If we get here with init_needed still true, that means we used
+        # up every ARGV defining symbols and didn't specify any files.
+        # Not specifying any input files, like ARGC==1, means to read
+        # standard input, so that's what we must do now.
+        if (init_needed) {
+            load_home_m2rc()
+            dofile("-")
         }
     }
     exit my_exit

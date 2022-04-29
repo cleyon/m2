@@ -2,16 +2,37 @@
 #*****************************************************************************
 #
 # NAME
-#       m2 - Line oriented macro processor
+#       m2 - Line-oriented macro processor
 #
 # USAGE
 #       m2 [NAME=VAL] [file...]
 #       awk -f m2 [file...]
 #
 # DESCRIPTION
-#       M2 copies its input file(s) to its output unchanged except as
-#       modified by certain "macro expressions."  The following lines
-#       define macros for subsequent processing:
+#       The m1 program is a "little brother" to the m4 macro processor
+#       found on UNIX systems.  M2 is a line-oriented macro processor
+#       which copies its input file(s) to its output.  It can perform
+#       several tasks, including:
+#
+#       1. Define and expand macros.  Macros have two parts, a name and
+#          a body.  All occurrences of a macro's name are replaced with
+#          the macro's body.
+#
+#       2. Include files.  Special include directives in a data file are
+#          replaced with the contents of the named file.  Includes can
+#          usually be nested, with one included file including another.
+#          Included files are processed for macros.
+#
+#       3. Conditional text inclusion and exclusion.  Different parts of
+#          the text can be included in the final output, often based
+#          upon whether a macro is or isn't defined.
+#
+#       4. Depending on the macro processor, comment lines can appear
+#          that will be removed from the final output.
+#
+#       Macro expressions lines are distinguished with a "@" character.
+#       The following lines define or control macros for subsequent
+#       processing:
 #
 #           @append NAME MORE      Add to the body of an already defined macro
 #           @comment ...           Comment -- line is ignored
@@ -52,9 +73,9 @@
 #
 #       A definition may extend across many lines by ending each line
 #       with a backslash, thus quoting the following newline.
-#       Alternatively, use @longdef.  Short macros can be defined on the
-#       command line by using the form "NAME=VAL" (or "NAME=" to define
-#       with empty value)
+#       (Alternatively, use @longdef.)  Short macros can be defined on
+#       the command line by using the form "NAME=VAL" (or "NAME=" to
+#       define with empty value)
 #
 #       Any occurrence of @name@ in the input is replaced in the output
 #       by the corresponding value.  Specifying more than one word in a
@@ -171,7 +192,7 @@
 #       Too many parameters in 'XXX'
 #           - More than nine parameters were supplied to a macro.
 #
-#       Unexpected end of macro definition
+#       Unexpected end of definition
 #           - Input ended before macro definition was complete.
 #
 #       Value 'XXX' must be numeric
@@ -200,11 +221,20 @@
 #       $HOME/.m2rc
 #           - Init file automatically read if available.
 #
+#       /dev/stdin, /dev/stderr, /dev/tty
+#           - I/O is performed on these paths.
+#
 # AUTHOR(S)
-#       Jon L. Bentley, jlb@research.bell-labs.com
+#       Jon L. Bentley, jlb@research.bell-labs.com.  Original author.
+#       Christopher Leyon, cleyon@gmail.com.
 #
 # SEE ALSO
+#       "m1: A Mini Macro Processor", Computer Language, June 1990,
+#          Volume 7, Number 6, pages 47-61.
+#
 #       http://www.drdobbs.com/open-source/m1-a-mini-macro-processor/200001791
+#
+#       https://docstore.mik.ua/orelly/unix3/sedawk/ch13_10.htm
 #
 #*****************************************************************************
 
@@ -228,7 +258,9 @@ function format_message(text, line, file)
 
 function print_stderr(text)
 {
-    print text | "cat 1>&2"
+    print text > "/dev/stderr"
+    # More portable:
+    # print text | "cat 1>&2"
 }
 
 
@@ -495,8 +527,8 @@ function builtin_dump(    buf, cnt, definition, dumpfile, i, key, keys, sym_name
 {
     if (! currently_active_p())
         return
-    dumpfile = (NF >= 2) ? $2 : ""
     all_flag = ($1 == "@dumpall")
+    dumpfile = (NF >= 2) ? $2 : "/dev/stderr"
 
     # Count and sort the symbol table keys
     cnt = 0
@@ -510,8 +542,8 @@ function builtin_dump(    buf, cnt, definition, dumpfile, i, key, keys, sym_name
     buf = ""
     for (i = 1; i <= cnt; i++) {
         key = keys[i]
-        sym_name = restore_brackets(key)
         definition = get_symbol(key)
+        sym_name = restore_brackets(key)
         if (index(definition, "\n") == 0)
             buf = buf "@define " sym_name "\t" definition "\n"
         else {
@@ -521,12 +553,9 @@ function builtin_dump(    buf, cnt, definition, dumpfile, i, key, keys, sym_name
         }
     }
     buf = chop(buf)
-
-    # Print them
-    if (dumpfile)
-        print buf > dumpfile
-    else
-        print_stderr(buf)
+    print buf > dumpfile
+    # More portable:
+    # print_stderr(buf)
 }
 
 
@@ -578,7 +607,7 @@ function builtin_exit()
 # @if, et al
 function builtin_if(    sym, cond, op, val2, val4)
 {
-    sub(/^@/, "")               # Remove leading @ otherwise dosubs($0) loses
+    sub(/^@/, "")          # Remove leading @ otherwise dosubs($0) loses
     $0 = dosubs($0)
 
     if ($1 == "if") {
@@ -832,6 +861,13 @@ function builtin_undefine(    sym)
 }
 
 
+# The high-level processing happens in the dofile() function, which
+# reads one line at a time, and decides what to do with each line.  The
+# activefiles array keeps track of open files.  The symbol __FILE__
+# stores the current file to read data from.  When an "@include"
+# directive is seen, dofile() is called recursively on the new file.
+# Interestingly, the included filename is first processed for macros.
+# Read this function carefully--there are some nice tricks here.
 function dofile(filename, read_literally,    savefile, saveline, savebuffer)
 {
     if (symbol_true_p("__DEBUG__"))
@@ -932,7 +968,11 @@ function process_line(read_literally,    newstring)
 }
 
 
-# Put next input line into global string "buffer"
+# Put next input line into global string "buffer".  The readline()
+# function manages the "pushback."  After expanding a macro, macro
+# processors examine the newly created text for any additional macro
+# names.  Only after all expanded text has been processed and sent to
+# the output does the program get a fresh line of input.
 # Return EOF or "" (null string)
 function readline(    getstat, i, status)
 {
@@ -957,12 +997,19 @@ function readline(    getstat, i, status)
 }
 
 
+# The dosubs() function actually performs the macro substitution.  It
+# processes the line left-to-right, replacing macro names with their
+# bodies.  The rescanning of the new line is left to the higher-level
+# logic that is jointly managed by readline() and dofile().  This
+# version is considerably more efficient than the brute-force approach
+# used in the m0 programs.
+#
 # M2 uses a fast substitution function.  The idea is to process the
 # string from left to right, searching for the first substitution to be
 # made.  We then make the substitution, and rescan the string starting
 # at the fresh text.  We implement this idea by keeping two strings: the
-# text processed so far is in L (for Left), and unprocessed text is in
-# R (for Right).
+# text processed so far is in L (for Left), and unprocessed text is in R
+# (for Right).
 #
 # Here is the pseudocode for dosubs:
 #     L = Empty
@@ -979,12 +1026,16 @@ function readline(    getstat, i, status)
 #             L = L "@" M
 #             R = "@" R
 #         return L R
-function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, sym)
+function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
 {
+    # Short-circuit check: no "@" characters means to action needed
     if (index(s, "@") == 0)
         return s
-    l = ""                   # Left of current pos; ready for output
-    r = s                    # Right of current; unexamined at this time
+
+    l = ""                   # Left of current pos  - ready for output
+    r = s                    # Right of current pos - as yet unexamined
+    fencepost = 1
+
     while ((i = index(r, "@")) != 0) {
         l = l substr(r, 1, i-1)
         r = substr(r, i+1)      # Currently scanning @
@@ -993,25 +1044,39 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, sym)
             l = l "@"
             break
         }
-        m = substr(r, 1, i-1)
+        m = substr(r, 1, i-1)   # Middle
         r = substr(r, i+1)
 
-        # nparam is the number of parameters supplied to the sym-function
-        # @foo@       --> nparam == 0
-        # @foo BAR@   --> nparam == 1
-        # @foo A B C@ --> nparam == 3
-        #
-        # In general, parameter N is available in variable param[N+1].
-        # if (sym=="foo"), B is found in param[3].
-        nparam = split(m, param) - 1
+        # In the code that follows:
+        # - m :: Entire text between @'s.  Example: "gensym foo 42".
+        # - symfunc :: The name of the "function" to call.  The first
+        #     element of m.  Example: "gensym".
+        # - nparam :: Number of parameters supplied to the symfunc.
+        #     @foo@         --> nparam == 0
+        #     @foo BAR@     --> nparam == 1
+        #     @foo BAR BAZ@ --> nparam == 2
+        # In general, a symfunc's parameter N is available in variable
+        #   param[N+1].  For "gensym foo 42", nparam is 2, the new prefix
+        #   is at param[1+1] and the new count is at param[2+1].
+        #   This offset of one is referred to as `fencepost' below.
+        # Each `if' condition eventually performs
+        #     r = <SOMETHING> r
+        #   which injects <SOMETHING> just before the current value of
+        #   r.  (r is defined above.)  r is what is to the right of the
+        #   current position and contains as yet unexamined text that
+        #   needs to be evaluated for possible macro processing.  This
+        #   is the data we were going to evaluate anyway.  In other
+        #   words, this injects the result of "invoking" symfunc.
+        # Eventually this big while loop exits and we "return l r".
+        nparam = split(m, param) - fencepost
         if (nparam > 9)
             error("Too many parameters in '" m "':" $0)
-        sym = param[1]
+        symfunc = param[fencepost]
 
-        # basename : Return base name of file
-        if (sym == "basename") {
+        # basename SYM: Return base name of file
+        if (symfunc == "basename") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[2]
+            p = param[1+fencepost]
             if (symbol_valid_p(p) && symbol_defined_p(p))
                 p = get_symbol(p)
             "/usr/bin/basename " p | getline expand
@@ -1019,15 +1084,15 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, sym)
 
         # boolval : Return 1 if symbol is true, else 0
         #   @boolval SYM@ => 0 or 1
-        } else if (sym == "boolval") {
+        } else if (symfunc == "boolval") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            validate_symbol(param[2])
-            r = (symbol_true_p(param[2]) ? "1" : "0") r
+            validate_symbol(param[1+fencepost])
+            r = (symbol_true_p(param[1+fencepost]) ? "1" : "0") r
 
         # dirname : Return directory name of file
-        } else if (sym == "dirname") {
+        } else if (symfunc == "dirname") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[2]
+            p = param[1+fencepost]
             if (symbol_valid_p(p) && symbol_defined_p(p))
                 p = get_symbol(p)
             "/usr/bin/dirname " p | getline expand
@@ -1037,17 +1102,17 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, sym)
         #   @gensym@ => _gen66
         #   @gensym 42@ (prefix unchanged, counter now 42) => _gen42
         #   @gensym foo 42@ => (prefix now "foo", counter now 42) => foo42
-        } else if (sym == "gensym") {
+        } else if (symfunc == "gensym") {
             if (nparam == 1) {
-                if (! integerp(param[2]))
+                if (! integerp(param[1+fencepost]))
                     error("Value '" m "' must be numeric:" $0)
-                set_symbol("__GENSYMCOUNT__", param[2])
+                set_symbol("__GENSYMCOUNT__", param[1+fencepost])
             } else if (nparam == 2) {
-                if (! integerp(param[3]))
+                if (! integerp(param[2+fencepost]))
                     error("Value '" m "' must be numeric:" $0)
-                validate_symbol(param[2])
-                set_symbol("__GENSYMPREFIX__", param[2])
-                set_symbol("__GENSYMCOUNT__",  param[3])
+                validate_symbol(param[1+fencepost])
+                set_symbol("__GENSYMPREFIX__", param[1+fencepost])
+                set_symbol("__GENSYMCOUNT__",  param[2+fencepost])
             } else if (nparam > 2)
                 error("Bad parameters in '" m "':" $0)
             # 0, 1, or 2 param
@@ -1056,18 +1121,18 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, sym)
 
         # getenv : Get environment variable
         #   @getenv HOME@ => /home/user
-        } else if (sym == "getenv") {
+        } else if (symfunc == "getenv") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            env = param[2]
+            env = param[1+fencepost]
             if (env in ENVIRON)
                 r = ENVIRON[env] r
             else if (strictp())
                 error("Environment variable '" env "' not defined:" $0)
 
         # lc : Lower case
-        } else if (sym == "lc") {
+        } else if (symfunc == "lc") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[2]
+            p = param[1+fencepost]
             validate_symbol(p)
             if (! symbol_defined_p(p))
                 error("Symbol '" p "' not defined:" $0)
@@ -1075,9 +1140,9 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, sym)
 
         # len : Length
         #   @len SYM@ => N
-        } else if (sym == "len") {
+        } else if (symfunc == "len") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[2]
+            p = param[1+fencepost]
             validate_symbol(p)
             if (! symbol_defined_p(p))
                 error("Symbol '" p "' not defined:" $0)
@@ -1086,27 +1151,27 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, sym)
         # substr : Substring ...  SYMBOL, START[, LENGTH]
         #   @substr FOO 3@
         #   @substr FOO 2 2@
-        } else if (sym == "substr") {
+        } else if (symfunc == "substr") {
             if (nparam != 2 && nparam != 3)
                 error("Bad parameters in '" m "':" $0)
-            p = param[2]
+            p = param[1+fencepost]
             validate_symbol(p)
             if (! symbol_defined_p(p))
                 error("Symbol '" p "' not defined:" $0)
-            if (! integerp(param[3]))
+            if (! integerp(param[2+fencepost]))
                 error("Value '" m "' must be numeric:" $0)
             if (nparam == 2) {
-                r = substr(get_symbol(p), param[3]+1) r
+                r = substr(get_symbol(p), param[2+fencepost]+1) r
             } else if (nparam == 3) {
-                if (! integerp(param[4]))
+                if (! integerp(param[3+fencepost]))
                     error("Value '" m "' must be numeric:" $0)
-                r = substr(get_symbol(p), param[3]+1, param[4]) r
+                r = substr(get_symbol(p), param[2+fencepost]+1, param[3+fencepost]) r
             }
 
         # trim : Remove leading and trailing whitespace
-        } else if (sym == "trim") {
+        } else if (symfunc == "trim") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[2]
+            p = param[1+fencepost]
             validate_symbol(p)
             if (! symbol_defined_p(p))
                 error("Symbol '" p "' not defined:" $0)
@@ -1116,9 +1181,9 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, sym)
             r = expand r
 
         # uc : Upper case
-        } else if (sym == "uc") {
+        } else if (symfunc == "uc") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[2]
+            p = param[1+fencepost]
             validate_symbol(p)
             if (! symbol_defined_p(p))
                 error("Symbol '" p "' not defined:" $0)
@@ -1126,20 +1191,22 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, sym)
 
         # uuid : Generate something that resembles a UUID
         #   @uuid@ => C3525388-E400-43A7-BC95-9DF5FA3C4A52
-        } else if (sym == "uuid") {
+        } else if (symfunc == "uuid") {
             r = uuid() r
 
-        } else if (symbol_valid_p(sym) && symbol_defined_p(sym)) {
-            expand = get_symbol(sym)
+        # <SOMETHING> : Call a user-defined macro, handles arguments
+        } else if (symbol_valid_p(symfunc) && symbol_defined_p(symfunc)) {
+            expand = get_symbol(symfunc)
             # Expand $N parameters (includes $0 for macro name)
             for (j = 0; j <= 9; j++)
                 if (index(expand, "$" j) > 0) {
                     if (j > nparam)
                         error("Parameter " j " not supplied in '" m "':" $0)
-                    gsub("\\$" j, param[j+1], expand)
+                    gsub("\\$" j, param[j+fencepost], expand)
                 }
             r = expand r
 
+        # Throw an error on undefined symbol (strict-only)
         } else if (strictp()) {
             error("Symbol '" m "' not defined:" $0)
 
@@ -1152,6 +1219,18 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, sym)
 }
 
 
+# Finally, the dodef() function handles the defining of macros.  It
+# saves the macro name from $2, and then uses sub() to remove the first
+# two fields.  The new value of $0 now contains just (the first line of)
+# the macro body.  The Computer Language article explains that sub() is
+# used on purpose, in order to preserve whitespace in the macro body.
+# Simply assigning the empty string to $1 and $2 would rebuild the
+# record, but with all occurrences of whitespace collapsed into single
+# occurrences of the value of OFS (a single blank).  The function then
+# proceeds to gather the rest of the macro body, indicated by lines that
+# end with a "\".  This is an additional improvement over m0: macro
+# bodies can be more than one line long.
+#
 # Caller is responsible for checking NF, so we don't check here.
 # Caller is responsible for ensuring name is valid.
 # Caller is responsible for ensuring name is not protected.
@@ -1162,7 +1241,7 @@ function dodef(append_flag,    name, str, x)
     str = $0
     while (str ~ /\\$/) {
         if (readline() == EOF)
-            error("Unexpected end of macro definition")
+            error("Unexpected end of definition")
         # OLD BUG: sub(/\\$/, "\n" $0, str)
         x = $0
         sub(/^[ \t]+/, "", x)
@@ -1231,6 +1310,9 @@ function initialize(    d, dateout, egid, euid, host, hostname, user)
 }
 
 
+# The main program occurs in the BEGIN procedure at the bottom.  It
+# simply processes either standard input, if there are no arguments, or
+# all of the files named on the command line.
 BEGIN {
     initialize()
     # set_symbol("__DEBUG__", TRUE)

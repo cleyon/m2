@@ -835,7 +835,9 @@ function builtin_undefine(    sym)
 function dofile(filename, read_literally,    savefile, saveline, savebuffer)
 {
     if (symbol_true_p("__DEBUG__"))
-        print_stderr("dofile(" filename ", read_literally=" read_literally ")")
+        print_stderr("dofile(" filename \
+                     (read_literally ? ", read_literally=TRUE" : "") \
+                     ")")
     if (filename == "-")
         filename = "/dev/stdin"
     if (! path_exists_p(filename))
@@ -1231,6 +1233,7 @@ function initialize(    d, dateout, egid, euid, host, hostname, user)
 
 BEGIN {
     initialize()
+    # set_symbol("__DEBUG__", TRUE)
     my_exit = 0
 
     if (ARGC == 1) {

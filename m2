@@ -35,6 +35,8 @@
 #       processing:
 #
 #           @append NAME MORE      Add to the body of an already defined macro
+#           @capture NAME ...      Pass ... to shell, capture output in NAME
+#                                    Note: ... data is evaluated before being sent to shell
 #           @comment ...           Comment -- line is ignored
 #           @decr NAME [N]         Subtract 1 (or N) from an already defined NAME
 #           @default NAME VALUE    As @define, but no-op if NAME already defined
@@ -62,13 +64,11 @@
 #             ...                    Don't use other @ commands inside def!
 #           @longend                 But simple @VAR@ references should be okay
 #           @paste FILENAME        Read FILENAME literally, do not process any macros
-#           @print SYM             Print value of SYM without evaluation (use with @sh)
+#           @print SYM             Print value of SYM without evaluation (use with @capture)
 #           @read SYM FILE         Read FILE contents into SYM
 #           @rem ...               Same as @comment
-#           @send DELIM [PROG]     Evaluate input until DELIM, send raw data to PROG
+#           @shell DELIM [PROG]    Evaluate input until DELIM, send raw data to PROG
 #                                    Output from prog is captured in output stream.
-#           @sh NAME ...           Pass ... to shell, capture output in NAME
-#                                    Note: ... data is evaluated before being sent to shell
 #           @typeout               Print remainder of input literally, no processing
 #           @undef(ine) NAME       Remove definition of NAME
 #           @unless NAME           Include subsequent text if NAME == 0 (or undefined)
@@ -152,7 +152,7 @@
 #           - An @if expression with an invalid comparison operator.
 #
 #       Delimiter 'XXX' not found
-#           - A multi-line read (@ignore, @longdef, @send) did not find
+#           - A multi-line read (@ignore, @longdef, @shell) did not find
 #             its terminating delimiter line.
 #           - An @if block was not properly terminated before end of input.
 #
@@ -192,9 +192,6 @@
 #       Symbol 'XXX' protected
 #           - Attempt to modify a protected symbol (__XXX__).
 #             (__STRICT__ is an exception and can be modified.)
-#
-#       Too many parameters in 'XXX'
-#           - More than nine parameters were supplied to a macro.
 #
 #       Unexpected end of definition
 #           - Input ended before macro definition was complete.
@@ -295,7 +292,6 @@ function chop(s)
 function chomp(s,    last)
 {
     last = substr(s, length(s), 1)
-    print_stderr("chomp:last='" last "'")
     return (last == "\n") ? chop(s) : s
 }
 
@@ -749,6 +745,36 @@ function read_lines_until(delim,    buf, delim_len)
 }
 
 
+# @capture SYM CMD...
+# In general, the only thing you can safely to with symbols defined here
+# is to @print them.
+function builtin_capture(    sym, val, cmd)
+{
+    if (symbol_true_p("__DEBUG__"))
+        print_stderr("@capture: \$0='" $0 "'")
+    if (NF < 3) error("Bad parameters:" $0)
+    sym = $2
+    if (symbol_protected_p(sym))
+        error("Symbol '" sym "' protected:" $0)
+    if (! currently_active_p())
+        return
+    validate_symbol(sym)
+
+    val = ""
+    sub(/^[ \t]*[^ \t]+[ \t]+[^ \t]+[ \t]*/, "")
+    cmd = dosubs($0)
+    if (symbol_true_p("__DEBUG__"))
+        print_stderr("@capture: cmd='" cmd "'")
+    while ((cmd | getline) > 0) {
+        if ($0 !~ /^[ \t]*$/)
+            val = val $0 "\n"
+    }
+    if (symbol_true_p("__DEBUG__"))
+        print_stderr("@capture: val='" val "'")
+    set_symbol(sym, chop(val))
+}
+
+
 # Ignore input until line starts with $2.  This means
 #     @ignore Foo
 #     ...
@@ -865,6 +891,8 @@ function builtin_print(    sym, r)
 
 
 # @read
+# As usual, multiline values are accepted but the final trailing \n (if
+# any) is stripped.
 function builtin_read(    sym, file, line, val, getstat)
 {
     if (symbol_true_p("__DEBUG__"))
@@ -891,13 +919,24 @@ function builtin_read(    sym, file, line, val, getstat)
             val = val line "\n"
     }
     close(file)
-    set_symbol(sym, val)
+    set_symbol(sym, chomp(val))
 }
 
 
-# @send
-# The sendto program defaults to a shell but you can send
-function builtin_send(    buf, delim, save_line, save_lineno, sendto)
+# @shell DELIM [shell]@
+# The sendto program defaults to a reasonable shell but you can specify
+# where you want to send your data.  Possibly useful choices would be a
+# non-standard shell, a message emailer, or /usr/bin/bc.
+#
+#       @define NUM   355
+#       @define DENOM 113
+#       Here is a pretty good approximation of pi followed by the standard value:
+#       @shell EOD /usr/bin/bc -l
+#       scale=10
+#       @NUM@/@DENOM@
+#       4*a(1)
+#       EOD
+function builtin_shell(    buf, delim, save_line, save_lineno, sendto)
 {
     if (NF < 2)
         error("Bad parameters:" $0)
@@ -905,9 +944,9 @@ function builtin_send(    buf, delim, save_line, save_lineno, sendto)
         return
     delim = $2
     $1 = ""; $2 = ""
-    if (NF == 2) {              # @send DELIM
+    if (NF == 2) {              # @shell DELIM
         sendto = default_shell()
-    } else {       # @send DELIM /bin/bash
+    } else {       # @shell DELIM /bin/bash
         sub("^[ \t]*", "")
         sendto = dosubs($0)
     }
@@ -919,36 +958,6 @@ function builtin_send(    buf, delim, save_line, save_lineno, sendto)
         error("Delimiter '" delim "' not found:" save_line, save_lineno)
     print dosubs(buf) | sendto
     close(sendto)
-}
-
-
-# @sh SYM CMD...
-# In general, the only thing you can safely to with symbols defined here
-# is to @print them.
-function builtin_sh(    sym, val, cmd)
-{
-    if (symbol_true_p("__DEBUG__"))
-        print_stderr("@sh: \$0='" $0 "'")
-    if (NF < 3) error("Bad parameters:" $0)
-    sym = $2
-    if (symbol_protected_p(sym))
-        error("Symbol '" sym "' protected:" $0)
-    if (! currently_active_p())
-        return
-    validate_symbol(sym)
-
-    val = ""
-    sub(/^[ \t]*[^ \t]+[ \t]+[^ \t]+[ \t]*/, "")
-    cmd = dosubs($0)
-    if (symbol_true_p("__DEBUG__"))
-        print_stderr("@sh: cmd='" cmd "'")
-    while ((cmd | getline) > 0) {
-        if ($0 !~ /^[ \t]*$/)
-            val = val $0 "\n"
-    }
-    if (symbol_true_p("__DEBUG__"))
-        print_stderr("@sh: val='" val "'")
-    set_symbol(sym, chop(val))
 }
 
 
@@ -1086,39 +1095,40 @@ function process_line(read_literally,    newstring)
 
     # Look for built-in commands.  Note, these only match
     # at beginning of line.
-    if      (/^@(@|#)/)                { } # Comments are ignored
-    else if (/^@append([ \t]|$)/)      { builtin_define() }
-    else if (/^@c(omment)([ \t]|$)/)   { } # Comments are ignored
-    else if (/^@decr([ \t]|$)/)        { builtin_incr() }
-    else if (/^@default([ \t]|$)/)     { builtin_default() }
-    else if (/^@define([ \t]|$)/)      { builtin_define() }
-    else if (/^@dump(all)?([ \t]|$)/)  { builtin_dump() }
-    else if (/^@echo([ \t]|$)/)        { builtin_error() }
-    else if (/^@else([ \t]|$)/)        { builtin_else() }
-    else if (/^@endif([ \t]|$)/)       { builtin_endif() }
-    else if (/^@error([ \t]|$)/)       { builtin_error() }
-    else if (/^@exit([ \t]|$)/)        { builtin_exit() }
-    else if (/^@fi([ \t]|$)/)          { builtin_endif() }
+    if      (/^@(@|#)/)                  { } # Comments are ignored
+    else if (/^@append([ \t]|$)/)        { builtin_define() }
+    else if (/^@c([ \t]|$)/)             { } # Comments are ignored
+    else if (/^@capture([ \t]|$)/)       { builtin_capture() }
+    else if (/^@comment([ \t]|$)/)       { } # Comments are ignored
+    else if (/^@decr([ \t]|$)/)          { builtin_incr() }
+    else if (/^@default([ \t]|$)/)       { builtin_default() }
+    else if (/^@define([ \t]|$)/)        { builtin_define() }
+    else if (/^@dump(all)?([ \t]|$)/)    { builtin_dump() }
+    else if (/^@echo([ \t]|$)/)          { builtin_error() }
+    else if (/^@else([ \t]|$)/)          { builtin_else() }
+    else if (/^@endif([ \t]|$)/)         { builtin_endif() }
+    else if (/^@error([ \t]|$)/)         { builtin_error() }
+    else if (/^@exit([ \t]|$)/)          { builtin_exit() }
+    else if (/^@fi([ \t]|$)/)            { builtin_endif() }
     else if (/^@if(_not)?(_(defined|env|exists|in))?([ \t]|$)/)
-                                       { builtin_if() }
-    else if (/^@ifn?def([ \t]|$)/)     { builtin_if() }
-    else if (/^@ignore([ \t]|$)/)      { builtin_ignore() }
-    else if (/^@include([ \t]|$)/)     { builtin_include() }
-    else if (/^@incr([ \t]|$)/)        { builtin_incr() }
+                                         { builtin_if() }
+    else if (/^@ifn?def([ \t]|$)/)       { builtin_if() }
+    else if (/^@ignore([ \t]|$)/)        { builtin_ignore() }
+    else if (/^@include([ \t]|$)/)       { builtin_include() }
+    else if (/^@incr([ \t]|$)/)          { builtin_incr() }
     else if (/^@init(ialize)?([ \t]|$)/) { builtin_default() }
-    else if (/^@input([ \t]|$)/)       { builtin_input() }
-    else if (/^@longdef([ \t]|$)/)     { builtin_longdef() }
-    else if (/^@longend([ \t]|$)/)     { builtin_longend() }
-    else if (/^@paste([ \t]|$)/)       { builtin_include() }
-    else if (/^@print([ \t]|$)/)       { builtin_print() }
-    else if (/^@read([ \t]|$)/)        { builtin_read() }
-    else if (/^@rem([ \t]|$)/)         { } # Comments are ignored
-    else if (/^@send([ \t]|$)/)        { builtin_send() }
-    else if (/^@sh([ \t]|$)/)          { builtin_sh() }
-    else if (/^@typeout([ \t]|$)/)     { builtin_typeout() }
-    else if (/^@undef(ine)?([ \t]|$)/) { builtin_undefine() }
-    else if (/^@unless([ \t]|$)/)      { builtin_if() }
-    else if (/^@warn([ \t]|$)/)        { builtin_error() }
+    else if (/^@input([ \t]|$)/)         { builtin_input() }
+    else if (/^@longdef([ \t]|$)/)       { builtin_longdef() }
+    else if (/^@longend([ \t]|$)/)       { builtin_longend() }
+    else if (/^@paste([ \t]|$)/)         { builtin_include() }
+    else if (/^@print([ \t]|$)/)         { builtin_print() }
+    else if (/^@read([ \t]|$)/)          { builtin_read() }
+    else if (/^@rem([ \t]|$)/)           { } # Comments are ignored
+    else if (/^@shell([ \t]|$)/)         { builtin_shell() }
+    else if (/^@typeout([ \t]|$)/)       { builtin_typeout() }
+    else if (/^@undef(ine)?([ \t]|$)/)   { builtin_undefine() }
+    else if (/^@unless([ \t]|$)/)        { builtin_if() }
+    else if (/^@warn([ \t]|$)/)          { builtin_error() }
 
     # Process @
     else {
@@ -1155,9 +1165,11 @@ function readline(    getstat, i, status)
         else                    # Read a line
             incr_symbol("__LINE__")
     }
-    # # Kludge: allow @Mname at start of line without closing @
-    # if ($0 ~ /^@[A-Z][a-zA-Z0-9_]*[ \t]*$/)
-    #     sub(/[ \t]*$/, "@")
+    # Hack: allow @Mname at start of line w/o closing @
+    # if non-strict.  Note, macro name must start w/capital.
+    if (not strictp())
+        if ($0 ~ /^@[A-Z][a-zA-Z0-9_]*[ \t]*$/)
+            sub(/[ \t]*$/, "@")
     return status
 }
 
@@ -1234,8 +1246,6 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
         #   words, this injects the result of "invoking" symfunc.
         # Eventually this big while loop exits and we "return l r".
         nparam = split(m, param) - fencepost
-        if (nparam > 9)
-            error("Too many parameters in '" m "':" $0)
         symfunc = param[fencepost]
 
         # basename SYM: Return base name of file

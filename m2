@@ -41,7 +41,7 @@
 #           @decr NAME [N]         Subtract 1 (or N) from an already defined NAME
 #           @default NAME VALUE    As @define, but no-op if NAME already defined
 #           @define NAME VALUE     Set NAME to VALUE
-#           @dump(all) [FILE]      Print symbol names & definitions to FILE (stderr)
+#           @dump(all) [FILE]      Output symbol names & definitions to FILE (stderr)
 #           @echo STUFF            Same as @warn
 #           @else                  Switch to the other branch of an @if statement
 #           @endif                 Terminate @if or @unless
@@ -64,12 +64,12 @@
 #             ...                    Don't use other @ commands inside def!
 #           @longend                 But simple @VAR@ references should be okay
 #           @paste FILENAME        Read FILENAME literally, do not process any macros
-#           @print SYM             Print value of SYM without evaluation (use with @capture)
+#           @print SYM             Ship out value of SYM without evaluation (use with @capture)
 #           @read SYM FILE         Read FILE contents into SYM
 #           @rem ...               Same as @comment
 #           @shell DELIM [PROG]    Evaluate input until DELIM, send raw data to PROG
 #                                    Output from prog is captured in output stream.
-#           @typeout               Print remainder of input literally, no processing
+#           @typeout               Ship out remainder of input file literally, no processing
 #           @undef(ine) NAME       Remove definition of NAME
 #           @unless NAME           Include subsequent text if NAME == 0 (or undefined)
 #           @warn STUFF            Send STUFF to standard error, continue
@@ -518,6 +518,12 @@ function swap(A, i, j,    t)
 }
 
 
+function shipout_printf(s)
+{
+    printf("%s", s)
+}
+
+
 # @default, @initialize
 function builtin_default(    sym)
 {
@@ -886,7 +892,8 @@ function builtin_print(    sym, r)
     if (! symbol_defined_p(sym))
         error("Symbol '" sym "' not defined:" $0)
     # We want @print to end cleanly
-    if (dostr(get_symbol(sym)) == 0) print
+    if (dostr(get_symbol(sym)) == 0)
+        shipout_printf("\n")
 }
 
 
@@ -967,7 +974,7 @@ function builtin_typeout(    buf)
         return
     buf = read_lines_until("")
     if (length(buf) > 0)
-        print buf       # PRINT
+        shipout_printf(buf "\n")
 }
 
 
@@ -986,8 +993,8 @@ function builtin_undefine(    sym)
 
 # Sets $0 so dostr() can process it.  Returns
 #  1 if a newline was found; there's potentially more data.
-#  0 if no newline was found so that empties the buffer.
-# -1 on empty buffer - end of data
+#  0 if no newline was found so that empties the strbuf.
+# -1 on empty strbuf - end of data
 function readline_from_string(    i, status)
 {
     if (strbuf == "") {
@@ -1019,9 +1026,9 @@ function dostr(s,    r, rprev)
         r = readline_from_string()
         if (r == -1)
             break
-        printf("%s", $0)
+        shipout_printf("%s", $0)
         if (r == 1)
-            printf("\n")
+            shipout_printf("\n")
         rprev = r
     }
     flush_stdout()
@@ -1089,7 +1096,7 @@ function process_line(read_literally,    newstring)
     # Short circuit if we're not processing macros, or no @ found
     if (read_literally ||
         (currently_active_p() && index($0, "@") == 0)) {
-        print $0                # PRINT
+        shipout_printf($0 "\n")
         return
     }
 
@@ -1133,9 +1140,9 @@ function process_line(read_literally,    newstring)
     # Process @
     else {
         newstring = dosubs($0)
-        if ($0 == newstring || index(newstring, "@") == 0) {
+        if (newstring == $0 || index(newstring, "@") == 0) {
             if (currently_active_p())
-                print newstring # PRINT
+                shipout_printf(newstring "\n")
         } else {
             buffer = newstring "\n" buffer
         }
@@ -1205,7 +1212,7 @@ function readline(    getstat, i, status)
 #         return L R
 function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
 {
-    # Short-circuit check: no "@" characters means to action needed
+    # Short-circuit check: no "@" characters means no action needed
     if (index(s, "@") == 0)
         return s
 

@@ -33,39 +33,38 @@
 #       The following lines define or control macros for subsequent processing:
 #
 #           @append NAME MORE      Add MORE to an already defined macro NAME
-#           @comment STUFF...      Comment; ignore line.  Also @@, @c, @#, @rem
+#           @comment [STUFF...]    Comment; ignore line.  Also @@, @c, @#, @rem
 #           @decr NAME [N]         Subtract 1 (or N) from an already defined NAME
-#           @default NAME VALUE    As @define, but no-op if NAME already defined
-#           @define NAME VALUE     Set NAME to VALUE
+#           @default NAME VAL      Like @define, but no-op if NAME already defined
+#           @define NAME VAL       Set NAME to VAL
 #           @dump(all) [FILE]      Output symbol names & definitions to FILE (stderr)
-#           @else                  Switch to the other branch of an @if statement
-#           @endif                 Terminate @if or @unless
-#           @error STUFF...        Send STUFF... to standard error, exit 2
+#           @error [STUFF...]      Send STUFF... to standard error; exit code 2
 #           @exit [CODE]           Immediately stop parsing; exit CODE (default 0)
-#           @fi                    Same as @endif
 #           @if NAME               Include subsequent text if NAME is true (!= 0)
-#           @if NAME <OP> AAA      Test if NAME compares to AAA (names or values)
+#           @if NAME <OP> XXX      Test if NAME compares to XXX (names or values)
 #           @if(_not)_defined NAME Test if NAME is defined
-#           @if(_not)_env VAR      Test if VAR is defined in the environment (or not)
-#           @if(_not)_exists FILE  Test if FILE exists (or not)
+#           @if(_not)_env VAR      Test if VAR is defined in the environment
+#           @if(_not)_exists FILE  Test if FILE exists
 #           @if(_not)_in KEY ARR   Test if symbol ARR[KEY] is defined
-#           @if(n)def NAME         Same as @if_defined/@if_not_defined
+#           @if(n)def NAME         Like @if_defined/@if_not_defined
+#           @else                  Switch to the other branch of an @if statement
+#           @endif                 Terminate @if or @unless.  Also @fi
 #           @ignore DELIM          Ignore input until line that begins with DELIM
 #           @include FILE          Read and process contents of FILE
 #           @incr NAME [N]         Add 1 (or N) from an already defined NAME
-#           @initialize NAME VALUE As @default, but errors if NAME already defined
+#           @initialize NAME VAL   Like @define, but abort if NAME already defined
 #           @input [NAME]          Read a single line from keyboard and define NAME
-#           @longdef NAME          Define NAME to <...> lines until @longend
+#           @longdef NAME          Set NAME to <...> (all lines until @longend)
 #             <...>                  Don't use other @ commands inside definition
-#           @longend                 But simple @VAR@ references should be okay
-#           @paste FILE            Read FILE literally, do not process any macros
-#           @read NAME FILE        Read FILE contents into NAME
+#           @longend                 But simple @NAME@ references should be okay
+#           @paste FILE            Insert FILE contents literally, do not process macros
+#           @read NAME FILE        Read FILE contents to define NAME
 #           @shell DELIM [PROG]    Evaluate input until DELIM, send raw data to PROG
 #                                    Output from prog is captured in output stream
-#           @stderr STUFF...       Send STUFF... to standard error, continue
+#           @stderr [STUFF...]     Send STUFF... to standard error; continue
 #                                    Also called @echo, @warn
 #           @typeout               Ship out remainder of input file literally, no processing
-#           @undef(ine) NAME       Remove definition of NAME
+#           @undef NAME            Remove definition of NAME
 #           @unless NAME           Include subsequent text if NAME == 0 (or undefined)
 #
 #       A definition may extend across many lines by ending each line
@@ -88,7 +87,7 @@
 #       You may supply more parameters than needed, but it is an error
 #       for a definition to refer to a parameter which is not supplied.
 #
-#       The following built-in definitions are recognized:
+#       The following definitions are recognized:
 #
 #           @basename SYM@         Return base name of SYM
 #           @boolval SYM@          Return 1 if symbol is true, else 0
@@ -99,7 +98,7 @@
 #           @getenv VAR@           Get environment variable [*]
 #           @lc SYM@               Lower case
 #           @len SYM@              Number of characters in symbol
-#           @substr SYM BEG [LEN]  Substring
+#           @substr SYM BEG [LEN]@ Substring
 #           @trim SYM@             Remove leading and trailing whitespace
 #           @uc SYM@               Upper case
 #           @uuid@                 Generate something that resembles a UUID:
@@ -125,14 +124,14 @@
 #           __GID__                [effective] Group id
 #           __HOST__               Short host name (myhost)
 #           __HOSTNAME__           FQDN host name (myhost.example.com)
-#           __INPUT__              The characters read by @input
+#           __INPUT__              The data read by @input
 #           __LINE__               Current line number in __FILE__
-#           __NFILE__              Number of files processed (0)
+#           __NFILE__              Number of files processed so far (0)
 #           __STRICT__             Strict mode (TRUE)
 #           __TIME__               Current time (053000)
 #           __TIMESTAMP__          ISO 8601 timestamp (1945-07-16T05:30:00-0600)
 #           __UID__                [effective] User id
-#           __USER__               Username
+#           __USER__               User name
 #           __VERSION__            m2 version
 #
 #       Except for certain unprotected symbols, internal symbols cannot be
@@ -210,8 +209,8 @@
 #       you have learned to expect.
 #
 #       Positional parameters are parsed by splitting on white space.
-#               @foo "aaa bbb" ccc
-#       has 3 arguments ('"aaa', 'bbb"', 'ccc') not 2.
+#               @foo "a b" c
+#       has 3 arguments ('"a', 'b"', 'c') not 2.
 #
 # EXAMPLE
 #       @define Condition under
@@ -227,7 +226,7 @@
 #
 # AUTHOR(S)
 #       Jon L. Bentley, jlb@research.bell-labs.com.  Original author.
-#       Christopher Leyon, cleyon@gmail.com.
+#       Chris Leyon, cleyon@gmail.com.
 #
 # SEE ALSO
 #       "m1: A Mini Macro Processor", Computer Language, June 1990,
@@ -240,7 +239,7 @@
 #*****************************************************************************
 
 BEGIN {
-    version = "2.1.2"
+    version = "2.1.3"
 }
 
 
@@ -288,18 +287,18 @@ function chop(s)
 }
 
 
-function chomp(s,    last)
+# If last character is newline, chop() it off
+function chomp(s)
 {
-    last = substr(s, length(s), 1)
-    return (last == "\n") ? chop(s) : s
+    return (substr(s, length(s), 1) == "\n") \
+        ? chop(s) : s
 }
 
 
 # x[y]  =>  x <SUBSEP> y
 function remove_brackets(sym,    lbracket, rbracket, x, y)
 {
-    lbracket = index(sym, "[")
-    if (lbracket == 0)
+    if ((lbracket = index(sym, "[")) == 0)
         return sym
     if (sym !~ /^.+\[.+\]$/)
         return sym
@@ -313,8 +312,7 @@ function remove_brackets(sym,    lbracket, rbracket, x, y)
 # x <SUBSEP> y  =>  x[y]
 function restore_brackets(sym,    idx, x, y)
 {
-    idx = index(sym, SUBSEP)
-    if (idx == 0)
+    if ((idx = index(sym, SUBSEP)) == 0)
         return sym
     x = substr(sym, 1, idx-1)
     y = substr(sym, idx+1)
@@ -335,7 +333,7 @@ function symbol_internal_p(sym)
 }
 
 
-# In strict mode, a symbol must match the followiong regexp:
+# In strict mode, a symbol must match the following regexp:
 #       /^[A-Za-z#$_][A-Za-z#$_0-9]*$/
 # In non-strict mode, any non-empty string is valid.
 function symbol_valid_p(sym,    lbracket)
@@ -346,10 +344,9 @@ function symbol_valid_p(sym,    lbracket)
         return FALSE
 
     # Half remove brackets
-    if (sym ~ /^.+\[.+\]$/) {
+    if ((lbracket = index(sym, "[")) && (sym ~ /^.+\[.+\]$/)) {
         # Part to check for validity is the "x" part (think array name)
         # The "subscript" party can be anything at all.
-        lbracket = index(sym, "[")
         sym = substr(sym, 1, lbracket-1)
     }
 
@@ -366,16 +363,15 @@ function validate_symbol(sym)
 {
     if (symbol_valid_p(sym))
         return TRUE
-    else
-        error("Symbol name '" sym "' invalid:" $0)
+    error("Symbol name '" sym "' invalid:" $0)
 }
 
 
 # Protected symbols cannot be changed by the user.
 function symbol_protected_p(sym)
 {
+    # Whitelist of known safe symbols
     if (sym in unprotected_symbols)
-        # Whitelist of known safe symbols
         return FALSE
     return symbol_internal_p(sym)
 }
@@ -424,6 +420,8 @@ function delete_symbol(sym)
     # It is legal to delete an array key that does not exist
     delete symtab[remove_brackets(sym)]
 }
+
+
 function currently_active_p()
 {
     return active[ifdepth]
@@ -440,10 +438,9 @@ function default_shell()
 {
     if (symbol_defined_p("SHELL"))
         return get_symbol("SHELL")
-    else if ("SHELL" in ENVIRON)
+    if ("SHELL" in ENVIRON)
         return ENVIRON["SHELL"]
-    else
-        return get_symbol("__SHELL__")
+    return get_symbol("__SHELL__")
 }
 
 
@@ -481,7 +478,7 @@ function uuid()
 
 
 # Quicksort - from "The AWK Programming Language", p.161
-# Used in builtin_dump() to sort the symbol table.
+# Used in m2_dump() to sort the symbol table.
 function qsort(A, left, right,    i, last)
 {
     if (left >= right)          # Do nothing if array contains
@@ -489,24 +486,23 @@ function qsort(A, left, right,    i, last)
     swap(A, left, left + int((right-left+1)*rand()))
     last = left                 # A[left] is now partition element
     for (i = left+1; i <= right; i++)
-        if (less_than(A[i], A[left]))
+        if (_less_than(A[i], A[left]))
             swap(A, ++last, i)
     swap(A, left, last)
     qsort(A, left,   last-1)
     qsort(A, last+1, right)
 }
 
-# Special comparison used to sort leading underscores after all other values
-function less_than(s1, s2,    s1_underscore, s2_underscore)
+# Special comparison to sort leading underscores after all other values
+function _less_than(s1, s2,    s1_underscore, s2_underscore)
 {
     s1_underscore = substr(s1, 1, 1) == "_"
     s2_underscore = substr(s2, 1, 1) == "_"
     if (s1_underscore && !s2_underscore)
         return FALSE
-    else if (s2_underscore && !s1_underscore)
+    if (!s1_underscore && s2_underscore)
         return TRUE
-    else
-        return s1 < s2
+    return s1 < s2
 }
 
 function swap(A, i, j,    t)
@@ -522,7 +518,7 @@ function shipout_printf(s)
 
 
 # @default, @initialize
-function builtin_default(    sym)
+function m2_default(    sym)
 {
     if (NF < 2) error("Bad parameters:" $0)
     sym = $2
@@ -540,7 +536,7 @@ function builtin_default(    sym)
 
 
 # @define, @append
-function builtin_define(    append_flag, sym)
+function m2_define(    append_flag, sym)
 {
     if (NF < 2) error("Bad parameters:" $0)
     sym = $2
@@ -555,7 +551,7 @@ function builtin_define(    append_flag, sym)
 
 
 # @dump, @dumpall
-function builtin_dump(    buf, cnt, definition, dumpfile, i, key, keys, sym_name, all_flag)
+function m2_dump(    buf, cnt, definition, dumpfile, i, key, keys, sym_name, all_flag)
 {
     if (! currently_active_p())
         return
@@ -591,7 +587,7 @@ function builtin_dump(    buf, cnt, definition, dumpfile, i, key, keys, sym_name
 }
 
 
-function builtin_else()
+function m2_else()
 {
     if (ifdepth == 0)
         error("No corresponding '@if':" $0)
@@ -602,7 +598,7 @@ function builtin_else()
 }
 
 
-function builtin_endif()
+function m2_endif()
 {
     if (ifdepth-- == 0)
         error("No corresponding '@if':" $0)
@@ -610,7 +606,7 @@ function builtin_endif()
 
 
 # @error, @warn, @echo, @stderr
-function builtin_error(    exit_flag, message)
+function m2_error(    exit_flag, message)
 {
     if (! currently_active_p())
         return
@@ -628,7 +624,7 @@ function builtin_error(    exit_flag, message)
 }
 
 
-function builtin_exit()
+function m2_exit()
 {
     if (! currently_active_p())
         return
@@ -637,7 +633,7 @@ function builtin_exit()
 
 
 # @if, et al
-function builtin_if(    sym, cond, op, val2, val4)
+function m2_if(    sym, cond, op, val2, val4)
 {
     sub(/^@/, "")          # Remove leading @ otherwise dosubs($0) loses
     $0 = dosubs($0)
@@ -717,7 +713,7 @@ function builtin_if(    sym, cond, op, val2, val4)
 
     } else
         # Should not happen
-        error("builtin_if(): '" $1 "' not matched:" $0)
+        error("m2_if(): '" $1 "' not matched:" $0)
 
     active[++ifdepth] = currently_active_p() ? cond : FALSE
     seen_else[ifdepth] = FALSE
@@ -753,7 +749,7 @@ function read_lines_until(delim,    buf, delim_len)
 #     ...
 #     Foobar
 # works.
-function builtin_ignore(    buf, delim, save_line, save_lineno)
+function m2_ignore(    buf, delim, save_line, save_lineno)
 {
     if (NF != 2) error("Bad parameters:" $0)
     if (! currently_active_p())
@@ -768,7 +764,7 @@ function builtin_ignore(    buf, delim, save_line, save_lineno)
 
 
 # @include, @paste
-function builtin_include(    error_text, filename, read_literally)
+function m2_include(    error_text, filename, read_literally)
 {
     if (NF != 2) error("Bad parameters:" $0)
     if (! currently_active_p())
@@ -779,14 +775,13 @@ function builtin_include(    error_text, filename, read_literally)
         error_text = "File '" filename "' does not exist:" $0
         if (strictp())
             error(error_text)
-        else
-            print_stderr(format_message(error_text))
+        print_stderr(format_message(error_text))
     }
 }
 
 
 # @incr, @decr
-function builtin_incr(    incr, sym)
+function m2_incr(    incr, sym)
 {
     if (NF < 2) error("Bad parameters:" $0)
     sym = $2
@@ -805,9 +800,9 @@ function builtin_incr(    incr, sym)
 
 
 # Read a single line from /dev/tty.  No prompt is issued; if you want
-# one, use @echo.  Specify the symbol you want to receive the input.  If
-# no symbol is specified, a default name of __INPUT__ is used.
-function builtin_input(    getstat, input, sym)
+# one, use @echo.  Specify the symbol you want to receive the data.  If
+# no symbol is specified, __INPUT__ is used by default.
+function m2_input(    getstat, input, sym)
 {
     sym = (NF < 2) ? "__INPUT__" : $2
     if (symbol_protected_p(sym))
@@ -822,7 +817,7 @@ function builtin_input(    getstat, input, sym)
 }
 
 
-function builtin_longdef(    buf, save_line, save_lineno, sym)
+function m2_longdef(    buf, save_line, save_lineno, sym)
 {
     if (NF != 2) error("Bad parameters:" $0)
     sym = $2
@@ -840,9 +835,9 @@ function builtin_longdef(    buf, save_line, save_lineno, sym)
 }
 
 
-# @longend should never be encountered alone because builtin_longdef()
+# @longend should never be encountered alone because m2_longdef()
 # consumes any matching @longend.
-function builtin_longend()
+function m2_longend()
 {
     error("No corresponding '@longdef':" $0)
 }
@@ -852,15 +847,14 @@ function builtin_longend()
 # This is not intended to be a full-blown file inputter but rather just
 # to read short snippets like a file path or username.  As usual, multi-
 # line values are accepted but the final trailing \n (if any) is stripped.
-function builtin_read(    sym, file, line, val, getstat)
+function m2_read(    sym, file, line, val, getstat)
 {
     if (symbol_true_p("__DEBUG__"))
         print_stderr("@read: \$0='" $0 "'")
-    if (NF == 3) {       # @read SYM FILE
-        sym = $2
-        file = $3
-    } else
+    if (NF != 3)                # @read SYM FILE
         error("Bad parameters:" $0)
+    sym  = $2
+    file = $3
     if (symbol_protected_p(sym))
         error("Symbol '" sym "' protected:" $0)
     if (! currently_active_p())
@@ -872,10 +866,9 @@ function builtin_read(    sym, file, line, val, getstat)
         getstat = getline line < file
         if (getstat < 0)        # Error
             error("Error reading file '" file "'")
-        else if (getstat == 0)  # End of file
+        if (getstat == 0)       # End of file
             break
-        else                    # Read a line
-            val = val line "\n"
+        val = val line "\n"     # Read a line
     }
     close(file)
     set_symbol(sym, chomp(val))
@@ -895,7 +888,7 @@ function builtin_read(    sym, file, line, val, getstat)
 #       @NUM@/@DENOM@
 #       4*a(1)
 #       EOD
-function builtin_shell(    buf, delim, save_line, save_lineno, sendto)
+function m2_shell(    buf, delim, save_line, save_lineno, sendto)
 {
     if (NF < 2)
         error("Bad parameters:" $0)
@@ -920,7 +913,7 @@ function builtin_shell(    buf, delim, save_line, save_lineno, sendto)
 }
 
 
-function builtin_typeout(    buf)
+function m2_typeout(    buf)
 {
     if (! currently_active_p())
         return
@@ -930,7 +923,7 @@ function builtin_typeout(    buf)
 }
 
 
-function builtin_undefine(    sym)
+function m2_undef(    sym)
 {
     if (NF != 2) error("Bad parameters:" $0)
     sym = $2
@@ -1052,41 +1045,41 @@ function process_line(read_literally,    newstring)
         return
     }
 
-    # Look for built-in commands.  Note, these only match
-    # at beginning of line.
+    # Look for built-in macro control commands.
+    # Note, these only match at beginning of line.
     if      (/^@(@|#)/)                  { } # Comments are ignored
-    else if (/^@append([ \t]|$)/)        { builtin_define() }
+    else if (/^@append([ \t]|$)/)        { m2_define() }
     else if (/^@c([ \t]|$)/)             { } # Comments are ignored
     else if (/^@comment([ \t]|$)/)       { } # Comments are ignored
-    else if (/^@decr([ \t]|$)/)          { builtin_incr() }
-    else if (/^@default([ \t]|$)/)       { builtin_default() }
-    else if (/^@define([ \t]|$)/)        { builtin_define() }
-    else if (/^@dump(all)?([ \t]|$)/)    { builtin_dump() }
-    else if (/^@echo([ \t]|$)/)          { builtin_error() }
-    else if (/^@else([ \t]|$)/)          { builtin_else() }
-    else if (/^@endif([ \t]|$)/)         { builtin_endif() }
-    else if (/^@error([ \t]|$)/)         { builtin_error() }
-    else if (/^@exit([ \t]|$)/)          { builtin_exit() }
-    else if (/^@fi([ \t]|$)/)            { builtin_endif() }
+    else if (/^@decr([ \t]|$)/)          { m2_incr() }
+    else if (/^@default([ \t]|$)/)       { m2_default() }
+    else if (/^@define([ \t]|$)/)        { m2_define() }
+    else if (/^@dump(all)?([ \t]|$)/)    { m2_dump() }
+    else if (/^@echo([ \t]|$)/)          { m2_error() }
+    else if (/^@else([ \t]|$)/)          { m2_else() }
+    else if (/^@endif([ \t]|$)/)         { m2_endif() }
+    else if (/^@error([ \t]|$)/)         { m2_error() }
+    else if (/^@exit([ \t]|$)/)          { m2_exit() }
+    else if (/^@fi([ \t]|$)/)            { m2_endif() }
     else if (/^@if(_not)?(_(defined|env|exists|in))?([ \t]|$)/)
-                                         { builtin_if() }
-    else if (/^@ifn?def([ \t]|$)/)       { builtin_if() }
-    else if (/^@ignore([ \t]|$)/)        { builtin_ignore() }
-    else if (/^@include([ \t]|$)/)       { builtin_include() }
-    else if (/^@incr([ \t]|$)/)          { builtin_incr() }
-    else if (/^@init(ialize)?([ \t]|$)/) { builtin_default() }
-    else if (/^@input([ \t]|$)/)         { builtin_input() }
-    else if (/^@longdef([ \t]|$)/)       { builtin_longdef() }
-    else if (/^@longend([ \t]|$)/)       { builtin_longend() }
-    else if (/^@paste([ \t]|$)/)         { builtin_include() }
-    else if (/^@read([ \t]|$)/)          { builtin_read() }
+                                         { m2_if() }
+    else if (/^@ifn?def([ \t]|$)/)       { m2_if() }
+    else if (/^@ignore([ \t]|$)/)        { m2_ignore() }
+    else if (/^@include([ \t]|$)/)       { m2_include() }
+    else if (/^@incr([ \t]|$)/)          { m2_incr() }
+    else if (/^@init(ialize)?([ \t]|$)/) { m2_default() }
+    else if (/^@input([ \t]|$)/)         { m2_input() }
+    else if (/^@longdef([ \t]|$)/)       { m2_longdef() }
+    else if (/^@longend([ \t]|$)/)       { m2_longend() }
+    else if (/^@paste([ \t]|$)/)         { m2_include() }
+    else if (/^@read([ \t]|$)/)          { m2_read() }
     else if (/^@rem([ \t]|$)/)           { } # Comments are ignored
-    else if (/^@shell([ \t]|$)/)         { builtin_shell() }
-    else if (/^@stderr([ \t]|$)/)        { builtin_error() }
-    else if (/^@typeout([ \t]|$)/)       { builtin_typeout() }
-    else if (/^@undef(ine)?([ \t]|$)/)   { builtin_undefine() }
-    else if (/^@unless([ \t]|$)/)        { builtin_if() }
-    else if (/^@warn([ \t]|$)/)          { builtin_error() }
+    else if (/^@shell([ \t]|$)/)         { m2_shell() }
+    else if (/^@stderr([ \t]|$)/)        { m2_error() }
+    else if (/^@typeout([ \t]|$)/)       { m2_typeout() }
+    else if (/^@undef(ine)?([ \t]|$)/)   { m2_undef() }
+    else if (/^@unless([ \t]|$)/)        { m2_if() }
+    else if (/^@warn([ \t]|$)/)          { m2_error() }
 
     # Process @
     else {
@@ -1118,7 +1111,7 @@ function readline(    getstat, i, status)
         getstat = getline < get_symbol("__FILE__")
         if (getstat < 0)        # Error
             error("Error reading file '" get_symbol("__FILE__") "'")
-        else if (getstat == 0)  # End of file
+        if (getstat == 0)  # End of file
             status = EOF
         else                    # Read a line
             incr_symbol("__LINE__")
@@ -1363,7 +1356,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
 # two fields.  The new value of $0 now contains just (the first line of)
 # the macro body.  The Computer Language article explains that sub() is
 # used on purpose, in order to preserve whitespace in the macro body.
-# Simply assigning the empty string to $1 and $2 would rebuild the
+# Simply assigning the empty string to $1 and $2 would rebuild th
 # record, but with all occurrences of whitespace collapsed into single
 # occurrences of the value of OFS (a single blank).  The function then
 # proceeds to gather the rest of the macro body, indicated by lines that
@@ -1408,7 +1401,8 @@ function load_home_m2rc()
 {
     if ("HOME" in ENVIRON)
         dofile(ENVIRON["HOME"] "/.m2rc")
-    init_needed = FALSE
+    # What matters is that you tried...
+    read_init_file = TRUE
 }
 
 
@@ -1418,7 +1412,7 @@ function initialize(    d, dateout, egid, euid, host, hostname, user)
     FALSE           = 0
     EOF             = "EOF" SUBSEP "EOF" # Unlikely to occur in normal text
     ifdepth         = 0
-    init_needed     = TRUE
+    read_init_file  = FALSE
     active[ifdepth] = TRUE
     buffer          = ""
     strbuf          = ""
@@ -1486,7 +1480,7 @@ BEGIN {
                     set_symbol("__STRICT__", val)
             } else {
                 # Load a file
-                if (init_needed)
+                if (! read_init_file)
                     load_home_m2rc()
                 if (! dofile(arg)) {
                     print_stderr(format_message("File '" arg "' does not exist", i, "ARGV"))
@@ -1494,11 +1488,11 @@ BEGIN {
                 }
             }
         }
-        # If we get here with init_needed still true, that means we used
+        # If we get here with read_init_file still false, that means we used
         # up every ARGV defining symbols and didn't specify any files.
         # Not specifying any input files, like ARGC==1, means to read
-        # standard input, so that's what we must do now.
-        if (init_needed) {
+        # standard input, so that is what we must do now.
+        if (! read_init_file) {
             load_home_m2rc()
             dofile("-")
         }

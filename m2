@@ -239,7 +239,7 @@
 #*****************************************************************************
 
 BEGIN {
-    version = "2.1.3"
+    version = "2.1.4"
 }
 
 
@@ -295,28 +295,28 @@ function chomp(s)
 }
 
 
-# x[y]  =>  x <SUBSEP> y
-function remove_brackets(sym,    lbracket, rbracket, x, y)
+# Remove brackets:      "arr[key]"  =>  "arr <SUBSEP> key"
+function canonical_form(sym,    lbracket, rbracket, arr, key)
 {
     if ((lbracket = index(sym, "[")) == 0)
         return sym
     if (sym !~ /^.+\[.+\]$/)
         return sym
     rbracket = index(sym, "]")
-    x = substr(sym, 1, lbracket-1)
-    y = substr(sym, lbracket+1, rbracket-lbracket-1)
-    return x SUBSEP y
+    arr = substr(sym, 1, lbracket-1)
+    key = substr(sym, lbracket+1, rbracket-lbracket-1)
+    return arr SUBSEP key
 }
 
 
-# x <SUBSEP> y  =>  x[y]
-function restore_brackets(sym,    idx, x, y)
+# Restore brackets:     "arr <SUBSEP> key"  =>  "arr[key]"
+function display_form(sym,    sep, arr, key)
 {
-    if ((idx = index(sym, SUBSEP)) == 0)
+    if ((sep = index(sym, SUBSEP)) == 0)
         return sym
-    x = substr(sym, 1, idx-1)
-    y = substr(sym, idx+1)
-    return x "[" y "]"
+    arr = substr(sym, 1, sep-1)
+    key = substr(sym, sep+1)
+    return arr "[" key "]"
 }
 
 
@@ -343,15 +343,15 @@ function symbol_valid_p(sym,    lbracket)
     if (length(sym) == 0)
         return FALSE
 
-    # Half remove brackets
+    # Fake/hack out any "array name" by removing brackets
     if ((lbracket = index(sym, "[")) && (sym ~ /^.+\[.+\]$/)) {
-        # Part to check for validity is the "x" part (think array name)
-        # The "subscript" party can be anything at all.
+        # Part to check for validity is the "arr" part (think array name)
+        # The "subscript" part can be anything at all.
         sym = substr(sym, 1, lbracket-1)
     }
 
     # 2. We're in strict mode and the name doesn't pass regexp check
-    if ((strictp()) && (sym !~ /^[A-Za-z#$_][A-Za-z#$_0-9]*$/))
+    if (strictp() && sym !~ /^[A-Za-z#$_][A-Za-z#$_0-9]*$/))
         return FALSE
 
     return TRUE
@@ -379,7 +379,7 @@ function symbol_protected_p(sym)
 
 function symbol_defined_p(sym)
 {
-    return remove_brackets(sym) in symtab
+    return canonical_form(sym) in symtab
 }
 
 
@@ -393,7 +393,7 @@ function symbol_true_p(sym)
 
 function get_symbol(sym)
 {
-    return symtab[remove_brackets(sym)]
+    return symtab[canonical_form(sym)]
 }
 
 
@@ -401,7 +401,7 @@ function set_symbol(sym, val)
 {
     if (symbol_true_p("__DEBUG__"))
         print_stderr("set_symbol(" sym "," val ")")
-    symtab[remove_brackets(sym)] = val
+    symtab[canonical_form(sym)] = val
 }
 
 
@@ -409,7 +409,7 @@ function incr_symbol(sym, incr)
 {
     if (incr == "")
         incr = 1
-    symtab[remove_brackets(sym)] += incr
+    symtab[canonical_form(sym)] += incr
 }
 
 
@@ -418,7 +418,7 @@ function delete_symbol(sym)
     if (symbol_true_p("__DEBUG__"))
         print_stderr("delete_symbol(" sym ")")
     # It is legal to delete an array key that does not exist
-    delete symtab[remove_brackets(sym)]
+    delete symtab[canonical_form(sym)]
 }
 
 
@@ -571,7 +571,7 @@ function m2_dump(    buf, cnt, definition, dumpfile, i, key, keys, sym_name, all
     for (i = 1; i <= cnt; i++) {
         key = keys[i]
         definition = get_symbol(key)
-        sym_name = restore_brackets(key)
+        sym_name = display_form(key)
         if (index(definition, "\n") == 0)
             buf = buf "@define " sym_name "\t" definition "\n"
         else {
@@ -701,7 +701,11 @@ function m2_if(    sym, cond, op, val2, val4)
         if (NF < 2) error("Bad parameters:" $0)
         cond = ! path_exists_p($2)
 
+    # @if(_not)_in KEY ARR
+    # Test if symbol ARR[KEY] is defined.  Key comes first, because in
+    # Awk one says "key IN array" for the predicate.
     } else if ($1 == "if_in") {   # @if_in us-east-1 VALID_REGIONS
+        # @if_in KEY ARR
         if (NF < 3) error("Bad parameters:" $0)
         validate_symbol($3)
         cond = symbol_defined_p($3 "[" $2 "]")
@@ -787,7 +791,7 @@ function m2_incr(    incr, sym)
     sym = $2
     if (symbol_protected_p(sym))
         error("Symbol '" sym "' protected:" $0)
-    if (NF >= 3 && !integerp($3))
+    if (NF >= 3 && ! integerp($3))
         error("Value '" $3 "' must be numeric:" $0)
     if (! currently_active_p())
         return
@@ -1119,7 +1123,7 @@ function readline(    getstat, i, status)
     # Hack: allow @Mname at start of line w/o closing @
     # if non-strict.  Note, macro name must start w/capital.
     if (not strictp())
-        if ($0 ~ /^@[A-Z][a-zA-Z0-9_]*[ \t]*$/)
+        if ($0 ~ /^@[A-Z][A-Za-z#$_0-9]*[ \t]*$/)
             sub(/[ \t]*$/, "@")
     return status
 }
@@ -1410,9 +1414,10 @@ function initialize(    d, dateout, egid, euid, host, hostname, user)
 {
     TRUE            = 1
     FALSE           = 0
+    exit_code       = 0                  # EX_OK
     EOF             = "EOF" SUBSEP "EOF" # Unlikely to occur in normal text
-    ifdepth         = 0
     read_init_file  = FALSE
+    ifdepth         = 0
     active[ifdepth] = TRUE
     buffer          = ""
     strbuf          = ""
@@ -1450,14 +1455,11 @@ function initialize(    d, dateout, egid, euid, host, hostname, user)
 # all of the files named on the command line.
 BEGIN {
     initialize()
-    # set_symbol("__DEBUG__", TRUE)
 
     if (ARGC == 1) {
         load_home_m2rc()
         dofile("-")
-        exit 0
     } else if (ARGC > 1) {
-        my_exit = 0             # EX_OK
         # Delay loading $HOME/.m2rc as long as possible.  This allows us
         # to set symbols on the command line (e.g., debug=1) which will
         # have taken effect by the time the init file loads.
@@ -1484,7 +1486,7 @@ BEGIN {
                     load_home_m2rc()
                 if (! dofile(arg)) {
                     print_stderr(format_message("File '" arg "' does not exist", i, "ARGV"))
-                    my_exit = 66 # EX_NOINPUT
+                    exit_code = 66 # EX_NOINPUT
                 }
             }
         }
@@ -1496,9 +1498,9 @@ BEGIN {
             load_home_m2rc()
             dofile("-")
         }
-        exit my_exit
     } else {
         print_stderr("Usage: m2 [NAME=VAL] [file...]")
-        exit 64                 # EX_USAGE
+        exit_exit = 64          # EX_USAGE
     }
+    exit exit_code
 }

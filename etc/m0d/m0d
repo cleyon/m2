@@ -1,0 +1,47 @@
+awk '
+function dofile(fname) {
+    while (getline <fname > 0) {
+        if (/^@define[ \t]/) {
+            dodef()
+        } else if (/^@include[ \t]/) {
+            dofile(dosubs($2))
+        } else if (/^@if[ \t]/) {
+            if (!($2 in symtab) || symtab[$2] == 0)
+                gobble(fname)
+        } else {
+            print dosubs($0)
+        }
+    }
+    close(fname)
+}
+
+
+function gobble(fname) {
+    while (getline <fname > 0)
+        if (/^@fi/)
+            break
+}
+
+
+function dosubs(s,  i) {
+    do {
+        changes = 0
+        if (s ~ /@.*@/)
+            for (i in symtab)
+                changes += gsub("@" i "@", symtab[i], s)
+    } while (changes)
+    return s
+}
+
+
+function dodef(  name) {
+    name = $2
+    sub(/^[ \t]*[^ \t]+[ \t]+[^ \t]+[ \t]+/, "")
+    symtab[name] = $0
+}
+
+
+BEGIN { if (ARGC == 2) dofile(ARGV[1])
+    else dofile("/dev/stdin")
+      }
+' $*

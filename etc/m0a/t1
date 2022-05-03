@@ -1,0 +1,5 @@
+t1 begin
+@define Condition under
+ ...
+You are clearly @Condition@worked.
+t1 end

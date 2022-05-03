@@ -16,64 +16,57 @@
 #
 #       1. Define and expand macros.  Macros have two parts, a name and
 #          a body.  All occurrences of a macro's name are replaced with
-#          the macro's body.
+#          the macro's body.  Macro expansion may include parameters.
 #
 #       2. Include files.  Special include directives in a data file are
 #          replaced with the contents of the named file.  Includes can
-#          usually be nested, with one included file including another.
+#          be nested, with one included file including another.
 #          Included files are processed for macros.
 #
 #       3. Conditional text inclusion and exclusion.  Different parts of
 #          the text can be included in the final output, often based
 #          upon whether a macro is or isn't defined.
 #
-#       4. Depending on the macro processor, comment lines can appear
-#          that will be removed from the final output.
+#       4. Comment lines will be removed from the final output.
 #
-#       Macro expressions lines are distinguished with a "@" character.
-#       The following lines define or control macros for subsequent
-#       processing:
+#       Macro expression lines are distinguished with a "@" character.
+#       The following lines define or control macros for subsequent processing:
 #
-#           @append NAME MORE      Add to the body of an already defined macro
-#           @capture NAME ...      Pass ... to shell, capture output in NAME
-#                                    Note: ... data is evaluated before being sent to shell
-#           @comment ...           Comment -- line is ignored
+#           @append NAME MORE      Add MORE to an already defined macro NAME
+#           @comment STUFF...      Comment; ignore line.  Also @@, @c, @#, @rem
 #           @decr NAME [N]         Subtract 1 (or N) from an already defined NAME
 #           @default NAME VALUE    As @define, but no-op if NAME already defined
 #           @define NAME VALUE     Set NAME to VALUE
 #           @dump(all) [FILE]      Output symbol names & definitions to FILE (stderr)
-#           @echo STUFF            Same as @warn
 #           @else                  Switch to the other branch of an @if statement
 #           @endif                 Terminate @if or @unless
-#           @error STUFF           Send STUFF to standard error, exit 2
-#           @exit [CODE]           Stop parsing input immediately, exit CODE (default 0)
+#           @error STUFF...        Send STUFF... to standard error, exit 2
+#           @exit [CODE]           Immediately stop parsing; exit CODE (default 0)
 #           @fi                    Same as @endif
 #           @if NAME               Include subsequent text if NAME is true (!= 0)
 #           @if NAME <OP> AAA      Test if NAME compares to AAA (names or values)
 #           @if(_not)_defined NAME Test if NAME is defined
-#           @if(_not)_env ENV      Test if ENV is defined in the environment (or not)
-#           @if(_not)_exists PATH  Test if PATH exists (or not)
+#           @if(_not)_env VAR      Test if VAR is defined in the environment (or not)
+#           @if(_not)_exists FILE  Test if FILE exists (or not)
 #           @if(_not)_in KEY ARR   Test if symbol ARR[KEY] is defined
 #           @if(n)def NAME         Same as @if_defined/@if_not_defined
 #           @ignore DELIM          Ignore input until line that begins with DELIM
-#           @include FILENAME      Read and process contents of FILENAME
+#           @include FILE          Read and process contents of FILE
 #           @incr NAME [N]         Add 1 (or N) from an already defined NAME
 #           @initialize NAME VALUE As @default, but errors if NAME already defined
 #           @input [NAME]          Read a single line from keyboard and define NAME
 #           @longdef NAME          Define NAME to <...> lines until @longend
-#             ...                    Don't use other @ commands inside def!
+#             <...>                  Don't use other @ commands inside definition
 #           @longend                 But simple @VAR@ references should be okay
-#           @paste FILENAME        Read FILENAME literally, do not process any macros
-#           @print SYM             Ship out value of SYM without evaluation (use with @capture)
-#           @read SYM FILE         Read FILE contents into SYM
-#           @rem ...               Same as @comment
+#           @paste FILE            Read FILE literally, do not process any macros
+#           @read NAME FILE        Read FILE contents into NAME
 #           @shell DELIM [PROG]    Evaluate input until DELIM, send raw data to PROG
-#                                    Output from prog is captured in output stream.
+#                                    Output from prog is captured in output stream
+#           @stderr STUFF...       Send STUFF... to standard error, continue
+#                                    Also called @echo, @warn
 #           @typeout               Ship out remainder of input file literally, no processing
 #           @undef(ine) NAME       Remove definition of NAME
 #           @unless NAME           Include subsequent text if NAME == 0 (or undefined)
-#           @warn STUFF            Send STUFF to standard error, continue
-#           @@.../@#...            Same as @comment
 #
 #       A definition may extend across many lines by ending each line
 #       with a backslash, thus quoting the following newline.
@@ -96,6 +89,7 @@
 #       for a definition to refer to a parameter which is not supplied.
 #
 #       The following built-in definitions are recognized:
+#
 #           @basename SYM@         Return base name of SYM
 #           @boolval SYM@          Return 1 if symbol is true, else 0
 #           @dirname SYM@          Return directory name of SYM
@@ -112,14 +106,19 @@
 #                                    C3525388-E400-43A7-BC95-9DF5FA3C4A52
 #
 #       [*] @getenv VAR@ will be replaced by the value of the
-#       environment variable VAR.  If VAR is not defined, nothing is
-#       output (i.e., the replacement text is the empty string) and no
-#       error is generated.  (Depending on __STRICT__.)
+#       environment variable VAR.  A runtime error is thrown if VAR is
+#       not defined.  To continue with empty string and no error,
+#       disable __STRICT__.
+#
+#       N.B., The definitions just listed can occur multiple times in a
+#       single line, whereas the `macro expression lines' (@if, etc) can
+#       only occur once at the beginning of a line.
 #
 #       Symbols that start and end with "__" (like __FOO__) are called
 #       "internal" symbols.  The following internal symbols are pre-defined;
 #       example values or defaults are shown:
 #           __DATE__               Current date (19450716)
+#           __DEBUG__              Debug internal workings of m2
 #           __FILE__               Current file name
 #           __GENSYMCOUNT__        Count for generated symbols (0)
 #           __GENSYMPREFIX__       Prefix for generated symbols (_gen)
@@ -136,14 +135,14 @@
 #           __USER__               Username
 #           __VERSION__            m2 version
 #
-#       Except for __INPUT__ and __STRICT__, internal symbols cannot be
+#       Except for certain unprotected symbols, internal symbols cannot be
 #       modified by the user.  The values of __DATE__, __TIME__, and
 #       __TIMESTAMP__ are fixed at the start of the program and do not
 #       change.
 #
 # ERROR MESSAGES
 #       Bad parameters [in 'XXX']
-#           - A command was not provided the expected number of parameters.
+#           - A command did not receive the expected (number of) parameters.
 #
 #       Cannot recursively read 'XXX'
 #           - Attempt to @include the same file multiple times.
@@ -425,8 +424,6 @@ function delete_symbol(sym)
     # It is legal to delete an array key that does not exist
     delete symtab[remove_brackets(sym)]
 }
-
-
 function currently_active_p()
 {
     return active[ifdepth]
@@ -612,7 +609,7 @@ function builtin_endif()
 }
 
 
-# @error, @warn, @echo
+# @error, @warn, @echo, @stderr
 function builtin_error(    exit_flag, message)
 {
     if (! currently_active_p())
@@ -751,36 +748,6 @@ function read_lines_until(delim,    buf, delim_len)
 }
 
 
-# @capture SYM CMD...
-# In general, the only thing you can safely to with symbols defined here
-# is to @print them.
-function builtin_capture(    sym, val, cmd)
-{
-    if (symbol_true_p("__DEBUG__"))
-        print_stderr("@capture: \$0='" $0 "'")
-    if (NF < 3) error("Bad parameters:" $0)
-    sym = $2
-    if (symbol_protected_p(sym))
-        error("Symbol '" sym "' protected:" $0)
-    if (! currently_active_p())
-        return
-    validate_symbol(sym)
-
-    val = ""
-    sub(/^[ \t]*[^ \t]+[ \t]+[^ \t]+[ \t]*/, "")
-    cmd = dosubs($0)
-    if (symbol_true_p("__DEBUG__"))
-        print_stderr("@capture: cmd='" cmd "'")
-    while ((cmd | getline) > 0) {
-        if ($0 !~ /^[ \t]*$/)
-            val = val $0 "\n"
-    }
-    if (symbol_true_p("__DEBUG__"))
-        print_stderr("@capture: val='" val "'")
-    set_symbol(sym, chop(val))
-}
-
-
 # Ignore input until line starts with $2.  This means
 #     @ignore Foo
 #     ...
@@ -881,25 +848,10 @@ function builtin_longend()
 }
 
 
-# @print
-function builtin_print(    sym, r)
-{
-    if (NF != 2) error("Bad parameters:" $0)
-    sym = $2
-    if (! currently_active_p())
-        return
-    validate_symbol(sym)
-    if (! symbol_defined_p(sym))
-        error("Symbol '" sym "' not defined:" $0)
-    # We want @print to end cleanly
-    if (dostr(get_symbol(sym)) == 0)
-        shipout_printf("\n")
-}
-
-
 # @read
-# As usual, multiline values are accepted but the final trailing \n (if
-# any) is stripped.
+# This is not intended to be a full-blown file inputter but rather just
+# to read short snippets like a file path or username.  As usual, multi-
+# line values are accepted but the final trailing \n (if any) is stripped.
 function builtin_read(    sym, file, line, val, getstat)
 {
     if (symbol_true_p("__DEBUG__"))
@@ -1026,7 +978,7 @@ function dostr(s,    r, rprev)
         r = readline_from_string()
         if (r == -1)
             break
-        shipout_printf("%s", $0)
+        shipout_printf($0)
         if (r == 1)
             shipout_printf("\n")
         rprev = r
@@ -1105,7 +1057,6 @@ function process_line(read_literally,    newstring)
     if      (/^@(@|#)/)                  { } # Comments are ignored
     else if (/^@append([ \t]|$)/)        { builtin_define() }
     else if (/^@c([ \t]|$)/)             { } # Comments are ignored
-    else if (/^@capture([ \t]|$)/)       { builtin_capture() }
     else if (/^@comment([ \t]|$)/)       { } # Comments are ignored
     else if (/^@decr([ \t]|$)/)          { builtin_incr() }
     else if (/^@default([ \t]|$)/)       { builtin_default() }
@@ -1128,10 +1079,10 @@ function process_line(read_literally,    newstring)
     else if (/^@longdef([ \t]|$)/)       { builtin_longdef() }
     else if (/^@longend([ \t]|$)/)       { builtin_longend() }
     else if (/^@paste([ \t]|$)/)         { builtin_include() }
-    else if (/^@print([ \t]|$)/)         { builtin_print() }
     else if (/^@read([ \t]|$)/)          { builtin_read() }
     else if (/^@rem([ \t]|$)/)           { } # Comments are ignored
     else if (/^@shell([ \t]|$)/)         { builtin_shell() }
+    else if (/^@stderr([ \t]|$)/)        { builtin_error() }
     else if (/^@typeout([ \t]|$)/)       { builtin_typeout() }
     else if (/^@undef(ine)?([ \t]|$)/)   { builtin_undefine() }
     else if (/^@unless([ \t]|$)/)        { builtin_if() }
@@ -1308,11 +1259,11 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
         #   @getenv HOME@ => /home/user
         } else if (symfunc == "getenv") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            env = param[1+fencepost]
-            if (env in ENVIRON)
-                r = ENVIRON[env] r
+            p = param[1+fencepost]
+            if (p in ENVIRON)
+                r = ENVIRON[p] r
             else if (strictp())
-                error("Environment variable '" env "' not defined:" $0)
+                error("Environment variable '" p "' not defined:" $0)
 
         # lc : Lower case
         } else if (symfunc == "lc") {
@@ -1482,8 +1433,8 @@ function initialize(    d, dateout, egid, euid, host, hostname, user)
 
     set_symbol("__DATE__",         d[1] d[2] d[3])
     set_symbol("__DEBUG__",        FALSE); unprotected_symbols["__DEBUG__"]=1
-    set_symbol("__GENSYMPREFIX__", "_gen")
     set_symbol("__GENSYMCOUNT__",  0)
+    set_symbol("__GENSYMPREFIX__", "_gen")
     set_symbol("__GID__",          egid)
     set_symbol("__HOST__",         host)
     set_symbol("__HOSTNAME__",     hostname)

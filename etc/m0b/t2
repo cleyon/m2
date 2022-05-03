@@ -1,0 +1,5 @@
+t2 begin
+...  t2
+@include x2
+...  t2
+t2 end

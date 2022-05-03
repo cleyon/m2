@@ -1,0 +1,7 @@
+t2 begin
+Expected output:
+PROBSECFILE=/usr/jlb/macro.paper/sec2.in
+@define DIR /usr/jlb/macro.paper
+@define PROBSECFILE @DIR@/sec2.in
+PROBSECFILE=@PROBSECFILE@
+t2 end

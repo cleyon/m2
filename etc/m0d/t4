@@ -1,0 +1,13 @@
+t4 begin
+@define WANTNEWT 1
+...  t4
+@if WANTNEWT
+If you see this line, then conditional support for true values works.
+Now checking false condition; expect no output until "t4 end".
+@fi
+@define WANTNEWT 0
+@if WANTNEWT
+This area was profoundly influenced by
+the groundbreaking work of Professor Newton.
+@fi
+t4 end

@@ -1,14 +1,14 @@
-awk ’
+awk '
 # Modifications to published m1:
 #  Fixed bugs in dodef (see comment)
-#  Interpret ‘‘^@Mname’’ as ‘‘@Mname@’’
-#  Add ‘‘^@@’’ as comment
-#  Add ‘‘@ignore DELIM’’ -- ignore input until line that begins with DELIM
+#  Interpret ``^@Mname'' as ``@Mname@''
+#  Add ``^@@'' as comment
+#  Add ``@ignore DELIM'' -- ignore input until line that begins with DELIM
 #  Loop over multiple input files (from /usr/bwk/bin/m1)
 #  Fixed andrew-found bug in @fi -- @fine used to terminate, too
 # Potential modifications
-#  Avoid v10 ‘‘/dev/stdin’’ -- see comment in line
-#  Add ‘‘@shell DELIM shell line here’’ -- pipe output until DELIM through pipe
+#  Avoid v10 ``/dev/stdin'' -- see comment in line
+#  Add ``@shell DELIM shell line here'' -- pipe output until DELIM through pipe
 #  Add @longdef/@longend
 #  Add @append MacName MoreText, like troff .am
 

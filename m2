@@ -9,7 +9,7 @@
 #       awk -f m2 [file...]
 #
 # DESCRIPTION
-#       The m1 program is a "little brother" to the m4 macro processor
+#       The m2 program is a "little brother" to the m4 macro processor
 #       found on UNIX systems.  M2 is a line-oriented macro processor
 #       which copies its input file(s) to its output.  It can perform
 #       several tasks, including:
@@ -154,7 +154,7 @@
 #             its terminating delimiter line.
 #           - An @if block was not properly terminated before end of input.
 #
-#       Duplicate 'XXX' not allowed
+#       Duplicate '@else' not allowed
 #           - More than one @else found in a single @if block.
 #
 #       Environment variable 'XXX' not defined
@@ -168,17 +168,17 @@
 #           - Attempt to @include a non-existent file.
 #
 #       No corresponding 'XXX'
-#           - An @else or @endif was seen without a matching @if.
-#           - A @longend was seen without a matching @longdef.
+#           - @if: An @else or @endif was seen without a matching @if.
+#           - @longdef: A @longend was seen without a matching @longdef.
 #
-#       Parameter NN not supplied in 'XXX'
+#       Parameter N not supplied in 'XXX'
 #           - A macro referred to a parameter (such as $1) for which
 #             no value was supplied.
 #
 #       Symbol 'XXX' already defined
 #           - @initialize attempted to define a previously defined symbol.
 #
-#       Symbol name 'XXX' invalid
+#       Symbol 'XXX' invalid name
 #           - A symbol name does not pass validity check.  In __STRICT__
 #             mode (the default), a symbol name may only contain letters,
 #             digits, #, $, or _ characters.
@@ -363,7 +363,7 @@ function validate_symbol(sym)
 {
     if (symbol_valid_p(sym))
         return TRUE
-    error("Symbol name '" sym "' invalid:" $0)
+    error("Symbol '" sym "' invalid name:" $0)
 }
 
 
@@ -1019,6 +1019,7 @@ function dofile(filename, read_literally,    savefile, saveline, savebuffer)
     set_symbol("__LINE__", 0)
     incr_symbol("__NFILE__")
 
+    # Read the file and process each line
     while (readline() != EOF)
         process_line(read_literally)
 
@@ -1188,8 +1189,9 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
         #     @foo BAR@     --> nparam == 1
         #     @foo BAR BAZ@ --> nparam == 2
         # In general, a symfunc's parameter N is available in variable
-        #   param[N+1].  For "gensym foo 42", nparam is 2, the new prefix
-        #   is at param[1+1] and the new count is at param[2+1].
+        #   param[N+1].  Consider "gensym foo 42": the symfunc is found
+        #   in the first position, at param [0+1].  nparam is 2.  The new
+        #   prefix is at param[1+1] and the new count is at param[2+1].
         #   This offset of one is referred to as `fencepost' below.
         # Each `if' condition eventually performs
         #     r = <SOMETHING> r
@@ -1201,12 +1203,12 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
         #   words, this injects the result of "invoking" symfunc.
         # Eventually this big while loop exits and we "return l r".
         nparam = split(m, param) - fencepost
-        symfunc = param[fencepost]
+        symfunc = param[0 + fencepost]
 
         # basename SYM: Return base name of file
         if (symfunc == "basename") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[1+fencepost]
+            p = param[1 + fencepost]
             if (symbol_valid_p(p) && symbol_defined_p(p))
                 p = get_symbol(p)
             "/usr/bin/basename " p | getline expand
@@ -1216,7 +1218,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
         #   @boolval SYM@ => 0 or 1     # error if not defined
         } else if (symfunc == "boolval") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[1+fencepost]
+            p = param[1 + fencepost]
             validate_symbol(p)
             if (! symbol_defined_p(p))
                 error("Symbol '" p "' not defined:" $0)
@@ -1225,7 +1227,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
         # dirname : Return directory name of file
         } else if (symfunc == "dirname") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[1+fencepost]
+            p = param[1 + fencepost]
             if (symbol_valid_p(p) && symbol_defined_p(p))
                 p = get_symbol(p)
             "/usr/bin/dirname " p | getline expand
@@ -1237,15 +1239,16 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
         #   @gensym foo 42@ => (prefix now "foo", counter now 42) => foo42
         } else if (symfunc == "gensym") {
             if (nparam == 1) {
-                if (! integerp(param[1+fencepost]))
+                if (! integerp(param[1 + fencepost]))
                     error("Value '" m "' must be numeric:" $0)
-                set_symbol("__GENSYMCOUNT__", param[1+fencepost])
+                set_symbol("__GENSYMCOUNT__", param[1 + fencepost])
             } else if (nparam == 2) {
-                if (! integerp(param[2+fencepost]))
+                if (! integerp(param[2 + fencepost]))
                     error("Value '" m "' must be numeric:" $0)
-                validate_symbol(param[1+fencepost])
-                set_symbol("__GENSYMPREFIX__", param[1+fencepost])
-                set_symbol("__GENSYMCOUNT__",  param[2+fencepost])
+                # Make sure the new requested prefix is valid
+                validate_symbol(param[1 + fencepost])
+                set_symbol("__GENSYMPREFIX__", param[1 + fencepost])
+                set_symbol("__GENSYMCOUNT__",  param[2 + fencepost])
             } else if (nparam > 2)
                 error("Bad parameters in '" m "':" $0)
             # 0, 1, or 2 param
@@ -1256,7 +1259,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
         #   @getenv HOME@ => /home/user
         } else if (symfunc == "getenv") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[1+fencepost]
+            p = param[1 + fencepost]
             if (p in ENVIRON)
                 r = ENVIRON[p] r
             else if (strictp())
@@ -1265,7 +1268,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
         # lc : Lower case
         } else if (symfunc == "lc") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[1+fencepost]
+            p = param[1 + fencepost]
             validate_symbol(p)
             if (! symbol_defined_p(p))
                 error("Symbol '" p "' not defined:" $0)
@@ -1275,7 +1278,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
         #   @len SYM@ => N
         } else if (symfunc == "len") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[1+fencepost]
+            p = param[1 + fencepost]
             validate_symbol(p)
             if (! symbol_defined_p(p))
                 error("Symbol '" p "' not defined:" $0)
@@ -1287,24 +1290,24 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
         } else if (symfunc == "substr") {
             if (nparam != 2 && nparam != 3)
                 error("Bad parameters in '" m "':" $0)
-            p = param[1+fencepost]
+            p = param[1 + fencepost]
             validate_symbol(p)
             if (! symbol_defined_p(p))
                 error("Symbol '" p "' not defined:" $0)
-            if (! integerp(param[2+fencepost]))
+            if (! integerp(param[2 + fencepost]))
                 error("Value '" m "' must be numeric:" $0)
             if (nparam == 2) {
-                r = substr(get_symbol(p), param[2+fencepost]+1) r
+                r = substr(get_symbol(p), param[2 + fencepost]+1) r
             } else if (nparam == 3) {
-                if (! integerp(param[3+fencepost]))
+                if (! integerp(param[3 + fencepost]))
                     error("Value '" m "' must be numeric:" $0)
-                r = substr(get_symbol(p), param[2+fencepost]+1, param[3+fencepost]) r
+                r = substr(get_symbol(p), param[2 + fencepost]+1, param[3 + fencepost]) r
             }
 
         # trim : Remove leading and trailing whitespace
         } else if (symfunc == "trim") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[1+fencepost]
+            p = param[1 + fencepost]
             validate_symbol(p)
             if (! symbol_defined_p(p))
                 error("Symbol '" p "' not defined:" $0)
@@ -1316,7 +1319,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
         # uc : Upper case
         } else if (symfunc == "uc") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[1+fencepost]
+            p = param[1 + fencepost]
             validate_symbol(p)
             if (! symbol_defined_p(p))
                 error("Symbol '" p "' not defined:" $0)
@@ -1335,7 +1338,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
                 if (index(expand, "$" j) > 0) {
                     if (j > nparam)
                         error("Parameter " j " not supplied in '" m "':" $0)
-                    gsub("\\$" j, param[j+fencepost], expand)
+                    gsub("\\$" j, param[j + fencepost], expand)
                 }
             r = expand r
 
@@ -1476,7 +1479,7 @@ BEGIN {
                 if (symbol_protected_p(name))
                     error("Symbol '" name "' protected:" arg, i, "ARGV")
                 if (! symbol_valid_p(name))
-                    error("Symbol name '" name "' invalid:" arg, i, "ARGV")
+                    error("Symbol '" name "' invalid name:" arg, i, "ARGV")
                 set_symbol(name, val)
                 if (name == "strict")
                     set_symbol("__STRICT__", val)

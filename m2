@@ -54,16 +54,17 @@
 #           @incr NAME [N]         Add 1 (or N) from an already defined NAME
 #           @initialize NAME VAL   Like @define, but abort if NAME already defined
 #           @input [NAME]          Read a single line from keyboard and define NAME
+#           @let NAME [STUFF...]   Pass STUFF... to bc(1) for calc, result in NAME
 #           @longdef NAME          Set NAME to <...> (all lines until @longend)
 #             <...>                  Don't use other @ commands inside definition
 #           @longend                 But simple @NAME@ references should be okay
-#           @paste FILE            Insert FILE contents literally, do not process macros
+#           @paste FILE            Insert FILE contents literally, no macros
 #           @read NAME FILE        Read FILE contents to define NAME
 #           @shell DELIM [PROG]    Evaluate input until DELIM, send raw data to PROG
 #                                    Output from prog is captured in output stream
 #           @stderr [STUFF...]     Send STUFF... to standard error; continue
 #                                    Also called @echo, @warn
-#           @typeout               Ship out remainder of input file literally, no processing
+#           @typeout               Print remainder of input literally, no macros
 #           @undef NAME            Remove definition of NAME
 #           @unless NAME           Include subsequent text if NAME == 0 (or undefined)
 #
@@ -117,10 +118,10 @@
 #       "internal" symbols.  The following internal symbols are pre-defined;
 #       example values or defaults are shown:
 #           __DATE__               Current date (19450716)
-#           __DEBUG__              Debug internal workings of m2
+#           __DEBUG__              Debug level for internal workings of m2
 #           __FILE__               Current file name
-#           __GENSYMCOUNT__        Count for generated symbols (0)
-#           __GENSYMPREFIX__       Prefix for generated symbols (_gen)
+#           __GENSYM__[count]      Count for generated symbols (0)
+#           __GENSYM__[prefix]     Prefix for generated symbols (_gen)
 #           __GID__                [effective] Group id
 #           __HOST__               Short host name (myhost)
 #           __HOSTNAME__           FQDN host name (myhost.example.com)
@@ -287,10 +288,17 @@ function chop(s)
 }
 
 
+# Return last character of s
+function last(s)
+{
+    return substr(s, length(s), 1)
+}
+
+
 # If last character is newline, chop() it off
 function chomp(s)
 {
-    return (substr(s, length(s), 1) == "\n") \
+    return (last(s) == "\n") \
         ? chop(s) : s
 }
 
@@ -355,7 +363,7 @@ function symbol_valid_p(sym,    lbracket)
     }
 
     # 2. We're in strict mode and the name doesn't pass regexp check
-    if (strictp() && sym !~ /^[A-Za-z#$_][A-Za-z#$_0-9]*$/))
+    if (strictp() && sym !~ /^[A-Za-z#$_][A-Za-z#$_0-9]*$/)
         return FALSE
 
     return TRUE
@@ -375,7 +383,7 @@ function validate_symbol(sym)
 function symbol_protected_p(sym)
 {
     # Whitelist of known safe symbols
-    if (sym in unprotected_symbols)
+    if (sym in unprotected_syms)
         return FALSE
     return symbol_internal_p(sym)
 }
@@ -401,9 +409,15 @@ function get_symbol(sym)
 }
 
 
+function debugp(lev)
+{
+    return get_symbol("__DEBUG__") >= lev
+}
+
+
 function set_symbol(sym, val)
 {
-    if (symbol_true_p("__DEBUG__"))
+    if (debugp(5))
         print_stderr("set_symbol(" sym "," val ")")
     symtab[canonical_form(sym)] = val
 }
@@ -419,7 +433,7 @@ function incr_symbol(sym, incr)
 
 function delete_symbol(sym)
 {
-    if (symbol_true_p("__DEBUG__"))
+    if (debugp(5))
         print_stderr("delete_symbol(" sym ")")
     # It is legal to delete an array key that does not exist
     delete symtab[canonical_form(sym)]
@@ -438,19 +452,44 @@ function strictp()
 }
 
 
+function tmpdir(    t)
+{
+    if (symbol_defined_p("TMPDIR"))
+        t = get_symbol("TMPDIR")
+    else if ("TMPDIR" in ENVIRON)
+        t = ENVIRON["TMPDIR"]
+    else
+        t = get_symbol("__PROG__[tmpdir]")
+    while (last(t) == "\n")
+        t = chop(t)
+    return t ((last(t) != "/") ? "/" : "")
+}
+
+
 function default_shell()
 {
     if (symbol_defined_p("SHELL"))
         return get_symbol("SHELL")
     if ("SHELL" in ENVIRON)
         return ENVIRON["SHELL"]
-    return get_symbol("__SHELL__")
+    return get_symbol("__PROG__[sh]")
 }
 
 
 function path_exists_p(path)
 {
-    return (system("/usr/bin/stat " path " >/dev/null 2>/dev/null") == 0)
+    return (system(get_symbol("__PROG__[stat]") " " \
+                   path \
+                   " >/dev/null 2>/dev/null") == 0)
+}
+
+
+# 0  <=  randint(N)  <  N
+# To generate a hex digit (0..15), say `randint(16)'
+# To roll a die (generate 1..6),   say `randint(6)+1'.
+function randint(n)
+{
+    return int(n * rand())
 }
 
 
@@ -459,7 +498,7 @@ function hex_digits(n,    i, s)
 {
     s = ""
     for (i = 0; i < n; i++)
-        s = s sprintf("%X", int(16*rand()))
+        s = s sprintf("%X", randint(16))
     return s
 }
 
@@ -500,13 +539,16 @@ function qsort(A, left, right,    i, last)
 # Special comparison to sort leading underscores after all other values
 function _less_than(s1, s2,    s1_underscore, s2_underscore)
 {
-    s1_underscore = substr(s1, 1, 1) == "_"
-    s2_underscore = substr(s2, 1, 1) == "_"
-    if (s1_underscore && !s2_underscore)
+    s1_underscorep = substr(s1, 1, 1) == "_"
+    s2_underscorep = substr(s2, 1, 1) == "_"
+    if ( s1_underscorep &&  s2_underscorep)
+        return _less_than(substr(s1, 2), substr(s2, 2))
+    if ( s1_underscorep && !s2_underscorep)
         return FALSE
-    if (!s1_underscore && s2_underscore)
+    if (!s1_underscorep &&  s2_underscorep)
         return TRUE
-    return s1 < s2
+    #  (!s1_underscorep && !s2_underscorep)
+        return s1 < s2
 }
 
 function swap(A, i, j,    t)
@@ -520,6 +562,20 @@ function shipout_printf(s)
     printf("%s", s)
 }
 
+
+#*****************************************************************************
+#
+#       The m2_*() functions that follow can only be executed by
+#       process_line().  That routine has matched text at the beginning
+#       of line in $0 to invoke a `macro expression', such as @define,
+#       @if, or @let.  Therefore, NF cannot be zero.
+#
+#       - NF==1 means @xxx called bare, zero arguments.
+#       - NF==2 means @xxx called with 1 arguments.
+#           (NF < 3)
+#       - NF==3 means @xxx called with 2 arguments.
+#
+#*****************************************************************************
 
 # @default, @initialize
 function m2_default(    sym)
@@ -743,10 +799,10 @@ function read_lines_until(delim,    buf, delim_len)
     delim_len = length(delim)
     while (TRUE) {
         if (readline() == EOF)
-            if (delim_len == 0)
-                break
-            else
+            if (delim_len > 0)
                 return EOF
+            else
+                break
         if (delim_len > 0 && substr($0, 1, delim_len) == delim)
             break
         buf = buf $0 "\n"
@@ -828,6 +884,33 @@ function m2_input(    getstat, input, sym)
 }
 
 
+# @let
+function m2_let(    sym, math, bcfile, val)
+{
+    if (debugp(7))
+        print_stderr("@let: NF=" NF " \$0='" $0 "'")
+    if (NF < 3) error("Bad parameters:" $0)
+    if (! currently_active_p())
+        return
+
+    sym = $2
+    sub(/^[ \t]*[^ \t]+[ \t]+[^ \t]+[ \t]*/, "")
+    math = "scale=" get_symbol("__SCALE__") "; " dosubs($0)
+    bcfile = tmpdir() "bc.m2-" hex_digits(8)
+    if (debugp(7))
+        print_stderr("@let: bcfile='" bcfile "', math='" math "'")
+    print math > bcfile
+    close(bcfile)
+    val = ""
+    while ((get_symbol("__PROG__[cat]") " " bcfile " | " \
+            get_symbol("__PROG__[bc]") | getline) > 0) {
+        val = val $0 "\n"
+    }
+    system(get_symbol("__PROG__[rm]") " -f " bcfile)
+    set_symbol(sym, chop(val))
+}
+
+
 function m2_longdef(    buf, save_line, save_lineno, sym)
 {
     if (NF != 2) error("Bad parameters:" $0)
@@ -860,7 +943,7 @@ function m2_longend()
 # line values are accepted but the final trailing \n (if any) is stripped.
 function m2_read(    sym, file, line, val, getstat)
 {
-    if (symbol_true_p("__DEBUG__"))
+    if (debugp(7))
         print_stderr("@read: \$0='" $0 "'")
     if (NF != 3)                # @read SYM FILE
         error("Bad parameters:" $0)
@@ -888,17 +971,8 @@ function m2_read(    sym, file, line, val, getstat)
 
 # @shell DELIM [shell]@
 # The sendto program defaults to a reasonable shell but you can specify
-# where you want to send your data.  Possibly useful choices would be a
-# non-standard shell, a message emailer, or /usr/bin/bc.
-#
-#       @define NUM   355
-#       @define DENOM 113
-#       Here is a pretty good approximation of pi followed by the standard value:
-#       @shell EOD /usr/bin/bc -l
-#       scale=10
-#       @NUM@/@DENOM@
-#       4*a(1)
-#       EOD
+# where you want to send your data.  Possibly useful choices would be an
+# alternative shell, an email message reader, or /usr/bin/bc.
 function m2_shell(    buf, delim, save_line, save_lineno, sendto)
 {
     if (NF < 2)
@@ -909,7 +983,7 @@ function m2_shell(    buf, delim, save_line, save_lineno, sendto)
     $1 = ""; $2 = ""
     if (NF == 2) {              # @shell DELIM
         sendto = default_shell()
-    } else {       # @shell DELIM /bin/bash
+    } else {                    # @shell DELIM /usr/ucb/mail
         sub("^[ \t]*", "")
         sendto = dosubs($0)
     }
@@ -973,7 +1047,7 @@ function readline_from_string(    i, status)
 # last, 0 if the cursor is stuck and needs a newline.
 function dostr(s,    r, rprev)
 {
-    if (symbol_true_p("__DEBUG__"))
+    if (debugp(2))
         print_stderr("dostr(" s ")")
     flush_stdout()
     strbuf = s
@@ -1001,7 +1075,7 @@ function dostr(s,    r, rprev)
 # Read this function carefully--there are some nice tricks here.
 function dofile(filename, read_literally,    savefile, saveline, savebuffer)
 {
-    if (symbol_true_p("__DEBUG__"))
+    if (debugp(2))
         print_stderr("dofile(" filename \
                      (read_literally ? ", read_literally=TRUE" : "") \
                      ")")
@@ -1081,6 +1155,7 @@ function process_line(read_literally,    newstring)
     else if (/^@incr([ \t]|$)/)          { m2_incr() }
     else if (/^@init(ialize)?([ \t]|$)/) { m2_default() }
     else if (/^@input([ \t]|$)/)         { m2_input() }
+    else if (/^@let([ \t]|$)/)           { m2_let() }
     else if (/^@longdef([ \t]|$)/)       { m2_longdef() }
     else if (/^@longend([ \t]|$)/)       { m2_longend() }
     else if (/^@paste([ \t]|$)/)         { m2_include() }
@@ -1218,7 +1293,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
             p = param[1 + fencepost]
             if (symbol_valid_p(p) && symbol_defined_p(p))
                 p = get_symbol(p)
-            "/usr/bin/basename " p | getline expand
+            get_symbol("__PROG__[basename]") " " p | getline expand
             r = expand r
 
         # boolval : Return 1 if symbol is true, else 0
@@ -1237,7 +1312,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
             p = param[1 + fencepost]
             if (symbol_valid_p(p) && symbol_defined_p(p))
                 p = get_symbol(p)
-            "/usr/bin/dirname " p | getline expand
+            get_symbol("__PROG__[dirname]") " " p | getline expand
             r = expand r
 
         # gensym : Generate symbol
@@ -1248,19 +1323,20 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
             if (nparam == 1) {
                 if (! integerp(param[1 + fencepost]))
                     error("Value '" m "' must be numeric:" $0)
-                set_symbol("__GENSYMCOUNT__", param[1 + fencepost])
+                set_symbol("__GENSYM__[count]", param[1 + fencepost])
             } else if (nparam == 2) {
                 if (! integerp(param[2 + fencepost]))
                     error("Value '" m "' must be numeric:" $0)
                 # Make sure the new requested prefix is valid
                 validate_symbol(param[1 + fencepost])
-                set_symbol("__GENSYMPREFIX__", param[1 + fencepost])
-                set_symbol("__GENSYMCOUNT__",  param[2 + fencepost])
+                set_symbol("__GENSYM__[prefix]", param[1 + fencepost])
+                set_symbol("__GENSYM__[count]",  param[2 + fencepost])
             } else if (nparam > 2)
                 error("Bad parameters in '" m "':" $0)
             # 0, 1, or 2 param
-            r = get_symbol("__GENSYMPREFIX__") get_symbol("__GENSYMCOUNT__") r
-            incr_symbol("__GENSYMCOUNT__")
+            r = get_symbol("__GENSYM__[prefix]") \
+                get_symbol("__GENSYM__[count]") r
+            incr_symbol("__GENSYM__[count]")
 
         # getenv : Get environment variable
         #   @getenv HOME@ => /home/user
@@ -1359,7 +1435,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
         }
     }
 
-    if (symbol_true_p("__DEBUG__"))
+    if (debugp(7))
         print_stderr("dosubs:l=<" l "> r=<" r ">")
     return l r
 }
@@ -1432,7 +1508,7 @@ function initialize(    d, dateout, egid, euid, host, hostname, user)
     buffer          = ""
     strbuf          = ""
 
-    srand()                     # Seed random number generator
+    srand()     # Seed random number generator
     "date +'%Y %m %d %H %M %S %z'" | getline dateout;   split(dateout, d)
     "id -g"                        | getline egid
     "id -u"                        | getline euid
@@ -1440,23 +1516,37 @@ function initialize(    d, dateout, egid, euid, host, hostname, user)
     "hostname"                     | getline hostname
     "id -un"                       | getline user
 
-    set_symbol("__DATE__",         d[1] d[2] d[3])
-    set_symbol("__DEBUG__",        FALSE); unprotected_symbols["__DEBUG__"]=1
-    set_symbol("__GENSYMCOUNT__",  0)
-    set_symbol("__GENSYMPREFIX__", "_gen")
-    set_symbol("__GID__",          egid)
-    set_symbol("__HOST__",         host)
-    set_symbol("__HOSTNAME__",     hostname)
-    set_symbol("__INPUT__",        "");    unprotected_symbols["__INPUT__"]=1
-    set_symbol("__NFILE__",        0)
-    set_symbol("__SHELL__",        "/bin/sh")
-    set_symbol("__STRICT__",       TRUE);  unprotected_symbols["__STRICT__"]=1
-    set_symbol("__TIME__",         d[4] d[5] d[6])
-    set_symbol("__TIMESTAMP__",    d[1] "-" d[2] "-" d[3] "T" \
-                                   d[4] ":" d[5] ":" d[6] d[7])
-    set_symbol("__UID__",          euid)
-    set_symbol("__USER__",         user)
-    set_symbol("__VERSION__",      version)
+    set_symbol("__DATE__",           d[1] d[2] d[3])
+    set_symbol("__DEBUG__",          0)
+    set_symbol("__GENSYM__[count]",  0)
+    set_symbol("__GENSYM__[prefix]", "_gen")
+    set_symbol("__GID__",            egid)
+    set_symbol("__HOST__",           host)
+    set_symbol("__HOSTNAME__",       hostname)
+    set_symbol("__INPUT__",          "")
+    set_symbol("__NFILE__",          0)
+    set_symbol("__PROG__[basename]", "/usr/bin/basename")
+    set_symbol("__PROG__[bc]",       "/usr/bin/bc -l")
+    set_symbol("__PROG__[cat]",      "/bin/cat")
+    set_symbol("__PROG__[dirname]",  "/usr/bin/dirname")
+    set_symbol("__PROG__[rm]",       "/bin/rm")
+    set_symbol("__PROG__[sh]",       "/bin/sh")
+    set_symbol("__PROG__[stat]",     "/usr/bin/stat")
+    set_symbol("__PROG__[tmpdir]",   "/var/tmp/")
+    set_symbol("__RUN_ID__",         uuid())
+    set_symbol("__SCALE__",          6)
+    set_symbol("__STRICT__",         TRUE)
+    set_symbol("__TIME__",           d[4] d[5] d[6])
+    set_symbol("__TIMESTAMP__",      d[1] "-" d[2] "-" d[3] "T" \
+                                     d[4] ":" d[5] ":" d[6] d[7])
+    set_symbol("__UID__",            euid)
+    set_symbol("__USER__",           user)
+    set_symbol("__VERSION__",        version)
+
+    unprotected_syms["__DEBUG__"]=1
+    unprotected_syms["__INPUT__"]=1
+    unprotected_syms["__SCALE__"]=1
+    unprotected_syms["__STRICT__"]=1
 }
 
 
@@ -1471,12 +1561,12 @@ BEGIN {
         dofile("-")
     } else if (ARGC > 1) {
         # Delay loading $HOME/.m2rc as long as possible.  This allows us
-        # to set symbols on the command line (e.g., debug=1) which will
-        # have taken effect by the time the init file loads.
+        # to set symbols on the command line which will have taken effect
+        # by the time the init file loads.
         for (i = 1; i < ARGC; i++) {
             # Show each arg as we process it
             arg = ARGV[i]
-            if (symbol_true_p("__DEBUG__"))
+            if (debugp(6))
                 print_stderr("BEGIN: ARGV[" i "]:" arg)
             if (arg ~ /^([^= ][^= ]*)=(.*)/) {
                 # Define a symbol on the command line

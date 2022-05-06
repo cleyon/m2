@@ -258,7 +258,7 @@ function format_message(text, line, file)
 
 function flush_stdout()
 {
-    # One of these should work, right?
+    # One of these is bound to work, right?
     system("")
     fflush("/dev/stdout")
 }
@@ -266,7 +266,6 @@ function flush_stdout()
 
 function print_stderr(text)
 {
-    flush_stdout()
     print text > "/dev/stderr"
     # More portable:
     # print text | "cat 1>&2"
@@ -275,6 +274,7 @@ function print_stderr(text)
 
 function error(text, line, file)
 {
+    flush_stdout()
     print_stderr(format_message(text, line, file))
     exit 1
 }
@@ -295,7 +295,9 @@ function chomp(s)
 }
 
 
-# Remove brackets:      "arr[key]"  =>  "arr <SUBSEP> key"
+# Convert a symbol name into its canonical form (for table lookup
+# purposes) by removing and separating any array-referring brackets.
+#       "arr[key]"  =>  "arr <SUBSEP> key"
 function canonical_form(sym,    lbracket, rbracket, arr, key)
 {
     if ((lbracket = index(sym, "[")) == 0)
@@ -309,7 +311,9 @@ function canonical_form(sym,    lbracket, rbracket, arr, key)
 }
 
 
-# Restore brackets:     "arr <SUBSEP> key"  =>  "arr[key]"
+# Convert a symbol name into a nice, user-friendly format, usually for
+# printing (i.e., put the array-looking brackets back if needed).
+#       "arr <SUBSEP> key"  =>  "arr[key]"
 function display_form(sym,    sep, arr, key)
 {
     if ((sep = index(sym, SUBSEP)) == 0)
@@ -606,11 +610,11 @@ function m2_endif()
 
 
 # @error, @warn, @echo, @stderr
-function m2_error(    exit_flag, message)
+function m2_error(    m2_will_exit, message)
 {
     if (! currently_active_p())
         return
-    exit_flag = ($1 == "@error")
+    m2_will_exit = ($1 == "@error")
     if (NF == 1) {
         message = format_message($1)
     } else {
@@ -619,8 +623,10 @@ function m2_error(    exit_flag, message)
         message = dosubs($0)
     }
     print_stderr(message)
-    if (exit_flag)
+    if (m2_will_exit) {
+        flush_stdout()
         exit 2
+    }
 }
 
 
@@ -628,6 +634,7 @@ function m2_exit()
 {
     if (! currently_active_p())
         return
+    flush_stdout()
     exit (NF > 1 && integerp($2)) ? $2 : 0
 }
 
@@ -1505,5 +1512,6 @@ BEGIN {
         print_stderr("Usage: m2 [NAME=VAL] [file...]")
         exit_exit = 64          # EX_USAGE
     }
+    flush_stdout()
     exit exit_code
 }

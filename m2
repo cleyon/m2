@@ -902,8 +902,9 @@ function m2_let(    sym, math, bcfile, val)
     print math > bcfile
     close(bcfile)
     val = ""
+    # NB - Pass "-l" option to bc(1)
     while ((get_symbol("__PROG__[cat]") " " bcfile " | " \
-            get_symbol("__PROG__[bc]") | getline) > 0) {
+            get_symbol("__PROG__[bc]") " -l" | getline) > 0) {
         val = val $0 "\n"
     }
     system(get_symbol("__PROG__[rm]") " -f " bcfile)
@@ -1526,7 +1527,7 @@ function initialize(    d, dateout, egid, euid, host, hostname, user)
     set_symbol("__INPUT__",          "")
     set_symbol("__NFILE__",          0)
     set_symbol("__PROG__[basename]", "/usr/bin/basename")
-    set_symbol("__PROG__[bc]",       "/usr/bin/bc -l")
+    set_symbol("__PROG__[bc]",       "/usr/bin/bc")
     set_symbol("__PROG__[cat]",      "/bin/cat")
     set_symbol("__PROG__[dirname]",  "/usr/bin/dirname")
     set_symbol("__PROG__[rm]",       "/bin/rm")

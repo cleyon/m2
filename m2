@@ -102,7 +102,7 @@
 #           @substr SYM BEG [LEN]@ Substring
 #           @trim SYM@             Remove leading and trailing whitespace
 #           @uc SYM@               Upper case
-#           @uuid@                 Generate something that resembles a UUID:
+#           @uuid@                 Something that resembles but is not a UUID:
 #                                    C3525388-E400-43A7-BC95-9DF5FA3C4A52
 #
 #       [*] @getenv VAR@ will be replaced by the value of the
@@ -537,7 +537,7 @@ function qsort(A, left, right,    i, last)
 }
 
 # Special comparison to sort leading underscores after all other values
-function _less_than(s1, s2,    s1_underscore, s2_underscore)
+function _less_than(s1, s2,    s1_underscorep, s2_underscorep)
 {
     s1_underscorep = substr(s1, 1, 1) == "_"
     s2_underscorep = substr(s2, 1, 1) == "_"
@@ -563,6 +563,30 @@ function shipout_printf(s)
 }
 
 
+# Read multiple lines until delim is seen as first characters on a line.
+# If delimiter is not found, return EOF marker.  Intermediate lines are
+# terminated with a newline character, but last line has it stripped
+# away.  The lines read are NOT macro-expanded; if desired, the caller
+# can invoke dosubs() on the returned buffer.  Special case if delim is
+# "" - read until end of file and return whatever is found, without error.
+function read_lines_until(delim,    buf, delim_len)
+{
+    buf = ""
+    delim_len = length(delim)
+    while (TRUE) {
+        if (readline() == EOF)
+            if (delim_len > 0)
+                return EOF
+            else
+                break
+        if (delim_len > 0 && substr($0, 1, delim_len) == delim)
+            break
+        buf = buf $0 "\n"
+    }
+    return chop(buf)
+}
+
+
 #*****************************************************************************
 #
 #       The m2_*() functions that follow can only be executed by
@@ -577,7 +601,7 @@ function shipout_printf(s)
 #
 #*****************************************************************************
 
-# @default, @initialize
+# @default, @init[ialize]
 function m2_default(    sym)
 {
     if (NF < 2) error("Bad parameters:" $0)
@@ -595,7 +619,7 @@ function m2_default(    sym)
 }
 
 
-# @define, @append
+# @append, @define
 function m2_define(    append_flag, sym)
 {
     if (NF < 2) error("Bad parameters:" $0)
@@ -610,7 +634,7 @@ function m2_define(    append_flag, sym)
 }
 
 
-# @dump, @dumpall
+# @dump[all]
 function m2_dump(    buf, cnt, definition, dumpfile, i, key, keys, sym_name, all_flag)
 {
     if (! currently_active_p())
@@ -647,6 +671,7 @@ function m2_dump(    buf, cnt, definition, dumpfile, i, key, keys, sym_name, all
 }
 
 
+# @else
 function m2_else()
 {
     if (ifdepth == 0)
@@ -658,6 +683,7 @@ function m2_else()
 }
 
 
+# @endif, @fi
 function m2_endif()
 {
     if (ifdepth-- == 0)
@@ -665,7 +691,7 @@ function m2_endif()
 }
 
 
-# @error, @warn, @echo, @stderr
+# @echo, @error, @stderr, @warn
 function m2_error(    m2_will_exit, message)
 {
     if (! currently_active_p())
@@ -686,6 +712,7 @@ function m2_error(    m2_will_exit, message)
 }
 
 
+# @exit
 function m2_exit()
 {
     if (! currently_active_p())
@@ -695,10 +722,10 @@ function m2_exit()
 }
 
 
-# @if, et al
+# @if[_not][_{defined|env|exists|in}], @if[n]def
 function m2_if(    sym, cond, op, val2, val4)
 {
-    sub(/^@/, "")          # Remove leading @ otherwise dosubs($0) loses
+    sub(/^@/, "")          # Remove leading @, otherwise dosubs($0) loses
     $0 = dosubs($0)
 
     if ($1 == "if") {
@@ -787,37 +814,14 @@ function m2_if(    sym, cond, op, val2, val4)
 }
 
 
-# Read multiple lines until delim is seen as first characters on a line.
-# If delimiter is not found, return EOF marker.  Intermediate lines are
-# terminated with a newline character, but last line has it stripped
-# away.  The lines read are NOT macro-expanded; if desired, the caller
-# can invoke dosubs() on the returned buffer.  Special case if delim is
-# "" - read until end of file and return whatever is found, without error.
-function read_lines_until(delim,    buf, delim_len)
-{
-    buf = ""
-    delim_len = length(delim)
-    while (TRUE) {
-        if (readline() == EOF)
-            if (delim_len > 0)
-                return EOF
-            else
-                break
-        if (delim_len > 0 && substr($0, 1, delim_len) == delim)
-            break
-        buf = buf $0 "\n"
-    }
-    return chop(buf)
-}
-
-
-# Ignore input until line starts with $2.  This means
-#     @ignore Foo
-#     ...
-#     Foobar
-# works.
+# @ignore
 function m2_ignore(    buf, delim, save_line, save_lineno)
 {
+    # Ignore input until line starts with $2.  This means
+    #     @ignore The
+    #      <...>
+    #     Theodore Roosevelt
+    # ignores <...> text up to the president's name.
     if (NF != 2) error("Bad parameters:" $0)
     if (! currently_active_p())
         return
@@ -847,7 +851,7 @@ function m2_include(    error_text, filename, read_literally)
 }
 
 
-# @incr, @decr
+# @decr, @incr
 function m2_incr(    incr, sym)
 {
     if (NF < 2) error("Bad parameters:" $0)
@@ -866,11 +870,12 @@ function m2_incr(    incr, sym)
 }
 
 
-# Read a single line from /dev/tty.  No prompt is issued; if you want
-# one, use @echo.  Specify the symbol you want to receive the data.  If
-# no symbol is specified, __INPUT__ is used by default.
+# @input
 function m2_input(    getstat, input, sym)
 {
+    # Read a single line from /dev/tty.  No prompt is issued; if you
+    # want one, use @echo.  Specify the symbol you want to receive the
+    # data.  If no symbol is specified, __INPUT__ is used by default.
     sym = (NF < 2) ? "__INPUT__" : $2
     if (symbol_protected_p(sym))
         error("Symbol '" sym "' protected:" $0)
@@ -912,6 +917,7 @@ function m2_let(    sym, math, bcfile, val)
 }
 
 
+# @longdef
 function m2_longdef(    buf, save_line, save_lineno, sym)
 {
     if (NF != 2) error("Bad parameters:" $0)
@@ -930,20 +936,21 @@ function m2_longdef(    buf, save_line, save_lineno, sym)
 }
 
 
-# @longend should never be encountered alone because m2_longdef()
-# consumes any matching @longend.
+# @longend
 function m2_longend()
 {
+    # @longend should never be encountered alone because m2_longdef()
+    # consumes any matching @longend.
     error("No corresponding '@longdef':" $0)
 }
 
 
 # @read
-# This is not intended to be a full-blown file inputter but rather just
-# to read short snippets like a file path or username.  As usual, multi-
-# line values are accepted but the final trailing \n (if any) is stripped.
 function m2_read(    sym, file, line, val, getstat)
 {
+    # This is not intended to be a full-blown file inputter but rather just
+    # to read short snippets like a file path or username.  As usual, multi-
+    # line values are accepted but the final trailing \n (if any) is stripped.
     if (debugp(7))
         print_stderr("@read: \$0='" $0 "'")
     if (NF != 3)                # @read SYM FILE
@@ -970,12 +977,12 @@ function m2_read(    sym, file, line, val, getstat)
 }
 
 
-# @shell DELIM [shell]@
-# The sendto program defaults to a reasonable shell but you can specify
-# where you want to send your data.  Possibly useful choices would be an
-# alternative shell, an email message reader, or /usr/bin/bc.
+# @shell
 function m2_shell(    buf, delim, save_line, save_lineno, sendto)
 {
+    # The sendto program defaults to a reasonable shell but you can specify
+    # where you want to send your data.  Possibly useful choices would be an
+    # alternative shell, an email message reader, or /usr/bin/bc.
     if (NF < 2)
         error("Bad parameters:" $0)
     if (! currently_active_p())
@@ -999,6 +1006,7 @@ function m2_shell(    buf, delim, save_line, save_lineno, sendto)
 }
 
 
+# @typeout
 function m2_typeout(    buf)
 {
     if (! currently_active_p())
@@ -1009,6 +1017,7 @@ function m2_typeout(    buf)
 }
 
 
+# @undef[ine]
 function m2_undef(    sym)
 {
     if (NF != 2) error("Bad parameters:" $0)
@@ -1136,8 +1145,7 @@ function process_line(read_literally,    newstring)
     # Note, these only match at beginning of line.
     if      (/^@(@|#)/)                  { } # Comments are ignored
     else if (/^@append([ \t]|$)/)        { m2_define() }
-    else if (/^@c([ \t]|$)/)             { } # Comments are ignored
-    else if (/^@comment([ \t]|$)/)       { } # Comments are ignored
+    else if (/^@c(omment)?([ \t]|$)/)    { } # Comments are ignored
     else if (/^@decr([ \t]|$)/)          { m2_incr() }
     else if (/^@default([ \t]|$)/)       { m2_default() }
     else if (/^@define([ \t]|$)/)        { m2_define() }
@@ -1409,7 +1417,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
                 error("Symbol '" p "' not defined:" $0)
             r = toupper(get_symbol(p)) r
 
-        # uuid : Generate something that resembles a UUID
+        # uuid : Something that resembles but is not a UUID
         #   @uuid@ => C3525388-E400-43A7-BC95-9DF5FA3C4A52
         } else if (symfunc == "uuid") {
             r = uuid() r
@@ -1525,6 +1533,7 @@ function initialize(    d, dateout, egid, euid, host, hostname, user)
     set_symbol("__HOST__",           host)
     set_symbol("__HOSTNAME__",       hostname)
     set_symbol("__INPUT__",          "")
+    set_symbol("__M2_UUID__",        uuid())
     set_symbol("__NFILE__",          0)
     set_symbol("__PROG__[basename]", "/usr/bin/basename")
     set_symbol("__PROG__[bc]",       "/usr/bin/bc")
@@ -1534,7 +1543,6 @@ function initialize(    d, dateout, egid, euid, host, hostname, user)
     set_symbol("__PROG__[sh]",       "/bin/sh")
     set_symbol("__PROG__[stat]",     "/usr/bin/stat")
     set_symbol("__PROG__[tmpdir]",   "/var/tmp/")
-    set_symbol("__RUN_ID__",         uuid())
     set_symbol("__SCALE__",          6)
     set_symbol("__STRICT__",         TRUE)
     set_symbol("__TIME__",           d[4] d[5] d[6])

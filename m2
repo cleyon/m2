@@ -126,8 +126,10 @@
 #           __HOST__               Short host name (myhost)
 #           __HOSTNAME__           FQDN host name (myhost.example.com)
 #           __INPUT__              The data read by @input
+#           __M2_UUID__            UUID uniquely identifying this m2 run
 #           __LINE__               Current line number in __FILE__
 #           __NFILE__              Number of files processed so far (0)
+#           __SCALE__              Value of "scale" passed to bc from @let (6)
 #           __STRICT__             Strict mode (TRUE)
 #           __TIME__               Current time (053000)
 #           __TIMESTAMP__          ISO 8601 timestamp (1945-07-16T05:30:00-0600)

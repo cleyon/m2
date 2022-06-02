@@ -475,6 +475,8 @@ function strictp()
 }
 
 
+# Return a likely path for storing temporary files.
+# This path is guaranteed to end with a "/" character.
 function tmpdir(    t)
 {
     if (symbol_defined_p("TMPDIR"))
@@ -491,8 +493,8 @@ function tmpdir(    t)
 
 function default_shell()
 {
-    if (symbol_defined_p("SHELL"))
-        return get_symbol("SHELL")
+    if (symbol_defined_p("M2_SHELL"))
+        return get_symbol("M2_SHELL")
     if ("SHELL" in ENVIRON)
         return ENVIRON["SHELL"]
     return get_symbol("__PROG__[sh]")
@@ -1124,6 +1126,7 @@ function dofile(filename, read_literally,    savefile, saveline, savebuffer)
     flush_stdout()
     savefile   = get_symbol("__FILE__")
     saveline   = get_symbol("__LINE__")
+    saveuuid   = get_symbol("__FILE_UUID__")
     savebuffer = buffer
 
     # Set up new file context
@@ -1150,6 +1153,7 @@ function dofile(filename, read_literally,    savefile, saveline, savebuffer)
     # Restore previous file context
     set_symbol("__FILE__", savefile)
     set_symbol("__LINE__", saveline)
+    set_symbol("__FILE_UUID__", saveuuid)
     buffer = savebuffer
 
     return TRUE
@@ -1569,7 +1573,7 @@ function initialize(    d, dateout, egid, euid, host, hostname, user)
     set_symbol("__PROG__[rm]",       "/bin/rm")
     set_symbol("__PROG__[sh]",       "/bin/sh")
     set_symbol("__PROG__[stat]",     "/usr/bin/stat")
-    set_symbol("__PROG__[tmpdir]",   "/var/tmp/")
+    set_symbol("__PROG__[tmpdir]",   "/var/tmp/") # NB - trailing slash
     set_symbol("__SCALE__",          6)
     set_symbol("__STRICT__",         TRUE)
     set_symbol("__TIME__",           d[4] d[5] d[6])

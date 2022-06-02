@@ -479,8 +479,8 @@ function strictp()
 # This path is guaranteed to end with a "/" character.
 function tmpdir(    t)
 {
-    if (symbol_defined_p("TMPDIR"))
-        t = get_symbol("TMPDIR")
+    if (symbol_defined_p("M2_TMPDIR"))
+        t = get_symbol("M2_TMPDIR")
     else if ("TMPDIR" in ENVIRON)
         t = ENVIRON["TMPDIR"]
     else
@@ -1003,6 +1003,7 @@ function m2_read(    sym, file, line, val, getstat)
 
 
 # @shell
+# Set symbol "M2_SHELL" to override.
 function m2_shell(    buf, delim, save_line, save_lineno, sendto)
 {
     # The sendto program defaults to a reasonable shell but you can specify
@@ -1549,12 +1550,12 @@ function initialize(    d, dateout, egid, euid, host, hostname, user)
     strbuf          = ""
 
     srand()     # Seed random number generator
-    "date +'%Y %m %d %H %M %S %z'" | getline dateout;   split(dateout, d)
-    "id -g"                        | getline egid
-    "id -u"                        | getline euid
-    "hostname -s"                  | getline host
-    "hostname"                     | getline hostname
-    "id -un"                       | getline user
+    "/bin/date +'%Y %m %d %H %M %S %z'" | getline dateout;  split(dateout, d)
+    "/usr/bin/id -g"                    | getline egid
+    "/usr/bin/id -u"                    | getline euid
+    "/bin/hostname -s"                  | getline host
+    "/bin/hostname"                     | getline hostname
+    "/usr/bin/id -un"                   | getline user
 
     set_symbol("__DATE__",           d[1] d[2] d[3])
     set_symbol("__DEBUG__",          0)
@@ -1583,10 +1584,10 @@ function initialize(    d, dateout, egid, euid, host, hostname, user)
     set_symbol("__USER__",           user)
     set_symbol("__VERSION__",        version)
 
-    unprotected_syms["__DEBUG__"]=1
-    unprotected_syms["__INPUT__"]=1
-    unprotected_syms["__SCALE__"]=1
-    unprotected_syms["__STRICT__"]=1
+    unprotected_syms["__DEBUG__"]  = TRUE
+    unprotected_syms["__INPUT__"]  = TRUE
+    unprotected_syms["__SCALE__"]  = TRUE
+    unprotected_syms["__STRICT__"] = TRUE
 }
 
 

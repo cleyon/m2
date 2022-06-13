@@ -1,0 +1,1624 @@
+#LyX 2.3 created this file. For more info see http://www.lyx.org/
+\lyxformat 544
+\begin_document
+\begin_header
+\save_transient_properties true
+\origin unavailable
+\textclass article
+\use_default_options true
+\maintain_unincluded_children false
+\language english
+\language_package default
+\inputencoding auto
+\fontencoding global
+\font_roman "default" "default"
+\font_sans "default" "default"
+\font_typewriter "default" "default"
+\font_math "auto" "auto"
+\font_default_family default
+\use_non_tex_fonts false
+\font_sc false
+\font_osf false
+\font_sf_scale 100 100
+\font_tt_scale 100 100
+\use_microtype false
+\use_dash_ligatures true
+\graphics default
+\default_output_format default
+\output_sync 0
+\bibtex_command default
+\index_command default
+\paperfontsize default
+\spacing single
+\use_hyperref false
+\papersize default
+\use_geometry true
+\use_package amsmath 1
+\use_package amssymb 1
+\use_package cancel 1
+\use_package esint 1
+\use_package mathdots 1
+\use_package mathtools 1
+\use_package mhchem 1
+\use_package stackrel 1
+\use_package stmaryrd 1
+\use_package undertilde 1
+\cite_engine basic
+\cite_engine_type default
+\biblio_style plain
+\use_bibtopic false
+\use_indices false
+\paperorientation portrait
+\suppress_date false
+\justification true
+\use_refstyle 1
+\use_minted 0
+\index Index
+\shortcut idx
+\color #008000
+\end_index
+\leftmargin 1in
+\topmargin 1in
+\rightmargin 1in
+\bottommargin 1in
+\secnumdepth 3
+\tocdepth 3
+\paragraph_separation indent
+\paragraph_indentation default
+\is_math_indent 0
+\math_numbering_side default
+\quotes_style english
+\dynamic_quotes 0
+\papercolumns 1
+\papersides 1
+\paperpagestyle default
+\tracking_changes false
+\output_changes false
+\html_math_output 0
+\html_css_as_file 0
+\html_be_strict false
+\end_header
+
+\begin_body
+
+\begin_layout Title
+m1 : A Micro Macro Processor
+\end_layout
+
+\begin_layout Section*
+Synopsis
+\end_layout
+
+\begin_layout LyX-Code
+awk -f m1.awk [file...]
+\end_layout
+
+\begin_layout Section*
+Description
+\end_layout
+
+\begin_layout Standard
+M1 is a simple macro language that supports the essential operations of
+ defining strings and replacing strings in text by their definitions.
+ It also provides facilities for file inclusion and for conditional expansion
+ of text.
+ It is not designed for any particular application, so it is mildly useful
+ across several applications, including document preparation and programming.
+ This paper describes the evolution of the program; the final version is
+ implemented in about 110 lines of Awk.
+\end_layout
+
+\begin_layout Standard
+M1 copies its input file(s) to its output unchanged except as modified by
+ certain ``macro expressions.'' The following lines define macros for subsequent
+ processing:
+\end_layout
+
+\begin_layout LyX-Code
+@comment Any text
+\end_layout
+
+\begin_layout LyX-Code
+@@                            same as @comment
+\end_layout
+
+\begin_layout LyX-Code
+@define name value
+\end_layout
+
+\begin_layout LyX-Code
+@default name value           set if name undefined
+\end_layout
+
+\begin_layout LyX-Code
+@include filename
+\end_layout
+
+\begin_layout LyX-Code
+@if varname                   include subsequent text if varname != 0
+\end_layout
+
+\begin_layout LyX-Code
+@unless varname               include subsequent text if varname == 0
+\end_layout
+
+\begin_layout LyX-Code
+@fi                           terminate @if or @unless
+\end_layout
+
+\begin_layout LyX-Code
+@ignore DELIM                 ignore input until line that begins with DELIM
+\end_layout
+
+\begin_layout LyX-Code
+@stderr stuff                 send diagnostics to standard error
+\end_layout
+
+\begin_layout Standard
+A definition may extend across many lines by ending each line with a backslash,
+ thus quoting the following newline.
+ Any occurrence of 
+\family typewriter
+@name@
+\family default
+ in the input is replaced in the output by the corresponding value.
+
+\family typewriter
+ @name
+\family default
+ at beginning of line is treated the same as 
+\family typewriter
+@name@
+\family default
+.
+\end_layout
+
+\begin_layout Subsection*
+\noindent
+Applications
+\end_layout
+
+\begin_layout Subsubsection*
+Form Letters
+\end_layout
+
+\begin_layout Standard
+We'll start with a toy example that illustrates some simple uses of m1.
+ Here's a form letter that I've often been tempted to use:
+\end_layout
+
+\begin_layout Standard
+\align center
+\begin_inset listings
+lstparams "basicstyle={\small\ttfamily},tabsize=4"
+inline false
+status open
+
+\begin_layout Plain Layout
+
+@default MYNAME Jon Bentley
+\end_layout
+
+\begin_layout Plain Layout
+
+@default TASK respond to your special offer
+\end_layout
+
+\begin_layout Plain Layout
+
+@default EXCUSE the dog ate my homework
+\end_layout
+
+\begin_layout Plain Layout
+
+Dear @NAME@:
+\end_layout
+
+\begin_layout Plain Layout
+
+    Although I would dearly love to @TASK@,
+\end_layout
+
+\begin_layout Plain Layout
+
+I am afraid that I am unable to do so because @EXCUSE@.
+\end_layout
+
+\begin_layout Plain Layout
+
+I am sure that you have been in this situation
+\end_layout
+
+\begin_layout Plain Layout
+
+many times yourself.
+\end_layout
+
+\begin_layout Plain Layout
+
+            Sincerely,
+\end_layout
+
+\begin_layout Plain Layout
+
+            @MYNAME@
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+If that file is named 
+\family typewriter
+sayno.mac
+\family default
+, it might be invoked with this text:
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+lstparams "basicstyle={\small\ttfamily}"
+inline false
+status open
+
+\begin_layout Plain Layout
+
+@define NAME Mr.
+ Smith
+\end_layout
+
+\begin_layout Plain Layout
+
+@define TASK subscribe to your magazine
+\end_layout
+
+\begin_layout Plain Layout
+
+@define EXCUSE I suddenly forgot how to read
+\end_layout
+
+\begin_layout Plain Layout
+
+@include sayno.mac
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Recall that a 
+\family typewriter
+@default
+\family default
+ takes effect only if its variable was not previously 
+\family typewriter
+@define
+\family default
+d.
+\end_layout
+
+\begin_layout Subsubsection*
+Troff Pre-Processing
+\end_layout
+
+\begin_layout Standard
+I've found m1 to be a handy Troff preprocessor.
+ Many of my text files (including this one) start with m1 definitions like:
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+lstparams "basicstyle={\small\ttfamily},tabsize=4"
+inline false
+status open
+
+\begin_layout Plain Layout
+
+@define ArrayFig @StructureSec@.2
+\end_layout
+
+\begin_layout Plain Layout
+
+@define HashTabFig @StructureSec@.3
+\end_layout
+
+\begin_layout Plain Layout
+
+@define TreeFig @StructureSec@.4
+\end_layout
+
+\begin_layout Plain Layout
+
+@define ProblemSize 100
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Even a simple form of arithmetic would be useful in numeric sequences of
+ definitions.
+ The longer m1 variables get around Troff's dreadful two-character limit
+ on string names; these variables are also available to Troff preprocessors
+ like Pic and Eqn.
+ Various forms of the 
+\family typewriter
+@define
+\family default
+, 
+\family typewriter
+@if
+\family default
+, and 
+\family typewriter
+@include
+\family default
+ facilities are present in some of the Troff-family languages (Pic and Troff)
+ but not others (Tbl); m1 provides a consistent mechanism.
+\end_layout
+
+\begin_layout Standard
+I include figures in documents with lines like this:
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+lstparams "basicstyle={\small\ttfamily},tabsize=4"
+inline false
+status open
+
+\begin_layout Plain Layout
+
+@define FIGNUM @FIGMFMOVIE@
+\end_layout
+
+\begin_layout Plain Layout
+
+@define FIGTITLE The Multiple Fragment heuristic.
+\end_layout
+
+\begin_layout Plain Layout
+
+@FIGSTART@
+\end_layout
+
+\begin_layout Plain Layout
+
+.PS <@THISDIR@/mfmovie.pic
+\end_layout
+
+\begin_layout Plain Layout
+
+@FIGEND@
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+The two 
+\family typewriter
+@define
+\family default
+s are a hack to supply the two parameters of number and title to the figure.
+ The figure might be set off by horizontal lines or enclosed in a box, the
+ number and title might be printed at the top or the bottom, and the figures
+ might be graphs, pictures, or animations of algorithms.
+ All figures, though, are presented in the consistent format defined by
+ 
+\family typewriter
+FIGSTART
+\family default
+ and 
+\family typewriter
+FIGEND
+\family default
+.
+\end_layout
+
+\begin_layout Subsubsection*
+Awk Library Management
+\end_layout
+
+\begin_layout Standard
+I have also used m1 as a preprocessor for Awk programs.
+ The 
+\family typewriter
+@include
+\family default
+ statement allows one to build simple libraries of Awk functions (though
+ some—but not all—Awk implementations provide this facility by allowing
+ multiple program files).
+ File inclusion was used in an earlier version of this paper to include
+ individual functions in the text and then wrap them all together into the
+ complete m1 program.
+ The conditional statements allow one to customize a program with macros
+ rather than run-time if statements, which can reduce both run time and
+ compile time.
+\end_layout
+
+\begin_layout Subsubsection*
+Controlling Experiments
+\end_layout
+
+\begin_layout Standard
+The most interesting application for which I've used this macro language
+ is unfortunately too complicated to describe in detail.
+ The job for which I wrote the original version of m1 was to control a set
+ of experiments.
+ The experiments were described in a language with a lexical structure that
+ forced me to make substitutions inside text strings; that was the original
+ reason that substitutions are bracketed by at-signs.
+ The experiments are currently controlled by text files that contain description
+s in the experiment language, data extraction programs written in Awk, and
+ graphical displays of data written in Grap; all the programs are tailored
+ by m1 commands.
+\end_layout
+
+\begin_layout Standard
+Most experiments are driven by short files that set a few keys parameters
+ and then 
+\family typewriter
+@include
+\family default
+ a large file with many 
+\family typewriter
+@default
+\family default
+s.
+ Separate files describe the fields of shared databases:
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+lstparams "basicstyle={\small\ttfamily},tabsize=4"
+inline false
+status open
+
+\begin_layout Plain Layout
+
+@define N ($1)
+\end_layout
+
+\begin_layout Plain Layout
+
+@define NODES ($2)
+\end_layout
+
+\begin_layout Plain Layout
+
+@define CPU ($3)
+\end_layout
+
+\begin_layout Plain Layout
+
+...
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+These files are 
+\family typewriter
+@include
+\family default
+d in both the experiment files and in Troff files that display data from
+ the databases.
+ I had tried to conduct a similar set of experiments before I built m1,
+ and got mired in muck.
+ The few hours I spent building the tool were paid back handsomely in the
+ first days I used it.
+\end_layout
+
+\begin_layout Subsection*
+The Substitution Function
+\end_layout
+
+\begin_layout Standard
+M1 uses as fast substitution function.
+ The idea is to process the string from left to right, searching for the
+ first substitution to be made.
+ We then make the substitution, and rescan the string starting at the fresh
+ text.
+ We implement this idea by keeping two strings: the text processed so far
+ is in 
+\family typewriter
+L
+\family default
+ (for Left), and unprocessed text is in 
+\family typewriter
+R
+\family default
+ (for Right).
+ Here is the pseudocode for 
+\family typewriter
+dosubs
+\family default
+:
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+lstparams "basicstyle={\small\ttfamily},tabsize=4"
+inline false
+status open
+
+\begin_layout Plain Layout
+
+L = Empty
+\end_layout
+
+\begin_layout Plain Layout
+
+R = Input String
+\end_layout
+
+\begin_layout Plain Layout
+
+while R contains an "@" sign do
+\end_layout
+
+\begin_layout Plain Layout
+
+	let R = A @ B; set L = L A and R = B
+\end_layout
+
+\begin_layout Plain Layout
+
+	if R contains no "@" then
+\end_layout
+
+\begin_layout Plain Layout
+
+		L = L "@"
+\end_layout
+
+\begin_layout Plain Layout
+
+		break
+\end_layout
+
+\begin_layout Plain Layout
+
+	let R = A @ B; set M = A and R = B
+\end_layout
+
+\begin_layout Plain Layout
+
+	if M is in SymTab then
+\end_layout
+
+\begin_layout Plain Layout
+
+		R = SymTab[M] R
+\end_layout
+
+\begin_layout Plain Layout
+
+	else
+\end_layout
+
+\begin_layout Plain Layout
+
+		L = L "@" M
+\end_layout
+
+\begin_layout Plain Layout
+
+		R = "@" R
+\end_layout
+
+\begin_layout Plain Layout
+
+return L R
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection*
+Possible Extensions
+\end_layout
+
+\begin_layout Standard
+There are many ways in which the m1 program could be extended.
+ Here are some of the biggest temptations to ``creeping creaturism'':
+\end_layout
+
+\begin_layout Itemize
+A long definition with a trail of backslashes might be more graciously expressed
+ by a 
+\family typewriter
+@longdefine
+\family default
+ statement terminated by a 
+\family typewriter
+@longend
+\family default
+.
+\end_layout
+
+\begin_layout Itemize
+An 
+\family typewriter
+@undefine
+\family default
+ statement would remove a definition from the symbol table.
+\end_layout
+
+\begin_layout Itemize
+I've been tempted to add parameters to macros, but so far I have gotten
+ around the problem by using an idiom described in the next section.
+\end_layout
+
+\begin_layout Itemize
+It would be easy to add stack-based arithmetic and strings to the language
+ by adding 
+\family typewriter
+@push
+\family default
+ and 
+\family typewriter
+@pop
+\family default
+ commands that read and write variables.
+\end_layout
+
+\begin_layout Itemize
+As soon as you try to write interesting macros, you need to have mechanisms
+ for quoting strings (to postpone evaluation) and for forcing immediate
+ evaluation.
+\end_layout
+
+\begin_layout Section*
+Code
+\end_layout
+
+\begin_layout Standard
+The following code is short (around 100 lines), which is significantly shorter
+ than other macro processors; see, for instance, Chapter 8 of Kernighan
+ and Plauger [1981].
+ The program uses several techniques that can be applied in many Awk programs.
+\end_layout
+
+\begin_layout Itemize
+Symbol tables are easy to implement with Awk's associative arrays.
+\end_layout
+
+\begin_layout Itemize
+The program makes extensive use of Awk's string-handling facilities: regular
+ expressions, string concatenation, 
+\family typewriter
+gsub
+\family default
+, 
+\family typewriter
+index
+\family default
+, and 
+\family typewriter
+substr
+\family default
+.
+\end_layout
+
+\begin_layout Itemize
+Awk's file handling makes the 
+\family typewriter
+dofile
+\family default
+ procedure straightforward.
+\end_layout
+
+\begin_layout Itemize
+The 
+\family typewriter
+readline
+\family default
+ function and pushback mechanism associated with buffer are of general utility.
+\end_layout
+
+\begin_layout Subsection*
+error
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+lstparams "language={[POSIX]Awk},basicstyle={\small\ttfamily},tabsize=4"
+inline false
+status open
+
+\begin_layout Plain Layout
+
+function error(s) {
+\end_layout
+
+\begin_layout Plain Layout
+
+	print "m1 error: " s | "cat 1>&2"; exit 1
+\end_layout
+
+\begin_layout Plain Layout
+
+}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection*
+dofile
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+lstparams "language={[POSIX]Awk},basicstyle={\small\ttfamily},tabsize=4"
+inline false
+status open
+
+\begin_layout Plain Layout
+
+function dofile(fname, savefile, savebuffer, newstring) {
+\end_layout
+
+\begin_layout Plain Layout
+
+	if (fname in activefiles)
+\end_layout
+
+\begin_layout Plain Layout
+
+		error("recursively reading file: " fname)
+\end_layout
+
+\begin_layout Plain Layout
+
+	activefiles[fname] = 1
+\end_layout
+
+\begin_layout Plain Layout
+
+	savefile = file; file = fname
+\end_layout
+
+\begin_layout Plain Layout
+
+	savebuffer = buffer; buffer = ""
+\end_layout
+
+\begin_layout Plain Layout
+
+	while (readline() != EOF) {
+\end_layout
+
+\begin_layout Plain Layout
+
+		if (index($0, "@") == 0) {
+\end_layout
+
+\begin_layout Plain Layout
+
+			print $0
+\end_layout
+
+\begin_layout Plain Layout
+
+		} else if (/^@define[ 
+\backslash
+t]/) {
+\end_layout
+
+\begin_layout Plain Layout
+
+			dodef()
+\end_layout
+
+\begin_layout Plain Layout
+
+		} else if (/^@default[ 
+\backslash
+t]/) {
+\end_layout
+
+\begin_layout Plain Layout
+
+			if (!($2 in symtab))
+\end_layout
+
+\begin_layout Plain Layout
+
+				dodef()
+\end_layout
+
+\begin_layout Plain Layout
+
+		} else if (/^@include[ 
+\backslash
+t]/) {
+\end_layout
+
+\begin_layout Plain Layout
+
+			if (NF != 2) error("bad include line")
+\end_layout
+
+\begin_layout Plain Layout
+
+			dofile(dosubs($2))
+\end_layout
+
+\begin_layout Plain Layout
+
+		} else if (/^@if[ 
+\backslash
+t]/) {
+\end_layout
+
+\begin_layout Plain Layout
+
+			if (NF != 2) error("bad if line")
+\end_layout
+
+\begin_layout Plain Layout
+
+			if (!($2 in symtab) || symtab[$2] == 0)
+\end_layout
+
+\begin_layout Plain Layout
+
+				gobble()
+\end_layout
+
+\begin_layout Plain Layout
+
+		} else if (/^@unless[ 
+\backslash
+t]/) {
+\end_layout
+
+\begin_layout Plain Layout
+
+			if (NF != 2) error("bad unless line")
+\end_layout
+
+\begin_layout Plain Layout
+
+			if (($2 in symtab) && symtab[$2] != 0)
+\end_layout
+
+\begin_layout Plain Layout
+
+				gobble()
+\end_layout
+
+\begin_layout Plain Layout
+
+		} else if (/^@fi([ 
+\backslash
+t]?|$)/) {
+\end_layout
+
+\begin_layout Plain Layout
+
+			# Could do error checking here
+\end_layout
+
+\begin_layout Plain Layout
+
+		} else if (/^@stderr[ 
+\backslash
+t]?/) {
+\end_layout
+
+\begin_layout Plain Layout
+
+			print substr($0, 9) | "cat 1>&2"
+\end_layout
+
+\begin_layout Plain Layout
+
+		} else if (/^@(comment|@)[ 
+\backslash
+t]?/) {
+\end_layout
+
+\begin_layout Plain Layout
+
+		} else if (/^@ignore[ 
+\backslash
+t]/) {
+\end_layout
+
+\begin_layout Plain Layout
+
+			# Dump input until $2
+\end_layout
+
+\begin_layout Plain Layout
+
+			delim = $2
+\end_layout
+
+\begin_layout Plain Layout
+
+			l = length(delim)
+\end_layout
+
+\begin_layout Plain Layout
+
+			while (readline() != EOF)
+\end_layout
+
+\begin_layout Plain Layout
+
+				if (substr($0, 1, l) == delim)
+\end_layout
+
+\begin_layout Plain Layout
+
+					break
+\end_layout
+
+\begin_layout Plain Layout
+
+		} else {
+\end_layout
+
+\begin_layout Plain Layout
+
+			newstring = dosubs($0)
+\end_layout
+
+\begin_layout Plain Layout
+
+			if ($0 == newstring || index(newstring, "@") == 0)
+\end_layout
+
+\begin_layout Plain Layout
+
+				print newstring
+\end_layout
+
+\begin_layout Plain Layout
+
+			else
+\end_layout
+
+\begin_layout Plain Layout
+
+				buffer = newstring "
+\backslash
+n" buffer
+\end_layout
+
+\begin_layout Plain Layout
+
+		}
+\end_layout
+
+\begin_layout Plain Layout
+
+	}
+\end_layout
+
+\begin_layout Plain Layout
+
+	close(fname)
+\end_layout
+
+\begin_layout Plain Layout
+
+	delete activefiles[fname]
+\end_layout
+
+\begin_layout Plain Layout
+
+	file = savefile
+\end_layout
+
+\begin_layout Plain Layout
+
+	buffer = savebuffer
+\end_layout
+
+\begin_layout Plain Layout
+
+}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection*
+readline
+\end_layout
+
+\begin_layout Standard
+Put next input line into global string 
+\family typewriter
+buffer
+\family default
+.
+ Return 
+\family typewriter
+EOF
+\family default
+ or 
+\family typewriter
+""
+\family default
+ (null string).
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+lstparams "language={[POSIX]Awk},basicstyle={\small\ttfamily},tabsize=4"
+inline false
+status open
+
+\begin_layout Plain Layout
+
+function readline( i, status) {
+\end_layout
+
+\begin_layout Plain Layout
+
+	status = ""
+\end_layout
+
+\begin_layout Plain Layout
+
+	if (buffer != "") {
+\end_layout
+
+\begin_layout Plain Layout
+
+		i = index(buffer, "
+\backslash
+n")
+\end_layout
+
+\begin_layout Plain Layout
+
+		$0 = substr(buffer, 1, i-1)
+\end_layout
+
+\begin_layout Plain Layout
+
+		buffer = substr(buffer, i+1)
+\end_layout
+
+\begin_layout Plain Layout
+
+	} else {
+\end_layout
+
+\begin_layout Plain Layout
+
+		# Hume: special case for non v10: if (file == "/dev/stdin")
+\end_layout
+
+\begin_layout Plain Layout
+
+		if (getline <file <= 0)
+\end_layout
+
+\begin_layout Plain Layout
+
+			status = EOF
+\end_layout
+
+\begin_layout Plain Layout
+
+	}
+\end_layout
+
+\begin_layout Plain Layout
+
+	# Hack: allow @Mname at start of line w/o closing @
+\end_layout
+
+\begin_layout Plain Layout
+
+	if ($0 ~ /^@[A-Z][a-zA-Z0-9]*[ 
+\backslash
+t]*$/)
+\end_layout
+
+\begin_layout Plain Layout
+
+		sub(/[ 
+\backslash
+t]*$/, "@")
+\end_layout
+
+\begin_layout Plain Layout
+
+	return status
+\end_layout
+
+\begin_layout Plain Layout
+
+}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection*
+gobble
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+lstparams "language={[POSIX]Awk},basicstyle={\small\ttfamily},tabsize=4"
+inline false
+status open
+
+\begin_layout Plain Layout
+
+function gobble( ifdepth) {
+\end_layout
+
+\begin_layout Plain Layout
+
+	ifdepth = 1
+\end_layout
+
+\begin_layout Plain Layout
+
+	while (readline() != EOF) {
+\end_layout
+
+\begin_layout Plain Layout
+
+		if (/^@(if|unless)[ 
+\backslash
+t]/)
+\end_layout
+
+\begin_layout Plain Layout
+
+			ifdepth++
+\end_layout
+
+\begin_layout Plain Layout
+
+		if (/^@fi[ 
+\backslash
+t]?/ && --ifdepth <= 0)
+\end_layout
+
+\begin_layout Plain Layout
+
+			break
+\end_layout
+
+\begin_layout Plain Layout
+
+	}
+\end_layout
+
+\begin_layout Plain Layout
+
+}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection*
+dosubs
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+lstparams "language={[POSIX]Awk},basicstyle={\small\ttfamily},tabsize=4"
+inline false
+status open
+
+\begin_layout Plain Layout
+
+function dosubs(s, l, r, i, m) {
+\end_layout
+
+\begin_layout Plain Layout
+
+	if (index(s, "@") == 0)
+\end_layout
+
+\begin_layout Plain Layout
+
+		return s
+\end_layout
+
+\begin_layout Plain Layout
+
+	l = ""	# Left of current pos; ready for output
+\end_layout
+
+\begin_layout Plain Layout
+
+	r = s 	# Right of current; unexamined at this time
+\end_layout
+
+\begin_layout Plain Layout
+
+	while ((i = index(r, "@")) != 0) {
+\end_layout
+
+\begin_layout Plain Layout
+
+		l = l substr(r, 1, i-1)
+\end_layout
+
+\begin_layout Plain Layout
+
+		r = substr(r, i+1) # Currently scanning @
+\end_layout
+
+\begin_layout Plain Layout
+
+		i = index(r, "@")
+\end_layout
+
+\begin_layout Plain Layout
+
+		if (i == 0) {
+\end_layout
+
+\begin_layout Plain Layout
+
+			l = l "@"
+\end_layout
+
+\begin_layout Plain Layout
+
+			break
+\end_layout
+
+\begin_layout Plain Layout
+
+		}
+\end_layout
+
+\begin_layout Plain Layout
+
+		m = substr(r, 1, i-1)
+\end_layout
+
+\begin_layout Plain Layout
+
+		r = substr(r, i+1)
+\end_layout
+
+\begin_layout Plain Layout
+
+		if (m in symtab) {
+\end_layout
+
+\begin_layout Plain Layout
+
+			r = symtab[m] r
+\end_layout
+
+\begin_layout Plain Layout
+
+		} else {
+\end_layout
+
+\begin_layout Plain Layout
+
+			l = l "@" m
+\end_layout
+
+\begin_layout Plain Layout
+
+			r = "@" r
+\end_layout
+
+\begin_layout Plain Layout
+
+		}
+\end_layout
+
+\begin_layout Plain Layout
+
+	}
+\end_layout
+
+\begin_layout Plain Layout
+
+	return l r
+\end_layout
+
+\begin_layout Plain Layout
+
+}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection*
+dodef
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+lstparams "language={[POSIX]Awk},basicstyle={\small\ttfamily},tabsize=4"
+inline false
+status open
+
+\begin_layout Plain Layout
+
+function dodef(fname, str, x) {
+\end_layout
+
+\begin_layout Plain Layout
+
+	name = $2
+\end_layout
+
+\begin_layout Plain Layout
+
+	sub(/^[ 
+\backslash
+t]*[^ 
+\backslash
+t]+[ 
+\backslash
+t]+[^ 
+\backslash
+t]+[ 
+\backslash
+t]*/, "") # OLD BUG: last * was +
+\end_layout
+
+\begin_layout Plain Layout
+
+	str = $0
+\end_layout
+
+\begin_layout Plain Layout
+
+	while (str ~ /
+\backslash
+
+\backslash
+$/) {
+\end_layout
+
+\begin_layout Plain Layout
+
+		if (readline() == EOF)
+\end_layout
+
+\begin_layout Plain Layout
+
+			error("EOF inside definition")
+\end_layout
+
+\begin_layout Plain Layout
+
+		# OLD BUG: sub(/
+\backslash
+
+\backslash
+$/, "
+\backslash
+n" $0, str)
+\end_layout
+
+\begin_layout Plain Layout
+
+		x = $0
+\end_layout
+
+\begin_layout Plain Layout
+
+		sub(/^[ 
+\backslash
+t]+/, "", x)
+\end_layout
+
+\begin_layout Plain Layout
+
+		str = substr(str, 1, length(str)-1) "
+\backslash
+n" x
+\end_layout
+
+\begin_layout Plain Layout
+
+	}
+\end_layout
+
+\begin_layout Plain Layout
+
+	symtab[name] = str
+\end_layout
+
+\begin_layout Plain Layout
+
+}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection*
+BEGIN
+\end_layout
+
+\begin_layout Standard
+\begin_inset listings
+lstparams "language={[POSIX]Awk},basicstyle={\small\ttfamily},tabsize=4"
+inline false
+status open
+
+\begin_layout Plain Layout
+
+BEGIN {
+\end_layout
+
+\begin_layout Plain Layout
+
+	EOF = "EOF"
+\end_layout
+
+\begin_layout Plain Layout
+
+	if (ARGC == 1)
+\end_layout
+
+\begin_layout Plain Layout
+
+		dofile("/dev/stdin")
+\end_layout
+
+\begin_layout Plain Layout
+
+	else if (ARGC >= 2) {
+\end_layout
+
+\begin_layout Plain Layout
+
+		for (i = 1; i < ARGC; i++)
+\end_layout
+
+\begin_layout Plain Layout
+
+		dofile(ARGV[i])
+\end_layout
+
+\begin_layout Plain Layout
+
+	} else
+\end_layout
+
+\begin_layout Plain Layout
+
+		error("usage: m1 [fname...]")
+\end_layout
+
+\begin_layout Plain Layout
+
+}
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Section*
+Bugs
+\end_layout
+
+\begin_layout Standard
+M1 is three steps lower than m4.
+ You'll probably miss something you have learned to expect.
+\end_layout
+
+\begin_layout Section*
+History
+\end_layout
+
+\begin_layout Standard
+M1 was documented in the 1997 
+\emph on
+sed
+\begin_inset space ~
+\end_inset
+
+&
+\begin_inset space ~
+\end_inset
+
+awk
+\emph default
+ book by Dale
+\begin_inset space ~
+\end_inset
+
+Dougherty
+\begin_inset space ~
+\end_inset
+
+& Arnold
+\begin_inset space ~
+\end_inset
+
+Robbins (ISBN
+\begin_inset space ~
+\end_inset
+
+1-56592-225-5) but may have been written earlier.
+\end_layout
+
+\begin_layout Standard
+This page was adapted from 
+\begin_inset Flex URL
+status collapsed
+
+\begin_layout Plain Layout
+
+131.191.66.141:8181/UNIX_BS/sedawk/examples/ch13/m1.pdf
+\end_layout
+
+\end_inset
+
+, also available at 
+\begin_inset Flex URL
+status collapsed
+
+\begin_layout Plain Layout
+
+http://lawker.googlecode.com/svn/fridge/share/pdf/m1.pdf
+\end_layout
+
+\end_inset
+
+.
+ 
+\emph on
+(Note: Both URLs from the original text are now dead.)
+\end_layout
+
+\begin_layout Section*
+Author
+\end_layout
+
+\begin_layout Standard
+Jon L.
+ Bentley
+\end_layout
+
+\end_body
+\end_document

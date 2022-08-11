@@ -1,8 +1,9 @@
 In memory of Jon Bentley's mini macro processor "m1".  Alas, I have
 embiggened it beyond all hope of reason, and I pine for the AWK pearl
-that was m1.  It can still be found in the core of m2 though.
+that was m1.  It can still be found in the core of m2, though; and
+references to even earlier versions if you look closely enough.
 
-# /etc/
+# m2/etc/
 
 Bentley's initial development of m1, from m1.ps.
 
@@ -11,7 +12,7 @@ Bentley's initial development of m1, from m1.ps.
 - m0c/ : nested macros: call dosubs() until
 - m0d/ : support conditions @if...@fi  (buggy)
 
-# /etc/m1/
+# m2/etc/m1/
 
 The final version from Bentley's m1.ps paper.
 
@@ -44,6 +45,10 @@ Complete m1 language:
 
 # References
 
+Alas, these are starting to disappear...  They were reachable at one
+time at the addresses shown.  I've tried to preserve some things in
+m2/etc/x-*.
+
 ## M1: A Micro Macro Processor
 Jon Bentley, AT&T Bell Laboratories
 - [[file:etc/m1.pdf]]
@@ -58,12 +63,14 @@ Jon Bentley, July 03, 2007
 - https://www.drdobbs.com/open-source/m1-a-mini-macro-processor/200001791?pgno=4
 
 ## O'Reilly: _sed & awk_
-13.10.  m1 -- Simple Macro Processor
 - https://docstore.mik.ua/orelly/unix3/sedawk/ch13_10.htm
+- m2/etc/x-oreilly/     # Ch 13.10 : m1 -- Simple Macro Processor
 
 ## Dave Bucklin
 - https://davebucklin.com/play/2020/10/13/mac.html
-- etc/m1.awk.dave_bucklin :: https://gitlab.com/davebucklin/m1
+- https://gitlab.com/davebucklin/m1
+- m2/etc/x-bucklin/
 
 ## Lawker
-- etc/m1.awk.lawker :: https://github.com/timm/lawker/blob/master/fridge/lib/awk/m1.awk
+- https://github.com/timm/lawker/blob/master/fridge/lib/awk/m1.awk
+- m2/etc/x-lawker/

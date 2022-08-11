@@ -220,8 +220,9 @@
 #       you have learned to expect.
 #
 #       Positional parameters are parsed by splitting on white space.
+#       This means that in:
 #               @foo "a b" c
-#       has three arguments -- ('"a', 'b"', 'c') -- not two.
+#       foo has three arguments -- ('"a', 'b"', 'c') -- not two.
 #
 # EXAMPLE
 #       @define Condition under

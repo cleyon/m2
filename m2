@@ -18,7 +18,7 @@
 #          a body.  All occurrences of a macro's name are replaced with
 #          the macro's body.  Macro expansion may include parameters.
 #
-#       2. Include files.  Special include directives in a data file are
+#       2. Include files.  Special include directives in a file are
 #          replaced with the contents of the named file.  Includes can
 #          be nested, with one included file including another.
 #          Included files are processed for macros.
@@ -80,11 +80,12 @@
 #
 #       Macros can expand positional parameters whose actual values will be
 #       supplied when the macro is called.  The definition should refer to
-#       $1, $2, etc; $0 refers to the name of the macro name itself.
+#       $1, $2, etc.  $0 refers to the name of the macro itself.
 #       Example:
 #           @define greet Hello, $1!  m2 sends you $0ings.
 #           @greet world@
 #               => Hello, world!  m2 sends you greetings.
+#
 #       You may supply more parameters than needed, but it is an error
 #       for a definition to refer to a parameter which is not supplied.
 #
@@ -92,6 +93,8 @@
 #
 #           @basename SYM@         Return base name of SYM
 #           @boolval SYM@          Return 1 if symbol is true, else 0
+#           @currdate@             Return current date as YYYY-MM-DD
+#           @currtime@             Return current time as HH:MM:SS
 #           @dirname SYM@          Return directory name of SYM
 #           @gensym@               Generate symbol: <prefix><counter>
 #             @gensym 42@            Set counter; prefix unchanged
@@ -102,7 +105,7 @@
 #           @substr SYM BEG [LEN]@ Substring
 #           @trim SYM@             Remove leading and trailing whitespace
 #           @uc SYM@               Upper case
-#           @uuid@                 Something that resembles but is not a UUID:
+#           @uuid@                 Something that resembles a UUID:
 #                                    C3525388-E400-43A7-BC95-9DF5FA3C4A52
 #
 #       [*] @getenv VAR@ will be replaced by the value of the
@@ -117,7 +120,7 @@
 #       Symbols that start and end with "__" (like __FOO__) are called
 #       "internal" symbols.  The following internal symbols are pre-defined;
 #       example values or defaults are shown:
-#           __DATE__               Current date (19450716)
+#           __DATE__               Run date (19450716)
 #           __DEBUG__              Debug level for internal workings of m2
 #           __FILE__               Current file name
 #           __FILE_UUID__          UUID unique to this file
@@ -129,19 +132,19 @@
 #           __INPUT__              The data read by @input
 #           __LINE__               Current line number in __FILE__
 #           __M2_UUID__            UUID unique to this m2 run
+#           __M2_VERSION__         m2 version
 #           __NFILE__              Number of files processed so far (0)
 #           __SCALE__              Value of "scale" passed to bc from @let (6)
 #           __STRICT__             Strict mode (TRUE)
-#           __TIME__               Current time (053000)
+#           __TIME__               Run time (053000)
 #           __TIMESTAMP__          ISO 8601 timestamp (1945-07-16T05:30:00-0600)
 #           __UID__                [effective] User id
 #           __USER__               User name
-#           __VERSION__            m2 version
 #
 #       Except for certain unprotected symbols, internal symbols cannot be
 #       modified by the user.  The values of __DATE__, __TIME__, and
 #       __TIMESTAMP__ are fixed at the start of the program and do not
-#       change.
+#       change.  (@currtime@ and @currdate@ do change, however.)
 #
 # ERROR MESSAGES
 #       Error messages are printed to standard error in the following format:
@@ -232,6 +235,11 @@
 #       /dev/stdin, /dev/stderr, /dev/tty
 #           - I/O is performed on these paths.
 #
+# ENVIRONMENT VARIABLES
+#       HOME            Used to access your ~/.m2rc file
+#       SHELL           Used as a possible default shell
+#       TMPDIR          Used as a possible temporary directory
+#
 # AUTHOR(S)
 #       Jon L. Bentley, jlb@research.bell-labs.com.  Original author.
 #       Chris Leyon, cleyon@gmail.com.
@@ -247,7 +255,7 @@
 #*****************************************************************************
 
 BEGIN {
-    version = "2.1.4"
+    version = "2.1.5"
 }
 
 
@@ -367,28 +375,38 @@ function symbol_internal_p(sym)
 # In strict mode, a symbol must match the following regexp:
 #       /^[A-Za-z#$_][A-Za-z#$_0-9]*$/
 # In non-strict mode, any non-empty string is valid.
-function symbol_valid_p(sym,    lbracket, rbracket)
+function symbol_valid_p(sym,    result, lbracket, rbracket, new_sym)
 {
     # These are the ways a symbol is not valid:
-    # 1. Empty string is never a valid symbol name
-    if (length(sym) == 0)
-        return FALSE
+    result = FALSE
 
-    # Fake/hack out any "array name" by removing brackets
-    if ((lbracket = index(sym, "[")) && (sym ~ /^.+\[.+\]$/)) {
-        rbracket = index(sym, "]")
-        sym = substr(sym, 1, lbracket-1)
-        # 2. Empty parts are not valid
-        if (length(sym) == 0 ||
-            length(substr(sym, lbracket+1, rbracket-lbracket-1)) == 0)
-            return FALSE
-    }
+    do {
+        # 1. Empty string is never a valid symbol name
+        if (length(sym) == 0)
+             break
 
-    # 3. We're in strict mode and the name doesn't pass regexp check
-    if (strictp() && sym !~ /^[A-Za-z#$_][A-Za-z#$_0-9]*$/)
-        return FALSE
+        # Fake/hack out any "array name" by removing brackets
+        if ((lbracket = index(sym, "[")) && (sym ~ /^.+\[.+\]$/)) {
+            rbracket = index(sym, "]")
+            new_sym = substr(sym, 1, lbracket-1)
+            # 2. Empty parts are not valid
+            if (length(new_sym) == 0 ||
+                length(substr(sym, lbracket+1, rbracket-lbracket-1)) == 0)
+                break
+            sym = new_sym
+        }
 
-    return TRUE
+        # 3. We're in strict mode and the name doesn't pass regexp check
+        if (strictp() && sym !~ /^[A-Za-z#$_][A-Za-z#$_0-9]*$/)
+            break
+
+        # We've passed all the tests
+        result = TRUE
+    } while (FALSE)
+
+    if (debugp(5))
+        print_stderr("symbol_valid_p(" sym ") => " result)
+    return result
 }
 
 
@@ -1344,6 +1362,16 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
                 error("Symbol '" p "' not defined:" $0)
             r = (symbol_true_p(p) ? "1" : "0") r
 
+        # currdate : Return current date as YYYY-MM-DD
+        } else if (symfunc == "currdate") {
+            get_symbol("__PROG__[date]") " +'%Y-%m-%d'" | getline expand
+            r = expand r
+
+        # currtime : Return current time as HH:MM:SS
+        } else if (symfunc == "currtime") {
+            get_symbol("__PROG__[date]") " +'%H:%M:%S'" | getline expand
+            r = expand r
+
         # dirname : Return directory name of file
         } else if (symfunc == "dirname") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
@@ -1484,7 +1512,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
 # two fields.  The new value of $0 now contains just (the first line of)
 # the macro body.  The Computer Language article explains that sub() is
 # used on purpose, in order to preserve whitespace in the macro body.
-# Simply assigning the empty string to $1 and $2 would rebuild th
+# Simply assigning the empty string to $1 and $2 would rebuild the
 # record, but with all occurrences of whitespace collapsed into single
 # occurrences of the value of OFS (a single blank).  The function then
 # proceeds to gather the rest of the macro body, indicated by lines that
@@ -1566,10 +1594,12 @@ function initialize(    d, dateout, egid, euid, host, hostname, user)
     set_symbol("__HOSTNAME__",       hostname)
     set_symbol("__INPUT__",          "")
     set_symbol("__M2_UUID__",        uuid())
+    set_symbol("__M2_VERSION__",     version)
     set_symbol("__NFILE__",          0)
     set_symbol("__PROG__[basename]", "/usr/bin/basename")
     set_symbol("__PROG__[bc]",       "/usr/bin/bc")
     set_symbol("__PROG__[cat]",      "/bin/cat")
+    set_symbol("__PROG__[date]",     "/bin/date")
     set_symbol("__PROG__[dirname]",  "/usr/bin/dirname")
     set_symbol("__PROG__[rm]",       "/bin/rm")
     set_symbol("__PROG__[sh]",       "/bin/sh")
@@ -1582,7 +1612,6 @@ function initialize(    d, dateout, egid, euid, host, hostname, user)
                                      d[4] ":" d[5] ":" d[6] d[7])
     set_symbol("__UID__",            euid)
     set_symbol("__USER__",           user)
-    set_symbol("__VERSION__",        version)
 
     unprotected_syms["__DEBUG__"]  = TRUE
     unprotected_syms["__INPUT__"]  = TRUE
@@ -1615,7 +1644,7 @@ BEGIN {
                 name = substr(arg, 1, eq-1)
                 if (name == "strict")
                     name = "__STRICT__"
-                val  = substr(arg, eq+1)
+                val = substr(arg, eq+1)
                 if (symbol_protected_p(name))
                     error("Symbol '" name "' protected:" arg, i, "ARGV")
                 if (! symbol_valid_p(name))

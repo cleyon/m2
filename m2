@@ -91,7 +91,7 @@
 #
 #       The following definitions are recognized:
 #
-#           @basename SYM@         Return base name of SYM
+#           @basename SYM@         Return base (file) name of SYM
 #           @boolval SYM@          Return 1 if symbol is true, else 0
 #           @currdate@             Return current date as YYYY-MM-DD
 #           @currtime@             Return current time as HH:MM:SS
@@ -216,7 +216,7 @@
 #       66      A file specified on command line could not be read
 #
 # BUGS
-#       M2 is two steps lower than m4.  You'll probably miss something
+#       m2 is two steps lower than m4.  You'll probably miss something
 #       you have learned to expect.
 #
 #       Positional parameters are parsed by splitting on white space.
@@ -273,18 +273,19 @@ function format_message(text, line, file)
 }
 
 
+# One of these is bound to work, right?
 function flush_stdout()
 {
-    # One of these is bound to work, right?
-    system("")
     fflush("/dev/stdout")
+    # Reputed to be more portable:
+    # system("")
 }
 
 
 function print_stderr(text)
 {
     print text > "/dev/stderr"
-    # More portable:
+    # Definitely more portable:
     # print text | "cat 1>&2"
 }
 
@@ -297,7 +298,7 @@ function error(text, line, file)
 }
 
 
-# Return s but with last character removed (usually '\n')
+# Return s but with last character (usually "\n") removed
 function chop(s)
 {
     return substr(s, 1, length(s)-1)
@@ -314,12 +315,11 @@ function last(s)
 # If last character is newline, chop() it off
 function chomp(s)
 {
-    return (last(s) == "\n") \
-        ? chop(s) : s
+    return (last(s) == "\n") ? chop(s) : s
 }
 
 
-function symbol_basename(sym,    _sym)
+function symbol_root(sym,    _sym)
 {
     _sym = canonical_form(sym)
     if (index(_sym, SUBSEP) != 0)
@@ -369,7 +369,7 @@ function integerp(pat)
 # Internal symbols start and end with double underscores
 function symbol_internal_p(sym)
 {
-    return symbol_basename(sym) ~ /^__.*__$/
+    return symbol_root(sym) ~ /^__.*__$/
 }
 
 
@@ -423,7 +423,7 @@ function validate_symbol(sym)
 # Protected symbols cannot be changed by the user.
 function symbol_protected_p(sym)
 {
-    sym = symbol_basename(sym)
+    sym = symbol_root(sym)
     # Whitelist of known safe symbols
     if (sym in unprotected_syms)
         return FALSE
@@ -585,13 +585,13 @@ function _less_than(s1, s2,    s1_underscorep, s2_underscorep)
 {
     s1_underscorep = substr(s1, 1, 1) == "_"
     s2_underscorep = substr(s2, 1, 1) == "_"
-    if ( s1_underscorep &&  s2_underscorep)
-        return _less_than(substr(s1, 2), substr(s2, 2))
-    if ( s1_underscorep && !s2_underscorep)
+    if (s1_underscorep && s2_underscorep)
+        return _less_than(substr(s1,2), substr(s2,2))
+    if (s1_underscorep && !s2_underscorep)
         return FALSE
-    if (!s1_underscorep &&  s2_underscorep)
+    if (!s1_underscorep && s2_underscorep)
         return TRUE
-    #  (!s1_underscorep && !s2_underscorep)
+    #if (!s1_underscorep && !s2_underscorep)
         return s1 < s2
 }
 
@@ -634,13 +634,12 @@ function read_lines_until(delim,    buf, delim_len)
 #*****************************************************************************
 #
 #       The m2_*() functions that follow can only be executed by
-#       process_line().  That routine has matched text at the beginning
-#       of line in $0 to invoke a `macro expression', such as @define,
-#       @if, or @let.  Therefore, NF cannot be zero.
+#       process_line().  That routine has already matched text at the
+#       beginning of line in $0 to invoke a `macro expression', such as
+#       @define, @if, etc.  Therefore, NF cannot be zero.
 #
-#       - NF==1 means @xxx called bare, zero arguments.
-#       - NF==2 means @xxx called with 1 arguments.
-#           (NF < 3)
+#       - NF==1 means @xxx called with zero arguments.
+#       - NF==2 means @xxx called with 1 argument.
 #       - NF==3 means @xxx called with 2 arguments.
 #
 #*****************************************************************************
@@ -1340,7 +1339,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
         #   needs to be evaluated for possible macro processing.  This
         #   is the data we were going to evaluate anyway.  In other
         #   words, this injects the result of "invoking" symfunc.
-        # Eventually this big while loop exits and we "return l r".
+        # Eventually this big while loop exits and we return "l r".
         nparam = split(m, param) - fencepost
         symfunc = param[0 + fencepost]
 
@@ -1541,7 +1540,7 @@ function dodef(append_flag,    name, str, x)
     # expansion; then see if the result might be a symbol which we could
     # possibly use; then do a final substitution.  This makes possible:
     #      @define AMI  @ami-list[@my-region@]@
-    # This is a terrible**2 kludge....
+    # This is a terrible**2 kluge....
     if (str ~ /^@.+@$/) {
         x = dosubs(substr(str, 2, length(str)-2))
         if (symbol_defined_p(x))
@@ -1630,6 +1629,7 @@ BEGIN {
     if (ARGC == 1) {
         load_home_m2rc()
         exit_code = dofile("-") ? EX_OK : EX_NOINPUT
+
     } else if (ARGC > 1) {
         # Delay loading $HOME/.m2rc as long as possible.  This allows us
         # to set symbols on the command line which will have taken effect
@@ -1639,8 +1639,9 @@ BEGIN {
             arg = ARGV[i]
             if (debugp(6))
                 print_stderr("BEGIN: ARGV[" i "]:" arg)
+
+            # If it's a definition on the command line, define it
             if (arg ~ /^([^= ][^= ]*)=(.*)/) {
-                # Define a symbol on the command line
                 eq = index(arg, "=")
                 name = substr(arg, 1, eq-1)
                 if (name == "strict")
@@ -1651,8 +1652,9 @@ BEGIN {
                 if (! symbol_valid_p(name))
                     error("Symbol '" name "' invalid name:" arg, i, "ARGV")
                 set_symbol(name, val)
+
+            # Otherwise load a file
             } else {
-                # Load a file
                 if (! init_file_p)
                     load_home_m2rc()
                 if (! dofile(arg)) {
@@ -1661,6 +1663,7 @@ BEGIN {
                 }
             }
         }
+
         # If we get here with init_file_p still false, that means we
         # used up every ARGV defining symbols and didn't specify any
         # files.  Not specifying any input files, like ARGC==1, means to
@@ -1669,11 +1672,12 @@ BEGIN {
             load_home_m2rc()
             exit_code = dofile("-") ? EX_OK : EX_NOINPUT
         }
-    } else {
-        # Can't happen...
+
+    } else {    # ARGC < 1, can't happen...
         print_stderr("Usage: m2 [NAME=VAL] [file...]")
         exit_code = EX_USAGE
     }
+
     flush_stdout()
     exit exit_code
 }

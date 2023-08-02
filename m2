@@ -194,7 +194,7 @@
 #             mode (the default), a symbol name may only contain letters,
 #             digits, #, $, or _ characters.
 #
-#       "Symbol 'XXX' not defined"
+#       "Symbol 'XXX' not defined[hint]"
 #           - A symbol name without a value was passed to a function
 #           - An undefined macro was referenced and __STRICT__ is true.
 #
@@ -243,7 +243,7 @@
 #
 # AUTHOR(S)
 #       Jon L. Bentley, jlb@research.bell-labs.com.  Original author.
-#       Chris Leyon, cleyon@gmail.com.
+#       Christopher Leyon, cleyon@gmail.com.
 #
 # SEE ALSO
 #       "m1: A Mini Macro Processor", Computer Language, June 1990,
@@ -907,7 +907,7 @@ function m2_incr(    incr, sym)
         return
     validate_symbol(sym)
     if (! symbol_defined_p(sym))
-        error("Symbol '" sym "' not defined:" $0)
+        error("Symbol '" sym "' not defined[incr]:" $0)
     incr = (NF >= 3) ? $3 : 1
     incr_symbol(sym, ($1 == "@incr") ? incr : -incr)
 }
@@ -1359,7 +1359,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
             p = param[1 + fencepost]
             validate_symbol(p)
             if (! symbol_defined_p(p))
-                error("Symbol '" p "' not defined:" $0)
+                error("Symbol '" p "' not defined[boolval]:" $0)
             r = (symbol_true_p(p) ? "1" : "0") r
 
         # currdate : Return current date as YYYY-MM-DD
@@ -1420,7 +1420,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
             p = param[1 + fencepost]
             validate_symbol(p)
             if (! symbol_defined_p(p))
-                error("Symbol '" p "' not defined:" $0)
+                error("Symbol '" p "' not defined[lc]:" $0)
             r = tolower(get_symbol(p)) r
 
         # len : Length
@@ -1430,7 +1430,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
             p = param[1 + fencepost]
             validate_symbol(p)
             if (! symbol_defined_p(p))
-                error("Symbol '" p "' not defined:" $0)
+                error("Symbol '" p "' not defined[len]:" $0)
             r = length(get_symbol(p)) r
 
         # substr : Substring ...  SYMBOL, START[, LENGTH]
@@ -1442,7 +1442,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
             p = param[1 + fencepost]
             validate_symbol(p)
             if (! symbol_defined_p(p))
-                error("Symbol '" p "' not defined:" $0)
+                error("Symbol '" p "' not defined[substr]:" $0)
             if (! integerp(param[2 + fencepost]))
                 error("Value '" m "' must be numeric:" $0)
             if (nparam == 2) {
@@ -1459,7 +1459,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
             p = param[1 + fencepost]
             validate_symbol(p)
             if (! symbol_defined_p(p))
-                error("Symbol '" p "' not defined:" $0)
+                error("Symbol '" p "' not defined[trim]:" $0)
             expand = get_symbol(p)
             sub(/^[ \t]+/, "", expand)
             sub(/[ \t]+$/, "", expand)
@@ -1471,7 +1471,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
             p = param[1 + fencepost]
             validate_symbol(p)
             if (! symbol_defined_p(p))
-                error("Symbol '" p "' not defined:" $0)
+                error("Symbol '" p "' not defined[uc]:" $0)
             r = toupper(get_symbol(p)) r
 
         # uuid : Something that resembles but is not a UUID
@@ -1493,7 +1493,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
 
         # Throw an error on undefined symbol (strict-only)
         } else if (strictp()) {
-            error("Symbol '" m "' not defined:" $0)
+            error("Symbol '" m "' not defined[strict]:" $0)
 
         } else {
             l = l "@" m
@@ -1555,6 +1555,9 @@ function dodef(append_flag,    name, str, x)
 # No worries if it doesn't exist.
 function load_home_m2rc()
 {
+    # Don't load the init file more than once
+    if (init_file_p == TRUE)
+        return;
     if ("HOME" in ENVIRON)
         dofile(ENVIRON["HOME"] "/.m2rc")
     # What matters is that you tried...
@@ -1655,8 +1658,7 @@ BEGIN {
 
             # Otherwise load a file
             } else {
-                if (! init_file_p)
-                    load_home_m2rc()
+                load_home_m2rc()
                 if (! dofile(arg)) {
                     print_stderr(format_message("File '" arg "' does not exist", i, "ARGV"))
                     exit_code = EX_NOINPUT

@@ -25,7 +25,7 @@
 #
 #       3. Conditional text inclusion and exclusion.  Different parts of
 #          the text can be included in the final output, often based
-#          upon whether a macro is or isn't defined.
+#          upon whether a macro is or is not defined.
 #
 #       4. Comment lines will be removed from the final output.
 #
@@ -104,14 +104,15 @@
 #           @len SYM@              Number of characters in symbol
 #           @substr SYM BEG [LEN]@ Substring
 #           @trim SYM@             Remove leading and trailing whitespace
+#           @tz@                   Time zone offset from UTC (-0400)
 #           @uc SYM@               Upper case
 #           @uuid@                 Something that resembles a UUID:
 #                                    C3525388-E400-43A7-BC95-9DF5FA3C4A52
 #
 #       [*] @getenv VAR@ will be replaced by the value of the
 #       environment variable VAR.  A runtime error is thrown if VAR is
-#       not defined.  To continue with empty string and no error,
-#       disable __STRICT__.
+#       not defined.  (To continue with empty string and no error,
+#       disable __STRICT__.)
 #
 #       N.B., The definitions just listed can occur multiple times in a
 #       single line, whereas the `macro expression lines' (@if, etc) can
@@ -144,7 +145,9 @@
 #       Except for certain unprotected symbols, internal symbols cannot be
 #       modified by the user.  The values of __DATE__, __TIME__, and
 #       __TIMESTAMP__ are fixed at the start of the program and do not
-#       change.  (@currtime@ and @currdate@ do change, however.)
+#       change.  (@currtime@ and @currdate@ do change, however, so
+#           @currdate@T@currtime@@tz@
+#       will generate an up-to-date timestamp.)
 #
 # ERROR MESSAGES
 #       Error messages are printed to standard error in the following format:
@@ -241,9 +244,11 @@
 #       SHELL           Used as a possible default shell
 #       TMPDIR          Used as a possible temporary directory
 #
-# AUTHOR(S)
-#       Jon L. Bentley, jlb@research.bell-labs.com.  Original author.
-#       Christopher Leyon, cleyon@gmail.com.
+# AUTHOR
+#       Jon L. Bentley, jlb@research.bell-labs.com
+#
+# EMBIGGENER
+#       Chris Leyon, cleyon@gmail.com
 #
 # SEE ALSO
 #       "m1: A Mini Macro Processor", Computer Language, June 1990,
@@ -256,7 +261,7 @@
 #*****************************************************************************
 
 BEGIN {
-    version = "2.1.5"
+    version = "2.1.6"
 }
 
 
@@ -1463,6 +1468,12 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
             expand = get_symbol(p)
             sub(/^[ \t]+/, "", expand)
             sub(/[ \t]+$/, "", expand)
+            r = expand r
+
+        # tz : Time zone offset from UTC
+        #   @tz@ => -0400
+        } else if (symfunc == "tz") {
+            get_symbol("__PROG__[date]") " +'%z'" | getline expand
             r = expand r
 
         # uc : Upper case

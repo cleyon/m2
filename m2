@@ -29,8 +29,11 @@
 #
 #       4. Comment lines will be removed from the final output.
 #
-#       Macro expression lines are distinguished with a "@" character.
-#       The following lines define or control macros for subsequent processing:
+#       Macro expression lines (@if, @define, etc) are distinguished by
+#       a "@" as the first character at the beginning of a line.  They
+#       consume the entire line.  The following table lists macro
+#       expression lines to evaluate, control, or define macros for
+#       subsequent processing:
 #
 #           @append NAME MORE      Add MORE to an already defined macro NAME
 #           @comment [STUFF...]    Comment; ignore line.  Also @@, @c, @#, @rem
@@ -45,7 +48,7 @@
 #           @if(_not)_defined NAME Test if NAME is defined
 #           @if(_not)_env VAR      Test if VAR is defined in the environment
 #           @if(_not)_exists FILE  Test if FILE exists
-#           @if(_not)_in KEY ARR   Test if symbol ARR[KEY] is defined
+#           @if(_not)_in KEY ARR   Test if symbol ARR[KEY] is defined (KEY in ARR)
 #           @if(n)def NAME         Like @if_defined/@if_not_defined
 #           @else                  Switch to the other branch of an @if statement
 #           @endif                 Terminate @if or @unless.  Also @fi
@@ -54,7 +57,7 @@
 #           @incr NAME [N]         Add 1 (or N) from an already defined NAME
 #           @initialize NAME VAL   Like @define, but abort if NAME already defined
 #           @input [NAME]          Read a single line from keyboard and define NAME
-#           @let NAME [STUFF...]   Pass STUFF... to bc(1) for calc, result in NAME
+#           @let NAME [STUFF...]   Pass STUFF to bc(1), result in NAME
 #           @longdef NAME          Set NAME to <...> (all lines until @longend)
 #             <...>                  Don't use other @ commands inside definition
 #           @longend                 But simple @NAME@ references should be okay
@@ -62,6 +65,7 @@
 #           @read NAME FILE        Read FILE contents to define NAME
 #           @shell DELIM [PROG]    Evaluate input until DELIM, send raw data to PROG
 #                                    Output from prog is captured in output stream
+#           @sleep [N]             Pause execution for N seconds (default 1)
 #           @stderr [STUFF...]     Send STUFF... to standard error; continue
 #                                    Also called @echo, @warn
 #           @typeout               Print remainder of input literally, no macros
@@ -72,22 +76,23 @@
 #       with a backslash, thus quoting the following newline.
 #       (Alternatively, use @longdef.)  Short macros can be defined on
 #       the command line by using the form "NAME=VAL" (or "NAME=" to
-#       define with empty value)
+#       define with empty value).
 #
 #       Any occurrence of @name@ in the input is replaced in the output
-#       by the corresponding value.  Specifying more than one word in a
-#       @aaa bbb ...@ form is used as a crude form of function invocation.
+#       by the corresponding value.  They can occur multiple times in a
+#       single line.  Specifying more than one word between @ signs
+#       (like @aaaa bbbb cccc@) is used as a crude form of function
+#       invocation.  Macros can expand positional parameters whose
+#       actual values will be supplied when the macro is called.  The
+#       definition should refer to $1, $2, etc.  $0 refers to the name
+#       of the macro itself.  You may supply more parameters than
+#       needed, but it is an error for a definition to refer to a
+#       parameter which is not supplied.
 #
-#       Macros can expand positional parameters whose actual values will be
-#       supplied when the macro is called.  The definition should refer to
-#       $1, $2, etc.  $0 refers to the name of the macro itself.
 #       Example:
 #           @define greet Hello, $1!  m2 sends you $0ings.
 #           @greet world@
 #               => Hello, world!  m2 sends you greetings.
-#
-#       You may supply more parameters than needed, but it is an error
-#       for a definition to refer to a parameter which is not supplied.
 #
 #       The following definitions are recognized:
 #
@@ -109,112 +114,95 @@
 #           @uuid@                 Something that resembles a UUID:
 #                                    C3525388-E400-43A7-BC95-9DF5FA3C4A52
 #
-#       [*] @getenv VAR@ will be replaced by the value of the
-#       environment variable VAR.  A runtime error is thrown if VAR is
-#       not defined.  (To continue with empty string and no error,
-#       disable __STRICT__.)
-#
-#       N.B., The definitions just listed can occur multiple times in a
-#       single line, whereas the `macro expression lines' (@if, etc) can
-#       only occur once at the beginning of a line.
+#       [*] @getenv VAR@ will be replaced by the value of the environment
+#           variable VAR.  A runtime error is thrown if VAR is not defined.
+#           To continue with empty string and no error, disable __STRICT__.
 #
 #       Symbols that start and end with "__" (like __FOO__) are called
-#       "internal" symbols.  The following internal symbols are pre-defined;
+#       "system" symbols.  The following system symbols are pre-defined;
 #       example values or defaults are shown:
 #           __DATE__               Run date (19450716)
-#           __DEBUG__              Debug level for internal workings of m2
+#           __DEBUG__              Debug level for internal workings of m2 [**]
 #           __FILE__               Current file name
 #           __FILE_UUID__          UUID unique to this file
 #           __GENSYM__[count]      Count for generated symbols (0)
 #           __GENSYM__[prefix]     Prefix for generated symbols (_gen)
-#           __GID__                [effective] Group id
+#           __GID__                (effective) Group id
 #           __HOST__               Short host name (myhost)
 #           __HOSTNAME__           FQDN host name (myhost.example.com)
-#           __INPUT__              The data read by @input
+#           __INPUT__              The data read by @input [**]
 #           __LINE__               Current line number in __FILE__
 #           __M2_UUID__            UUID unique to this m2 run
 #           __M2_VERSION__         m2 version
 #           __NFILE__              Number of files processed so far (0)
-#           __SCALE__              Value of "scale" passed to bc from @let (6)
-#           __STRICT__             Strict mode (TRUE)
+#           __SCALE__              Value of "scale" passed to bc from @let (6) [**]
+#           __STRICT__             Strict mode (TRUE) [**]
 #           __TIME__               Run time (053000)
 #           __TIMESTAMP__          ISO 8601 timestamp (1945-07-16T05:30:00-0600)
-#           __UID__                [effective] User id
+#           __TMPDIR__             Location for temporary files (/tmp) [**]
+#           __UID__                (effective) User id
 #           __USER__               User name
 #
-#       Except for certain unprotected symbols, internal symbols cannot be
-#       modified by the user.  The values of __DATE__, __TIME__, and
-#       __TIMESTAMP__ are fixed at the start of the program and do not
-#       change.  (@currtime@ and @currdate@ do change, however, so
+#       Except for certain [**] unprotected symbols, system symbols
+#       cannot be modified by the user.  The values of __DATE__,
+#       __TIME__, and __TIMESTAMP__ are fixed at program start and do
+#       not change.  @currdate@ and @currtime@ do change, however, so
 #           @currdate@T@currtime@@tz@
-#       will generate an up-to-date timestamp.)
+#       will generate an up-to-date timestamp.
 #
 # ERROR MESSAGES
 #       Error messages are printed to standard error in the following format:
-#               <__FILE__>:<__LINE__>:<Error text>:<Offending input line>
+#           <__FILE__>:<__LINE__>:<Error text>:<Offending input line>
 #       All error texts and their meanings are as follows:
 #
-#       "Bad parameters [in 'XXX']"
+#       Bad parameters [in 'XXX']
 #           - A command did not receive the expected (number of) parameters.
-#
-#       "Cannot recursively read 'XXX'"
+#       Cannot recursively read 'XXX'
 #           - Attempt to @include the same file multiple times.
-#
-#       "Comparison operator 'XXX' invalid"
+#       Comparison operator 'XXX' invalid
 #           - An @if expression with an invalid comparison operator.
-#
-#       "Delimiter 'XXX' not found"
+#       Delimiter 'XXX' not found
 #           - A multi-line read (@ignore, @longdef, @shell) did not find
 #             its terminating delimiter line.
 #           - An @if block was not properly terminated before end of input.
-#
-#       "Duplicate '@else' not allowed"
+#           - Indicates an "starting" command did not find its finish.
+#       Duplicate '@else' not allowed
 #           - More than one @else found in a single @if block.
-#
-#       "Environment variable 'XXX' not defined"
+#       Environment variable 'XXX' not defined
 #           - Attempt to getenv an undefined environment variable
 #             while __STRICT__ is in effect.
-#
-#       "Error reading file 'XXX'"
+#       Error STAT reading 'XXX' [hint]
 #           - Read error on file.
-#
-#       "File 'XXX' does not exist"
+#       File 'XXX' does not exist
 #           - Attempt to @include a non-existent file in strict mode.
-#
-#       "No corresponding 'XXX'"
+#       No corresponding 'XXX'
 #           - @if: An @else or @endif was seen without a matching @if.
 #           - @longdef: A @longend was seen without a matching @longdef.
-#
-#       "Parameter N not supplied in 'XXX'"
+#           - Indicates a "finishing" command was seen without a starter.
+#       Parameter N not supplied in 'XXX'
 #           - A macro referred to a parameter (such as $1) for which
 #             no value was supplied.
-#
-#       "Symbol 'XXX' already defined"
+#       Symbol 'XXX' already defined
 #           - @initialize attempted to define a previously defined symbol.
-#
-#       "Symbol 'XXX' invalid name"
+#       Symbol 'XXX' invalid name
 #           - A symbol name does not pass validity check.  In __STRICT__
 #             mode (the default), a symbol name may only contain letters,
 #             digits, #, $, or _ characters.
-#
-#       "Symbol 'XXX' not defined[hint]"
+#       Symbol 'XXX' not defined [hint]
 #           - A symbol name without a value was passed to a function
 #           - An undefined macro was referenced and __STRICT__ is true.
-#
-#       "Symbol 'XXX' protected"
+#       Symbol 'XXX' protected
 #           - Attempt to modify a protected symbol (__XXX__).
 #             (__STRICT__ is an exception and can be modified.)
-#
-#       "Unexpected end of definition"
+#       Unexpected end of definition
 #           - Input ended before macro definition was complete.
-#
-#       "Value 'XXX' must be numeric"
+#       Value 'XXX' must be numeric
 #           - Something expected to be a number was not.
 #
 # EXIT CODES
 #       0       Normal process completion, or @exit command
-#       1       Internal error generated by error()
-#       2       @error command found in input data
+#       1       m2 error generated by error() function
+#       2       User requested @error command in input
 #       64      Usage error
 #       66      A file specified on command line could not be read
 #
@@ -233,8 +221,8 @@
 #       You are clearly @Condition@worked.
 #
 # FILES
-#       $HOME/.m2rc
-#           - Init file automatically read if available.
+#       $HOME/.m2rc, ./.m2rc
+#           - Init files automatically read if available.
 #
 #       /dev/stdin, /dev/stderr, /dev/tty
 #           - I/O is performed on these paths.
@@ -261,7 +249,7 @@
 #*****************************************************************************
 
 BEGIN {
-    version = "2.1.6"
+    version = "2.2.0"
 }
 
 
@@ -299,7 +287,7 @@ function error(text, line, file)
 {
     flush_stdout()
     print_stderr(format_message(text, line, file))
-    exit 1
+    exit EX_M2_ERROR
 }
 
 
@@ -324,30 +312,37 @@ function chomp(s)
 }
 
 
-function symbol_root(sym,    _sym)
+function build_subsep(s, t)
 {
-    _sym = canonical_form(sym)
-    if (index(_sym, SUBSEP) != 0)
-        return substr(_sym, 1, index(_sym, SUBSEP)-1)
-    return sym
+    return s SUBSEP t
 }
 
 
-# Convert a symbol name into its canonical form (for table lookup
+function symbol_root(sym,    _isym)
+{
+    _isym = internal_form(sym)
+    if (index(_isym, SUBSEP) == IDX_NOT_FOUND)
+        return sym
+    else
+        return substr(_isym, 1, index(_isym, SUBSEP)-1)
+}
+
+
+# Convert a symbol name into its "internal" form (for table lookup
 # purposes) by removing and separating any array-referring brackets.
 #       "arr[key]"  =>  "arr <SUBSEP> key"
 # If there are no array-referring brackets, the symbol is returned
 # unchanged, without a <SUBSEB>.
-function canonical_form(sym,    lbracket, rbracket, arr, key)
+function internal_form(sym,    lbracket, rbracket, arr, key)
 {
-    if ((lbracket = index(sym, "[")) == 0)
+    if ((lbracket = index(sym, "[")) == IDX_NOT_FOUND)
         return sym
     if (sym !~ /^.+\[.+\]$/)
         return sym
     rbracket = index(sym, "]")
     arr = substr(sym, 1, lbracket-1)
     key = substr(sym, lbracket+1, rbracket-lbracket-1)
-    return arr SUBSEP key
+    return build_subsep(arr, key)
 }
 
 
@@ -355,9 +350,9 @@ function canonical_form(sym,    lbracket, rbracket, arr, key)
 # printing (i.e., put the array-looking brackets back if needed).
 #       "arr <SUBSEP> key"  =>  "arr[key]"
 # If there is no <SUBSEP>, the symbol is returned unchanged.
-function display_form(sym,    sep, arr, key)
+function printable_form(sym,    sep, arr, key)
 {
-    if ((sep = index(sym, SUBSEP)) == 0)
+    if ((sep = index(sym, SUBSEP)) == IDX_NOT_FOUND)
         return sym
     arr = substr(sym, 1, sep-1)
     key = substr(sym, sep+1)
@@ -371,8 +366,8 @@ function integerp(pat)
 }
 
 
-# Internal symbols start and end with double underscores
-function symbol_internal_p(sym)
+# System symbols start and end with double underscores
+function symbol_sys_p(sym)
 {
     return symbol_root(sym) ~ /^__.*__$/
 }
@@ -381,7 +376,7 @@ function symbol_internal_p(sym)
 # In strict mode, a symbol must match the following regexp:
 #       /^[A-Za-z#$_][A-Za-z#$_0-9]*$/
 # In non-strict mode, any non-empty string is valid.
-function symbol_valid_p(sym,    result, lbracket, rbracket, new_sym)
+function symbol_valid_p(sym,    result, lbracket, rbracket, sym_root, sym_key)
 {
     # These are the ways a symbol is not valid:
     result = FALSE
@@ -394,12 +389,12 @@ function symbol_valid_p(sym,    result, lbracket, rbracket, new_sym)
         # Fake/hack out any "array name" by removing brackets
         if ((lbracket = index(sym, "[")) && (sym ~ /^.+\[.+\]$/)) {
             rbracket = index(sym, "]")
-            new_sym = substr(sym, 1, lbracket-1)
+            sym_root = substr(sym, 1, lbracket-1)
+            sym_key  = substr(sym, lbracket+1, rbracket-lbracket-1)
             # 2. Empty parts are not valid
-            if (length(new_sym) == 0 ||
-                length(substr(sym, lbracket+1, rbracket-lbracket-1)) == 0)
+            if (length(sym_root) == 0 || length(sym_key) == 0)
                 break
-            sym = new_sym
+            sym = sym_root
         }
 
         # 3. We're in strict mode and the name doesn't pass regexp check
@@ -432,27 +427,36 @@ function symbol_protected_p(sym)
     # Whitelist of known safe symbols
     if (sym in unprotected_syms)
         return FALSE
-    return symbol_internal_p(sym)
+    return symbol_sys_p(sym)
 }
 
 
 function symbol_defined_p(sym)
 {
-    return canonical_form(sym) in symtab
+    return internal_form(sym) in symtab
 }
 
+function aref_defined_p(arr, key)
+{
+    return build_subsep(arr, key) in symtab
+}
 
 function symbol_true_p(sym)
 {
-    return (symbol_defined_p(sym) &&
-            get_symbol(sym) != 0  &&
+    return (symbol_defined_p(sym)    &&
+            get_symbol(sym) != FALSE &&
             get_symbol(sym) != "")
 }
 
 
 function get_symbol(sym)
 {
-    return symtab[canonical_form(sym)]
+    return symtab[internal_form(sym)]
+}
+
+function get_aref(arr, key)
+{
+    return symtab[build_subsep(arr, key)]
 }
 
 
@@ -466,7 +470,14 @@ function set_symbol(sym, val)
 {
     if (debugp(5))
         print_stderr("set_symbol(" sym "," val ")")
-    symtab[canonical_form(sym)] = val
+    symtab[internal_form(sym)] = val
+}
+
+function set_aref(arr, key, val)
+{
+    if (debugp(5))
+        print_stderr("set_aref(" arr "," key "," val ")")
+    symtab[build_subsep(arr, key)] = val
 }
 
 
@@ -474,7 +485,7 @@ function incr_symbol(sym, incr)
 {
     if (incr == "")
         incr = 1
-    symtab[canonical_form(sym)] += incr
+    symtab[internal_form(sym)] += incr
 }
 
 
@@ -483,7 +494,7 @@ function delete_symbol(sym)
     if (debugp(5))
         print_stderr("delete_symbol(" sym ")")
     # It is legal to delete an array key that does not exist
-    delete symtab[canonical_form(sym)]
+    delete symtab[internal_form(sym)]
 }
 
 
@@ -499,6 +510,25 @@ function strictp()
 }
 
 
+function build_prog_cmdline(prog, arg, silent)
+{
+    if (! aref_defined_p("__PROG__", prog))
+        error("Symbol '__PROG__[" prog "]' not defined [build_prog_cmdline]:" $0)
+    return sprintf("%s %s%s", \
+                   get_aref("__PROG__", prog), \
+                   arg, \
+                   (silent ? " >/dev/null 2>/dev/null" : ""))
+}
+
+
+function exec_prog_cmdline(prog, arg,    sym)
+{
+    if (! aref_defined_p("__PROG__", prog))
+        error("Symbol '__PROG__[" prog "]' not defined [exec_prog_cmdline]:" $0)
+    return system(build_prog_cmdline(prog, arg, TRUE)) # always silent
+}
+
+
 # Return a likely path for storing temporary files.
 # This path is guaranteed to end with a "/" character.
 function tmpdir(    t)
@@ -508,7 +538,7 @@ function tmpdir(    t)
     else if ("TMPDIR" in ENVIRON)
         t = ENVIRON["TMPDIR"]
     else
-        t = get_symbol("__PROG__[tmpdir]")
+        t = get_symbol("__TMPDIR__")
     while (last(t) == "\n")
         t = chop(t)
     return t ((last(t) != "/") ? "/" : "")
@@ -521,15 +551,13 @@ function default_shell()
         return get_symbol("M2_SHELL")
     if ("SHELL" in ENVIRON)
         return ENVIRON["SHELL"]
-    return get_symbol("__PROG__[sh]")
+    return get_aref("__PROG__", "sh")
 }
 
 
 function path_exists_p(path)
 {
-    return (system(get_symbol("__PROG__[stat]") " " \
-                   path \
-                   " >/dev/null 2>/dev/null") == 0)
+    return exec_prog_cmdline("stat", path) == EX_OK
 }
 
 
@@ -585,30 +613,22 @@ function qsort(A, left, right,    i, last)
     qsort(A, last+1, right)
 }
 
-# Special comparison to sort leading underscores after all other values
-function _less_than(s1, s2,    s1_underscorep, s2_underscorep)
+# Special comparison to sort leading underscores after all other values.
+function _less_than(s1, s2,    s1_un, s2_un)
 {
-    s1_underscorep = substr(s1, 1, 1) == "_"
-    s2_underscorep = substr(s2, 1, 1) == "_"
-    if (s1_underscorep && s2_underscorep)
-        return _less_than(substr(s1,2), substr(s2,2))
-    if (s1_underscorep && !s2_underscorep)
-        return FALSE
-    if (!s1_underscorep && s2_underscorep)
-        return TRUE
-    #if (!s1_underscorep && !s2_underscorep)
-        return s1 < s2
+    # Determine if s1 and s2 have a leading underscore
+    s1_un = substr(s1, 1, 1) == "_"
+    s2_un = substr(s2, 1, 1) == "_"
+
+    if      (  s1_un &&   s2_un) return _less_than(substr(s1,2), substr(s2,2))
+    else if (  s1_un && ! s2_un) return FALSE
+    else if (! s1_un &&   s2_un) return TRUE
+    else                         return s1 < s2
 }
 
 function swap(A, i, j,    t)
 {
     t = A[i];  A[i] = A[j];  A[j] = t
-}
-
-
-function shipout_printf(s)
-{
-    printf("%s", s)
 }
 
 
@@ -693,7 +713,7 @@ function m2_dump(    buf, cnt, definition, dumpfile, i, key, keys, sym_name, all
     # Count and sort the symbol table keys
     cnt = 0
     for (key in symtab) {
-        if (all_flag || ! symbol_internal_p(key))
+        if (all_flag || ! symbol_sys_p(key))
             keys[++cnt] = key
     }
     qsort(keys, 1, cnt)
@@ -703,8 +723,9 @@ function m2_dump(    buf, cnt, definition, dumpfile, i, key, keys, sym_name, all
     for (i = 1; i <= cnt; i++) {
         key = keys[i]
         definition = get_symbol(key)
-        sym_name = display_form(key)
-        if (index(definition, "\n") == 0)
+        sym_name = printable_form(key)
+        if (index(definition, "\n") == IDX_NOT_FOUND)
+            # No newline means it's a one-liner
             buf = buf "@define " sym_name "\t" definition "\n"
         else {
             buf = buf "@longdef " sym_name "\n"
@@ -713,9 +734,8 @@ function m2_dump(    buf, cnt, definition, dumpfile, i, key, keys, sym_name, all
         }
     }
     buf = chop(buf)
-    print buf > dumpfile
-    # More portable:
-    # print_stderr(buf)
+    if (length(buf) > 0)
+        print buf > dumpfile    # More portable: print_stderr(buf)
 }
 
 
@@ -755,7 +775,7 @@ function m2_error(    m2_will_exit, message)
     print_stderr(message)
     if (m2_will_exit) {
         flush_stdout()
-        exit 2
+        exit EX_USER_REQUEST
     }
 }
 
@@ -846,12 +866,14 @@ function m2_if(    sym, cond, op, val2, val4)
         # @if_in KEY ARR
         if (NF < 3) error("Bad parameters:" $0)
         validate_symbol($3)
-        cond = symbol_defined_p($3 "[" $2 "]")
+        #cond = symbol_defined_p($3 "[" $2 "]")
+        cond = aref_defined_p($3, $2)
 
     } else if ($1 == "if_not_in") {
         if (NF < 3) error("Bad parameters:" $0)
         validate_symbol($3)
-        cond = ! symbol_defined_p($3 "[" $2 "]")
+        #cond = ! symbol_defined_p($3 "[" $2 "]")
+        cond = ! aref_defined_p($3, $2)
 
     } else
         # Should not happen
@@ -912,7 +934,7 @@ function m2_incr(    incr, sym)
         return
     validate_symbol(sym)
     if (! symbol_defined_p(sym))
-        error("Symbol '" sym "' not defined[incr]:" $0)
+        error("Symbol '" sym "' not defined [incr]:" $0)
     incr = (NF >= 3) ? $3 : 1
     incr_symbol(sym, ($1 == "@incr") ? incr : -incr)
 }
@@ -932,16 +954,16 @@ function m2_input(    getstat, input, sym)
     validate_symbol(sym)
     getstat = getline input < "/dev/tty"
     if (getstat < 0)
-        error("Error reading file '/dev/tty':" $0)
+        error("Error " getstat " reading '/dev/tty' [input]:" $0)
     set_symbol(sym, input)
 }
 
 
 # @let
-function m2_let(    sym, math, bcfile, val)
+function m2_let(    sym, math, bcfile, val, cmd)
 {
     if (debugp(7))
-        print_stderr("@let: NF=" NF " \$0='" $0 "'")
+        print_stderr("@let: NF=" NF " $0='" $0 "'")
     if (NF < 3) error("Bad parameters:" $0)
     if (! currently_active_p())
         return
@@ -949,18 +971,21 @@ function m2_let(    sym, math, bcfile, val)
     sym = $2
     sub(/^[ \t]*[^ \t]+[ \t]+[^ \t]+[ \t]*/, "")
     math = "scale=" get_symbol("__SCALE__") "; " dosubs($0)
-    bcfile = tmpdir() "bc.m2-" hex_digits(8)
+    bcfile = tmpdir() "m2-bcfile." get_symbol("__M2_UUID__")
     if (debugp(7))
         print_stderr("@let: bcfile='" bcfile "', math='" math "'")
     print math > bcfile
     close(bcfile)
+
+    cmd = build_prog_cmdline("cat", bcfile) \
+          " | " \
+          build_prog_cmdline("bc", "-l") # pass "-l" (library) option to bc(1)
     val = ""
-    # NB - Pass "-l" option to bc(1)
-    while ((get_symbol("__PROG__[cat]") " " bcfile " | " \
-            get_symbol("__PROG__[bc]") " -l" | getline) > 0) {
+    while ((cmd | getline) > 0) {
         val = val $0 "\n"
     }
-    system(get_symbol("__PROG__[rm]") " -f " bcfile)
+    close(cmd)
+    exec_prog_cmdline("rm", ("-f " bcfile))
     set_symbol(sym, chop(val))
 }
 
@@ -1000,7 +1025,7 @@ function m2_read(    sym, file, line, val, getstat)
     # to read short snippets like a file path or username.  As usual, multi-
     # line values are accepted but the final trailing \n (if any) is stripped.
     if (debugp(7))
-        print_stderr("@read: \$0='" $0 "'")
+        print_stderr("@read: $0='" $0 "'")
     if (NF != 3)                # @read SYM FILE
         error("Bad parameters:" $0)
     sym  = $2
@@ -1015,7 +1040,7 @@ function m2_read(    sym, file, line, val, getstat)
     while (TRUE) {
         getstat = getline line < file
         if (getstat < 0)        # Error
-            error("Error reading file '" file "'")
+            error("Error " getstat " reading '" file "' [read]")
         if (getstat == 0)       # End of file
             break
         val = val line "\n"     # Read a line
@@ -1055,6 +1080,17 @@ function m2_shell(    buf, delim, save_line, save_lineno, sendto)
 }
 
 
+# @sleep
+function m2_sleep(    sec)
+{
+    if (! currently_active_p())
+        return
+    sec = (NF > 1 && integerp($2)) ? $2 : 1
+    flush_stdout()
+    exec_prog_cmdline("sleep", sec)
+}
+
+
 # @typeout
 function m2_typeout(    buf)
 {
@@ -1062,7 +1098,7 @@ function m2_typeout(    buf)
         return
     buf = read_lines_until("")
     if (length(buf) > 0)
-        shipout_printf(buf "\n")
+        printf("%s\n", buf)
 }
 
 
@@ -1077,51 +1113,6 @@ function m2_undef(    sym)
         return
     validate_symbol(sym)
     delete_symbol(sym)
-}
-
-
-# Sets $0 so dostr() can process it.  Returns
-#  1 if a newline was found; there's potentially more data.
-#  0 if no newline was found so that empties the strbuf.
-# -1 on empty strbuf - end of data
-function readline_from_string(    i, status)
-{
-    if (strbuf == "") {
-        $0 = ""
-        return -1
-    }
-    i = index(strbuf, "\n")
-    if (i == 0) {
-        $0 = strbuf
-        strbuf = ""
-        return 0
-    }
-    $0 = substr(strbuf, 1, i-1)
-    strbuf = substr(strbuf, i+1)
-    return 1
-}
-
-
-# Return value as from readline_from_string: 1 if a newline was included
-# last, 0 if the cursor is stuck and needs a newline.
-function dostr(s,    r, rprev)
-{
-    if (debugp(2))
-        print_stderr("dostr(" s ")")
-    flush_stdout()
-    strbuf = s
-    rprev = -1
-    while (TRUE) {
-        r = readline_from_string()
-        if (r == -1)
-            break
-        shipout_printf($0)
-        if (r == 1)
-            shipout_printf("\n")
-        rprev = r
-    }
-    flush_stdout()
-    return rprev
 }
 
 
@@ -1184,12 +1175,91 @@ function dofile(filename, read_literally,    savefile, saveline, savebuffer)
 }
 
 
+# Put next input line into global string "buffer".  The readline()
+# function manages the "pushback."  After expanding a macro, macro
+# processors examine the newly created text for any additional macro
+# names.  Only after all expanded text has been processed and sent to
+# the output does the program get a fresh line of input.
+# Return EOF or "" (null string)
+function readline(    getstat, i, status)
+{
+    status = ""
+    if (buffer != "") {
+        i = index(buffer, "\n")
+        $0 = substr(buffer, 1, i-1)
+        buffer = substr(buffer, i+1)
+    } else {
+        getstat = getline < get_symbol("__FILE__")
+        if (getstat < 0)        # Error
+            error("Error " getstat " reading '" get_symbol("__FILE__") "' [readline]")
+        if (getstat == 0)  # End of file
+            status = EOF
+        else                    # Read a line
+            incr_symbol("__LINE__")
+    }
+    # Hack: allow @Mname at start of line w/o closing @
+    # if non-strict.  Note, macro name must start w/capital.
+    if (not strictp())
+        if ($0 ~ /^@[A-Z][A-Za-z#$_0-9]*[ \t]*$/)
+            sub(/[ \t]*$/, "@")
+    return status
+}
+
+
+# In the same way as dofile()+readline() processes text, so can
+# dostr()+readline_from_string() process string values.  These
+# routines are not currently used or tested.
+#
+# # Return value as from readline_from_string:
+# #  1 if a newline was included last
+# #  0 if the cursor is stuck and needs a newline
+# # -1 if end of data
+# function dostr(s,    r, rprev)
+# {
+#     if (debugp(2))
+#         print_stderr("dostr(" s ")")
+#     strbuf = s
+#     rprev = -1
+#     while (TRUE) {
+#         r = readline_from_string()
+#         if (r == -1)
+#             break
+#         printf("%s", $0)
+#         if (r == 1)
+#             printf("\n")
+#         rprev = r
+#     }
+#     return rprev
+# }
+#
+# # Sets $0 so dostr() can process it.  Returns
+# #  1 if a newline was found; there's potentially more data.
+# #  0 if no newline was found so that empties the strbuf.
+# # -1 on empty strbuf - end of data
+# function readline_from_string(    i)
+# {
+#     if (strbuf == "") {
+#         $0 = ""
+#         return -1
+#     }
+#     i = index(strbuf, "\n")
+#     if (i == IDX_NOT_FOUND) {
+#         $0 = strbuf
+#         strbuf = ""
+#         return 0
+#     }
+#     $0 = substr(strbuf, 1, i-1)
+#     strbuf = substr(strbuf, i+1)
+#     return 1
+# }
+
+
 function process_line(read_literally,    newstring)
 {
     # Short circuit if we're not processing macros, or no @ found
     if (read_literally ||
-        (currently_active_p() && index($0, "@") == 0)) {
-        shipout_printf($0 "\n")
+        (currently_active_p() && index($0, "@") == IDX_NOT_FOUND)) {
+        printf("%s\n", $0)
         return
     }
 
@@ -1223,6 +1293,7 @@ function process_line(read_literally,    newstring)
     else if (/^@read([ \t]|$)/)          { m2_read() }
     else if (/^@rem([ \t]|$)/)           { } # Comments are ignored
     else if (/^@shell([ \t]|$)/)         { m2_shell() }
+    else if (/^@sleep([ \t]|$)/)         { m2_sleep() }
     else if (/^@stderr([ \t]|$)/)        { m2_error() }
     else if (/^@typeout([ \t]|$)/)       { m2_typeout() }
     else if (/^@undef(ine)?([ \t]|$)/)   { m2_undef() }
@@ -1232,44 +1303,13 @@ function process_line(read_literally,    newstring)
     # Process @
     else {
         newstring = dosubs($0)
-        if (newstring == $0 || index(newstring, "@") == 0) {
+        if (newstring == $0 || index(newstring, "@") == IDX_NOT_FOUND) {
             if (currently_active_p())
-                shipout_printf(newstring "\n")
+                printf("%s\n", newstring)
         } else {
             buffer = newstring "\n" buffer
         }
     }
-}
-
-
-# Put next input line into global string "buffer".  The readline()
-# function manages the "pushback."  After expanding a macro, macro
-# processors examine the newly created text for any additional macro
-# names.  Only after all expanded text has been processed and sent to
-# the output does the program get a fresh line of input.
-# Return EOF or "" (null string)
-function readline(    getstat, i, status)
-{
-    status = ""
-    if (buffer != "") {
-        i = index(buffer, "\n")
-        $0 = substr(buffer, 1, i-1)
-        buffer = substr(buffer, i+1)
-    } else {
-        getstat = getline < get_symbol("__FILE__")
-        if (getstat < 0)        # Error
-            error("Error reading file '" get_symbol("__FILE__") "'")
-        if (getstat == 0)  # End of file
-            status = EOF
-        else                    # Read a line
-            incr_symbol("__LINE__")
-    }
-    # Hack: allow @Mname at start of line w/o closing @
-    # if non-strict.  Note, macro name must start w/capital.
-    if (not strictp())
-        if ($0 ~ /^@[A-Z][A-Za-z#$_0-9]*[ \t]*$/)
-            sub(/[ \t]*$/, "@")
-    return status
 }
 
 
@@ -1302,21 +1342,24 @@ function readline(    getstat, i, status)
 #             L = L "@" M
 #             R = "@" R
 #         return L R
-function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
+function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd)
 {
     # Short-circuit check: no "@" characters means no action needed
-    if (index(s, "@") == 0)
+    if (index(s, "@") == IDX_NOT_FOUND)
         return s
 
     l = ""                   # Left of current pos  - ready for output
     r = s                    # Right of current pos - as yet unexamined
     fencepost = 1
+    gl_cnt = 0
 
     while ((i = index(r, "@")) != 0) {
+        if (debugp(7))
+            print_stderr(sprintf("dosubs: top of loop: l='%s', r='%s', expand='%s'", l, r, expand))
         l = l substr(r, 1, i-1)
         r = substr(r, i+1)      # Currently scanning @
         i = index(r, "@")
-        if (i == 0) {
+        if (i == IDX_NOT_FOUND) {
             l = l "@"
             break
         }
@@ -1347,6 +1390,8 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
         # Eventually this big while loop exits and we return "l r".
         nparam = split(m, param) - fencepost
         symfunc = param[0 + fencepost]
+        if (debugp(7))
+            print_stderr(sprintf("dosubs: symfunc=%s, nparam=%d; l='%s', m='%s', r='%s', expand='%s'", symfunc, nparam, l, m, r, expand))
 
         # basename SYM: Return base name of file
         if (symfunc == "basename") {
@@ -1354,7 +1399,9 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
             p = param[1 + fencepost]
             if (symbol_valid_p(p) && symbol_defined_p(p))
                 p = get_symbol(p)
-            get_symbol("__PROG__[basename]") " " p | getline expand
+            cmd = build_prog_cmdline("basename", p)
+            cmd | getline expand
+            close(cmd)
             r = expand r
 
         # boolval : Return 1 if symbol is true, else 0
@@ -1364,17 +1411,21 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
             p = param[1 + fencepost]
             validate_symbol(p)
             if (! symbol_defined_p(p))
-                error("Symbol '" p "' not defined[boolval]:" $0)
+                error("Symbol '" p "' not defined [boolval]:" $0)
             r = (symbol_true_p(p) ? "1" : "0") r
 
         # currdate : Return current date as YYYY-MM-DD
         } else if (symfunc == "currdate") {
-            get_symbol("__PROG__[date]") " +'%Y-%m-%d'" | getline expand
+            cmd = build_prog_cmdline("date", "+'%Y-%m-%d'")
+            cmd | getline expand
+            close(cmd)
             r = expand r
 
         # currtime : Return current time as HH:MM:SS
         } else if (symfunc == "currtime") {
-            get_symbol("__PROG__[date]") " +'%H:%M:%S'" | getline expand
+            cmd = build_prog_cmdline("date", "+'%H:%M:%S'")
+            cmd | getline expand
+            close(cmd)
             r = expand r
 
         # dirname : Return directory name of file
@@ -1383,7 +1434,9 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
             p = param[1 + fencepost]
             if (symbol_valid_p(p) && symbol_defined_p(p))
                 p = get_symbol(p)
-            get_symbol("__PROG__[dirname]") " " p | getline expand
+            cmd = build_prog_cmdline("dirname", p)
+            cmd | getline expand
+            close(cmd)
             r = expand r
 
         # gensym : Generate symbol
@@ -1394,19 +1447,19 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
             if (nparam == 1) {
                 if (! integerp(param[1 + fencepost]))
                     error("Value '" m "' must be numeric:" $0)
-                set_symbol("__GENSYM__[count]", param[1 + fencepost])
+                set_aref("__GENSYM__", "count", param[1 + fencepost])
             } else if (nparam == 2) {
                 if (! integerp(param[2 + fencepost]))
                     error("Value '" m "' must be numeric:" $0)
                 # Make sure the new requested prefix is valid
                 validate_symbol(param[1 + fencepost])
-                set_symbol("__GENSYM__[prefix]", param[1 + fencepost])
-                set_symbol("__GENSYM__[count]",  param[2 + fencepost])
+                set_aref("__GENSYM__", "prefix", param[1 + fencepost])
+                set_aref("__GENSYM__", "count",  param[2 + fencepost])
             } else if (nparam > 2)
                 error("Bad parameters in '" m "':" $0)
             # 0, 1, or 2 param
-            r = get_symbol("__GENSYM__[prefix]") \
-                get_symbol("__GENSYM__[count]") r
+            r = get_aref("__GENSYM__", "prefix") \
+                get_aref("__GENSYM__", "count") r
             incr_symbol("__GENSYM__[count]")
 
         # getenv : Get environment variable
@@ -1425,7 +1478,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
             p = param[1 + fencepost]
             validate_symbol(p)
             if (! symbol_defined_p(p))
-                error("Symbol '" p "' not defined[lc]:" $0)
+                error("Symbol '" p "' not defined [lc]:" $0)
             r = tolower(get_symbol(p)) r
 
         # len : Length
@@ -1435,7 +1488,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
             p = param[1 + fencepost]
             validate_symbol(p)
             if (! symbol_defined_p(p))
-                error("Symbol '" p "' not defined[len]:" $0)
+                error("Symbol '" p "' not defined [len]:" $0)
             r = length(get_symbol(p)) r
 
         # substr : Substring ...  SYMBOL, START[, LENGTH]
@@ -1447,7 +1500,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
             p = param[1 + fencepost]
             validate_symbol(p)
             if (! symbol_defined_p(p))
-                error("Symbol '" p "' not defined[substr]:" $0)
+                error("Symbol '" p "' not defined [substr]:" $0)
             if (! integerp(param[2 + fencepost]))
                 error("Value '" m "' must be numeric:" $0)
             if (nparam == 2) {
@@ -1464,7 +1517,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
             p = param[1 + fencepost]
             validate_symbol(p)
             if (! symbol_defined_p(p))
-                error("Symbol '" p "' not defined[trim]:" $0)
+                error("Symbol '" p "' not defined [trim]:" $0)
             expand = get_symbol(p)
             sub(/^[ \t]+/, "", expand)
             sub(/[ \t]+$/, "", expand)
@@ -1473,7 +1526,9 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
         # tz : Time zone offset from UTC
         #   @tz@ => -0400
         } else if (symfunc == "tz") {
-            get_symbol("__PROG__[date]") " +'%z'" | getline expand
+            cmd = build_prog_cmdline("date", "+'%z'")
+            cmd | getline expand
+            close(cmd)
             r = expand r
 
         # uc : Upper case
@@ -1482,7 +1537,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
             p = param[1 + fencepost]
             validate_symbol(p)
             if (! symbol_defined_p(p))
-                error("Symbol '" p "' not defined[uc]:" $0)
+                error("Symbol '" p "' not defined [uc]:" $0)
             r = toupper(get_symbol(p)) r
 
         # uuid : Something that resembles but is not a UUID
@@ -1495,7 +1550,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
             expand = get_symbol(symfunc)
             # Expand $N parameters (includes $0 for macro name)
             for (j = 0; j <= 9; j++)
-                if (index(expand, "$" j) > 0) {
+                if (index(expand, "$" j) != IDX_NOT_FOUND) { # i.e., "found"
                     if (j > nparam)
                         error("Parameter " j " not supplied in '" m "':" $0)
                     gsub("\\$" j, param[j + fencepost], expand)
@@ -1504,7 +1559,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
 
         # Throw an error on undefined symbol (strict-only)
         } else if (strictp()) {
-            error("Symbol '" m "' not defined[strict]:" $0)
+            error("Symbol '" m "' not defined [strict]:" $0)
 
         } else {
             l = l "@" m
@@ -1513,7 +1568,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc)
     }
 
     if (debugp(7))
-        print_stderr("dosubs:l=<" l "> r=<" r ">")
+        print_stderr(sprintf("dosubs: out of loop, returning l r: l='%s', r='%s'", l, r))
     return l r
 }
 
@@ -1547,6 +1602,9 @@ function dodef(append_flag,    name, str, x)
         str = chop(str) "\n" x
     }
 
+    if (debugp(7))
+        print_stderr(sprintf("dodef: before kluge, str='%s'", str))
+
     # If the definition text looks like an expansion request, do a preliminary
     # expansion; then see if the result might be a symbol which we could
     # possibly use; then do a final substitution.  This makes possible:
@@ -1554,55 +1612,92 @@ function dodef(append_flag,    name, str, x)
     # This is a terrible**2 kluge....
     if (str ~ /^@.+@$/) {
         x = dosubs(substr(str, 2, length(str)-2))
-        if (symbol_defined_p(x))
+        if (debugp(7))
+            print_stderr(sprintf("dodef: x='%s'", x))
+        if (symbol_valid_p(x) && symbol_defined_p(x))
             str = get_symbol(x)
         str = dosubs(str)
     }
+    if (debugp(7))
+        print_stderr(sprintf("dodef: after kluge, str='%s'", str))
     set_symbol(name, append_flag ? get_symbol(name) str : str)
 }
 
 
-# Try to read init file: $HOME/.m2rc
-# No worries if it doesn't exist.
-function load_home_m2rc()
+# Try to read init files: $HOME/.m2rc and/or ./.m2rc
+# No worries if they don't exist.
+function load_init_files()
 {
-    # Don't load the init file more than once
-    if (init_file_p == TRUE)
-        return;
+    # Don't load the init files more than once
+    if (init_files_loaded == TRUE)
+        return
+
     if ("HOME" in ENVIRON)
         dofile(ENVIRON["HOME"] "/.m2rc")
-    # What matters is that you tried...
-    init_file_p = TRUE
+    dofile("./.m2rc")
+
+    # Don't count init files in total file tally - it's better to keep
+    # in sync with the command line.
+    set_symbol("__NFILE__", 0)
+    init_files_loaded = TRUE
 }
 
 
+# Change these paths as necessary for correct operation on your system.
+# It is important that __PROG__ remain a protected symbol.  Otherwise,
+# some bad person could entice you to evaluate:
+#       @define __PROG__[stat]  /bin/rm
+#       @include $HOME/my_precious_file
+function setup_prog_paths()
+{
+    set_aref("__PROG__", "basename", "/usr/bin/basename")
+    set_aref("__PROG__", "bc",       "/usr/bin/bc")
+    set_aref("__PROG__", "cat",      "/bin/cat")
+    set_aref("__PROG__", "date",     "/bin/date")
+    set_aref("__PROG__", "dirname",  "/usr/bin/dirname")
+    set_aref("__PROG__", "hostname", "/bin/hostname")
+    set_aref("__PROG__", "id",       "/usr/bin/id")
+    set_aref("__PROG__", "rm",       "/bin/rm")
+    set_aref("__PROG__", "sh",       "/bin/sh")
+    set_aref("__PROG__", "sleep",    "/bin/sleep")
+    set_aref("__PROG__", "stat",     "/usr/bin/stat")
+    set_symbol("__TMPDIR__",         "/tmp")
+}
+
+
+# Nothing here is user-customizable
 function initialize(    d, dateout, egid, euid, host, hostname, user)
 {
-    TRUE            = 1
-    FALSE           = 0
-    EX_OK           = 0
-    EX_USAGE        = 64
-    EX_NOINPUT      = 66
-    exit_code       = EX_OK
-    EOF             = "EOF" SUBSEP "EOF" # Unlikely to occur in normal text
-    init_file_p     = FALSE
-    ifdepth         = 0
-    active[ifdepth] = TRUE
-    buffer          = ""
-    strbuf          = ""
+    TRUE              =  1
+    FALSE             =  0
+    IDX_NOT_FOUND     =  0
+    EX_OK             =  0
+    EX_M2_ERROR       =  1
+    EX_USER_REQUEST   =  2
+    EX_USAGE          = 64
+    EX_NOINPUT        = 66
 
-    srand()     # Seed random number generator
-    "/bin/date +'%Y %m %d %H %M %S %z'" | getline dateout;  split(dateout, d)
-    "/usr/bin/id -g"                    | getline egid
-    "/usr/bin/id -u"                    | getline euid
-    "/bin/hostname -s"                  | getline host
-    "/bin/hostname"                     | getline hostname
-    "/usr/bin/id -un"                   | getline user
+    exit_code         = EX_OK
+    EOF               = build_subsep("EoF1", "EoF2") # Unlikely to occur in normal text
+    init_files_loaded = FALSE
+    ifdepth           = 0
+    active[ifdepth]   = TRUE
+    buffer            = ""
+    strbuf            = ""
+
+    srand()                     # Seed random number generator
+    setup_prog_paths()
+    build_prog_cmdline("date", "+'%Y %m %d %H %M %S %z'") | getline dateout;  split(dateout, d)
+    build_prog_cmdline("id", "-g")                        | getline egid
+    build_prog_cmdline("id", "-u")                        | getline euid
+    build_prog_cmdline("hostname", "-s")                  | getline host
+    build_prog_cmdline("hostname")                        | getline hostname
+    build_prog_cmdline("id", "-un")                       | getline user
 
     set_symbol("__DATE__",           d[1] d[2] d[3])
     set_symbol("__DEBUG__",          0)
-    set_symbol("__GENSYM__[count]",  0)
-    set_symbol("__GENSYM__[prefix]", "_gen")
+    set_aref("__GENSYM__", "count",  0)
+    set_aref("__GENSYM__", "prefix", "_gen")
     set_symbol("__GID__",            egid)
     set_symbol("__HOST__",           host)
     set_symbol("__HOSTNAME__",       hostname)
@@ -1610,15 +1705,6 @@ function initialize(    d, dateout, egid, euid, host, hostname, user)
     set_symbol("__M2_UUID__",        uuid())
     set_symbol("__M2_VERSION__",     version)
     set_symbol("__NFILE__",          0)
-    set_symbol("__PROG__[basename]", "/usr/bin/basename")
-    set_symbol("__PROG__[bc]",       "/usr/bin/bc")
-    set_symbol("__PROG__[cat]",      "/bin/cat")
-    set_symbol("__PROG__[date]",     "/bin/date")
-    set_symbol("__PROG__[dirname]",  "/usr/bin/dirname")
-    set_symbol("__PROG__[rm]",       "/bin/rm")
-    set_symbol("__PROG__[sh]",       "/bin/sh")
-    set_symbol("__PROG__[stat]",     "/usr/bin/stat")
-    set_symbol("__PROG__[tmpdir]",   "/var/tmp/") # NB - trailing slash
     set_symbol("__SCALE__",          6)
     set_symbol("__STRICT__",         TRUE)
     set_symbol("__TIME__",           d[4] d[5] d[6])
@@ -1631,19 +1717,20 @@ function initialize(    d, dateout, egid, euid, host, hostname, user)
     unprotected_syms["__INPUT__"]  = TRUE
     unprotected_syms["__SCALE__"]  = TRUE
     unprotected_syms["__STRICT__"] = TRUE
+    unprotected_syms["__TMPDIR__"] = TRUE
 }
 
 
-# The main program occurs in the BEGIN procedure below.  If there are no
-# command line arguments, it processes standard input; otherwise, it
-# processes all files or macro definitions found on the command line.
+# The main program occurs in the BEGIN procedure below.
 BEGIN {
     initialize()
 
+    # No command line arguments: process standard input.
     if (ARGC == 1) {
-        load_home_m2rc()
+        load_init_files()
         exit_code = dofile("-") ? EX_OK : EX_NOINPUT
 
+    # Else, process all command line files/macro definitions.
     } else if (ARGC > 1) {
         # Delay loading $HOME/.m2rc as long as possible.  This allows us
         # to set symbols on the command line which will have taken effect
@@ -1658,18 +1745,18 @@ BEGIN {
             if (arg ~ /^([^= ][^= ]*)=(.*)/) {
                 eq = index(arg, "=")
                 name = substr(arg, 1, eq-1)
-                if (name == "strict")
-                    name = "__STRICT__"
+                if (name == "strict")     name = "__STRICT__"
+                else if (name == "debug") name = "__DEBUG__"
                 val = substr(arg, eq+1)
-                if (symbol_protected_p(name))
-                    error("Symbol '" name "' protected:" arg, i, "ARGV")
                 if (! symbol_valid_p(name))
                     error("Symbol '" name "' invalid name:" arg, i, "ARGV")
+                if (symbol_protected_p(name))
+                    error("Symbol '" name "' protected:" arg, i, "ARGV")
                 set_symbol(name, val)
 
             # Otherwise load a file
             } else {
-                load_home_m2rc()
+                load_init_files()
                 if (! dofile(arg)) {
                     print_stderr(format_message("File '" arg "' does not exist", i, "ARGV"))
                     exit_code = EX_NOINPUT
@@ -1677,16 +1764,17 @@ BEGIN {
             }
         }
 
-        # If we get here with init_file_p still false, that means we
-        # used up every ARGV defining symbols and didn't specify any
+        # If we get here with init_files_loaded still false, that means
+        # we used up every ARGV defining symbols and didn't specify any
         # files.  Not specifying any input files, like ARGC==1, means to
         # read standard input, so that is what we must now do.
-        if (! init_file_p) {
-            load_home_m2rc()
+        if (! init_files_loaded) {
+            load_init_files()
             exit_code = dofile("-") ? EX_OK : EX_NOINPUT
         }
 
-    } else {    # ARGC < 1, can't happen...
+    # ARGC < 1, can't happen...
+    } else {
         print_stderr("Usage: m2 [NAME=VAL] [file...]")
         exit_code = EX_USAGE
     }

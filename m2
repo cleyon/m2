@@ -1601,25 +1601,6 @@ function dodef(append_flag,    name, str, x)
         sub(/^[ \t]+/, "", x)
         str = chop(str) "\n" x
     }
-
-    if (debugp(7))
-        print_stderr(sprintf("dodef: before kluge, str='%s'", str))
-
-    # If the definition text looks like an expansion request, do a preliminary
-    # expansion; then see if the result might be a symbol which we could
-    # possibly use; then do a final substitution.  This makes possible:
-    #      @define AMI  @ami-list[@my-region@]@
-    # This is a terrible**2 kluge....
-    if (str ~ /^@.+@$/) {
-        x = dosubs(substr(str, 2, length(str)-2))
-        if (debugp(7))
-            print_stderr(sprintf("dodef: x='%s'", x))
-        if (symbol_valid_p(x) && symbol_defined_p(x))
-            str = get_symbol(x)
-        str = dosubs(str)
-    }
-    if (debugp(7))
-        print_stderr(sprintf("dodef: after kluge, str='%s'", str))
     set_symbol(name, append_flag ? get_symbol(name) str : str)
 }
 

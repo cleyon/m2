@@ -291,12 +291,11 @@ function error(text, line, file)
 }
 
 
-# Return s but with last character (usually "\n") removed
-function chop(s)
+# Return first character of s
+function first(s)
 {
-    return substr(s, 1, length(s)-1)
+    return substr(s, 1, 1)
 }
-
 
 # Return last character of s
 function last(s)
@@ -304,6 +303,12 @@ function last(s)
     return substr(s, length(s), 1)
 }
 
+
+# Return s but with last character (usually "\n") removed
+function chop(s)
+{
+    return substr(s, 1, length(s)-1)
+}
 
 # If last character is newline, chop() it off
 function chomp(s)
@@ -1199,17 +1204,16 @@ function readline(    getstat, i, status)
     }
     # Hack: allow @Mname at start of line w/o closing @
     # if non-strict.  Note, macro name must start w/capital.
-    if (not strictp())
-        if ($0 ~ /^@[A-Z][A-Za-z#$_0-9]*[ \t]*$/)
-            sub(/[ \t]*$/, "@")
+    if (!strictp() && ($0 ~ /^@[A-Z][A-Za-z#$_0-9]*[ \t]*$/))
+        sub(/[ \t]*$/, "@")
     return status
 }
 
 
-# In the same way as dofile()+readline() processes text, so can
-# dostr()+readline_from_string() process string values.  These
-# routines are not currently used or tested.
-#
+# # In the same way as dofile()+readline() processes text, so can
+# # dostr()+readline_from_string() process string values.  These
+# # routines are not currently used or tested.
+# #
 # # Return value as from readline_from_string:
 # #  1 if a newline was included last
 # #  0 if the cursor is stuck and needs a newline
@@ -1231,7 +1235,7 @@ function readline(    getstat, i, status)
 #     }
 #     return rprev
 # }
-#
+# 
 # # Sets $0 so dostr() can process it.  Returns
 # #  1 if a newline was found; there's potentially more data.
 # #  0 if no newline was found so that empties the strbuf.
@@ -1341,23 +1345,28 @@ function process_line(read_literally,    newstring)
 #         else
 #             L = L "@" M
 #             R = "@" R
-#         return L R
-function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd)
+#     return L R
+function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_brace)
 {
     # Short-circuit check: no "@" characters means no action needed
     if (index(s, "@") == IDX_NOT_FOUND)
         return s
 
+    # Recursive evaluation
+    if (debugp(6))
+        print_stderr(sprintf("dosubs: PRE s='%s'", s))
+    s = expand_recursively(s)
+    if (debugp(6))
+        print_stderr(sprintf("dosubs: POST s='%s'", s))
+
     l = ""                   # Left of current pos  - ready for output
     r = s                    # Right of current pos - as yet unexamined
-    fencepost = 1
-    gl_cnt = 0
-
-    while ((i = index(r, "@")) != 0) {
+    while ((i = index(r, "@")) != IDX_NOT_FOUND) {
         if (debugp(7))
             print_stderr(sprintf("dosubs: top of loop: l='%s', r='%s', expand='%s'", l, r, expand))
         l = l substr(r, 1, i-1)
         r = substr(r, i+1)      # Currently scanning @
+
         i = index(r, "@")
         if (i == IDX_NOT_FOUND) {
             l = l "@"
@@ -1378,7 +1387,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd)
         #   param[N+1].  Consider "gensym foo 42": the symfunc is found
         #   in the first position, at param [0+1].  nparam is 2.  The new
         #   prefix is at param[1+1] and the new count is at param[2+1].
-        #   This offset of one is referred to as `fencepost' below.
+        #   This offset of one is referred to as `_fencepost' below.
         # Each `if' condition eventually performs
         #     r = <SOMETHING> r
         #   which injects <SOMETHING> just before the current value of
@@ -1388,15 +1397,15 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd)
         #   is the data we were going to evaluate anyway.  In other
         #   words, this injects the result of "invoking" symfunc.
         # Eventually this big while loop exits and we return "l r".
-        nparam = split(m, param) - fencepost
-        symfunc = param[0 + fencepost]
+        nparam = split(m, param) - _fencepost
+        symfunc = param[0 + _fencepost]
         if (debugp(7))
             print_stderr(sprintf("dosubs: symfunc=%s, nparam=%d; l='%s', m='%s', r='%s', expand='%s'", symfunc, nparam, l, m, r, expand))
 
         # basename SYM: Return base name of file
         if (symfunc == "basename") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[1 + fencepost]
+            p = param[1 + _fencepost]
             if (symbol_valid_p(p) && symbol_defined_p(p))
                 p = get_symbol(p)
             cmd = build_prog_cmdline("basename", p)
@@ -1408,7 +1417,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd)
         #   @boolval SYM@ => 0 or 1     # error if not defined
         } else if (symfunc == "boolval") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[1 + fencepost]
+            p = param[1 + _fencepost]
             validate_symbol(p)
             if (! symbol_defined_p(p))
                 error("Symbol '" p "' not defined [boolval]:" $0)
@@ -1431,7 +1440,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd)
         # dirname : Return directory name of file
         } else if (symfunc == "dirname") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[1 + fencepost]
+            p = param[1 + _fencepost]
             if (symbol_valid_p(p) && symbol_defined_p(p))
                 p = get_symbol(p)
             cmd = build_prog_cmdline("dirname", p)
@@ -1445,16 +1454,16 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd)
         #   @gensym foo 42@ => (prefix now "foo", counter now 42) => foo42
         } else if (symfunc == "gensym") {
             if (nparam == 1) {
-                if (! integerp(param[1 + fencepost]))
+                if (! integerp(param[1 + _fencepost]))
                     error("Value '" m "' must be numeric:" $0)
-                set_aref("__GENSYM__", "count", param[1 + fencepost])
+                set_aref("__GENSYM__", "count", param[1 + _fencepost])
             } else if (nparam == 2) {
-                if (! integerp(param[2 + fencepost]))
+                if (! integerp(param[2 + _fencepost]))
                     error("Value '" m "' must be numeric:" $0)
                 # Make sure the new requested prefix is valid
-                validate_symbol(param[1 + fencepost])
-                set_aref("__GENSYM__", "prefix", param[1 + fencepost])
-                set_aref("__GENSYM__", "count",  param[2 + fencepost])
+                validate_symbol(param[1 + _fencepost])
+                set_aref("__GENSYM__", "prefix", param[1 + _fencepost])
+                set_aref("__GENSYM__", "count",  param[2 + _fencepost])
             } else if (nparam > 2)
                 error("Bad parameters in '" m "':" $0)
             # 0, 1, or 2 param
@@ -1466,7 +1475,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd)
         #   @getenv HOME@ => /home/user
         } else if (symfunc == "getenv") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[1 + fencepost]
+            p = param[1 + _fencepost]
             if (p in ENVIRON)
                 r = ENVIRON[p] r
             else if (strictp())
@@ -1475,7 +1484,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd)
         # lc : Lower case
         } else if (symfunc == "lc") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[1 + fencepost]
+            p = param[1 + _fencepost]
             validate_symbol(p)
             if (! symbol_defined_p(p))
                 error("Symbol '" p "' not defined [lc]:" $0)
@@ -1485,7 +1494,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd)
         #   @len SYM@ => N
         } else if (symfunc == "len") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[1 + fencepost]
+            p = param[1 + _fencepost]
             validate_symbol(p)
             if (! symbol_defined_p(p))
                 error("Symbol '" p "' not defined [len]:" $0)
@@ -1497,24 +1506,24 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd)
         } else if (symfunc == "substr") {
             if (nparam != 2 && nparam != 3)
                 error("Bad parameters in '" m "':" $0)
-            p = param[1 + fencepost]
+            p = param[1 + _fencepost]
             validate_symbol(p)
             if (! symbol_defined_p(p))
                 error("Symbol '" p "' not defined [substr]:" $0)
-            if (! integerp(param[2 + fencepost]))
+            if (! integerp(param[2 + _fencepost]))
                 error("Value '" m "' must be numeric:" $0)
             if (nparam == 2) {
-                r = substr(get_symbol(p), param[2 + fencepost]+1) r
+                r = substr(get_symbol(p), param[2 + _fencepost]+1) r
             } else if (nparam == 3) {
-                if (! integerp(param[3 + fencepost]))
+                if (! integerp(param[3 + _fencepost]))
                     error("Value '" m "' must be numeric:" $0)
-                r = substr(get_symbol(p), param[2 + fencepost]+1, param[3 + fencepost]) r
+                r = substr(get_symbol(p), param[2 + _fencepost]+1, param[3 + _fencepost]) r
             }
 
         # trim : Remove leading and trailing whitespace
         } else if (symfunc == "trim") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[1 + fencepost]
+            p = param[1 + _fencepost]
             validate_symbol(p)
             if (! symbol_defined_p(p))
                 error("Symbol '" p "' not defined [trim]:" $0)
@@ -1534,7 +1543,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd)
         # uc : Upper case
         } else if (symfunc == "uc") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[1 + fencepost]
+            p = param[1 + _fencepost]
             validate_symbol(p)
             if (! symbol_defined_p(p))
                 error("Symbol '" p "' not defined [uc]:" $0)
@@ -1553,7 +1562,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd)
                 if (index(expand, "$" j) != IDX_NOT_FOUND) { # i.e., "found"
                     if (j > nparam)
                         error("Parameter " j " not supplied in '" m "':" $0)
-                    gsub("\\$" j, param[j + fencepost], expand)
+                    gsub("\\$" j, param[j + _fencepost], expand)
                 }
             r = expand r
 
@@ -1570,6 +1579,50 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd)
     if (debugp(7))
         print_stderr(sprintf("dosubs: out of loop, returning l r: l='%s', r='%s'", l, r))
     return l r
+}
+
+function expand_recursively(s)
+{
+    while ((at_brace = index(s, "@{")) != IDX_NOT_FOUND) {
+        # @{ triggers recursive eval
+        # Handle @{...} - scan forward to matching end brace
+        slen = length(s)
+        print_stderr(sprintf("AAA slen=%d", length(s)))
+
+        i = dorecurse(s, at_brace)
+        i++             # skip }
+
+        s =        substr(s, 1,          at_brace-1)    \
+            dosubs(substr(s, at_brace+2, i-at_brace-3)) \
+                   substr(s, i)
+        print_stderr(sprintf("BBB new_s='%s', new_slen=%d", s, length(s)))
+
+        # As long as there's a recursive eval, frob the input string
+    }
+    return s
+}
+
+
+# Given a starting point (position of @{ in string),
+# move forward and return position of closing }.
+# Nested @{...} are accounted for.  If closing }
+# not found, return 0.
+function dorecurse(s, start,    i)
+{
+    i = start + 2
+    while (TRUE) {
+        # Scan each character/glyph:
+        # print_stderr(sprintf("AAA i=%d, c=%s, remaining=%d, rest=%s", i, substr(r,i,1), (rlen-i+1), substr(r,i)))
+        # }  ends scan
+        if (substr(s, i, 1) == "}") {
+            break
+        }
+        i++
+        # Do the bookkeeping necessary for balanced braces
+        # How do you specify a non-scan-ending brace?  @}  or  }}  or  \} ?
+        #   Inclined to \}
+    }
+    return i
 }
 
 
@@ -1661,8 +1714,9 @@ function initialize(    d, dateout, egid, euid, host, hostname, user)
     exit_code         = EX_OK
     EOF               = build_subsep("EoF1", "EoF2") # Unlikely to occur in normal text
     init_files_loaded = FALSE
-    ifdepth           = 0
+    ifdepth           =  0
     active[ifdepth]   = TRUE
+    _fencepost        =  1
     buffer            = ""
     strbuf            = ""
 

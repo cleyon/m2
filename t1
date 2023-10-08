@@ -1,0 +1,27 @@
+@define bar Bar
+Foo is @{Foo}.
+Bar is @{@bar@}.
+Foobar is @{foo .. @{bar} ..}!
+@define FooBar Quux
+Quux is @@{@{Foo}@{@bar@}}@
+@exit
+@ifndef region
+@error You must define region on the command line
+@endif
+@@
+@define valid_regions[east1] 1
+@define valid_regions[east2] 1
+@define valid_regions[west1] 1
+@define valid_regions[west2] 1
+@if_not_in @region@ valid_regions
+@error Region '@region@' is not valid
+@fi
+@@
+@define img[east1] my-east1-image
+@define img[east2] my-east2-image
+@define img[west1] my-west1-image
+@define img[west2] my-west2-image
+@@
+@define current_image @img[@{@region@}]@
+Region: @region@
+Image: @current_image@

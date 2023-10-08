@@ -871,13 +871,11 @@ function m2_if(    sym, cond, op, val2, val4)
         # @if_in KEY ARR
         if (NF < 3) error("Bad parameters:" $0)
         validate_symbol($3)
-        #cond = symbol_defined_p($3 "[" $2 "]")
         cond = aref_defined_p($3, $2)
 
     } else if ($1 == "if_not_in") {
         if (NF < 3) error("Bad parameters:" $0)
         validate_symbol($3)
-        #cond = ! symbol_defined_p($3 "[" $2 "]")
         cond = ! aref_defined_p($3, $2)
 
     } else
@@ -1202,60 +1200,13 @@ function readline(    getstat, i, status)
         else                    # Read a line
             incr_symbol("__LINE__")
     }
-    # Hack: allow @Mname at start of line w/o closing @
-    # if non-strict.  Note, macro name must start w/capital.
+    # Hack: allow @Mname at start of line without a closing @.
+    # This only applies if in non-strict mode.  Note, macro name must
+    # start with a capital letter and must not be passed any parameters.
     if (!strictp() && ($0 ~ /^@[A-Z][A-Za-z#$_0-9]*[ \t]*$/))
         sub(/[ \t]*$/, "@")
     return status
 }
-
-
-# # In the same way as dofile()+readline() processes text, so can
-# # dostr()+readline_from_string() process string values.  These
-# # routines are not currently used or tested.
-# #
-# # Return value as from readline_from_string:
-# #  1 if a newline was included last
-# #  0 if the cursor is stuck and needs a newline
-# # -1 if end of data
-# function dostr(s,    r, rprev)
-# {
-#     if (debugp(2))
-#         print_stderr("dostr(" s ")")
-#     strbuf = s
-#     rprev = -1
-#     while (TRUE) {
-#         r = readline_from_string()
-#         if (r == -1)
-#             break
-#         printf("%s", $0)
-#         if (r == 1)
-#             printf("\n")
-#         rprev = r
-#     }
-#     return rprev
-# }
-# 
-# # Sets $0 so dostr() can process it.  Returns
-# #  1 if a newline was found; there's potentially more data.
-# #  0 if no newline was found so that empties the strbuf.
-# # -1 on empty strbuf - end of data
-# function readline_from_string(    i)
-# {
-#     if (strbuf == "") {
-#         $0 = ""
-#         return -1
-#     }
-#     i = index(strbuf, "\n")
-#     if (i == IDX_NOT_FOUND) {
-#         $0 = strbuf
-#         strbuf = ""
-#         return 0
-#     }
-#     $0 = substr(strbuf, 1, i-1)
-#     strbuf = substr(strbuf, i+1)
-#     return 1
-# }
 
 
 function process_line(read_literally,    newstring)
@@ -1352,16 +1303,17 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
     if (index(s, "@") == IDX_NOT_FOUND)
         return s
 
-    # Recursive evaluation
-    if (debugp(6))
-        print_stderr(sprintf("dosubs: PRE s='%s'", s))
-    s = expand_recursively(s)
-    if (debugp(6))
-        print_stderr(sprintf("dosubs: POST s='%s'", s))
-
     l = ""                   # Left of current pos  - ready for output
     r = s                    # Right of current pos - as yet unexamined
     while ((i = index(r, "@")) != IDX_NOT_FOUND) {
+        # Recursive evaluation
+        if (debugp(6))
+            print_stderr(sprintf("dosubs: PRE r='%s'", r))
+        r = expand_recursively(r)
+        # What if the recursive expansion removes any "@" ??
+        if (debugp(6))
+            print_stderr(sprintf("dosubs: POST r='%s'", r))
+
         if (debugp(7))
             print_stderr(sprintf("dosubs: top of loop: l='%s', r='%s', expand='%s'", l, r, expand))
         l = l substr(r, 1, i-1)
@@ -1581,23 +1533,30 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
     return l r
 }
 
-function expand_recursively(s)
+# Handle @{...} - scan forward to matching end brace
+function expand_recursively(s,    i)
 {
     while ((at_brace = index(s, "@{")) != IDX_NOT_FOUND) {
-        # @{ triggers recursive eval
-        # Handle @{...} - scan forward to matching end brace
+        # There's a @{ somewhere in the string - find and expand it
         slen = length(s)
-        print_stderr(sprintf("AAA slen=%d", length(s)))
-
-        i = dorecurse(s, at_brace)
-        i++             # skip }
+        i = at_brace + 2
+        while (TRUE) {
+            # Scan each character/glyph; "}" ends scan
+            # FIXME: This is just the *first* brace.  What about
+            #   @{foo... @{bar...} baz}
+            if (substr(s, i, 1) == "}") {
+                break
+            }
+            i++
+            # Do the bookkeeping necessary for balanced braces
+            # How do you specify a non-scan-ending brace?  @}  or  }}  or  \} ?
+            #   Inclined to \}
+        }
+        i++                     # skip "}" character
 
         s =        substr(s, 1,          at_brace-1)    \
             dosubs(substr(s, at_brace+2, i-at_brace-3)) \
                    substr(s, i)
-        print_stderr(sprintf("BBB new_s='%s', new_slen=%d", s, length(s)))
-
-        # As long as there's a recursive eval, frob the input string
     }
     return s
 }
@@ -1609,20 +1568,6 @@ function expand_recursively(s)
 # not found, return 0.
 function dorecurse(s, start,    i)
 {
-    i = start + 2
-    while (TRUE) {
-        # Scan each character/glyph:
-        # print_stderr(sprintf("AAA i=%d, c=%s, remaining=%d, rest=%s", i, substr(r,i,1), (rlen-i+1), substr(r,i)))
-        # }  ends scan
-        if (substr(s, i, 1) == "}") {
-            break
-        }
-        i++
-        # Do the bookkeeping necessary for balanced braces
-        # How do you specify a non-scan-ending brace?  @}  or  }}  or  \} ?
-        #   Inclined to \}
-    }
-    return i
 }
 
 

@@ -1,4 +1,5 @@
 #!/usr/bin/awk -f
+#
 #*****************************************************************************
 #
 # NAME
@@ -29,10 +30,10 @@
 #
 #       4. Comment lines will be removed from the final output.
 #
-#       Macro expression lines (@if, @define, etc) are distinguished by
+#       Macro control commands (@if, @define, etc) are distinguished by
 #       a "@" as the first character at the beginning of a line.  They
 #       consume the entire line.  The following table lists macro
-#       expression lines to evaluate, control, or define macros for
+#       control commands to evaluate, control, or define macros for
 #       subsequent processing:
 #
 #           @append NAME MORE      Add MORE to an already defined macro NAME
@@ -75,19 +76,24 @@
 #       A definition may extend across many lines by ending each line
 #       with a backslash, thus quoting the following newline.
 #       (Alternatively, use @longdef.)  Short macros can be defined on
-#       the command line by using the form "NAME=VAL" (or "NAME=" to
-#       define with empty value).
+#       the command line by using the form "NAME=VAL", or "NAME=" to
+#       define with empty value.  Any occurrence of @name@ in the input
+#       is replaced in the output by the corresponding value.  They can
+#       occur multiple times in a single line.
 #
-#       Any occurrence of @name@ in the input is replaced in the output
-#       by the corresponding value.  They can occur multiple times in a
-#       single line.  Specifying more than one word between @ signs
-#       (like @aaaa bbbb cccc@) is used as a crude form of function
-#       invocation.  Macros can expand positional parameters whose
-#       actual values will be supplied when the macro is called.  The
-#       definition should refer to $1, $2, etc.  $0 refers to the name
-#       of the macro itself.  You may supply more parameters than
-#       needed, but it is an error for a definition to refer to a
-#       parameter which is not supplied.
+#       Example:
+#           @define Condition under
+#           You are clearly @Condition@worked.
+#               => You are clearly underworked.
+#
+#       Specifying more than one word between @ signs, as in
+#           @xxx A B C@
+#       is used as a crude form of function invocation.  Macros can
+#       expand positional parameters whose actual values will be
+#       supplied when the macro is called.  The definition should refer
+#       to $1, $2, etc.  $0 refers to the name of the macro itself.  You
+#       may supply more parameters than needed, but it is an error for a
+#       definition to refer to a parameter which is not supplied.
 #
 #       Example:
 #           @define greet Hello, $1!  m2 sends you $0ings.
@@ -115,14 +121,17 @@
 #                                    C3525388-E400-43A7-BC95-9DF5FA3C4A52
 #
 #       [*] @getenv VAR@ will be replaced by the value of the environment
-#           variable VAR.  A runtime error is thrown if VAR is not defined.
-#           To continue with empty string and no error, disable __STRICT__.
+#       variable VAR.  A runtime error is thrown if VAR is not defined.
+#       To continue with empty string and no error, disable __STRICT__.
+#
+#       Symbols can be suffixed with "[<key>]" to form simple arrays.
 #
 #       Symbols that start and end with "__" (like __FOO__) are called
 #       "system" symbols.  The following system symbols are pre-defined;
 #       example values or defaults are shown:
+#
 #           __DATE__               Run date (19450716)
-#           __DEBUG__              Debug level for internal workings of m2 [**]
+#           __DBG__[<id>]          Debugging levels for m2 systems [**]
 #           __FILE__               Current file name
 #           __FILE_UUID__          UUID unique to this file
 #           __GENSYM__[count]      Count for generated symbols (0)
@@ -143,7 +152,7 @@
 #           __UID__                (effective) User id
 #           __USER__               User name
 #
-#       Except for certain [**] unprotected symbols, system symbols
+#       [**] Except for certain unprotected symbols, system symbols
 #       cannot be modified by the user.  The values of __DATE__,
 #       __TIME__, and __TIMESTAMP__ are fixed at program start and do
 #       not change.  @currdate@ and @currtime@ do change, however, so
@@ -153,51 +162,54 @@
 # ERROR MESSAGES
 #       Error messages are printed to standard error in the following format:
 #           <__FILE__>:<__LINE__>:<Error text>:<Offending input line>
+#
 #       All error texts and their meanings are as follows:
 #
-#       Bad parameters [in 'XXX']
-#           - A command did not receive the expected (number of) parameters.
-#       Cannot recursively read 'XXX'
-#           - Attempt to @include the same file multiple times.
-#       Comparison operator 'XXX' invalid
-#           - An @if expression with an invalid comparison operator.
-#       Delimiter 'XXX' not found
-#           - A multi-line read (@ignore, @longdef, @shell) did not find
-#             its terminating delimiter line.
-#           - An @if block was not properly terminated before end of input.
-#           - Indicates an "starting" command did not find its finish.
-#       Duplicate '@else' not allowed
-#           - More than one @else found in a single @if block.
-#       Environment variable 'XXX' not defined
-#           - Attempt to getenv an undefined environment variable
-#             while __STRICT__ is in effect.
-#       Error STAT reading 'XXX' [hint]
-#           - Read error on file.
-#       File 'XXX' does not exist
-#           - Attempt to @include a non-existent file in strict mode.
-#       No corresponding 'XXX'
-#           - @if: An @else or @endif was seen without a matching @if.
-#           - @longdef: A @longend was seen without a matching @longdef.
-#           - Indicates a "finishing" command was seen without a starter.
-#       Parameter N not supplied in 'XXX'
-#           - A macro referred to a parameter (such as $1) for which
-#             no value was supplied.
-#       Symbol 'XXX' already defined
-#           - @initialize attempted to define a previously defined symbol.
-#       Symbol 'XXX' invalid name
-#           - A symbol name does not pass validity check.  In __STRICT__
-#             mode (the default), a symbol name may only contain letters,
-#             digits, #, $, or _ characters.
-#       Symbol 'XXX' not defined [hint]
-#           - A symbol name without a value was passed to a function
-#           - An undefined macro was referenced and __STRICT__ is true.
-#       Symbol 'XXX' protected
-#           - Attempt to modify a protected symbol (__XXX__).
-#             (__STRICT__ is an exception and can be modified.)
-#       Unexpected end of definition
-#           - Input ended before macro definition was complete.
-#       Value 'XXX' must be numeric
-#           - Something expected to be a number was not.
+#           Bad parameters [in 'XXX']
+#               - A command did not receive the expected/number of parameters.
+#           Cannot recursively read 'XXX'
+#               - Attempt to @include the same file multiple times.
+#           Comparison operator 'XXX' invalid
+#               - An @if expression with an invalid comparison operator.
+#           Delimiter 'XXX' not found
+#               - A multi-line read (@ignore, @longdef, @shell) did not find
+#                 its terminating delimiter line.
+#               - An @if block was not properly terminated before end of input.
+#               - Indicates an "starting" command did not find its finish.
+#               - An expansion @{...} is missing a closing brace.
+#           Duplicate '@else' not allowed
+#               - More than one @else found in a single @if block.
+#           Environment variable 'XXX' not defined
+#               - Attempt to getenv an undefined environment variable
+#                 while __STRICT__ is in effect.
+#           Error STAT reading 'XXX' [hint]
+#               - Read error on file.
+#           File 'XXX' does not exist
+#               - Attempt to @include a non-existent file in strict mode.
+#           No corresponding 'XXX'
+#               - @if: An @else or @endif was seen without a matching @if.
+#               - @longdef: A @longend was seen without a matching @longdef.
+#               - Indicates a "finishing" command was seen without a starter.
+#           Parameter N not supplied in 'XXX'
+#               - A macro referred to a parameter (such as $1) for which
+#                 no value was supplied.
+#           Symbol 'XXX' already defined
+#               - @initialize attempted to define a previously defined symbol.
+#           Symbol 'XXX' invalid name
+#               - A symbol name does not pass validity check.  In __STRICT__
+#                 mode (the default), a symbol name may only contain letters,
+#                 digits, #, $, or _ characters.
+#           Symbol 'XXX' not defined [hint]
+#               - A symbol name without a value was passed to a function
+#               - An undefined macro was referenced and __STRICT__ is true.
+#           Symbol 'XXX' protected
+#               - Attempt to modify a protected symbol (__XXX__).
+#                 (__STRICT__ is an exception and can be modified.)
+#           Unexpected end of definition:[hint]
+#               - Input ended before macro definition was complete.
+#               - Error while expanding @{...} construct.
+#           Value 'XXX' must be numeric
+#               - Something expected to be a number was not.
 #
 # EXIT CODES
 #       0       Normal process completion, or @exit command
@@ -212,13 +224,47 @@
 #
 #       Positional parameters are parsed by splitting on white space.
 #       This means that in:
-#               @foo "a b" c
+#           @foo "a b" c
 #       foo has three arguments -- ('"a', 'b"', 'c') -- not two.
 #
 # EXAMPLE
-#       @define Condition under
-#          <...>
-#       You are clearly @Condition@worked.
+#       This example demonstrates arrays and @{...} evaluation:
+#
+#           @@  To require the caller to specify a valid 'region', add:
+#           @@      @ifndef region
+#           @@      @error You must define 'region' from the command line
+#           @@      @endif
+#           @@
+#           @@  But I want to use a default value for my favorite region
+#           @@
+#           @default region west2
+#           @@
+#           @@  Validate region - only: east1, east2, west1, or west2
+#           @@
+#           @define valid_regions[east1]
+#           @define valid_regions[east2]
+#           @define valid_regions[west1]
+#           @define valid_regions[west2]
+#           @if_not_in @region@ valid_regions
+#           @error Region '@region@' is not valid
+#           @endif
+#           @@
+#           @@  Configure image name according to region
+#           @@  NB use of @{...} in definition of 'my_image'
+#           @@
+#           @define image_name[east1]   my-east1-image
+#           @define image_name[east2]   my-east2-image
+#           @define image_name[west1]   my-west1-image
+#           @define image_name[west2]   my-west2-image
+#           @define my_image @image_name[@{@region@}]@
+#           @@
+#           @@  Output begins here
+#           @@
+#           Region: @region@
+#           Image:  @my_image@
+#
+#               => Region: west2
+#               => Image:  my-west2-image
 #
 # FILES
 #       $HOME/.m2rc, ./.m2rc
@@ -291,11 +337,12 @@ function error(text, line, file)
 }
 
 
-# Return first character of s
-function first(s)
+# Return s but with last character (usually "\n") removed
+function chop(s)
 {
-    return substr(s, 1, 1)
+    return substr(s, 1, length(s)-1)
 }
+
 
 # Return last character of s
 function last(s)
@@ -303,12 +350,6 @@ function last(s)
     return substr(s, length(s), 1)
 }
 
-
-# Return s but with last character (usually "\n") removed
-function chop(s)
-{
-    return substr(s, 1, length(s)-1)
-}
 
 # If last character is newline, chop() it off
 function chomp(s)
@@ -410,8 +451,6 @@ function symbol_valid_p(sym,    result, lbracket, rbracket, sym_root, sym_key)
         result = TRUE
     } while (FALSE)
 
-    if (debugp(5))
-        print_stderr("symbol_valid_p(" sym ") => " result)
     return result
 }
 
@@ -465,23 +504,42 @@ function get_aref(arr, key)
 }
 
 
-function debugp(lev)
+function dbg(key, lev)
 {
-    return get_symbol("__DEBUG__") >= lev
+    if (lev == "")
+        lev = 1
+    if (key == "")
+        key = "m2"
+    if (! aref_defined_p("__DBG__", key))
+        return false
+    return get_aref("__DBG__", key) >= lev
+}
+
+function dbg_set_level(key, lev)
+{
+    if (lev == "")
+        lev = 1
+    if (key == "")
+        key = "m2"
+    set_aref("__DBG__", key, lev)
+}
+
+function dbg_print(key, lev, str)
+{
+    if (dbg(key, lev))
+        print_stderr(str)
 }
 
 
 function set_symbol(sym, val)
 {
-    if (debugp(5))
-        print_stderr("set_symbol(" sym "," val ")")
+    dbg_print("m2", 5, ("set_symbol(" sym "," val ")"))
     symtab[internal_form(sym)] = val
 }
 
 function set_aref(arr, key, val)
 {
-    if (debugp(5))
-        print_stderr("set_aref(" arr "," key "," val ")")
+    dbg_print("m2", 5, ("set_aref(" arr "," key "," val ")"))
     symtab[build_subsep(arr, key)] = val
 }
 
@@ -496,8 +554,7 @@ function incr_symbol(sym, incr)
 
 function delete_symbol(sym)
 {
-    if (debugp(5))
-        print_stderr("delete_symbol(" sym ")")
+    dbg_print("m2", 5, ("delete_symbol(" sym ")"))
     # It is legal to delete an array key that does not exist
     delete symtab[internal_form(sym)]
 }
@@ -665,8 +722,8 @@ function read_lines_until(delim,    buf, delim_len)
 #
 #       The m2_*() functions that follow can only be executed by
 #       process_line().  That routine has already matched text at the
-#       beginning of line in $0 to invoke a `macro expression', such as
-#       @define, @if, etc.  Therefore, NF cannot be zero.
+#       beginning of line in $0 to invoke a `macro control command'
+#       such as @define, @if, etc.  Therefore, NF cannot be zero.
 #
 #       - NF==1 means @xxx called with zero arguments.
 #       - NF==2 means @xxx called with 1 argument.
@@ -965,8 +1022,7 @@ function m2_input(    getstat, input, sym)
 # @let
 function m2_let(    sym, math, bcfile, val, cmd)
 {
-    if (debugp(7))
-        print_stderr("@let: NF=" NF " $0='" $0 "'")
+    dbg_print("let", 7, ("@let: NF=" NF " $0='" $0 "'"))
     if (NF < 3) error("Bad parameters:" $0)
     if (! currently_active_p())
         return
@@ -975,8 +1031,7 @@ function m2_let(    sym, math, bcfile, val, cmd)
     sub(/^[ \t]*[^ \t]+[ \t]+[^ \t]+[ \t]*/, "")
     math = "scale=" get_symbol("__SCALE__") "; " dosubs($0)
     bcfile = tmpdir() "m2-bcfile." get_symbol("__M2_UUID__")
-    if (debugp(7))
-        print_stderr("@let: bcfile='" bcfile "', math='" math "'")
+    dbg_print("let", 7, ("@let: bcfile='" bcfile "', math='" math "'"))
     print math > bcfile
     close(bcfile)
 
@@ -1027,8 +1082,7 @@ function m2_read(    sym, file, line, val, getstat)
     # This is not intended to be a full-blown file inputter but rather just
     # to read short snippets like a file path or username.  As usual, multi-
     # line values are accepted but the final trailing \n (if any) is stripped.
-    if (debugp(7))
-        print_stderr("@read: $0='" $0 "'")
+    dbg_print("read", 7, ("@read: $0='" $0 "'"))
     if (NF != 3)                # @read SYM FILE
         error("Bad parameters:" $0)
     sym  = $2
@@ -1128,10 +1182,9 @@ function m2_undef(    sym)
 # Read this function carefully--there are some nice tricks here.
 function dofile(filename, read_literally,    savefile, saveline, savebuffer)
 {
-    if (debugp(2))
-        print_stderr("dofile(" filename \
-                     (read_literally ? ", read_literally=TRUE" : "") \
-                     ")")
+    dbg_print("m2", 1, ("dofile(" filename \
+                        (read_literally ? ", read_literally=TRUE" : "") \
+                        ")"))
     if (filename == "-")
         filename = "/dev/stdin"
     if (! path_exists_p(filename))
@@ -1299,23 +1352,22 @@ function process_line(read_literally,    newstring)
 #     return L R
 function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_brace)
 {
-    # Short-circuit check: no "@" characters means no action needed
-    if (index(s, "@") == IDX_NOT_FOUND)
-        return s
-
     l = ""                   # Left of current pos  - ready for output
     r = s                    # Right of current pos - as yet unexamined
-    while ((i = index(r, "@")) != IDX_NOT_FOUND) {
-        # Recursive evaluation
-        if (debugp(6))
-            print_stderr(sprintf("dosubs: PRE r='%s'", r))
-        r = expand_recursively(r)
-        # What if the recursive expansion removes any "@" ??
-        if (debugp(6))
-            print_stderr(sprintf("dosubs: POST r='%s'", r))
+    while (TRUE) {
+        i = index(r, "@")
+        if (i == IDX_NOT_FOUND)
+            break
 
-        if (debugp(7))
-            print_stderr(sprintf("dosubs: top of loop: l='%s', r='%s', expand='%s'", l, r, expand))
+        # Check entire string for recursive evaluation
+        if (index(r, "@{") != IDX_NOT_FOUND) {
+            r = expand_recursively(r, 1, length(r))
+            i = index(r, "@")
+            if (i == IDX_NOT_FOUND)
+                break
+        }
+
+        # dbg_print("dosubs", 7, (sprintf("dosubs: top of loop: l='%s', r='%s', expand='%s'", l, r, expand)))
         l = l substr(r, 1, i-1)
         r = substr(r, i+1)      # Currently scanning @
 
@@ -1351,8 +1403,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
         # Eventually this big while loop exits and we return "l r".
         nparam = split(m, param) - _fencepost
         symfunc = param[0 + _fencepost]
-        if (debugp(7))
-            print_stderr(sprintf("dosubs: symfunc=%s, nparam=%d; l='%s', m='%s', r='%s', expand='%s'", symfunc, nparam, l, m, r, expand))
+        # dbg_print("dosubs", 7, sprintf("dosubs: symfunc=%s, nparam=%d; l='%s', m='%s', r='%s', expand='%s'", symfunc, nparam, l, m, r, expand))
 
         # basename SYM: Return base name of file
         if (symfunc == "basename") {
@@ -1526,38 +1577,52 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
             l = l "@" m
             r = "@" r
         }
+        i = index(r, "@")
     }
 
-    if (debugp(7))
-        print_stderr(sprintf("dosubs: out of loop, returning l r: l='%s', r='%s'", l, r))
+    # dbg_print("dosubs", 7, sprintf("dosubs: out of loop, returning l r: l='%s', r='%s'", l, r))
     return l r
 }
 
-# Handle @{...} - scan forward to matching end brace
-function expand_recursively(s,    i)
-{
-    while ((at_brace = index(s, "@{")) != IDX_NOT_FOUND) {
-        # There's a @{ somewhere in the string - find and expand it
-        slen = length(s)
-        i = at_brace + 2
-        while (TRUE) {
-            # Scan each character/glyph; "}" ends scan
-            # FIXME: This is just the *first* brace.  What about
-            #   @{foo... @{bar...} baz}
-            if (substr(s, i, 1) == "}") {
-                break
-            }
-            i++
-            # Do the bookkeeping necessary for balanced braces
-            # How do you specify a non-scan-ending brace?  @}  or  }}  or  \} ?
-            #   Inclined to \}
-        }
-        i++                     # skip "}" character
 
-        s =        substr(s, 1,          at_brace-1)    \
-            dosubs(substr(s, at_brace+2, i-at_brace-3)) \
-                   substr(s, i)
+function expand_recursively(s, pos, len,   at_brace, close_brace, old_m_len, new_m_len, __l, __m, __r)
+{
+    # dbg_print("braces", 7, (">> expand_recursively(s='" s "', pos=" pos ", len=" len))
+    at_brace = index(s, "@{")
+    if (at_brace == IDX_NOT_FOUND ||
+        at_brace < pos ||
+        at_brace > pos+len)
+        # No dosubs() here, because nothing was @{...} expanded
+        return substr(s, pos, len)
+
+    while (at_brace != IDX_NOT_FOUND) {
+        # There's a @{ somewhere in the string.  Find the closing brace
+        # and expand the substring.  Don't forget to update new len.
+        close_brace = find_closing_brace(s, at_brace, (len-at_brace)+1)
+
+        __l = substr(s, 1,          at_brace-1)
+        __m = substr(s, at_brace+2, close_brace-at_brace-2)
+        __r = substr(s, close_brace+1)
+        if (dbg("braces", 7)) {
+            print_stderr("   expand_recursively: __l=" __l)
+            print_stderr("   expand_recursively: __m=" __m)
+            print_stderr("   expand_recursively: __r=" __r)
+        }
+
+        # Adjust length - remove old @{...} length and add replacement text length
+        old_m_len = length(__m)
+        __m = dosubs(__m)
+        new_m_len = length(__m)
+        len = len - old_m_len - 3 + new_m_len
+
+        s = __l __m __r
+        at_brace = index(s, "@{")
     }
+
+    # If there were any \) left in the expansion text, change to a
+    # single closing brace.
+    gsub(/\\}/, "}", s)
+    # dbg_print("braces", 7, ("<< expand_recursively: returning '" s "'"))
     return s
 }
 
@@ -1566,8 +1631,52 @@ function expand_recursively(s,    i)
 # move forward and return position of closing }.
 # Nested @{...} are accounted for.  If closing }
 # not found, return 0.
-function dorecurse(s, start,    i)
+#
+# RETURN VALUE: Index value of correct closing brace.  If there is no
+# such character, or if the search exceeds len characters, return zero.
+function find_closing_brace(s, start, len,    c, cb, i, nc, rlen)
 {
+    if (len <= 2 || substr(s, start, 2) != "@{")
+        error("Unexpected end of definition:'@{':" s, get_symbol("__LINE__"))
+
+    # Local variables:
+    #   c       character pointed to by i
+    #   cb      location of closing brace
+    #   i       offset into s under consideration
+    #   nc      (next character) first char of rest
+    #   rlen    length(rest) == len - i
+    #   rest    not a variable, but value is substr(s, i+1, rlen)
+
+    i = start + 2
+    c = substr(s, i, 1)
+    nc = substr(s, i+1, 1)
+    rlen = len - 2
+
+    while (rlen >= 0) {
+        # dbg_print("braces", 7, ("   find_closing_brace: i=" i ", c=" c ", nc=" nc ", rlen=" rlen ", rest='" substr(s, i+1, rlen) "'"))
+        if (c == "") {          # end of string - can't happen?
+            return 0
+        } else if (c == "}") {  # found closing } at position i
+            return i
+        } else if (c == "\\" && nc == "}") {
+            # "\}" in expansion text will result in a single close brace
+            # without ending the expansion text scanner.  Skip over }
+            # and do not return.  \) is fixed in expand_recursively().
+            i++; nc = substr(s, i+1, 1)
+        } else if (c == "@" && nc == "{") {
+            # "@{" in expansion text will invoke a recursive scan.
+            cb = find_closing_brace(substr(s, i), 1, rlen+1)
+            i += cb - 1;  rlen = len - i
+            nc = substr(s, i+1, 1)
+        }
+
+        # Advance to next character
+        c = nc; i++; nc = substr(s, i+1, 1)
+    }
+
+    # If we fall out of the loop here, we never found a closing brace so
+    # that's an error.
+    error("Delimiter '}' not found:" s, get_symbol("__LINE__"))
 }
 
 
@@ -1593,7 +1702,7 @@ function dodef(append_flag,    name, str, x)
     str = $0
     while (str ~ /\\$/) {
         if (readline() == EOF)
-            error("Unexpected end of definition")
+            error("Unexpected end of definition:" name)
         # OLD BUG: sub(/\\$/, "\n" $0, str)
         x = $0
         sub(/^[ \t]+/, "", x)
@@ -1675,7 +1784,6 @@ function initialize(    d, dateout, egid, euid, host, hostname, user)
     build_prog_cmdline("id", "-un")                       | getline user
 
     set_symbol("__DATE__",           d[1] d[2] d[3])
-    set_symbol("__DEBUG__",          0)
     set_aref("__GENSYM__", "count",  0)
     set_aref("__GENSYM__", "prefix", "_gen")
     set_symbol("__GID__",            egid)
@@ -1693,7 +1801,7 @@ function initialize(    d, dateout, egid, euid, host, hostname, user)
     set_symbol("__UID__",            euid)
     set_symbol("__USER__",           user)
 
-    unprotected_syms["__DEBUG__"]  = TRUE
+    unprotected_syms["__DBG__"]    = TRUE
     unprotected_syms["__INPUT__"]  = TRUE
     unprotected_syms["__SCALE__"]  = TRUE
     unprotected_syms["__STRICT__"] = TRUE
@@ -1718,15 +1826,16 @@ BEGIN {
         for (i = 1; i < ARGC; i++) {
             # Show each arg as we process it
             arg = ARGV[i]
-            if (debugp(6))
-                print_stderr("BEGIN: ARGV[" i "]:" arg)
+            dbg_print("m2", 3, ("BEGIN: ARGV[" i "]:" arg))
 
             # If it's a definition on the command line, define it
             if (arg ~ /^([^= ][^= ]*)=(.*)/) {
                 eq = index(arg, "=")
                 name = substr(arg, 1, eq-1)
-                if (name == "strict")     name = "__STRICT__"
-                else if (name == "debug") name = "__DEBUG__"
+                if (name == "strict")
+                    name = "__STRICT__"
+                else if (name == "debug" || name == "dbg")
+                    name = "__DBG__[m2]"
                 val = substr(arg, eq+1)
                 if (! symbol_valid_p(name))
                     error("Symbol '" name "' invalid name:" arg, i, "ARGV")

@@ -167,6 +167,8 @@
 #
 #           Bad parameters [in 'XXX']
 #               - A command did not receive the expected/number of parameters.
+#           Bad @{...} expansion
+#               - Error expanding @{...}, often caused by a missing "}"
 #           Cannot recursively read 'XXX'
 #               - Attempt to @include the same file multiple times.
 #           Comparison operator 'XXX' invalid
@@ -176,7 +178,6 @@
 #                 its terminating delimiter line.
 #               - An @if block was not properly terminated before end of input.
 #               - Indicates an "starting" command did not find its finish.
-#               - An expansion @{...} is missing a closing brace.
 #           Duplicate '@else' not allowed
 #               - More than one @else found in a single @if block.
 #           Environment variable 'XXX' not defined
@@ -207,7 +208,6 @@
 #                 (__STRICT__ is an exception and can be modified.)
 #           Unexpected end of definition:[hint]
 #               - Input ended before macro definition was complete.
-#               - Error while expanding @{...} construct.
 #           Value 'XXX' must be numeric
 #               - Something expected to be a number was not.
 #
@@ -228,43 +228,35 @@
 #       foo has three arguments -- ('"a', 'b"', 'c') -- not two.
 #
 # EXAMPLE
-#       This example demonstrates arrays and @{...} evaluation:
+#       This example demonstrates arrays, conditionals, and @{...}:
 #
-#           @@  To require the caller to specify a valid 'region', add:
-#           @@      @ifndef region
-#           @@      @error You must define 'region' from the command line
-#           @@      @endif
-#           @@
-#           @@  But I want to use a default value for my favorite region
-#           @@
-#           @default region west2
-#           @@
-#           @@  Validate region - only: east1, east2, west1, or west2
-#           @@
-#           @define valid_regions[east1]
-#           @define valid_regions[east2]
-#           @define valid_regions[west1]
-#           @define valid_regions[west2]
-#           @if_not_in @region@ valid_regions
-#           @error Region '@region@' is not valid
+#           @#              Use default region if available
+#           @if_env AWS_DEFAULT_REGION
+#           @define region @getenv AWS_DEFAULT_REGION@
 #           @endif
-#           @@
-#           @@  Configure image name according to region
-#           @@  NB use of @{...} in definition of 'my_image'
-#           @@
-#           @define image_name[east1]   my-east1-image
-#           @define image_name[east2]   my-east2-image
-#           @define image_name[west1]   my-west1-image
-#           @define image_name[west2]   my-west2-image
-#           @define my_image @image_name[@{@region@}]@
-#           @@
-#           @@  Output begins here
-#           @@
+#           @#              If you want your own default region, uncomment
+#           @#                      @default region us-west-2
+#           @#              Otherwise, m2 will exit with error message
+#           @ifndef region
+#           @error You must provide a value for 'region' on the command line
+#           @endif
+#           @#              Validate region
+#           @define valid_regions[us-east-1]
+#           @define valid_regions[us-east-2]
+#           @define valid_regions[us-west-1]
+#           @define valid_regions[us-west-2]
+#           @if_not_in @region@ valid_regions
+#           @error Region '@region@' is not valid: choose us-{east,west}-{1,2}
+#           @endif
+#           @#              Configure image name according to region
+#           @define imgs[us-east-1]     my-east1-image-name
+#           @define imgs[us-east-2]     my-east2-image-name
+#           @define imgs[us-west-1]     my-west1-image-name
+#           @define imgs[us-west-2]     my-west2-image-name
+#           @define my_image @imgs[@{@region@}]@
+#           @#              Output begins here
 #           Region: @region@
 #           Image:  @my_image@
-#
-#               => Region: west2
-#               => Image:  my-west2-image
 #
 # FILES
 #       $HOME/.m2rc, ./.m2rc
@@ -1082,7 +1074,7 @@ function m2_read(    sym, file, line, val, getstat)
     # This is not intended to be a full-blown file inputter but rather just
     # to read short snippets like a file path or username.  As usual, multi-
     # line values are accepted but the final trailing \n (if any) is stripped.
-    dbg_print("read", 7, ("@read: $0='" $0 "'"))
+    #dbg_print("read", 7, ("@read: $0='" $0 "'"))
     if (NF != 3)                # @read SYM FILE
         error("Bad parameters:" $0)
     sym  = $2
@@ -1182,14 +1174,13 @@ function m2_undef(    sym)
 # Read this function carefully--there are some nice tricks here.
 function dofile(filename, read_literally,    savefile, saveline, savebuffer)
 {
-    dbg_print("m2", 1, ("dofile(" filename \
-                        (read_literally ? ", read_literally=TRUE" : "") \
-                        ")"))
     if (filename == "-")
         filename = "/dev/stdin"
     if (! path_exists_p(filename))
         return FALSE
-
+    dbg_print("m2", 1, ("dofile(" filename \
+                        (read_literally ? ", read_literally=TRUE" : "") \
+                        ")"))
     if (filename in activefiles)
         error("Cannot recursively read '" filename "':" $0)
 
@@ -1580,103 +1571,148 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
         i = index(r, "@")
     }
 
-    # dbg_print("dosubs", 7, sprintf("dosubs: out of loop, returning l r: l='%s', r='%s'", l, r))
+    # dbg_print("dosubs", 3, sprintf("dosubs: out of loop, returning l r: l='%s', r='%s'", l, r))
     return l r
 }
 
 
-function expand_recursively(s, pos, len,   at_brace, close_brace, old_m_len, new_m_len, __l, __m, __r)
+function expand_recursively(s, pos, len,    atbr, cb, ignore, ltext, mtext, rtext)
 {
-    # dbg_print("braces", 7, (">> expand_recursively(s='" s "', pos=" pos ", len=" len))
-    at_brace = index(s, "@{")
-    if (at_brace == IDX_NOT_FOUND ||
-        at_brace < pos ||
-        at_brace > pos+len)
+    dbg_print("braces", 3, (">> expand_recursively(s='" s "', pos=" pos ", len=" len))
+    atbr = index(s, "@{")
+    ignore = (atbr == IDX_NOT_FOUND ||
+              atbr < pos ||
+              atbr > pos+len)
+    if (ignore)
         # No dosubs() here, because nothing was @{...} expanded
         return substr(s, pos, len)
 
-    while (at_brace != IDX_NOT_FOUND) {
+    while (! ignore) {
         # There's a @{ somewhere in the string.  Find the closing brace
         # and expand the substring.  Don't forget to update new len.
-        close_brace = find_closing_brace(s, at_brace, (len-at_brace)+1)
+        cb = find_closing_brace(s, atbr, len)
+        if (cb <= 0)
+            error("Bad @{...} expansion:" s, get_symbol("__LINE__"))
 
-        __l = substr(s, 1,          at_brace-1)
-        __m = substr(s, at_brace+2, close_brace-at_brace-2)
-        __r = substr(s, close_brace+1)
+        dbg_print("braces", 5, ("   expand_recursively: in loop, atbr=" atbr ", cb=" cb))
+        ltext = substr(s, 1,        atbr - 1)
+        mtext = substr(s, atbr + 2, cb - atbr - 2)
+        rtext = substr(s, cb + 1)
         if (dbg("braces", 7)) {
-            print_stderr("   expand_recursively: __l=" __l)
-            print_stderr("   expand_recursively: __m=" __m)
-            print_stderr("   expand_recursively: __r=" __r)
+            print_stderr("   expand_recursively: ltext='" ltext "'")
+            print_stderr("   expand_recursively: mtext='" mtext "'")
+            print_stderr("   expand_recursively: rtext='" rtext "'")
         }
 
-        # Adjust length - remove old @{...} length and add replacement text length
-        old_m_len = length(__m)
-        __m = dosubs(__m)
-        new_m_len = length(__m)
-        len = len - old_m_len - 3 + new_m_len
-
-        s = __l __m __r
-        at_brace = index(s, "@{")
+        s = ltext dosubs(mtext) rtext
+        len = length(s)
+        atbr = index(s, "@{")
+        ignore = (atbr == IDX_NOT_FOUND ||
+                  atbr < pos ||
+                  atbr > pos+len)
     }
 
-    # If there were any \) left in the expansion text, change to a
-    # single closing brace.
+    # If there are any \} remaining in the expansion text, change them
+    # to single closing brace(s).
     gsub(/\\}/, "}", s)
-    # dbg_print("braces", 7, ("<< expand_recursively: returning '" s "'"))
+    dbg_print("braces", 3, ("<< expand_recursively: returning '" s "'"))
     return s
 }
 
 
-# Given a starting point (position of @{ in string),
-# move forward and return position of closing }.
-# Nested @{...} are accounted for.  If closing }
-# not found, return 0.
+# NAME
+#     find_closing_brace
 #
-# RETURN VALUE: Index value of correct closing brace.  If there is no
-# such character, or if the search exceeds len characters, return zero.
-function find_closing_brace(s, start, len,    c, cb, i, nc, rlen)
+# DESCRIPTION
+#     Given a starting point (position of @{ in string), move forward
+# and return position of closing }.  Nested @{...} are accounted for.
+# If closing } is not found, return 0.  On other error, return -1.
+#
+# PARAMETERS
+#     s         String to examine
+#     left      The position in s, not necessarily 1, of the "@{"
+#               for which we need to find the closing brace.
+#     right     Index of rightmost character of string, beyond which
+#               will shall not go.  Not necessarily the length of s.
+#
+# There are (right-left+1) characters between left & right, inclusive.
+#
+# LOCAL VARIABLES
+#     i         Counter of current offset into s from left.
+#               Initially i=0.  As we scan right, i will be incremented.
+#     c         The current character pointed to by i.
+#                   c = substr(s, left+i, 1)
+#     nc        The next character past i.
+#                   nc = substr(s, left+i+1, 1)
+#     cb        Position of inner "}" found via recursion
+#
+# EXAMPLE
+#     A @{xx@{yy}zz} B
+#
+#     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+#     |A| |@|{|x|x|@|{|y|y|}|z|z|}| |B|
+#     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+#      1 2 3 4 5 6 7 8 9 1 1 1 1 1 1 1
+#                        0 1 2 3 4 5 6
+#
+# RETURN VALUE
+#     If successfully found a closing brace, return its position within s.
+# The actual value returned is left+i.
+#     If no closing brace is found, or the search proceeds beyond "right"
+# (i.e., left+i > right), return a "failure code" of 0.  If the initial
+# conditions are bad, return an "error code" of -1.
+#
+function find_closing_brace(s, left, right,    i, c, nc, cb)
 {
-    if (len <= 2 || substr(s, start, 2) != "@{")
-        error("Unexpected end of definition:'@{':" s, get_symbol("__LINE__"))
+    dbg_print("braces", 3, (">> find_closing_brace(s='" s "', left=" left ", right=" right))
 
-    # Local variables:
-    #   c       character pointed to by i
-    #   cb      location of closing brace
-    #   i       offset into s under consideration
-    #   nc      (next character) first char of rest
-    #   rlen    length(rest) == len - i
-    #   rest    not a variable, but value is substr(s, i+1, rlen)
+    # Check that we have at least two characters, and s starts with "@{"
+    if (right - left + 1 < 2 || substr(s, left, 2) != "@{")
+        return -1               # error
 
-    i = start + 2
-    c = substr(s, i, 1)
-    nc = substr(s, i+1, 1)
-    rlen = len - 2
+    # At this point, we've verified that we're looking at @{, so there
+    # are at least two characters in the string.  Let's move along...
+    i  = 2
 
-    while (rlen >= 0) {
-        # dbg_print("braces", 7, ("   find_closing_brace: i=" i ", c=" c ", nc=" nc ", rlen=" rlen ", rest='" substr(s, i+1, rlen) "'"))
-        if (c == "") {          # end of string - can't happen?
-            return 0
-        } else if (c == "}") {  # found closing } at position i
-            return i
+    # Look at the character (c) immediately following "@{", and also the
+    # next character (nc) after that one.  One or both might be empty string.
+    c  = substr(s, left+i,   1)
+    nc = substr(s, left+i+1, 1)
+
+    while (left+i <= right) {
+        dbg_print("braces", 7, ("   find_closing_brace: i=" i ", c=" c ", nc=" nc))
+        if (c == "") {          # end of string/error
+            break
+        } else if (c == "}") {
+            dbg_print("braces", 3, ("<< find_closing_brace: returning " left+i))
+            return left+i
         } else if (c == "\\" && nc == "}") {
             # "\}" in expansion text will result in a single close brace
             # without ending the expansion text scanner.  Skip over }
-            # and do not return.  \) is fixed in expand_recursively().
-            i++; nc = substr(s, i+1, 1)
+            # and do not return.  (\} is fixed in expand_recursively().)
+            i++; nc = substr(s, left+i+1, 1)
         } else if (c == "@" && nc == "{") {
             # "@{" in expansion text will invoke a recursive scan.
-            cb = find_closing_brace(substr(s, i), 1, rlen+1)
-            i += cb - 1;  rlen = len - i
-            nc = substr(s, i+1, 1)
+            cb = find_closing_brace(s, left+i, right)
+            if (cb <= 0)
+                return cb       # propagate failure/error
+
+            # Since the return value is the *absolute* location of the
+            # "}" in string s, update i to be the value corresponding to
+            # that location.  In fact, i, being an offset, is exactly
+            # the distance from that closing brace back to "left".
+            i = cb - left
+            nc = substr(s, left+i+1, 1)
+            dbg_print("braces", 5, ("   find_closing_brace: (recursive) cb=" cb \
+                                    ".  Now, i=" i ", nc=" nc))
         }
 
         # Advance to next character
-        c = nc; i++; nc = substr(s, i+1, 1)
+        i++; c = nc; nc = substr(s, left+i+1, 1)
     }
 
-    # If we fall out of the loop here, we never found a closing brace so
-    # that's an error.
-    error("Delimiter '}' not found:" s, get_symbol("__LINE__"))
+    # If we fall out of the loop here, we never found a closing brace.
+    return 0                    # failure
 }
 
 

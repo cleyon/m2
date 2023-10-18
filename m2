@@ -183,7 +183,7 @@
 #           Environment variable 'XXX' not defined
 #               - Attempt to getenv an undefined environment variable
 #                 while __STRICT__ is in effect.
-#           Error STAT reading 'XXX' [hint]
+#           Error reading 'FILE'
 #               - Read error on file.
 #           File 'XXX' does not exist
 #               - Attempt to @include a non-existent file in strict mode.
@@ -200,13 +200,13 @@
 #               - A symbol name does not pass validity check.  In __STRICT__
 #                 mode (the default), a symbol name may only contain letters,
 #                 digits, #, $, or _ characters.
-#           Symbol 'XXX' not defined [hint]
+#           Symbol 'XXX' not defined
 #               - A symbol name without a value was passed to a function
 #               - An undefined macro was referenced and __STRICT__ is true.
 #           Symbol 'XXX' protected
 #               - Attempt to modify a protected symbol (__XXX__).
 #                 (__STRICT__ is an exception and can be modified.)
-#           Unexpected end of definition:[hint]
+#           Unexpected end of definition
 #               - Input ended before macro definition was complete.
 #           Value 'XXX' must be numeric
 #               - Something expected to be a number was not.
@@ -321,10 +321,15 @@ function print_stderr(text)
 }
 
 
+function warn(text, line, file)
+{
+    print_stderr(format_message(text, line, file))
+}
+
 function error(text, line, file)
 {
+    warn(text, line, file)
     flush_stdout()
-    print_stderr(format_message(text, line, file))
     exit EX_M2_ERROR
 }
 
@@ -968,7 +973,8 @@ function m2_include(    error_text, filename, read_literally)
         error_text = "File '" filename "' does not exist:" $0
         if (strictp())
             error(error_text)
-        print_stderr(format_message(error_text))
+        else
+            warn(error_text)
     }
 }
 
@@ -1005,8 +1011,10 @@ function m2_input(    getstat, input, sym)
         return
     validate_symbol(sym)
     getstat = getline input < "/dev/tty"
-    if (getstat < 0)
-        error("Error " getstat " reading '/dev/tty' [input]:" $0)
+    if (getstat < 0) {
+        warn("Error reading '/dev/tty' [input]:" $0)
+        input = ""
+    }
     set_symbol(sym, input)
 }
 
@@ -1089,8 +1097,8 @@ function m2_read(    sym, file, line, val, getstat)
     while (TRUE) {
         getstat = getline line < file
         if (getstat < 0)        # Error
-            error("Error " getstat " reading '" file "' [read]")
-        if (getstat == 0)       # End of file
+            warn("Error reading '" file "' [read]")
+        if (getstat <= 0)       # End of file
             break
         val = val line "\n"     # Read a line
     }
@@ -1238,8 +1246,8 @@ function readline(    getstat, i, status)
     } else {
         getstat = getline < get_symbol("__FILE__")
         if (getstat < 0)        # Error
-            error("Error " getstat " reading '" get_symbol("__FILE__") "' [readline]")
-        if (getstat == 0)  # End of file
+            warn("Error reading '" get_symbol("__FILE__") "' [readline]")
+        if (getstat <= 0)  # End of file
             status = EOF
         else                    # Read a line
             incr_symbol("__LINE__")
@@ -1883,7 +1891,7 @@ BEGIN {
             } else {
                 load_init_files()
                 if (! dofile(arg)) {
-                    print_stderr(format_message("File '" arg "' does not exist", i, "ARGV"))
+                    warn("File '" arg "' does not exist", i, "ARGV")
                     exit_code = EX_NOINPUT
                 }
             }

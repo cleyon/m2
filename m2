@@ -6,14 +6,14 @@
 #       m2 - Line-oriented macro processor
 #
 # USAGE
-#       m2 [NAME=VAL] [file...]
-#       awk -f m2 [file...]
+#       m2 [NAME=VAL ...] [file ...]
+#       awk -f m2 [file ...]
 #
 # DESCRIPTION
-#       The m2 program is a "little brother" to the m4 macro processor
-#       found on UNIX systems.  M2 is a line-oriented macro processor
-#       which copies its input file(s) to its output.  It can perform
-#       several tasks, including:
+#       m2 is a line-oriented macro processor, a "little brother" to the
+#       m4(1) macro processor found on Unix systems.  It is written in
+#       portable "standard" Awk and does not depend on any GNU extensions.
+#       It can perform several functions, including:
 #
 #       1. Define and expand macros.  Macros have two parts, a name and
 #          a body.  All occurrences of a macro's name are replaced with
@@ -30,11 +30,10 @@
 #
 #       4. Comment lines will be removed from the final output.
 #
-#       Macro control commands (@if, @define, etc) are distinguished by
-#       a "@" as the first character at the beginning of a line.  They
-#       consume the entire line.  The following table lists macro
-#       control commands to evaluate, control, or define macros for
-#       subsequent processing:
+#       Control commands (@if, @define, etc) are distinguished by a "@"
+#       as the first character at the beginning of a line.  They consume
+#       the entire line.  The following table lists control commands to
+#       evaluate, control, or define macros for subsequent processing:
 #
 #           @append NAME MORE      Add MORE to an already defined macro NAME
 #           @comment [STUFF...]    Comment; ignore line.  Also @@, @c, @#, @rem
@@ -92,8 +91,8 @@
 #       expand positional parameters whose actual values will be
 #       supplied when the macro is called.  The definition should refer
 #       to $1, $2, etc.  $0 refers to the name of the macro itself.  You
-#       may supply more parameters than needed, but it is an error for a
-#       definition to refer to a parameter which is not supplied.
+#       may supply more parameters than needed, but it is an error if
+#       a definition refers to a parameter which is not supplied.
 #
 #       Example:
 #           @define greet Hello, $1!  m2 sends you $0ings.
@@ -103,7 +102,7 @@
 #       The following definitions are recognized:
 #
 #           @basename SYM@         Return base (file) name of SYM
-#           @boolval SYM@          Return 1 if symbol is true, else 0
+#           @boolval SYM@          Return "1" if symbol is true, else "0"
 #           @currdate@             Return current date as YYYY-MM-DD
 #           @currtime@             Return current time as HH:MM:SS
 #           @dirname SYM@          Return directory name of SYM
@@ -334,12 +333,11 @@ function error(text, line, file)
 }
 
 
-# Return s but with last character (usually "\n") removed
-function chop(s)
+# Return first character of s
+function first(s)
 {
-    return substr(s, 1, length(s)-1)
+    return substr(s, 1, 1)
 }
-
 
 # Return last character of s
 function last(s)
@@ -348,10 +346,24 @@ function last(s)
 }
 
 
+# Return s but with last character (usually "\n") removed
+function chop(s)
+{
+    return substr(s, 1, length(s)-1)
+}
+
 # If last character is newline, chop() it off
 function chomp(s)
 {
     return (last(s) == "\n") ? chop(s) : s
+}
+
+# If s is surrounded by quotes, remove them.
+function rm_quotes(s)
+{
+    if (length(s) >= 2 && first(s) == "\"" && last(s) == "\"")
+        s = substr(s, 2, length(s) - 2)
+    return s
 }
 
 
@@ -672,22 +684,22 @@ function qsort(A, left, right,    i, last)
     qsort(A, last+1, right)
 }
 
+function swap(A, i, j,    t)
+{
+    t = A[i];  A[i] = A[j];  A[j] = t
+}
+
 # Special comparison to sort leading underscores after all other values.
 function _less_than(s1, s2,    s1_un, s2_un)
 {
     # Determine if s1 and s2 have a leading underscore
-    s1_un = substr(s1, 1, 1) == "_"
-    s2_un = substr(s2, 1, 1) == "_"
+    s1_un = first(s1) == "_"
+    s2_un = first(s2) == "_"
 
     if      (  s1_un &&   s2_un) return _less_than(substr(s1,2), substr(s2,2))
     else if (  s1_un && ! s2_un) return FALSE
     else if (! s1_un &&   s2_un) return TRUE
     else                         return s1 < s2
-}
-
-function swap(A, i, j,    t)
-{
-    t = A[i];  A[i] = A[j];  A[j] = t
 }
 
 
@@ -719,8 +731,8 @@ function read_lines_until(delim,    buf, delim_len)
 #
 #       The m2_*() functions that follow can only be executed by
 #       process_line().  That routine has already matched text at the
-#       beginning of line in $0 to invoke a `macro control command'
-#       such as @define, @if, etc.  Therefore, NF cannot be zero.
+#       beginning of line in $0 to invoke a `control command' such as
+#       @define, @if, etc.  Therefore, NF cannot be zero.
 #
 #       - NF==1 means @xxx called with zero arguments.
 #       - NF==2 means @xxx called with 1 argument.
@@ -767,7 +779,7 @@ function m2_dump(    buf, cnt, definition, dumpfile, i, key, keys, sym_name, all
     if (! currently_active_p())
         return
     all_flag = ($1 == "@dumpall")
-    dumpfile = (NF >= 2) ? $2 : "/dev/stderr"
+    dumpfile = (NF >= 2) ? rm_quotes($2) : "/dev/stderr"
 
     # Count and sort the symbol table keys
     cnt = 0
@@ -795,6 +807,7 @@ function m2_dump(    buf, cnt, definition, dumpfile, i, key, keys, sym_name, all
     buf = chop(buf)
     if (length(buf) > 0)
         print buf > dumpfile    # More portable: print_stderr(buf)
+    close(dumpfile)
 }
 
 
@@ -858,7 +871,7 @@ function m2_if(    sym, cond, op, val2, val4)
     if ($1 == "if") {
         if (NF == 2) {
             # @if [!]FOO
-            if (substr($2, 1, 1) == "!") {
+            if (first($2) == "!") {
                 sym = substr($2, 2)
                 validate_symbol(sym)
                 cond = ! symbol_true_p(sym)
@@ -912,11 +925,11 @@ function m2_if(    sym, cond, op, val2, val4)
 
     } else if ($1 == "if_exists") {
         if (NF < 2) error("Bad parameters:" $0)
-        cond = path_exists_p($2)
+        cond = path_exists_p(rm_quotes($2))
 
     } else if ($1 == "if_not_exists") {
         if (NF < 2) error("Bad parameters:" $0)
-        cond = ! path_exists_p($2)
+        cond = ! path_exists_p(rm_quotes($2))
 
     # @if(_not)_in KEY ARR
     # Test if symbol ARR[KEY] is defined.  Key comes first, because in
@@ -968,7 +981,7 @@ function m2_include(    error_text, filename, read_literally)
     if (! currently_active_p())
         return
     read_literally = ($1 == "@paste")   # @paste does not process macros
-    filename = dosubs($2)
+    filename = rm_quotes(dosubs($2))
     if (! dofile(filename, read_literally)) {
         error_text = "File '" filename "' does not exist:" $0
         if (strictp())
@@ -1086,7 +1099,7 @@ function m2_read(    sym, file, line, val, getstat)
     if (NF != 3)                # @read SYM FILE
         error("Bad parameters:" $0)
     sym  = $2
-    file = $3
+    file = rm_quotes($3)
     if (symbol_protected_p(sym))
         error("Symbol '" sym "' protected:" $0)
     if (! currently_active_p())
@@ -1180,6 +1193,8 @@ function m2_undef(    sym)
 # directive is seen, dofile() is called recursively on the new file.
 # Interestingly, the included filename is first processed for macros.
 # Read this function carefully--there are some nice tricks here.
+#
+# Caller is responsible for removing potential quotes from filename.
 function dofile(filename, read_literally,    savefile, saveline, savebuffer)
 {
     if (filename == "-")
@@ -1270,7 +1285,7 @@ function process_line(read_literally,    newstring)
         return
     }
 
-    # Look for built-in macro control commands.
+    # Look for built-in control commands.
     # Note, these only match at beginning of line.
     if      (/^@(@|#)/)                  { } # Comments are ignored
     else if (/^@append([ \t]|$)/)        { m2_define() }
@@ -1360,7 +1375,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
 
         # Check entire string for recursive evaluation
         if (index(r, "@{") != IDX_NOT_FOUND) {
-            r = expand_recursively(r, 1, length(r))
+            r = expand_braces(r)
             i = index(r, "@")
             if (i == IDX_NOT_FOUND)
                 break
@@ -1387,11 +1402,11 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
         #     @foo BAR@     --> nparam == 1
         #     @foo BAR BAZ@ --> nparam == 2
         # In general, a symfunc's parameter N is available in variable
-        #   param[N+1].  Consider "gensym foo 42": the symfunc is found
-        #   in the first position, at param [0+1].  nparam is 2.  The new
-        #   prefix is at param[1+1] and the new count is at param[2+1].
+        #   param[N+1].  Consider "gensym foo 42".  nparam is 2.
+        #   The symfunc is found in the first position, at param [0+1].
+        #   The new prefix is at param[1+1] and new count is at param[2+1].
         #   This offset of one is referred to as `_fencepost' below.
-        # Each `if' condition eventually performs
+        # Each symfunc condition eventually executes
         #     r = <SOMETHING> r
         #   which injects <SOMETHING> just before the current value of
         #   r.  (r is defined above.)  r is what is to the right of the
@@ -1400,6 +1415,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
         #   is the data we were going to evaluate anyway.  In other
         #   words, this injects the result of "invoking" symfunc.
         # Eventually this big while loop exits and we return "l r".
+
         nparam = split(m, param) - _fencepost
         symfunc = param[0 + _fencepost]
         # dbg_print("dosubs", 7, sprintf("dosubs: symfunc=%s, nparam=%d; l='%s', m='%s', r='%s', expand='%s'", symfunc, nparam, l, m, r, expand))
@@ -1410,13 +1426,13 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
             p = param[1 + _fencepost]
             if (symbol_valid_p(p) && symbol_defined_p(p))
                 p = get_symbol(p)
-            cmd = build_prog_cmdline("basename", p)
+            cmd = build_prog_cmdline("basename", rm_quotes(p))
             cmd | getline expand
             close(cmd)
             r = expand r
 
-        # boolval : Return 1 if symbol is true, else 0
-        #   @boolval SYM@ => 0 or 1     # error if not defined
+        # boolval : Return "1" if symbol is true, else "0"
+        #   @boolval SYM@ => "0" or "1"     # error if not defined
         } else if (symfunc == "boolval") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
             p = param[1 + _fencepost]
@@ -1445,7 +1461,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
             p = param[1 + _fencepost]
             if (symbol_valid_p(p) && symbol_defined_p(p))
                 p = get_symbol(p)
-            cmd = build_prog_cmdline("dirname", p)
+            cmd = build_prog_cmdline("dirname", rm_quotes(p))
             cmd | getline expand
             close(cmd)
             r = expand r
@@ -1468,9 +1484,11 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
                 set_aref("__GENSYM__", "count",  param[2 + _fencepost])
             } else if (nparam > 2)
                 error("Bad parameters in '" m "':" $0)
-            # 0, 1, or 2 param
+
+            # gensym returns something in all cases
             r = get_aref("__GENSYM__", "prefix") \
-                get_aref("__GENSYM__", "count") r
+                get_aref("__GENSYM__", "count") \
+                r
             incr_symbol("__GENSYM__[count]")
 
         # getenv : Get environment variable
@@ -1584,46 +1602,33 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
 }
 
 
-function expand_recursively(s, pos, len,    atbr, cb, ignore, ltext, mtext, rtext)
+function expand_braces(s,    atbr, cb, ltext, mtext, rtext)
 {
-    dbg_print("braces", 3, (">> expand_recursively(s='" s "', pos=" pos ", len=" len))
-    atbr = index(s, "@{")
-    ignore = (atbr == IDX_NOT_FOUND ||
-              atbr < pos ||
-              atbr > pos+len)
-    if (ignore)
-        # No dosubs() here, because nothing was @{...} expanded
-        return substr(s, pos, len)
+    dbg_print("braces", 3, (">> expand_braces(s='" s "'"))
 
-    while (! ignore) {
-        # There's a @{ somewhere in the string.  Find the closing brace
-        # and expand the substring.  Don't forget to update new len.
-        cb = find_closing_brace(s, atbr, len)
+    while ((atbr = index(s, "@{")) != IDX_NOT_FOUND) {
+        # There's a @{ somewhere in the string.  Find the matching
+        # closing brace and expand the enclosed text.
+        cb = find_closing_brace(s, atbr)
         if (cb <= 0)
             error("Bad @{...} expansion:" s, get_symbol("__LINE__"))
+        dbg_print("braces", 5, ("   expand_braces: in loop, atbr=" atbr ", cb=" cb))
 
-        dbg_print("braces", 5, ("   expand_recursively: in loop, atbr=" atbr ", cb=" cb))
-        ltext = substr(s, 1,        atbr - 1)
-        mtext = substr(s, atbr + 2, cb - atbr - 2)
-        rtext = substr(s, cb + 1)
+        # LTEXT  @{  MTEXT  }  RTEXT
+        ltext = substr(s, 1,      atbr-1)
+        mtext = substr(s, atbr+2, cb-atbr-2)
+                gsub(/\\}/, "}", mtext)
+        rtext = substr(s, cb+1)
         if (dbg("braces", 7)) {
-            print_stderr("   expand_recursively: ltext='" ltext "'")
-            print_stderr("   expand_recursively: mtext='" mtext "'")
-            print_stderr("   expand_recursively: rtext='" rtext "'")
+            print_stderr("   expand_braces: ltext='" ltext "'")
+            print_stderr("   expand_braces: mtext='" mtext "'")
+            print_stderr("   expand_braces: rtext='" rtext "'")
         }
 
         s = ltext dosubs(mtext) rtext
-        len = length(s)
-        atbr = index(s, "@{")
-        ignore = (atbr == IDX_NOT_FOUND ||
-                  atbr < pos ||
-                  atbr > pos+len)
     }
 
-    # If there are any \} remaining in the expansion text, change them
-    # to single closing brace(s).
-    gsub(/\\}/, "}", s)
-    dbg_print("braces", 3, ("<< expand_recursively: returning '" s "'"))
+    dbg_print("braces", 3, ("<< expand_braces: returning '" s "'"))
     return s
 }
 
@@ -1638,85 +1643,73 @@ function expand_recursively(s, pos, len,    atbr, cb, ignore, ltext, mtext, rtex
 #
 # PARAMETERS
 #     s         String to examine
-#     left      The position in s, not necessarily 1, of the "@{"
+#     start     The position in s, not necessarily 1, of the "@{"
 #               for which we need to find the closing brace.
-#     right     Index of rightmost character of string, beyond which
-#               will shall not go.  Not necessarily the length of s.
-#
-# There are (right-left+1) characters between left & right, inclusive.
 #
 # LOCAL VARIABLES
-#     i         Counter of current offset into s from left.
+#     i         Counter of current offset into s from start.
 #               Initially i=0.  As we scan right, i will be incremented.
 #     c         The current character pointed to by i.
-#                   c = substr(s, left+i, 1)
+#                   c = substr(s, start+i, 1)
 #     nc        The next character past i.
-#                   nc = substr(s, left+i+1, 1)
+#                   nc = substr(s, start+i+1, 1)
 #     cb        Position of inner "}" found via recursion
-#
-# EXAMPLE
-#     A @{xx@{yy}zz} B
-#
-#     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-#     |A| |@|{|x|x|@|{|y|y|}|z|z|}| |B|
-#     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-#      1 2 3 4 5 6 7 8 9 1 1 1 1 1 1 1
-#                        0 1 2 3 4 5 6
 #
 # RETURN VALUE
 #     If successfully found a closing brace, return its position within s.
-# The actual value returned is left+i.
-#     If no closing brace is found, or the search proceeds beyond "right"
-# (i.e., left+i > right), return a "failure code" of 0.  If the initial
-# conditions are bad, return an "error code" of -1.
+# The actual value returned is start+i.
+#     If no closing brace is found, or the search proceeds beyond the end
+# of the string (i.e., start+i > length(s)), return a "failure code" of 0.
+# If the initial conditions are bad, return an "error code" of -1.
 #
-function find_closing_brace(s, left, right,    i, c, nc, cb)
+function find_closing_brace(s, start,    i, c, nc, cb, slen)
 {
-    dbg_print("braces", 3, (">> find_closing_brace(s='" s "', left=" left ", right=" right))
+    dbg_print("braces", 3, (">> find_closing_brace(s='" s "', start=" start))
 
-    # Check that we have at least two characters, and s starts with "@{"
-    if (right - left + 1 < 2 || substr(s, left, 2) != "@{")
+    # Check that we have at least two characters, and start points to "@{"
+    slen = length(s)            # s is not modified so its length is constant
+    if (slen - start + 1 < 2 || substr(s, start, 2) != "@{")
         return -1               # error
 
     # At this point, we've verified that we're looking at @{, so there
     # are at least two characters in the string.  Let's move along...
-    i  = 2
+    i = 2
 
     # Look at the character (c) immediately following "@{", and also the
-    # next character (nc) after that one.  One or both might be empty string.
-    c  = substr(s, left+i,   1)
-    nc = substr(s, left+i+1, 1)
+    # next character (nc) after that.  One or both might be empty string.
+    c  = substr(s, start+i,   1)
+    nc = substr(s, start+i+1, 1)
 
-    while (left+i <= right) {
+    while (start+i <= slen) {
         dbg_print("braces", 7, ("   find_closing_brace: i=" i ", c=" c ", nc=" nc))
         if (c == "") {          # end of string/error
             break
         } else if (c == "}") {
-            dbg_print("braces", 3, ("<< find_closing_brace: returning " left+i))
-            return left+i
+            dbg_print("braces", 3, ("<< find_closing_brace: returning " start+i))
+            return start+i
         } else if (c == "\\" && nc == "}") {
             # "\}" in expansion text will result in a single close brace
             # without ending the expansion text scanner.  Skip over }
-            # and do not return.  (\} is fixed in expand_recursively().)
-            i++; nc = substr(s, left+i+1, 1)
+            # and do not return yet.  "\}" is fixed in expand_braces().
+            i++; nc = substr(s, start+i+1, 1)
         } else if (c == "@" && nc == "{") {
             # "@{" in expansion text will invoke a recursive scan.
-            cb = find_closing_brace(s, left+i, right)
+            cb = find_closing_brace(s, start+i)
             if (cb <= 0)
                 return cb       # propagate failure/error
 
             # Since the return value is the *absolute* location of the
             # "}" in string s, update i to be the value corresponding to
             # that location.  In fact, i, being an offset, is exactly
-            # the distance from that closing brace back to "left".
-            i = cb - left
-            nc = substr(s, left+i+1, 1)
+            # the distance from that closing brace back to "start".
+            i = cb - start
+            nc = substr(s, start+i+1, 1)
             dbg_print("braces", 5, ("   find_closing_brace: (recursive) cb=" cb \
                                     ".  Now, i=" i ", nc=" nc))
         }
 
         # Advance to next character
-        i++; c = nc; nc = substr(s, left+i+1, 1)
+        i++; c = nc; nc = substr(s, start+i+1, 1)
     }
 
     # If we fall out of the loop here, we never found a closing brace.
@@ -1890,7 +1883,7 @@ BEGIN {
             # Otherwise load a file
             } else {
                 load_init_files()
-                if (! dofile(arg)) {
+                if (! dofile(rm_quotes(arg))) {
                     warn("File '" arg "' does not exist", i, "ARGV")
                     exit_code = EX_NOINPUT
                 }

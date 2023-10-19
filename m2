@@ -35,16 +35,16 @@
 #       the entire line.  The following table lists control commands to
 #       evaluate, control, or define macros for subsequent processing:
 #
-#           @append NAME MORE      Add MORE to an already defined macro NAME
-#           @comment [STUFF...]    Comment; ignore line.  Also @@, @c, @#, @rem
+#           @append NAME TEXT      Add TEXT to an already defined macro NAME
+#           @comment [TEXT]        Comment; ignore line.  Also @@, @c, @#, @rem
 #           @decr NAME [N]         Subtract 1 (or N) from an already defined NAME
 #           @default NAME VAL      Like @define, but no-op if NAME already defined
-#           @define NAME VAL       Set NAME to VAL
+#           @define NAME TEXT      Set NAME to TEXT
 #           @dump(all) [FILE]      Output symbol names & definitions to FILE (stderr)
-#           @error [STUFF...]      Send STUFF... to standard error; exit code 2
+#           @error [TEXT]          Send TEXT to standard error; exit code 2
 #           @exit [CODE]           Immediately stop parsing; exit CODE (default 0)
 #           @if NAME               Include subsequent text if NAME is true (!= 0)
-#           @if NAME <OP> XXX      Test if NAME compares to XXX (names or values)
+#           @if NAME <OP> TEXT     Test if NAME compares to TEXT (names or values)
 #           @if(_not)_defined NAME Test if NAME is defined
 #           @if(_not)_env VAR      Test if VAR is defined in the environment
 #           @if(_not)_exists FILE  Test if FILE exists
@@ -57,7 +57,7 @@
 #           @incr NAME [N]         Add 1 (or N) from an already defined NAME
 #           @initialize NAME VAL   Like @define, but abort if NAME already defined
 #           @input [NAME]          Read a single line from keyboard and define NAME
-#           @let NAME [STUFF...]   Pass STUFF to bc(1), result in NAME
+#           @let NAME TEXT         Pass TEXT to bc(1), result in NAME
 #           @longdef NAME          Set NAME to <...> (all lines until @longend)
 #             <...>                  Don't use other @ commands inside definition
 #           @longend                 But simple @NAME@ references should be okay
@@ -66,11 +66,11 @@
 #           @shell DELIM [PROG]    Evaluate input until DELIM, send raw data to PROG
 #                                    Output from prog is captured in output stream
 #           @sleep [N]             Pause execution for N seconds (default 1)
-#           @stderr [STUFF...]     Send STUFF... to standard error; continue
-#                                    Also called @echo, @warn
 #           @typeout               Print remainder of input literally, no macros
 #           @undef NAME            Remove definition of NAME
 #           @unless NAME           Include subsequent text if NAME == 0 (or undefined)
+#           @warn [TEXT]           Send TEXT to standard error; continue
+#                                    Also called @echo, @stderr
 #
 #       A definition may extend across many lines by ending each line
 #       with a backslash, thus quoting the following newline.
@@ -740,7 +740,7 @@ function read_lines_until(delim,    buf, delim_len)
 #
 #*****************************************************************************
 
-# @default, @init[ialize]
+# @default, @initialize NAME TEXT
 function m2_default(    sym)
 {
     if (NF < 2) error("Bad parameters:" $0)
@@ -758,7 +758,7 @@ function m2_default(    sym)
 }
 
 
-# @append, @define
+# @append, @define      NAME TEXT
 function m2_define(    append_flag, sym)
 {
     if (NF < 2) error("Bad parameters:" $0)
@@ -773,14 +773,19 @@ function m2_define(    append_flag, sym)
 }
 
 
-# @dump[all]
+# @dump[all]            [FILE]
 function m2_dump(    buf, cnt, definition, dumpfile, i, key, keys, sym_name, all_flag)
 {
     if (! currently_active_p())
         return
     all_flag = ($1 == "@dumpall")
-    dumpfile = (NF >= 2) ? rm_quotes($2) : "/dev/stderr"
-
+    if (NF == 1)
+        dumpfile = "/dev/stderr"
+    else {
+        $1 = ""
+        sub("^[ \t]*", "")
+        dumpfile = rm_quotes(dosubs($0))
+    }
     # Count and sort the symbol table keys
     cnt = 0
     for (key in symtab) {
@@ -831,7 +836,7 @@ function m2_endif()
 }
 
 
-# @echo, @error, @stderr, @warn
+# @echo, @error, @stderr, @warn TEXT
 function m2_error(    m2_will_exit, message)
 {
     if (! currently_active_p())
@@ -852,7 +857,7 @@ function m2_error(    m2_will_exit, message)
 }
 
 
-# @exit
+# @exit                 [CODE]
 function m2_exit()
 {
     if (! currently_active_p())
@@ -862,7 +867,7 @@ function m2_exit()
 }
 
 
-# @if[_not][_{defined|env|exists|in}], @if[n]def
+# @if[_not][_{defined|env|exists|in}], @if[n]def, @unless
 function m2_if(    sym, cond, op, val2, val4)
 {
     sub(/^@/, "")          # Remove leading @, otherwise dosubs($0) loses
@@ -954,12 +959,12 @@ function m2_if(    sym, cond, op, val2, val4)
 }
 
 
-# @ignore
+# @ignore               DELIM
 function m2_ignore(    buf, delim, save_line, save_lineno)
 {
     # Ignore input until line starts with $2.  This means
     #     @ignore The
-    #      <...>
+    #       <...>
     #     Theodore Roosevelt
     # ignores <...> text up to the president's name.
     if (NF != 2) error("Bad parameters:" $0)
@@ -974,14 +979,16 @@ function m2_ignore(    buf, delim, save_line, save_lineno)
 }
 
 
-# @include, @paste
+# @include, @paste      FILE
 function m2_include(    error_text, filename, read_literally)
 {
-    if (NF != 2) error("Bad parameters:" $0)
+    if (NF < 2) error("Bad parameters:" $0)
     if (! currently_active_p())
         return
     read_literally = ($1 == "@paste")   # @paste does not process macros
-    filename = rm_quotes(dosubs($2))
+    $1 = ""
+    sub("^[ \t]*", "")
+    filename = rm_quotes(dosubs($0))
     if (! dofile(filename, read_literally)) {
         error_text = "File '" filename "' does not exist:" $0
         if (strictp())
@@ -992,7 +999,7 @@ function m2_include(    error_text, filename, read_literally)
 }
 
 
-# @decr, @incr
+# @decr, @incr          NAME [N]
 function m2_incr(    incr, sym)
 {
     if (NF < 2) error("Bad parameters:" $0)
@@ -1011,7 +1018,7 @@ function m2_incr(    incr, sym)
 }
 
 
-# @input
+# @input                [NAME]
 function m2_input(    getstat, input, sym)
 {
     # Read a single line from /dev/tty.  No prompt is issued; if you
@@ -1032,7 +1039,7 @@ function m2_input(    getstat, input, sym)
 }
 
 
-# @let
+# @let                  NAME TEXT
 function m2_let(    sym, math, bcfile, val, cmd)
 {
     dbg_print("let", 7, ("@let: NF=" NF " $0='" $0 "'"))
@@ -1061,18 +1068,18 @@ function m2_let(    sym, math, bcfile, val, cmd)
 }
 
 
-# @longdef
+# @longdef              NAME
 function m2_longdef(    buf, save_line, save_lineno, sym)
 {
     if (NF != 2) error("Bad parameters:" $0)
+    if (! currently_active_p())
+        return
+    save_line = $0
+    save_lineno = get_symbol("__LINE__")
     sym = $2
     if (symbol_protected_p(sym))
         error("Symbol '" sym "' protected:" $0)
-    if (! currently_active_p())
-        return
     validate_symbol(sym)
-    save_line = $0
-    save_lineno = get_symbol("__LINE__")
     buf = read_lines_until("@longend")
     if (buf == EOF)
         error("Delimiter '@longend' not found:" save_line, save_lineno)
@@ -1089,59 +1096,59 @@ function m2_longend()
 }
 
 
-# @read
-function m2_read(    sym, file, line, val, getstat)
+# @read                 NAME FILE
+function m2_read(    sym, filename, line, val, getstat)
 {
     # This is not intended to be a full-blown file inputter but rather just
     # to read short snippets like a file path or username.  As usual, multi-
     # line values are accepted but the final trailing \n (if any) is stripped.
     #dbg_print("read", 7, ("@read: $0='" $0 "'"))
-    if (NF != 3)                # @read SYM FILE
-        error("Bad parameters:" $0)
-    sym  = $2
-    file = rm_quotes($3)
-    if (symbol_protected_p(sym))
-        error("Symbol '" sym "' protected:" $0)
+    if (NF < 3) error("Bad parameters:" $0)
     if (! currently_active_p())
         return
+    sym  = $2
     validate_symbol(sym)
+    if (symbol_protected_p(sym))
+        error("Symbol '" sym "' protected:" $0)
+    $1 = $2 = ""
+    sub("^[ \t]*", "")
+    filename = rm_quotes(dosubs($0))
 
     val = ""
     while (TRUE) {
-        getstat = getline line < file
+        getstat = getline line < filename
         if (getstat < 0)        # Error
-            warn("Error reading '" file "' [read]")
+            warn("Error reading '" filename "' [read]")
         if (getstat <= 0)       # End of file
             break
         val = val line "\n"     # Read a line
     }
-    close(file)
+    close(filename)
     set_symbol(sym, chomp(val))
 }
 
 
-# @shell
+# @shell                DELIM [PROG]
 # Set symbol "M2_SHELL" to override.
 function m2_shell(    buf, delim, save_line, save_lineno, sendto)
 {
     # The sendto program defaults to a reasonable shell but you can specify
     # where you want to send your data.  Possibly useful choices would be an
     # alternative shell, an email message reader, or /usr/bin/bc.
-    if (NF < 2)
-        error("Bad parameters:" $0)
+    if (NF < 2) error("Bad parameters:" $0)
     if (! currently_active_p())
         return
+    save_line = $0
+    save_lineno = get_symbol("__LINE__")
     delim = $2
-    $1 = ""; $2 = ""
     if (NF == 2) {              # @shell DELIM
         sendto = default_shell()
     } else {                    # @shell DELIM /usr/ucb/mail
+        $1 = ""; $2 = ""
         sub("^[ \t]*", "")
-        sendto = dosubs($0)
+        sendto = rm_quotes(dosubs($0))
     }
 
-    save_line = $0
-    save_lineno = get_symbol("__LINE__")
     buf = read_lines_until(delim)
     if (buf == EOF)
         error("Delimiter '" delim "' not found:" save_line, save_lineno)
@@ -1150,7 +1157,7 @@ function m2_shell(    buf, delim, save_line, save_lineno, sendto)
 }
 
 
-# @sleep
+# @sleep                [N]
 function m2_sleep(    sec)
 {
     if (! currently_active_p())
@@ -1172,7 +1179,7 @@ function m2_typeout(    buf)
 }
 
 
-# @undef[ine]
+# @undef[ine]           NAME
 function m2_undef(    sym)
 {
     if (NF != 2) error("Bad parameters:" $0)
@@ -1772,7 +1779,7 @@ function load_init_files()
 # It is important that __PROG__ remain a protected symbol.  Otherwise,
 # some bad person could entice you to evaluate:
 #       @define __PROG__[stat]  /bin/rm
-#       @include $HOME/my_precious_file
+#       @include @getenv HOME@/my_precious_file
 function setup_prog_paths()
 {
     set_aref("__PROG__", "basename", "/usr/bin/basename")
@@ -1901,7 +1908,7 @@ BEGIN {
 
     # ARGC < 1, can't happen...
     } else {
-        print_stderr("Usage: m2 [NAME=VAL] [file...]")
+        print_stderr("Usage: m2 [NAME=VAL ...] [file ...]")
         exit_code = EX_USAGE
     }
 

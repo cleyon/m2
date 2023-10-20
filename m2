@@ -66,7 +66,7 @@
 #           @shell DELIM [PROG]    Evaluate input until DELIM, send raw data to PROG
 #                                    Output from prog is captured in output stream
 #           @sleep [N]             Pause execution for N seconds (default 1)
-#           @typeout               Print remainder of input literally, no macros
+#           @typeout               Print remainder of input file literally, no macros
 #           @undef NAME            Remove definition of NAME
 #           @unless NAME           Include subsequent text if NAME == 0 (or undefined)
 #           @warn [TEXT]           Send TEXT to standard error; continue
@@ -580,6 +580,7 @@ function incr_symbol(sym, incr)
 }
 
 
+# Caller is responsible for ensuring user is allowed to delete symbol
 function delete_symbol(sym)
 {
     dbg_print("m2", 5, ("delete_symbol(" sym ")"))
@@ -661,10 +662,10 @@ function randint(n)
 
 
 # Return a string of N random hex digits [0-9A-F].
-function hex_digits(n,    i, s)
+function hex_digits(n,    s)
 {
     s = ""
-    for (i = 0; i < n; i++)
+    while (n-- > 0)
         s = s sprintf("%X", randint(16))
     return s
 }
@@ -762,12 +763,13 @@ function read_lines_until(delim,    buf, delim_len)
 # @default, @initialize NAME TEXT
 function m2_default(    sym)
 {
-    if (NF < 2) error("Bad parameters:" $0)
-    sym = $2
-    if (symbol_protected_p(sym))
-        error("Symbol '" sym "' protected:" $0)
+    if (NF < 2)
+        error("Bad parameters:" $0)
     if (! currently_active_p())
         return
+    sym = $2
+    if (symbol_sys_p(sym))
+        error("Symbol '" sym "' protected:" $0)
     validate_symbol(sym)
     if (symbol_defined_p(sym)) {
         if ($1 == "@init" || $1 == "@initialize")
@@ -780,12 +782,13 @@ function m2_default(    sym)
 # @append, @define      NAME TEXT
 function m2_define(    append_flag, sym)
 {
-    if (NF < 2) error("Bad parameters:" $0)
+    if (NF < 2)
+        error("Bad parameters:" $0)
+    if (! currently_active_p())
+        return
     sym = $2
     if (symbol_protected_p(sym))
         error("Symbol '" sym "' protected:" $0)
-    if (! currently_active_p())
-        return
     validate_symbol(sym)
     append_flag = ($1 == "@append")
     dodef(append_flag)
@@ -988,7 +991,8 @@ function m2_ignore(    buf, delim, save_line, save_lineno)
     #       <...>
     #     Theodore Roosevelt
     # ignores <...> text up to the president's name.
-    if (NF != 2) error("Bad parameters:" $0)
+    if (NF != 2)
+        error("Bad parameters:" $0)
     if (! currently_active_p())
         return
     save_line = $0
@@ -1003,7 +1007,8 @@ function m2_ignore(    buf, delim, save_line, save_lineno)
 # @include, @paste      FILE
 function m2_include(    error_text, filename, read_literally)
 {
-    if (NF < 2) error("Bad parameters:" $0)
+    if (NF < 2)
+        error("Bad parameters:" $0)
     if (! currently_active_p())
         return
     read_literally = ($1 == "@paste")   # @paste does not process macros
@@ -1023,14 +1028,15 @@ function m2_include(    error_text, filename, read_literally)
 # @decr, @incr          NAME [N]
 function m2_incr(    incr, sym)
 {
-    if (NF < 2) error("Bad parameters:" $0)
+    if (NF < 2)
+        error("Bad parameters:" $0)
+    if (! currently_active_p())
+        return
     sym = $2
-    if (symbol_protected_p(sym))
+    if (symbol_sys_p(sym))
         error("Symbol '" sym "' protected:" $0)
     if (NF >= 3 && ! integerp($3))
         error("Value '" $3 "' must be numeric:" $0)
-    if (! currently_active_p())
-        return
     validate_symbol(sym)
     if (! symbol_defined_p(sym))
         error("Symbol '" sym "' not defined [incr]:" $0)
@@ -1045,11 +1051,11 @@ function m2_input(    getstat, input, sym)
     # Read a single line from /dev/tty.  No prompt is issued; if you
     # want one, use @echo.  Specify the symbol you want to receive the
     # data.  If no symbol is specified, __INPUT__ is used by default.
+    if (! currently_active_p())
+        return
     sym = (NF < 2) ? "__INPUT__" : $2
     if (symbol_protected_p(sym))
         error("Symbol '" sym "' protected:" $0)
-    if (! currently_active_p())
-        return
     validate_symbol(sym)
     getstat = getline input < "/dev/tty"
     if (getstat < 0) {
@@ -1064,7 +1070,8 @@ function m2_input(    getstat, input, sym)
 function m2_let(    sym, math, bcfile, val, cmd)
 {
     dbg_print("let", 7, ("@let: NF=" NF " $0='" $0 "'"))
-    if (NF < 3) error("Bad parameters:" $0)
+    if (NF < 3)
+        error("Bad parameters:" $0)
     if (! currently_active_p())
         return
 
@@ -1092,13 +1099,14 @@ function m2_let(    sym, math, bcfile, val, cmd)
 # @longdef              NAME
 function m2_longdef(    buf, save_line, save_lineno, sym)
 {
-    if (NF != 2) error("Bad parameters:" $0)
+    if (NF != 2)
+        error("Bad parameters:" $0)
     if (! currently_active_p())
         return
     save_line = $0
     save_lineno = get_symbol("__LINE__")
     sym = $2
-    if (symbol_protected_p(sym))
+    if (symbol_sys_p(sym))
         error("Symbol '" sym "' protected:" $0)
     validate_symbol(sym)
     buf = read_lines_until("@longend")
@@ -1124,12 +1132,13 @@ function m2_read(    sym, filename, line, val, getstat)
     # to read short snippets like a file path or username.  As usual, multi-
     # line values are accepted but the final trailing \n (if any) is stripped.
     #dbg_print("read", 7, ("@read: $0='" $0 "'"))
-    if (NF < 3) error("Bad parameters:" $0)
+    if (NF < 3)
+        error("Bad parameters:" $0)
     if (! currently_active_p())
         return
     sym  = $2
     validate_symbol(sym)
-    if (symbol_protected_p(sym))
+    if (symbol_sys_p(sym))
         error("Symbol '" sym "' protected:" $0)
     $1 = $2 = ""
     sub("^[ \t]*", "")
@@ -1156,7 +1165,8 @@ function m2_shell(    buf, delim, save_line, save_lineno, sendto)
     # The sendto program defaults to a reasonable shell but you can specify
     # where you want to send your data.  Possibly useful choices would be an
     # alternative shell, an email message reader, or /usr/bin/bc.
-    if (NF < 2) error("Bad parameters:" $0)
+    if (NF < 2)
+        error("Bad parameters:" $0)
     if (! currently_active_p())
         return
     save_line = $0
@@ -1203,12 +1213,14 @@ function m2_typeout(    buf)
 # @undef[ine]           NAME
 function m2_undef(    sym)
 {
-    if (NF != 2) error("Bad parameters:" $0)
-    sym = $2
-    if (symbol_protected_p(sym))
-        error("Symbol '" sym "' protected:" $0)
+    if (NF != 2)
+        error("Bad parameters:" $0)
     if (! currently_active_p())
         return
+    sym = symbol_root($2)
+    # Prevent user from deleting ANY system symbol, not just protected ones
+    if (symbol_sys_p(sym))
+        error("Symbol '" sym "' protected:" $0)
     validate_symbol(sym)
     delete_symbol(sym)
 }

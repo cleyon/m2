@@ -37,7 +37,7 @@
 #
 #           @append NAME TEXT      Add TEXT to an already defined macro NAME
 #           @comment [TEXT]        Comment; ignore line.  Also @@, @c, @#, @rem
-#           @decr NAME [N]         Subtract 1 (or N) from an already defined NAME
+#           @decr NAME [N]         Subtract N (1) from an already defined NAME
 #           @default NAME VAL      Like @define, but no-op if NAME already defined
 #           @define NAME TEXT      Set NAME to TEXT
 #           @dump(all) [FILE]      Output symbol names & definitions to FILE (stderr)
@@ -54,7 +54,7 @@
 #           @endif                 Terminate @if or @unless.  Also @fi
 #           @ignore DELIM          Ignore input until line that begins with DELIM
 #           @include FILE          Read and process contents of FILE
-#           @incr NAME [N]         Add 1 (or N) from an already defined NAME
+#           @incr NAME [N]         Add N (1) to an already defined NAME
 #           @initialize NAME VAL   Like @define, but abort if NAME already defined
 #           @input [NAME]          Read a single line from keyboard and define NAME
 #           @let NAME TEXT         Pass TEXT to bc(1), result in NAME
@@ -101,17 +101,17 @@
 #
 #       The following definitions are recognized:
 #
-#           @basename SYM@         Return base (file) name of SYM
-#           @boolval SYM@          Return "1" if symbol is true, else "0"
-#           @currdate@             Return current date as YYYY-MM-DD
-#           @currtime@             Return current time as HH:MM:SS
-#           @dirname SYM@          Return directory name of SYM
+#           @basename SYM@         Base (file) name of SYM
+#           @boolval SYM@          Output "1" if SYM is true, else "0"
+#           @currdate@             Current date as YYYY-MM-DD
+#           @currtime@             Current time as HH:MM:SS
+#           @dirname SYM@          Directory name of SYM
 #           @gensym@               Generate symbol: <prefix><counter>
 #             @gensym 42@            Set counter; prefix unchanged
 #             @gensym pre 0@         Set prefix and counter
-#           @getenv VAR@           Get environment variable [*]
+#           @getenv VAR@       [*] Get environment variable
 #           @lc SYM@               Lower case
-#           @len SYM@              Number of characters in symbol
+#           @len SYM@              Number of characters in SYM's value
 #           @substr SYM BEG [LEN]@ Substring
 #           @trim SYM@             Remove leading and trailing whitespace
 #           @tz@                   Time zone offset from UTC (-0400)
@@ -120,8 +120,8 @@
 #                                    C3525388-E400-43A7-BC95-9DF5FA3C4A52
 #
 #       [*] @getenv VAR@ will be replaced by the value of the environment
-#       variable VAR.  A runtime error is thrown if VAR is not defined.
-#       To continue with empty string and no error, disable __STRICT__.
+#           variable VAR.  An error is thrown if VAR is not defined.  To
+#           ignore error and continue with empty string, disable __STRICT__.
 #
 #       Symbols can be suffixed with "[<key>]" to form simple arrays.
 #
@@ -129,34 +129,34 @@
 #       "system" symbols.  The following system symbols are pre-defined;
 #       example values or defaults are shown:
 #
-#           __DATE__               Run date (19450716)
-#           __DBG__[<id>]          Debugging levels for m2 systems [**]
+#           __DATE__               Run start date as YYYYMMDD (eg 19450716)
+#           __DBG__[<id>]     [**] Debugging levels for m2 systems
 #           __FILE__               Current file name
 #           __FILE_UUID__          UUID unique to this file
-#           __GENSYM__[count]      Count for generated symbols (0)
-#           __GENSYM__[prefix]     Prefix for generated symbols (_gen)
-#           __GID__                (effective) Group id
-#           __HOST__               Short host name (myhost)
-#           __HOSTNAME__           FQDN host name (myhost.example.com)
-#           __INPUT__              The data read by @input [**]
+#           __GENSYM__[count]      Count for generated symbols (def 0)
+#           __GENSYM__[prefix]     Prefix for generated symbols (def _gen)
+#           __GID__                Group id (effective gid)
+#           __HOST__               Short host name (eg myhost)
+#           __HOSTNAME__           FQDN host name (eg myhost.example.com)
+#           __INPUT__         [**] The data read by @input
 #           __LINE__               Current line number in __FILE__
 #           __M2_UUID__            UUID unique to this m2 run
 #           __M2_VERSION__         m2 version
-#           __NFILE__              Number of files processed so far (0)
-#           __SCALE__              Value of "scale" passed to bc from @let (6) [**]
-#           __STRICT__             Strict mode (TRUE) [**]
-#           __TIME__               Run time (053000)
+#           __NFILE__              Number of files processed so far (eg 2)
+#           __SCALE__         [**] Value of "scale" passed to bc (def 6)
+#           __STRICT__        [**] Strict mode (def TRUE)
+#           __TIME__               Run start time as HHMMSS (eg 053000)
 #           __TIMESTAMP__          ISO 8601 timestamp (1945-07-16T05:30:00-0600)
-#           __TMPDIR__             Location for temporary files (/tmp) [**]
-#           __UID__                (effective) User id
+#           __TMPDIR__        [**] Location for temporary files (def /tmp)
+#           __UID__                User id (effective uid)
 #           __USER__               User name
 #
 #       [**] Except for certain unprotected symbols, system symbols
-#       cannot be modified by the user.  The values of __DATE__,
-#       __TIME__, and __TIMESTAMP__ are fixed at program start and do
-#       not change.  @currdate@ and @currtime@ do change, however, so
-#           @currdate@T@currtime@@tz@
-#       will generate an up-to-date timestamp.
+#            cannot be modified by the user.  The values of __DATE__,
+#            __TIME__, and __TIMESTAMP__ are fixed at program start and
+#            do not change.  @currdate@ and @currtime@ do change, however:
+#                @currdate@T@currtime@@tz@
+#            will generate an up-to-date timestamp.
 #
 # ERROR MESSAGES
 #       Error messages are printed to standard error in the following format:
@@ -179,6 +179,8 @@
 #               - Indicates an "starting" command did not find its finish.
 #           Duplicate '@else' not allowed
 #               - More than one @else found in a single @if block.
+#           Environment variable 'XXX' invalid name
+#               - Environment variable name does not pass validity check.
 #           Environment variable 'XXX' not defined
 #               - Attempt to getenv an undefined environment variable
 #                 while __STRICT__ is in effect.
@@ -428,6 +430,14 @@ function symbol_sys_p(sym)
 }
 
 
+# Environment variable names must match the following regexp:
+#       /^[A-Za-z_][A-Za-z_0-9]*$/
+function env_var_name_valid_p(var)
+{
+    return var ~ /^[A-Za-z_][A-Za-z_0-9]*$/
+}
+
+
 # In strict mode, a symbol must match the following regexp:
 #       /^[A-Za-z#$_][A-Za-z#$_0-9]*$/
 # In non-strict mode, any non-empty string is valid.
@@ -464,12 +474,21 @@ function symbol_valid_p(sym,    result, lbracket, rbracket, sym_root, sym_key)
 }
 
 
-# This function throws an error if the symbol is not valid
+# Throw an error if the symbol is not valid
 function validate_symbol(sym)
 {
     if (symbol_valid_p(sym))
         return TRUE
     error("Symbol '" sym "' invalid name:" $0)
+}
+
+
+# Throw an error if the environment variable name is not valid
+function validate_env_var_name(var)
+{
+    if (env_var_name_valid_p(var))
+        return TRUE
+    error("Environment variable '" var "' invalid name:" $0)
 }
 
 
@@ -714,7 +733,7 @@ function read_lines_until(delim,    buf, delim_len)
     buf = ""
     delim_len = length(delim)
     while (TRUE) {
-        if (readline() == EOF)
+        if (readline() != READ_OK) # eof or error, it's time to stop
             if (delim_len > 0)
                 return EOF
             else
@@ -922,10 +941,12 @@ function m2_if(    sym, cond, op, val2, val4)
 
     } else if ($1 == "if_env") {
         if (NF < 2) error("Bad parameters:" $0)
+        validate_env_var_name($2)
         cond = $2 in ENVIRON
 
     } else if ($1 == "if_not_env") {
         if (NF < 2) error("Bad parameters:" $0)
+        validate_env_var_name($2)
         cond = ! ($2 in ENVIRON)
 
     } else if ($1 == "if_exists") {
@@ -1230,7 +1251,7 @@ function dofile(filename, read_literally,    savefile, saveline, savebuffer)
     set_symbol("__FILE_UUID__", uuid())
 
     # Read the file and process each line
-    while (readline() != EOF)
+    while (readline() == READ_OK)
         process_line(read_literally)
 
     # Reached end of file
@@ -1260,24 +1281,30 @@ function dofile(filename, read_literally,    savefile, saveline, savebuffer)
 # Return EOF or "" (null string)
 function readline(    getstat, i, status)
 {
-    status = ""
+    status = READ_OK
     if (buffer != "") {
-        i = index(buffer, "\n")
-        $0 = substr(buffer, 1, i-1)
-        buffer = substr(buffer, i+1)
+        # Return the buffer even if somehow it doesn't end with a newline
+        if ((i = index(buffer, "\n")) == IDX_NOT_FOUND) {
+            $0 = buffer
+            buffer = ""
+        } else {
+            $0 = substr(buffer, 1, i-1)
+            buffer = substr(buffer, i+1)
+        }
     } else {
         getstat = getline < get_symbol("__FILE__")
-        if (getstat < 0)        # Error
+        if (getstat < 0) {      # Error
+            status = READ_ERROR
             warn("Error reading '" get_symbol("__FILE__") "' [readline]")
-        if (getstat <= 0)  # End of file
-            status = EOF
+        } else if (getstat == 0)  # End of file
+            status = READ_EOF
         else                    # Read a line
             incr_symbol("__LINE__")
     }
     # Hack: allow @Mname at start of line without a closing @.
     # This only applies if in non-strict mode.  Note, macro name must
     # start with a capital letter and must not be passed any parameters.
-    if (!strictp() && ($0 ~ /^@[A-Z][A-Za-z#$_0-9]*[ \t]*$/))
+    if (! strictp() && ($0 ~ /^@[A-Z][A-Za-z#$_0-9]*[ \t]*$/))
         sub(/[ \t]*$/, "@")
     return status
 }
@@ -1427,7 +1454,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
         symfunc = param[0 + _fencepost]
         # dbg_print("dosubs", 7, sprintf("dosubs: symfunc=%s, nparam=%d; l='%s', m='%s', r='%s', expand='%s'", symfunc, nparam, l, m, r, expand))
 
-        # basename SYM: Return base name of file
+        # basename SYM: Base (i.e., file name) of path
         if (symfunc == "basename") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
             p = param[1 + _fencepost]
@@ -1438,7 +1465,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
             close(cmd)
             r = expand r
 
-        # boolval : Return "1" if symbol is true, else "0"
+        # boolval SYM: Print "1" if SYM is true, else "0"
         #   @boolval SYM@ => "0" or "1"     # error if not defined
         } else if (symfunc == "boolval") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
@@ -1448,21 +1475,21 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
                 error("Symbol '" p "' not defined [boolval]:" $0)
             r = (symbol_true_p(p) ? "1" : "0") r
 
-        # currdate : Return current date as YYYY-MM-DD
+        # currdate : Current date as YYYY-MM-DD
         } else if (symfunc == "currdate") {
             cmd = build_prog_cmdline("date", "+'%Y-%m-%d'")
             cmd | getline expand
             close(cmd)
             r = expand r
 
-        # currtime : Return current time as HH:MM:SS
+        # currtime : Current time as HH:MM:SS
         } else if (symfunc == "currtime") {
             cmd = build_prog_cmdline("date", "+'%H:%M:%S'")
             cmd | getline expand
             close(cmd)
             r = expand r
 
-        # dirname : Return directory name of file
+        # dirname SYM: Directory name of path
         } else if (symfunc == "dirname") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
             p = param[1 + _fencepost]
@@ -1473,16 +1500,18 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
             close(cmd)
             r = expand r
 
-        # gensym : Generate symbol
-        #   @gensym@ => _gen0
-        #   @gensym 42@ (prefix unchanged, counter now 42) => _gen42
-        #   @gensym foo 42@ => (prefix now "foo", counter now 42) => foo42
+        # gensym ...: Generate symbol
+        #   @gensym@        => _gen0
+        #   @gensym 42@     => (prefix unchanged, count now 42) => _gen42
+        #   @gensym foo 42@ => (prefix now "foo", count now 42) => foo42
         } else if (symfunc == "gensym") {
             if (nparam == 1) {
+                # @gensym 42@
                 if (! integerp(param[1 + _fencepost]))
                     error("Value '" m "' must be numeric:" $0)
                 set_aref("__GENSYM__", "count", param[1 + _fencepost])
             } else if (nparam == 2) {
+                # @gensym foo 42@
                 if (! integerp(param[2 + _fencepost]))
                     error("Value '" m "' must be numeric:" $0)
                 # Make sure the new requested prefix is valid
@@ -1503,6 +1532,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
         } else if (symfunc == "getenv") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
             p = param[1 + _fencepost]
+            validate_env_var_name(p)
             if (p in ENVIRON)
                 r = ENVIRON[p] r
             else if (strictp())
@@ -1547,7 +1577,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
                 r = substr(get_symbol(p), param[2 + _fencepost]+1, param[3 + _fencepost]) r
             }
 
-        # trim : Remove leading and trailing whitespace
+        # trim SYM: Remove leading and trailing whitespace
         } else if (symfunc == "trim") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
             p = param[1 + _fencepost]
@@ -1567,7 +1597,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
             close(cmd)
             r = expand r
 
-        # uc : Upper case
+        # uc SYM: Upper case
         } else if (symfunc == "uc") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
             p = param[1 + _fencepost]
@@ -1581,7 +1611,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
         } else if (symfunc == "uuid") {
             r = uuid() r
 
-        # <SOMETHING> : Call a user-defined macro, handles arguments
+        # <SOMETHING ELSE> : Call a user-defined macro, handles arguments
         } else if (symbol_valid_p(symfunc) && symbol_defined_p(symfunc)) {
             expand = get_symbol(symfunc)
             # Expand $N parameters (includes $0 for macro name)
@@ -1742,12 +1772,12 @@ function find_closing_brace(s, start,    i, c, nc, cb, slen)
 function dodef(append_flag,    name, str, x)
 {
     name = $2
-    sub(/^[ \t]*[^ \t]+[ \t]+[^ \t]+[ \t]*/, "")  # OLD BUG: last * was +
+    sub(/^[ \t]*[^ \t]+[ \t]+[^ \t]+[ \t]*/, "")  # old bug: last * was +
     str = $0
     while (str ~ /\\$/) {
-        if (readline() == EOF)
+        if (readline() == READ_EOF)
             error("Unexpected end of definition:" name)
-        # OLD BUG: sub(/\\$/, "\n" $0, str)
+        # old bug: sub(/\\$/, "\n" $0, str)
         x = $0
         sub(/^[ \t]+/, "", x)
         str = chop(str) "\n" x
@@ -1802,12 +1832,16 @@ function initialize(    d, dateout, egid, euid, host, hostname, user)
 {
     TRUE              =  1
     FALSE             =  0
-    IDX_NOT_FOUND     =  0
+
     EX_OK             =  0
     EX_M2_ERROR       =  1
     EX_USER_REQUEST   =  2
     EX_USAGE          = 64
     EX_NOINPUT        = 66
+    IDX_NOT_FOUND     =  0
+    READ_ERROR        = -1
+    READ_EOF          =  0
+    READ_OK           =  1
 
     exit_code         = EX_OK
     EOF               = build_subsep("EoF1", "EoF2") # Unlikely to occur in normal text

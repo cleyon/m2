@@ -768,7 +768,7 @@ function m2_default(    sym)
     if (! currently_active_p())
         return
     sym = $2
-    if (symbol_sys_p(sym))
+    if (symbol_protected_p(sym))
         error("Symbol '" sym "' protected:" $0)
     validate_symbol(sym)
     if (symbol_defined_p(sym)) {
@@ -1033,7 +1033,7 @@ function m2_incr(    incr, sym)
     if (! currently_active_p())
         return
     sym = $2
-    if (symbol_sys_p(sym))
+    if (symbol_protected_p(sym))
         error("Symbol '" sym "' protected:" $0)
     if (NF >= 3 && ! integerp($3))
         error("Value '" $3 "' must be numeric:" $0)
@@ -1106,7 +1106,7 @@ function m2_longdef(    buf, save_line, save_lineno, sym)
     save_line = $0
     save_lineno = get_symbol("__LINE__")
     sym = $2
-    if (symbol_sys_p(sym))
+    if (symbol_protected_p(sym))
         error("Symbol '" sym "' protected:" $0)
     validate_symbol(sym)
     buf = read_lines_until("@longend")
@@ -1138,7 +1138,7 @@ function m2_read(    sym, filename, line, val, getstat)
         return
     sym  = $2
     validate_symbol(sym)
-    if (symbol_sys_p(sym))
+    if (symbol_protected_p(sym))
         error("Symbol '" sym "' protected:" $0)
     $1 = $2 = ""
     sub("^[ \t]*", "")
@@ -1219,7 +1219,7 @@ function m2_undef(    sym)
         return
     sym = symbol_root($2)
     # Prevent user from deleting ANY system symbol, not just protected ones
-    if (symbol_sys_p(sym))
+    if (symbol_protected_p(sym))
         error("Symbol '" sym "' protected:" $0)
     validate_symbol(sym)
     delete_symbol(sym)

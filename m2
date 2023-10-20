@@ -99,6 +99,11 @@
 #           @greet world@
 #               => Hello, world!  m2 sends you greetings.
 #
+#       To alleviate scanning ambiguities, any characters enclosed in
+#       braces will be recursively expanded.  For example,
+#           @data_list[@{@my_key@}]@
+#       uses the value in "my_key" to look up data from "data_list".
+#
 #       The following definitions are recognized:
 #
 #           @basename SYM@         Base (file) name of SYM
@@ -288,7 +293,7 @@
 #*****************************************************************************
 
 BEGIN {
-    version = "2.2.1"
+    version = "2.2.2"
 }
 
 
@@ -734,11 +739,13 @@ function read_lines_until(delim,    buf, delim_len)
     buf = ""
     delim_len = length(delim)
     while (TRUE) {
-        if (readline() != READ_OK) # eof or error, it's time to stop
+        if (readline() != READLINE_OK) {
+            # eof or error, it's time to stop
             if (delim_len > 0)
                 return EOF
             else
                 break
+        }
         if (delim_len > 0 && substr($0, 1, delim_len) == delim)
             break
         buf = buf $0 "\n"
@@ -1263,7 +1270,7 @@ function dofile(filename, read_literally,    savefile, saveline, savebuffer)
     set_symbol("__FILE_UUID__", uuid())
 
     # Read the file and process each line
-    while (readline() == READ_OK)
+    while (readline() == READLINE_OK)
         process_line(read_literally)
 
     # Reached end of file
@@ -1293,7 +1300,7 @@ function dofile(filename, read_literally,    savefile, saveline, savebuffer)
 # Return EOF or "" (null string)
 function readline(    getstat, i, status)
 {
-    status = READ_OK
+    status = READLINE_OK
     if (buffer != "") {
         # Return the buffer even if somehow it doesn't end with a newline
         if ((i = index(buffer, "\n")) == IDX_NOT_FOUND) {
@@ -1306,10 +1313,10 @@ function readline(    getstat, i, status)
     } else {
         getstat = getline < get_symbol("__FILE__")
         if (getstat < 0) {      # Error
-            status = READ_ERROR
+            status = READLINE_ERROR
             warn("Error reading '" get_symbol("__FILE__") "' [readline]")
         } else if (getstat == 0)  # End of file
-            status = READ_EOF
+            status = READLINE_EOF
         else                    # Read a line
             incr_symbol("__LINE__")
     }
@@ -1691,18 +1698,18 @@ function expand_braces(s,    atbr, cb, ltext, mtext, rtext)
 # If closing } is not found, return 0.  On other error, return -1.
 #
 # PARAMETERS
-#     s         String to examine
+#     s         String to examine.
 #     start     The position in s, not necessarily 1, of the "@{"
 #               for which we need to find the closing brace.
 #
 # LOCAL VARIABLES
 #     i         Counter of current offset into s from start.
 #               Initially i=0.  As we scan right, i will be incremented.
-#     c         The current character pointed to by i.
+#     c         The current character, at position i.
 #                   c = substr(s, start+i, 1)
-#     nc        The next character past i.
+#     nc        The next character past c, at position i+1.
 #                   nc = substr(s, start+i+1, 1)
-#     cb        Position of inner "}" found via recursion
+#     cb        Position of inner "}" found via recursion.
 #
 # RETURN VALUE
 #     If successfully found a closing brace, return its position within s.
@@ -1722,10 +1729,9 @@ function find_closing_brace(s, start,    i, c, nc, cb, slen)
 
     # At this point, we've verified that we're looking at @{, so there
     # are at least two characters in the string.  Let's move along...
-    i = 2
-
     # Look at the character (c) immediately following "@{", and also the
     # next character (nc) after that.  One or both might be empty string.
+    i  = 2
     c  = substr(s, start+i,   1)
     nc = substr(s, start+i+1, 1)
 
@@ -1787,7 +1793,7 @@ function dodef(append_flag,    name, str, x)
     sub(/^[ \t]*[^ \t]+[ \t]+[^ \t]+[ \t]*/, "")  # old bug: last * was +
     str = $0
     while (str ~ /\\$/) {
-        if (readline() == READ_EOF)
+        if (readline() == READLINE_EOF)
             error("Unexpected end of definition:" name)
         # old bug: sub(/\\$/, "\n" $0, str)
         x = $0
@@ -1851,9 +1857,9 @@ function initialize(    d, dateout, egid, euid, host, hostname, user)
     EX_USAGE          = 64
     EX_NOINPUT        = 66
     IDX_NOT_FOUND     =  0
-    READ_ERROR        = -1
-    READ_EOF          =  0
-    READ_OK           =  1
+    READLINE_ERROR    = -1
+    READLINE_EOF      =  0
+    READLINE_OK       =  1
 
     exit_code         = EX_OK
     EOF               = build_subsep("EoF1", "EoF2") # Unlikely to occur in normal text
@@ -1866,12 +1872,13 @@ function initialize(    d, dateout, egid, euid, host, hostname, user)
 
     srand()                     # Seed random number generator
     setup_prog_paths()
-    build_prog_cmdline("date", "+'%Y %m %d %H %M %S %z'") | getline dateout;  split(dateout, d)
+    build_prog_cmdline("date", "+'%Y %m %d %H %M %S %z'") | getline dateout
     build_prog_cmdline("id", "-g")                        | getline egid
     build_prog_cmdline("id", "-u")                        | getline euid
     build_prog_cmdline("hostname", "-s")                  | getline host
     build_prog_cmdline("hostname")                        | getline hostname
     build_prog_cmdline("id", "-un")                       | getline user
+    split(dateout, d)
 
     set_symbol("__DATE__",           d[1] d[2] d[3])
     set_aref("__GENSYM__", "count",  0)

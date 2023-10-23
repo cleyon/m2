@@ -86,7 +86,7 @@
 #               => You are clearly underworked.
 #
 #       Specifying more than one word between @ signs, as in
-#           @xxx A B C@
+#           @xxxx AA BB CC@
 #       is used as a crude form of function invocation.  Macros can
 #       expand positional parameters whose actual values will be
 #       supplied when the macro is called.  The definition should refer
@@ -100,7 +100,7 @@
 #               => Hello, world!  m2 sends you greetings.
 #
 #       To alleviate scanning ambiguities, any characters enclosed in
-#       braces will be recursively expanded.  For example,
+#       at-sign braces will be recursively scanned and expanded.  E.g.,
 #           @data_list[@{@my_key@}]@
 #       uses the value in "my_key" to look up data from "data_list".
 #
@@ -116,8 +116,10 @@
 #             @gensym pre 0@         Set prefix and counter
 #           @getenv VAR@       [*] Get environment variable
 #           @lc SYM@               Lower case
+#           @left SYM [N]@         Substring of SYM from 1 to Nth character
 #           @len SYM@              Number of characters in SYM's value
-#           @substr SYM BEG [LEN]@ Substring
+#           @mid SYM BEG [LEN]@    Substring of SYM from BEG, LEN chars long
+#           @right SYM [N]@        Substring of SYM from N to last character
 #           @trim SYM@             Remove leading and trailing whitespace
 #           @tz@                   Time zone offset from UTC (-0400)
 #           @uc SYM@               Upper case
@@ -1417,7 +1419,7 @@ function process_line(read_literally,    newstring)
 #             L = L "@" M
 #             R = "@" R
 #     return L R
-function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_brace)
+function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_brace, x, y)
 {
     l = ""                   # Left of current pos  - ready for output
     r = s                    # Right of current pos - as yet unexamined
@@ -1485,14 +1487,20 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
             r = expand r
 
         # boolval SYM: Print "1" if SYM is true, else "0"
-        #   @boolval SYM@ => "0" or "1"     # error if not defined
+        #   @boolval SYM@ => "0" or "1"
+        # If the symbol is not defined, the behavior is as follows:
+        # In strict mode, it is an error if the symbols is not defined.
+        # In non-strict mode, you get a "0" even if not defined.
         } else if (symfunc == "boolval") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
             p = param[1 + _fencepost]
             validate_symbol(p)
-            if (! symbol_defined_p(p))
+            if (symbol_defined_p(p))
+                r = (symbol_true_p(p) ? "1" : "0") r
+            else if (strictp())
                 error("Symbol '" p "' not defined [boolval]:" $0)
-            r = (symbol_true_p(p) ? "1" : "0") r
+            else
+                r = "0" r
 
         # currdate : Current date as YYYY-MM-DD
         } else if (symfunc == "currdate") {
@@ -1566,6 +1574,22 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
                 error("Symbol '" p "' not defined [lc]:" $0)
             r = tolower(get_symbol(p)) r
 
+        # left : Left (substring)
+        #   @left ALPHABET 7@ => ABCDEFG
+        } else if (symfunc == "left") {
+            if (nparam < 1 || nparam > 2) error("Bad parameters in '" m "':" $0)
+            p = param[1 + _fencepost]
+            validate_symbol(p)
+            if (! symbol_defined_p(p))
+                error("Symbol '" p "' not defined [left]:" $0)
+            x = 1
+            if (nparam == 2) {
+                x = param[2 + _fencepost]
+                if (! integerp(x))
+                    error("Value '" m "' must be numeric:" $0)
+            }
+            r = substr(get_symbol(p), 1, x) r
+
         # len : Length
         #   @len SYM@ => N
         } else if (symfunc == "len") {
@@ -1576,25 +1600,44 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
                 error("Symbol '" p "' not defined [len]:" $0)
             r = length(get_symbol(p)) r
 
-        # substr : Substring ...  SYMBOL, START[, LENGTH]
-        #   @substr FOO 3@
-        #   @substr FOO 2 2@
-        } else if (symfunc == "substr") {
-            if (nparam != 2 && nparam != 3)
+        # mid : Substring ...  SYMBOL, START[, LENGTH]
+        #   @mid ALPHABET 15 5@ => OPQRS
+        #   @mid FOO 3@
+        #   @mid FOO 2 2@
+        } else if (symfunc == "mid") {
+            if (nparam < 2 || nparam > 3)
                 error("Bad parameters in '" m "':" $0)
             p = param[1 + _fencepost]
             validate_symbol(p)
             if (! symbol_defined_p(p))
                 error("Symbol '" p "' not defined [substr]:" $0)
-            if (! integerp(param[2 + _fencepost]))
+            x = param[2 + _fencepost]
+            if (! integerp(x))
                 error("Value '" m "' must be numeric:" $0)
             if (nparam == 2) {
-                r = substr(get_symbol(p), param[2 + _fencepost]+1) r
+                r = substr(get_symbol(p), x) r
             } else if (nparam == 3) {
-                if (! integerp(param[3 + _fencepost]))
+                y = param[3 + _fencepost]
+                if (! integerp(y))
                     error("Value '" m "' must be numeric:" $0)
-                r = substr(get_symbol(p), param[2 + _fencepost]+1, param[3 + _fencepost]) r
+                r = substr(get_symbol(p), x, y) r
             }
+
+        # right : Right (substring)
+        #   @right ALPHABET 20@ => TUVWXYZ
+        } else if (symfunc == "right") {
+            if (nparam < 1 || nparam > 2) error("Bad parameters in '" m "':" $0)
+            p = param[1 + _fencepost]
+            validate_symbol(p)
+            if (! symbol_defined_p(p))
+                error("Symbol '" p "' not defined [left]:" $0)
+            x = length(get_symbol(p))
+            if (nparam == 2) {
+                x = param[2 + _fencepost]
+                if (! integerp(x))
+                    error("Value '" m "' must be numeric:" $0)
+            }
+            r = substr(get_symbol(p), x) r
 
         # trim SYM: Remove leading and trailing whitespace
         } else if (symfunc == "trim") {

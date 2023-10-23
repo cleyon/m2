@@ -190,6 +190,7 @@
 #                 its terminating delimiter line.
 #               - An @if block was not properly terminated before end of input.
 #               - Indicates an "starting" command did not find its finish.
+#               - Single quotes not allowed in __FTIME__ format string.
 #           Duplicate '@else' not allowed
 #               - More than one @else found in a single @if block.
 #           Environment variable 'XXX' invalid name
@@ -1514,8 +1515,12 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
         } else if (symfunc == "date" ||
                    symfunc == "time" ||
                    symfunc == "tz") {
-            cmd = build_prog_cmdline("date",
-                                     "+'" get_aref("__FTIME__", symfunc) "'")
+            y = get_aref("__FTIME__", symfunc)
+            if (index(y, "'") != IDX_NOT_FOUND)
+                # sh cannot find matching `'' (despite attempts at quoting)
+                # so I'll just disallow it.  Perhaps this can be fixed?
+                error("Delimiter ''' not found:__FTIME__[" symfunc "]=" y ":" $0)
+            cmd = build_prog_cmdline("date", "+'" y "'")
             cmd | getline expand
             close(cmd)
             r = expand r
@@ -1884,7 +1889,7 @@ function load_init_files()
 # It is important that __PROG__ remain a protected symbol.  Otherwise,
 # some bad person could entice you to evaluate:
 #       @define __PROG__[stat]  /bin/rm
-#       @include @getenv HOME@/my_precious_file
+#       @include my_precious_file
 function setup_prog_paths()
 {
     set_aref("__PROG__", "basename", "/usr/bin/basename")
@@ -1928,7 +1933,6 @@ function initialize(    d, dateout, egid, euid, host, hostname, user)
     active[ifdepth]   = TRUE
     _fencepost        =  1
     buffer            = ""
-    strbuf            = ""
 
     srand()                     # Seed random number generator
     setup_prog_paths()

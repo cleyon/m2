@@ -108,8 +108,7 @@
 #
 #           @basename SYM@         Base (file) name of SYM
 #           @boolval SYM@          Output "1" if SYM is true, else "0"
-#           @currdate@             Current date as YYYY-MM-DD
-#           @currtime@             Current time as HH:MM:SS
+#           @date@                 Current date (format as __FTIME__[date])
 #           @dirname SYM@          Directory name of SYM
 #           @gensym@               Generate symbol: <prefix><counter>
 #             @gensym 42@            Set counter; prefix unchanged
@@ -121,8 +120,9 @@
 #           @mid SYM BEG [LEN]@    Substring of SYM from BEG, LEN chars long
 #           @right SYM [N]@        Substring of SYM from N to last character
 #           @spaces [N]@           Output N space characters  (default 1)
+#           @time@                 Current time (format as __FTIME__[time])
 #           @trim SYM@             Remove leading and trailing whitespace
-#           @tz@                   Time zone offset from UTC (-0400)
+#           @tz@                   Time zone name (format as __FTIME__[tz])
 #           @uc SYM@               Upper case
 #           @uuid@                 Something that resembles a UUID:
 #                                    C3525388-E400-43A7-BC95-9DF5FA3C4A52
@@ -134,13 +134,17 @@
 #       Symbols can be suffixed with "[<key>]" to form simple arrays.
 #
 #       Symbols that start and end with "__" (like __FOO__) are called
-#       "system" symbols.  The following system symbols are pre-defined;
+#       "system" symbols.  Except for certain unprotected symbols, they
+#       cannot be modified by the user.  The following are pre-defined;
 #       example values or defaults are shown:
 #
 #           __DATE__               Run start date as YYYYMMDD (eg 19450716)
 #           __DBG__[<id>]     [**] Debugging levels for m2 systems
 #           __FILE__               Current file name
 #           __FILE_UUID__          UUID unique to this file
+#           __FTIME__[date]   [**] Date format for @date@ (%Y-%m-%d)
+#           __FTIME__[time]   [**] Time format for @time@ (%H:%M:%S)
+#           __FTIME__[tz]     [**] Time format for @tz@   (%Z)
 #           __GENSYM__[count]      Count for generated symbols (def 0)
 #           __GENSYM__[prefix]     Prefix for generated symbols (def _gen)
 #           __GID__                Group id (effective gid)
@@ -156,15 +160,16 @@
 #           __TIME__               Run start time as HHMMSS (eg 053000)
 #           __TIMESTAMP__          ISO 8601 timestamp (1945-07-16T05:30:00-0600)
 #           __TMPDIR__        [**] Location for temporary files (def /tmp)
+#           __TZ__                 Time zone numeric offset from UTC (-0400)
 #           __UID__                User id (effective uid)
 #           __USER__               User name
 #
-#       [**] Except for certain unprotected symbols, system symbols
-#            cannot be modified by the user.  The values of __DATE__,
-#            __TIME__, and __TIMESTAMP__ are fixed at program start and
-#            do not change.  @currdate@ and @currtime@ do change, however:
-#                @currdate@T@currtime@@tz@
-#            will generate an up-to-date timestamp.
+#       [**] denotes an "unprotected" system symbol.
+#
+#       The values of __DATE__, __TIME__, __TIMESTAMP__, and __TZ__ are fixed
+#       at program start and do not change.  @date@ and @time@ do change, so:
+#           @date@T@time@@__TZ__@
+#       will generate an up-to-date timestamp.
 #
 # ERROR MESSAGES
 #       Error messages are printed to standard error in the following format:
@@ -1503,16 +1508,14 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
             else
                 r = "0" r
 
-        # currdate : Current date as YYYY-MM-DD
-        } else if (symfunc == "currdate") {
-            cmd = build_prog_cmdline("date", "+'%Y-%m-%d'")
-            cmd | getline expand
-            close(cmd)
-            r = expand r
-
-        # currtime : Current time as HH:MM:SS
-        } else if (symfunc == "currtime") {
-            cmd = build_prog_cmdline("date", "+'%H:%M:%S'")
+        # date : Current date as YYYY-MM-DD
+        # time : Current time as HH:MM:SS
+        # tz   : Current time zone name
+        } else if (symfunc == "date" ||
+                   symfunc == "time" ||
+                   symfunc == "tz") {
+            cmd = build_prog_cmdline("date",
+                                     "+'" get_aref("__FTIME__", symfunc) "'")
             cmd | getline expand
             close(cmd)
             r = expand r
@@ -1666,14 +1669,6 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
             expand = get_symbol(p)
             sub(/^[ \t]+/, "", expand)
             sub(/[ \t]+$/, "", expand)
-            r = expand r
-
-        # tz : Time zone offset from UTC
-        #   @tz@ => -0400
-        } else if (symfunc == "tz") {
-            cmd = build_prog_cmdline("date", "+'%z'")
-            cmd | getline expand
-            close(cmd)
             r = expand r
 
         # uc SYM: Upper case
@@ -1946,6 +1941,9 @@ function initialize(    d, dateout, egid, euid, host, hostname, user)
     split(dateout, d)
 
     set_symbol("__DATE__",           d[1] d[2] d[3])
+    set_aref("__FTIME__", "date",    "%Y-%m-%d")
+    set_aref("__FTIME__", "time",    "%H:%M:%S")
+    set_aref("__FTIME__", "tz",      "%Z")
     set_aref("__GENSYM__", "count",  0)
     set_aref("__GENSYM__", "prefix", "_gen")
     set_symbol("__GID__",            egid)
@@ -1960,10 +1958,12 @@ function initialize(    d, dateout, egid, euid, host, hostname, user)
     set_symbol("__TIME__",           d[4] d[5] d[6])
     set_symbol("__TIMESTAMP__",      d[1] "-" d[2] "-" d[3] "T" \
                                      d[4] ":" d[5] ":" d[6] d[7])
+    set_symbol("__TZ__",             d[7])
     set_symbol("__UID__",            euid)
     set_symbol("__USER__",           user)
 
     unprotected_syms["__DBG__"]    = TRUE
+    unprotected_syms["__FTIME__"]  = TRUE
     unprotected_syms["__INPUT__"]  = TRUE
     unprotected_syms["__SCALE__"]  = TRUE
     unprotected_syms["__STRICT__"] = TRUE

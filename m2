@@ -120,6 +120,7 @@
 #           @len SYM@              Number of characters in SYM's value
 #           @mid SYM BEG [LEN]@    Substring of SYM from BEG, LEN chars long
 #           @right SYM [N]@        Substring of SYM from N to last character
+#           @spaces [N]@           Output N space characters  (default 1)
 #           @trim SYM@             Remove leading and trailing whitespace
 #           @tz@                   Time zone offset from UTC (-0400)
 #           @uc SYM@               Upper case
@@ -295,7 +296,7 @@
 #*****************************************************************************
 
 BEGIN {
-    version = "2.2.2"
+    version = "2.2.3"
 }
 
 
@@ -1534,17 +1535,20 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
         } else if (symfunc == "gensym") {
             if (nparam == 1) {
                 # @gensym 42@
-                if (! integerp(param[1 + _fencepost]))
-                    error("Value '" m "' must be numeric:" $0)
-                set_aref("__GENSYM__", "count", param[1 + _fencepost])
+                x = param[1 + _fencepost]
+                if (! integerp(x))
+                    error("Value '" x "' must be numeric:" $0)
+                set_aref("__GENSYM__", "count", x)
             } else if (nparam == 2) {
                 # @gensym foo 42@
-                if (! integerp(param[2 + _fencepost]))
-                    error("Value '" m "' must be numeric:" $0)
+                x = param[1 + _fencepost]
+                y = param[2 + _fencepost]
+                if (! integerp(y))
+                    error("Value '" y "' must be numeric:" $0)
                 # Make sure the new requested prefix is valid
-                validate_symbol(param[1 + _fencepost])
-                set_aref("__GENSYM__", "prefix", param[1 + _fencepost])
-                set_aref("__GENSYM__", "count",  param[2 + _fencepost])
+                validate_symbol(x)
+                set_aref("__GENSYM__", "prefix", x)
+                set_aref("__GENSYM__", "count",  y)
             } else if (nparam > 2)
                 error("Bad parameters in '" m "':" $0)
 
@@ -1586,7 +1590,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
             if (nparam == 2) {
                 x = param[2 + _fencepost]
                 if (! integerp(x))
-                    error("Value '" m "' must be numeric:" $0)
+                    error("Value '" x "' must be numeric:" $0)
             }
             r = substr(get_symbol(p), 1, x) r
 
@@ -1613,13 +1617,13 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
                 error("Symbol '" p "' not defined [substr]:" $0)
             x = param[2 + _fencepost]
             if (! integerp(x))
-                error("Value '" m "' must be numeric:" $0)
+                error("Value '" x "' must be numeric:" $0)
             if (nparam == 2) {
                 r = substr(get_symbol(p), x) r
             } else if (nparam == 3) {
                 y = param[3 + _fencepost]
                 if (! integerp(y))
-                    error("Value '" m "' must be numeric:" $0)
+                    error("Value '" y "' must be numeric:" $0)
                 r = substr(get_symbol(p), x, y) r
             }
 
@@ -1635,9 +1639,22 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
             if (nparam == 2) {
                 x = param[2 + _fencepost]
                 if (! integerp(x))
-                    error("Value '" m "' must be numeric:" $0)
+                    error("Value '" x "' must be numeric:" $0)
             }
             r = substr(get_symbol(p), x) r
+
+        # spaces [N]: N spaces
+        } else if (symfunc == "spaces") {
+            if (nparam > 1) error("Bad parameters in '" m "':" $0)
+            x = 1
+            if (nparam == 1) {
+                x = param[1 + _fencepost]
+                if (! integerp(x))
+                    error("Value '" x "' must be numeric:" $0)
+            }
+            while (x-- > 0)
+                expand = expand " "
+            r = expand r
 
         # trim SYM: Remove leading and trailing whitespace
         } else if (symfunc == "trim") {

@@ -1634,7 +1634,9 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
         } else if (symbol_valid_p(symfunc) && symbol_defined_p(symfunc)) {
             expand = get_symbol(symfunc)
             # Expand $N parameters (includes $0 for macro name)
-            for (j = 0; j <= 9; j++)
+            j = MAX_PARAM   # but don't go overboard with params
+            # Count backwards to get around $10 problem.
+            while (j-- >= 0)
                 if (index(expand, "$" j) != IDX_NOT_FOUND) { # i.e., "found"
                     if (j > nparam)
                         error("Parameter " j " not supplied in '" m "':" $0)
@@ -1850,16 +1852,19 @@ function initialize(    d, dateout, egid, euid, host, hostname, user)
 {
     TRUE              =  1
     FALSE             =  0
+    MAX_PARAM         = 20
 
+    IDX_NOT_FOUND     =  0
+    READLINE_ERROR    = -1
+    READLINE_EOF      =  0
+    READLINE_OK       =  1
+
+    # Exit codes
     EX_OK             =  0
     EX_M2_ERROR       =  1
     EX_USER_REQUEST   =  2
     EX_USAGE          = 64
     EX_NOINPUT        = 66
-    IDX_NOT_FOUND     =  0
-    READLINE_ERROR    = -1
-    READLINE_EOF      =  0
-    READLINE_OK       =  1
 
     exit_code         = EX_OK
     EOF               = build_subsep("EoF1", "EoF2") # Unlikely to occur in normal text

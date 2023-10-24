@@ -110,6 +110,7 @@
 #           @boolval SYM@          Output "1" if SYM is true, else "0"
 #           @date@                 Current date (format as __FTIME__[date])
 #           @dirname SYM@          Directory name of SYM
+#           @epoch@                Number of seconds since the Epoch, UTC
 #           @gensym@               Generate symbol: <prefix><counter>
 #             @gensym 42@            Set counter; prefix unchanged
 #             @gensym pre 0@         Set prefix and counter
@@ -138,8 +139,9 @@
 #       cannot be modified by the user.  The following are pre-defined;
 #       example values or defaults are shown:
 #
-#           __DATE__               Run start date as YYYYMMDD (eg 19450716)
+#           __DATE__               m2 run start date as YYYYMMDD (eg 19450716)
 #           __DBG__[<id>]     [**] Debugging levels for m2 systems
+#           __EPOCH__              Seconds since Epoch at m2 run start time
 #           __FILE__               Current file name
 #           __FILE_UUID__          UUID unique to this file
 #           __FTIME__[date]   [**] Date format for @date@ (%Y-%m-%d)
@@ -158,7 +160,7 @@
 #           __OSNAME__             Operating system name
 #           __SCALE__         [**] Value of "scale" passed to bc (def 6)
 #           __STRICT__        [**] Strict mode (def TRUE)
-#           __TIME__               Run start time as HHMMSS (eg 053000)
+#           __TIME__               m2 run start time as HHMMSS (eg 053000)
 #           __TIMESTAMP__          ISO 8601 timestamp (1945-07-16T05:30:00-0600)
 #           __TMPDIR__        [**] Location for temporary files (def /tmp)
 #           __TZ__                 Time zone numeric offset from UTC (-0400)
@@ -167,7 +169,7 @@
 #
 #       [**] denotes an "unprotected" system symbol.
 #
-#       The values of __DATE__, __TIME__, __TIMESTAMP__, and __TZ__ are fixed
+#       __DATE__, __EPOCH__, __TIME__, __TIMESTAMP__, and __TZ__ are fixed
 #       at program start and do not change.  @date@ and @time@ do change, so:
 #           @date@T@time@@__TZ__@
 #       will generate an up-to-date timestamp.
@@ -423,6 +425,14 @@ function sym2_defined_p(arr, key)
     return (arr, key) in symtab
 }
 
+# Caller is responsible for ensuring user is allowed to delete symbol
+function sym_destroy(sym)
+{
+    dbg_print("m2", 5, ("sym_destroy(" sym ")"))
+    # It is legal to delete an array key that does not exist
+    delete symtab[sym_internal_form(sym)]
+}
+
 function sym_fetch(sym,    s)
 {
     s = sym_internal_form(sym)
@@ -478,28 +488,19 @@ function sym_printable_form(sym,    sep, arr, key)
 # Protected symbols cannot be changed by the user.
 function sym_protected_p(sym)
 {
-    sym = sym_root(sym)
     # Whitelist of known safe symbols
-    if (sym in unprotected_syms)
+    if (sym_root(sym) in unprotected_syms)
         return FALSE
     return sym_system_p(sym)
 }
 
-# Caller is responsible for ensuring user is allowed to delete symbol
-function sym_remove(sym)
+function sym_root(sym,    s)
 {
-    dbg_print("m2", 5, ("sym_remove(" sym ")"))
-    # It is legal to delete an array key that does not exist
-    delete symtab[sym_internal_form(sym)]
-}
-
-function sym_root(sym,    _isym)
-{
-    _isym = sym_internal_form(sym)
-    if (index(_isym, SUBSEP) == IDX_NOT_FOUND)
+    s = sym_internal_form(sym)
+    if (index(s, SUBSEP) == IDX_NOT_FOUND)
         return sym
     else
-        return substr(_isym, 1, index(_isym, SUBSEP)-1)
+        return substr(s, 1, index(s, SUBSEP)-1)
 }
 
 function sym_store(sym, val)
@@ -1264,7 +1265,7 @@ function m2_undef(    sym)
     if (sym_protected_p(sym))
         error("Symbol '" sym "' protected:" $0)
     assert_valid_symbol_name(sym)
-    sym_remove(sym)
+    sym_destroy(sym)
 }
 
 
@@ -1457,17 +1458,13 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
     l = ""                   # Left of current pos  - ready for output
     r = s                    # Right of current pos - as yet unexamined
     while (TRUE) {
+        # Check entire string for recursive evaluation
+        if (index(r, "@{") != IDX_NOT_FOUND)
+            r = expand_braces(r)
+
         i = index(r, "@")
         if (i == IDX_NOT_FOUND)
             break
-
-        # Check entire string for recursive evaluation
-        if (index(r, "@{") != IDX_NOT_FOUND) {
-            r = expand_braces(r)
-            i = index(r, "@")
-            if (i == IDX_NOT_FOUND)
-                break
-        }
 
         # dbg_print("dosubs", 7, (sprintf("dosubs: top of loop: l='%s', r='%s', expand='%s'", l, r, expand)))
         l = l substr(r, 1, i-1)
@@ -1535,10 +1532,12 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
             else
                 r = "0" r
 
-        # date : Current date as YYYY-MM-DD
-        # time : Current time as HH:MM:SS
-        # tz   : Current time zone name
+        # date  : Current date as YYYY-MM-DD
+        # epoch : Number of seconds since Epoch
+        # time  : Current time as HH:MM:SS
+        # tz    : Current time zone name
         } else if (symfunc == "date" ||
+                   symfunc == "epoch" ||
                    symfunc == "time" ||
                    symfunc == "tz") {
             y = sym2_fetch("__FTIME__", symfunc)
@@ -1965,11 +1964,12 @@ function initialize(    d, dateout)
     srand()                     # Seed random number generator
     setup_prog_paths()
 
-    # Always capture run start time
-    build_prog_cmdline("date", "+'%Y %m %d %H %M %S %z'") | getline dateout
+    # Capture m2 run start time   1  2  3  4  5  6  7  8
+    build_prog_cmdline("date", "+'%Y %m %d %H %M %S %z %s'") | getline dateout
     split(dateout, d)
 
     sym_store("__DATE__",               d[1] d[2] d[3])
+    sym_store("__EPOCH__",              d[8])
     sym_store("__NFILE__",              0)
     sym_store("__STRICT__",             TRUE)
     sym_store("__TIME__",               d[4] d[5] d[6])
@@ -1980,6 +1980,7 @@ function initialize(    d, dateout)
     # These symbols' definitions are deferred until needed, because
     # initialization requires a relatively expensive subprocess.
     deferred_syms["__FTIME__[date]"]    = TRUE
+    deferred_syms["__FTIME__[epoch]"]   = TRUE
     deferred_syms["__FTIME__[time]"]    = TRUE
     deferred_syms["__FTIME__[tz]"]      = TRUE
     deferred_syms["__GENSYM__[count]"]  = TRUE
@@ -2018,6 +2019,7 @@ function initialize_run_deferred(    gid, host, hostname, osname, uid, user)
     build_prog_cmdline("id", "-un")      | getline user
 
     sym2_store("__FTIME__", "date",     "%Y-%m-%d")
+    sym2_store("__FTIME__", "epoch",    "%s")
     sym2_store("__FTIME__", "time",     "%H:%M:%S")
     sym2_store("__FTIME__", "tz",       "%Z")
     sym2_store("__GENSYM__", "count",   0)

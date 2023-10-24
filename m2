@@ -303,7 +303,7 @@
 #*****************************************************************************
 
 BEGIN {
-    version = "2.2.3"
+    version = "2.3.0"
 }
 
 
@@ -408,31 +408,33 @@ function build_subsep(s, t)
 #
 #*****************************************************************************
 
-function sym_defined_p(sym)
+function sym_defined_p(sym,    s)
 {
-    return sym_internal_form(sym) in symtab
+    s = sym_internal_form(sym)
+    if (init_deferred && s in deferred_syms)
+        initialize_run_deferred()
+    return s in symtab
 }
 
 function sym2_defined_p(arr, key)
 {
+    if (init_deferred && sym_printable_form(build_subsep(arr, key)) in deferred_syms)
+        initialize_run_deferred()
     return (arr, key) in symtab
 }
 
-# Caller is responsible for ensuring user is allowed to delete symbol
-function sym_delete(sym)
+function sym_fetch(sym,    s)
 {
-    dbg_print("m2", 5, ("sym_delete(" sym ")"))
-    # It is legal to delete an array key that does not exist
-    delete symtab[sym_internal_form(sym)]
-}
-
-function sym_fetch(sym)
-{
-    return symtab[sym_internal_form(sym)]
+    s = sym_internal_form(sym)
+    if (init_deferred && s in deferred_syms)
+        initialize_run_deferred()
+    return symtab[s]
 }
 
 function sym2_fetch(arr, key)
 {
+    if (init_deferred && sym_printable_form(build_subsep(arr, key)) in deferred_syms)
+        initialize_run_deferred()
     return symtab[arr, key]
 }
 
@@ -481,6 +483,14 @@ function sym_protected_p(sym)
     if (sym in unprotected_syms)
         return FALSE
     return sym_system_p(sym)
+}
+
+# Caller is responsible for ensuring user is allowed to delete symbol
+function sym_remove(sym)
+{
+    dbg_print("m2", 5, ("sym_remove(" sym ")"))
+    # It is legal to delete an array key that does not exist
+    delete symtab[sym_internal_form(sym)]
 }
 
 function sym_root(sym,    _isym)
@@ -751,7 +761,7 @@ function _less_than(s1, s2,    s1_un, s2_un)
 
 
 # Read multiple lines until delim is seen as first characters on a line.
-# If delimiter is not found, return EOF marker.  Intermediate lines are
+# If delimiter is not found, return eof marker.  Intermediate lines are
 # terminated with a newline character, but last line has it stripped
 # away.  The lines read are NOT macro-expanded; if desired, the caller
 # can invoke dosubs() on the returned buffer.  Special case if delim is
@@ -764,7 +774,7 @@ function read_lines_until(delim,    buf, delim_len)
         if (readline() != READLINE_OK) {
             # eof or error, it's time to stop
             if (delim_len > 0)
-                return EOF
+                return EoF_marker
             else
                 break
         }
@@ -829,7 +839,10 @@ function m2_dump(    buf, cnt, definition, dumpfile, i, key, keys, sym_name, all
 {
     if (! currently_active_p())
         return
-    all_flag = ($1 == "@dumpall")
+    if (all_flag = ($1 == "@dumpall"))
+        if (init_deferred)
+            initialize_run_deferred() # Show all system symbols
+
     if (NF == 1)
         dumpfile = "/dev/stderr"
     else {
@@ -1028,7 +1041,7 @@ function m2_ignore(    buf, delim, save_line, save_lineno)
     save_lineno = sym_fetch("__LINE__")
     delim = $2
     buf = read_lines_until(delim)
-    if (buf == EOF)
+    if (buf == EoF_marker)
         error("Delimiter '" delim "' not found:" save_line, save_lineno)
 }
 
@@ -1139,7 +1152,7 @@ function m2_longdef(    buf, save_line, save_lineno, sym)
         error("Symbol '" sym "' protected:" $0)
     assert_valid_symbol_name(sym)
     buf = read_lines_until("@longend")
-    if (buf == EOF)
+    if (buf == EoF_marker)
         error("Delimiter '@longend' not found:" save_line, save_lineno)
     sym_store(sym, buf)
 }
@@ -1210,7 +1223,7 @@ function m2_shell(    buf, delim, save_line, save_lineno, sendto)
     }
 
     buf = read_lines_until(delim)
-    if (buf == EOF)
+    if (buf == EoF_marker)
         error("Delimiter '" delim "' not found:" save_line, save_lineno)
     print dosubs(buf) | sendto
     close(sendto)
@@ -1251,7 +1264,7 @@ function m2_undef(    sym)
     if (sym_protected_p(sym))
         error("Symbol '" sym "' protected:" $0)
     assert_valid_symbol_name(sym)
-    sym_delete(sym)
+    sym_remove(sym)
 }
 
 
@@ -1319,7 +1332,7 @@ function dofile(filename, read_literally,    savefile, saveline, savebuffer)
 # processors examine the newly created text for any additional macro
 # names.  Only after all expanded text has been processed and sent to
 # the output does the program get a fresh line of input.
-# Return EOF or "" (null string)
+# Return EoF_marker or "" (null string)
 function readline(    getstat, i, status)
 {
     status = READLINE_OK
@@ -1922,7 +1935,7 @@ function setup_prog_paths()
 
 
 # Nothing here is user-customizable
-function initialize(    d, dateout, egid, euid, host, hostname, osname, user)
+function initialize(    d, dateout)
 {
     TRUE              =  1
     FALSE             =  0
@@ -1940,9 +1953,10 @@ function initialize(    d, dateout, egid, euid, host, hostname, osname, user)
     EX_USAGE          = 64
     EX_NOINPUT        = 66
 
+    EoF_marker        = build_subsep("EoF1", "EoF2") # Unlikely to occur in normal text
     exit_code         = EX_OK
-    EOF               = build_subsep("EoF1", "EoF2") # Unlikely to occur in normal text
-    init_files_loaded = FALSE
+    init_deferred     = TRUE    # becomes FALSE in initialize_run_deferred()
+    init_files_loaded = FALSE   # becomes TRUE in load_init_files()
     ifdepth           =  0
     active[ifdepth]   = TRUE
     _fencepost        =  1
@@ -1950,44 +1964,74 @@ function initialize(    d, dateout, egid, euid, host, hostname, osname, user)
 
     srand()                     # Seed random number generator
     setup_prog_paths()
+
+    # Always capture run start time
     build_prog_cmdline("date", "+'%Y %m %d %H %M %S %z'") | getline dateout
-    build_prog_cmdline("id", "-g")                        | getline egid
-    build_prog_cmdline("id", "-u")                        | getline euid
-    build_prog_cmdline("hostname", "-s")                  | getline host
-    build_prog_cmdline("hostname")                        | getline hostname
-    build_prog_cmdline("uname", "-s")                     | getline osname
-    build_prog_cmdline("id", "-un")                       | getline user
     split(dateout, d)
 
     sym_store("__DATE__",               d[1] d[2] d[3])
-    sym2_store("__FTIME__", "date",     "%Y-%m-%d")
-    sym2_store("__FTIME__", "time",     "%H:%M:%S")
-    sym2_store("__FTIME__", "tz",       "%Z")
-    sym2_store("__GENSYM__", "count",   0)
-    sym2_store("__GENSYM__", "prefix",  "_gen")
-    sym_store("__GID__",                egid)
-    sym_store("__HOST__",               host)
-    sym_store("__HOSTNAME__",           hostname)
-    sym_store("__INPUT__",              "")
-    sym_store("__M2_UUID__",            uuid())
-    sym_store("__M2_VERSION__",         version)
     sym_store("__NFILE__",              0)
-    sym_store("__OSNAME__",             osname)
-    sym_store("__SCALE__",              6)
     sym_store("__STRICT__",             TRUE)
     sym_store("__TIME__",               d[4] d[5] d[6])
     sym_store("__TIMESTAMP__",          d[1] "-" d[2] "-" d[3] "T" \
                                         d[4] ":" d[5] ":" d[6] d[7])
     sym_store("__TZ__",                 d[7])
-    sym_store("__UID__",                euid)
-    sym_store("__USER__",               user)
 
-    unprotected_syms["__DBG__"]    = TRUE
-    unprotected_syms["__FTIME__"]  = TRUE
-    unprotected_syms["__INPUT__"]  = TRUE
-    unprotected_syms["__SCALE__"]  = TRUE
-    unprotected_syms["__STRICT__"] = TRUE
-    unprotected_syms["__TMPDIR__"] = TRUE
+    # These symbols' definitions are deferred until needed, because
+    # initialization requires a relatively expensive subprocess.
+    deferred_syms["__FTIME__[date]"]    = TRUE
+    deferred_syms["__FTIME__[time]"]    = TRUE
+    deferred_syms["__FTIME__[tz]"]      = TRUE
+    deferred_syms["__GENSYM__[count]"]  = TRUE
+    deferred_syms["__GENSYM__[prefix]"] = TRUE
+    deferred_syms["__GID__"]            = TRUE
+    deferred_syms["__HOST__"]           = TRUE
+    deferred_syms["__HOSTNAME__"]       = TRUE
+    deferred_syms["__INPUT__"]          = TRUE
+    deferred_syms["__M2_UUID__"]        = TRUE
+    deferred_syms["__M2_VERSION__"]     = TRUE
+    deferred_syms["__OSNAME__"]         = TRUE
+    deferred_syms["__SCALE__"]          = TRUE
+    deferred_syms["__UID__"]            = TRUE
+    deferred_syms["__USER__"]           = TRUE
+
+    # These symbols can be modified by the user
+    unprotected_syms["__DBG__"]         = TRUE
+    unprotected_syms["__FTIME__"]       = TRUE
+    unprotected_syms["__INPUT__"]       = TRUE
+    unprotected_syms["__SCALE__"]       = TRUE
+    unprotected_syms["__STRICT__"]      = TRUE
+    unprotected_syms["__TMPDIR__"]      = TRUE
+}
+
+
+# The code here is relatively expensive, so it's only run on-demand.
+function initialize_run_deferred(    gid, host, hostname, osname, uid, user)
+{
+    init_deferred = FALSE
+
+    build_prog_cmdline("id", "-g")       | getline gid
+    build_prog_cmdline("hostname", "-s") | getline host
+    build_prog_cmdline("hostname")       | getline hostname
+    build_prog_cmdline("uname", "-s")    | getline osname
+    build_prog_cmdline("id", "-u")       | getline uid
+    build_prog_cmdline("id", "-un")      | getline user
+
+    sym2_store("__FTIME__", "date",     "%Y-%m-%d")
+    sym2_store("__FTIME__", "time",     "%H:%M:%S")
+    sym2_store("__FTIME__", "tz",       "%Z")
+    sym2_store("__GENSYM__", "count",   0)
+    sym2_store("__GENSYM__", "prefix",  "_gen")
+    sym_store("__GID__",                gid)
+    sym_store("__HOST__",               host)
+    sym_store("__HOSTNAME__",           hostname)
+    sym_store("__INPUT__",              "")
+    sym_store("__M2_UUID__",            uuid())
+    sym_store("__M2_VERSION__",         version)
+    sym_store("__OSNAME__",             osname)
+    sym_store("__SCALE__",              6)
+    sym_store("__UID__",                uid)
+    sym_store("__USER__",               user)
 }
 
 

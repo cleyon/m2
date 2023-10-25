@@ -1721,12 +1721,18 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
             # Expand $N parameters (includes $0 for macro name)
             j = MAX_PARAM   # but don't go overboard with params
             # Count backwards to get around $10 problem.
-            while (j-- >= 0)
-                if (index(expand, "$" j) != IDX_NOT_FOUND) { # i.e., "found"
+            while (j-- >= 0) {
+                if (index(expand, "$\{" j "\}") != IDX_NOT_FOUND) {
+                    if (j > nparam)
+                        error("Parameter " j " not supplied in '" m "':" $0)
+                    gsub("\\$\\{" j "\\}", param[j + _fencepost], expand)
+                 }
+                if (index(expand, "$" j) != IDX_NOT_FOUND) {
                     if (j > nparam)
                         error("Parameter " j " not supplied in '" m "':" $0)
                     gsub("\\$" j, param[j + _fencepost], expand)
                 }
+            }
             r = expand r
 
         # Throw an error on undefined symbol (strict-only)

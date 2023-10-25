@@ -217,7 +217,7 @@
 #           Symbol 'XXX' invalid name
 #               - A symbol name does not pass validity check.  In __STRICT__
 #                 mode (the default), a symbol name may only contain letters,
-#                 digits, #, $, or _ characters.
+#                 digits, #, -, or _ characters.
 #           Symbol 'XXX' not defined
 #               - A symbol name without a value was passed to a function
 #               - An undefined macro was referenced and __STRICT__ is true.
@@ -529,7 +529,7 @@ function sym_true_p(sym)
 }
 
 # In strict mode, a symbol must match the following regexp:
-#       /^[A-Za-z#$_][A-Za-z#$_0-9]*$/
+#       /^[A-Za-z#_][-A-Za-z#_0-9]*$/
 # In non-strict mode, any non-empty string is valid.
 function sym_valid_p(sym,    result, lbracket, rbracket, sym_root, sym_key)
 {
@@ -553,7 +553,7 @@ function sym_valid_p(sym,    result, lbracket, rbracket, sym_root, sym_key)
         }
 
         # 3. We're in strict mode and the name doesn't pass regexp check
-        if (strictp() && sym !~ /^[A-Za-z#$_][A-Za-z#$_0-9]*$/)
+        if (strictp() && sym !~ /^[A-Za-z#_][-A-Za-z#_0-9]*$/)
             break
 
         # We've passed all the tests
@@ -1359,7 +1359,7 @@ function readline(    getstat, i, status)
     # Hack: allow @Mname at start of line without a closing @.
     # This only applies if in non-strict mode.  Note, macro name must
     # start with a capital letter and must not be passed any parameters.
-    if (! strictp() && ($0 ~ /^@[A-Z][A-Za-z#$_0-9]*[ \t]*$/))
+    if (! strictp() && ($0 ~ /^@[A-Z][-A-Za-z#_0-9]*[ \t]*$/))
         sub(/[ \t]*$/, "@")
     return status
 }

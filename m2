@@ -72,13 +72,19 @@
 #           @warn [TEXT]           Send TEXT to standard error; continue
 #                                    Also called @echo, @stderr
 #
-#       A definition may extend across many lines by ending each line
-#       with a backslash, thus quoting the following newline.
+#       A definition may extend across multiple lines by ending each
+#       line with a backslash, thus quoting the following newline.
 #       (Alternatively, use @longdef.)  Short macros can be defined on
 #       the command line by using the form "NAME=VAL", or "NAME=" to
-#       define with empty value.  Any occurrence of @name@ in the input
-#       is replaced in the output by the corresponding value.  They can
-#       occur multiple times in a single line.
+#       define with empty value (NAME will be defined but false).
+#
+#       m2 does not scan tokens or replace unadorned text: macro
+#       substitution must be explicitly requested by enclosing the macro
+#       name in "@" characters.  Thus, any occurrence of @name@ in the
+#       input is replaced in the output by the corresponding value.  On
+#       the other hand, there is no need to `quote' any identifiers to
+#       protect against inadvertent replacement.  Various substitutions
+#       can occur multiple times in a single line.
 #
 #       Example:
 #           @define Condition under
@@ -87,12 +93,14 @@
 #
 #       Specifying more than one word between @ signs, as in
 #           @xxxx AA BB CC@
+
 #       is used as a crude form of function invocation.  Macros can
 #       expand positional parameters whose actual values will be
 #       supplied when the macro is called.  The definition should refer
-#       to $1, $2, etc.  $0 refers to the name of the macro itself.  You
-#       may supply more parameters than needed, but it is an error if
-#       a definition refers to a parameter which is not supplied.
+#       to $1, $2, etc.  ${1} also works, so ${1}1 is distinguishable
+#       from $11.  $0 refers to the name of the macro itself.  You may
+#       supply more parameters than needed, but it is an error if a
+#       definition refers to a parameter which is not supplied.
 #
 #       Example:
 #           @define greet Hello, $1!  m2 sends you $0ings.
@@ -139,6 +147,8 @@
 #       cannot be modified by the user.  The following are pre-defined;
 #       example values or defaults are shown:
 #
+#           __BOOL__[0]       [**] Output when @boolval@ is false ("0")
+#           __BOOL__[1]       [**] Output when @boolval@ is true ("1")
 #           __DATE__               m2 run start date as YYYYMMDD (eg 19450716)
 #           __DBG__[<id>]     [**] Debugging levels for m2 systems
 #           __EPOCH__              Seconds since Epoch at m2 run start time
@@ -196,6 +206,8 @@
 #               - Single quotes not allowed in __FTIME__ format string.
 #           Duplicate '@else' not allowed
 #               - More than one @else found in a single @if block.
+#           Empty symbol table
+#               - A @dump command found no definitions to display.
 #           Environment variable 'XXX' invalid name
 #               - Environment variable name does not pass validity check.
 #           Environment variable 'XXX' not defined
@@ -875,9 +887,16 @@ function m2_dump(    buf, cnt, definition, dumpfile, i, key, keys, sym_name, all
         }
     }
     buf = chop(buf)
-    if (length(buf) > 0)
+    if (length(buf) > 0) {
         print buf > dumpfile    # More portable: print_stderr(buf)
-    close(dumpfile)
+        close(dumpfile)
+    } else
+        # I don't usually condone chatty programs, but it seems to me
+        # that if the user asks for the symbol table and there's nothing
+        # to print, she'd probably like to know.  Perhaps a config file
+        # was not read properly...  Still, we only warn in strict mode.
+        if (strictp())
+            warn("Empty symbol table:" $0)
 }
 
 
@@ -1376,40 +1395,40 @@ function process_line(read_literally,    newstring)
 
     # Look for built-in control commands.
     # Note, these only match at beginning of line.
-    if      (/^@(@|#)/)                  { } # Comments are ignored
-    else if (/^@append([ \t]|$)/)        { m2_define() }
-    else if (/^@c(omment)?([ \t]|$)/)    { } # Comments are ignored
-    else if (/^@decr([ \t]|$)/)          { m2_incr() }
-    else if (/^@default([ \t]|$)/)       { m2_default() }
-    else if (/^@define([ \t]|$)/)        { m2_define() }
-    else if (/^@dump(all)?([ \t]|$)/)    { m2_dump() }
-    else if (/^@echo([ \t]|$)/)          { m2_error() }
-    else if (/^@else([ \t]|$)/)          { m2_else() }
-    else if (/^@endif([ \t]|$)/)         { m2_endif() }
-    else if (/^@error([ \t]|$)/)         { m2_error() }
-    else if (/^@exit([ \t]|$)/)          { m2_exit() }
-    else if (/^@fi([ \t]|$)/)            { m2_endif() }
+    if      (/^@(@|#)/)                   { } # Comments are ignored
+    else if (/^@append([ \t]|$)/)         { m2_define() }
+    else if (/^@c(omment)?([ \t]|$)/)     { } # Comments are ignored
+    else if (/^@decr([ \t]|$)/)           { m2_incr() }
+    else if (/^@default([ \t]|$)/)        { m2_default() }
+    else if (/^@define([ \t]|$)/)         { m2_define() }
+    else if (/^@dump(all|def)?([ \t]|$)/) { m2_dump() }
+    else if (/^@echo([ \t]|$)/)           { m2_error() }
+    else if (/^@else([ \t]|$)/)           { m2_else() }
+    else if (/^@endif([ \t]|$)/)          { m2_endif() }
+    else if (/^@err(or|print)([ \t]|$)/)  { m2_error() }
+    else if (/^@(m2)?exit([ \t]|$)/)      { m2_exit() }
+    else if (/^@fi([ \t]|$)/)             { m2_endif() }
     else if (/^@if(_not)?(_(defined|env|exists|in))?([ \t]|$)/)
-                                         { m2_if() }
-    else if (/^@ifn?def([ \t]|$)/)       { m2_if() }
-    else if (/^@ignore([ \t]|$)/)        { m2_ignore() }
-    else if (/^@include([ \t]|$)/)       { m2_include() }
-    else if (/^@incr([ \t]|$)/)          { m2_incr() }
-    else if (/^@init(ialize)?([ \t]|$)/) { m2_default() }
-    else if (/^@input([ \t]|$)/)         { m2_input() }
-    else if (/^@let([ \t]|$)/)           { m2_let() }
-    else if (/^@longdef([ \t]|$)/)       { m2_longdef() }
-    else if (/^@longend([ \t]|$)/)       { m2_longend() }
-    else if (/^@paste([ \t]|$)/)         { m2_include() }
-    else if (/^@read([ \t]|$)/)          { m2_read() }
-    else if (/^@rem([ \t]|$)/)           { } # Comments are ignored
-    else if (/^@shell([ \t]|$)/)         { m2_shell() }
-    else if (/^@sleep([ \t]|$)/)         { m2_sleep() }
-    else if (/^@stderr([ \t]|$)/)        { m2_error() }
-    else if (/^@typeout([ \t]|$)/)       { m2_typeout() }
-    else if (/^@undef(ine)?([ \t]|$)/)   { m2_undef() }
-    else if (/^@unless([ \t]|$)/)        { m2_if() }
-    else if (/^@warn([ \t]|$)/)          { m2_error() }
+                                          { m2_if() }
+    else if (/^@ifn?def([ \t]|$)/)        { m2_if() }
+    else if (/^@ignore([ \t]|$)/)         { m2_ignore() }
+    else if (/^@include([ \t]|$)/)        { m2_include() }
+    else if (/^@incr([ \t]|$)/)           { m2_incr() }
+    else if (/^@init(ialize)?([ \t]|$)/)  { m2_default() }
+    else if (/^@input([ \t]|$)/)          { m2_input() }
+    else if (/^@let([ \t]|$)/)            { m2_let() }
+    else if (/^@longdef([ \t]|$)/)        { m2_longdef() }
+    else if (/^@longend([ \t]|$)/)        { m2_longend() }
+    else if (/^@paste([ \t]|$)/)          { m2_include() }
+    else if (/^@read([ \t]|$)/)           { m2_read() }
+    else if (/^@rem([ \t]|$)/)            { } # Comments are ignored
+    else if (/^@shell([ \t]|$)/)          { m2_shell() }
+    else if (/^@sleep([ \t]|$)/)          { m2_sleep() }
+    else if (/^@stderr([ \t]|$)/)         { m2_error() }
+    else if (/^@typeout([ \t]|$)/)        { m2_typeout() }
+    else if (/^@undef(ine)?([ \t]|$)/)    { m2_undef() }
+    else if (/^@unless([ \t]|$)/)         { m2_if() }
+    else if (/^@warn([ \t]|$)/)           { m2_error() }
 
     # Process @
     else {
@@ -1516,21 +1535,24 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
             close(cmd)
             r = expand r
 
-        # boolval SYM: Print "1" if SYM is true, else "0"
-        #   @boolval SYM@ => "0" or "1"
-        # If the symbol is not defined, the behavior is as follows:
-        # In strict mode, it is an error if the symbols is not defined.
-        # In non-strict mode, you get a "0" even if not defined.
+        # boolval SYM: Print __BOOL__[0 or 1], depending on SYM truthiness.
+        #   @boolval SYM@ => <string>
+        # The actual output is taken from __BOOL__[].  The defaults are
+        # "1" and "0", but a Fortran programmer might change them to
+        # ".TRUE." and ".FALSE.", while a Lisp programmer might change
+        # them to "t" and "nil".  If the symbol SYM is not defined:
+        #  - In strict mode, throw an error if the symbol is not defined.
+        #  - In non-strict mode, you get a 'false' output if not defined.
         } else if (symfunc == "boolval") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
             p = param[1 + _fencepost]
             assert_valid_symbol_name(p)
             if (sym_defined_p(p))
-                r = (sym_true_p(p) ? "1" : "0") r
+                r = sym2_fetch("__BOOL__", sym_true_p(p)) r
             else if (strictp())
                 error("Symbol '" p "' not defined [boolval]:" $0)
             else
-                r = "0" r
+                r = sym2_fetch("__BOOL__", FALSE) r
 
         # date  : Current date as YYYY-MM-DD
         # epoch : Number of seconds since Epoch
@@ -1641,13 +1663,13 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
         #   @mid ALPHABET 15 5@ => OPQRS
         #   @mid FOO 3@
         #   @mid FOO 2 2@
-        } else if (symfunc == "mid") {
+        } else if (symfunc == "mid" || symfunc == "substr") {
             if (nparam < 2 || nparam > 3)
                 error("Bad parameters in '" m "':" $0)
             p = param[1 + _fencepost]
             assert_valid_symbol_name(p)
             if (! sym_defined_p(p))
-                error("Symbol '" p "' not defined [substr]:" $0)
+                error("Symbol '" p "' not defined [mid]:" $0)
             x = param[2 + _fencepost]
             if (! integerp(x))
                 error("Value '" x "' must be numeric:" $0)
@@ -1970,13 +1992,25 @@ function initialize(    d, dateout)
     srand()                     # Seed random number generator
     setup_prog_paths()
 
-    # Capture m2 run start time   1  2  3  4  5  6  7  8
+    # Capture m2 run start time.  1  2  3  4  5  6  7  8
     build_prog_cmdline("date", "+'%Y %m %d %H %M %S %z %s'") | getline dateout
     split(dateout, d)
 
+    sym2_store("__BOOL__", TRUE,        "1")
+    sym2_store("__BOOL__", FALSE,       "0")
     sym_store("__DATE__",               d[1] d[2] d[3])
     sym_store("__EPOCH__",              d[8])
+    sym2_store("__FTIME__", "date",     "%Y-%m-%d")
+    sym2_store("__FTIME__", "epoch",    "%s")
+    sym2_store("__FTIME__", "time",     "%H:%M:%S")
+    sym2_store("__FTIME__", "tz",       "%Z")
+    sym2_store("__GENSYM__", "count",   0)
+    sym2_store("__GENSYM__", "prefix",  "_gen")
+    sym_store("__INPUT__",              "")
+    sym_store("__M2_UUID__",            uuid())
+    sym_store("__M2_VERSION__",         version)
     sym_store("__NFILE__",              0)
+    sym_store("__SCALE__",              6)
     sym_store("__STRICT__",             TRUE)
     sym_store("__TIME__",               d[4] d[5] d[6])
     sym_store("__TIMESTAMP__",          d[1] "-" d[2] "-" d[3] "T" \
@@ -1984,25 +2018,16 @@ function initialize(    d, dateout)
     sym_store("__TZ__",                 d[7])
 
     # These symbols' definitions are deferred until needed, because
-    # initialization requires a relatively expensive subprocess.
-    deferred_syms["__FTIME__[date]"]    = TRUE
-    deferred_syms["__FTIME__[epoch]"]   = TRUE
-    deferred_syms["__FTIME__[time]"]    = TRUE
-    deferred_syms["__FTIME__[tz]"]      = TRUE
-    deferred_syms["__GENSYM__[count]"]  = TRUE
-    deferred_syms["__GENSYM__[prefix]"] = TRUE
+    # initialization requires several relatively expensive subprocesses.
     deferred_syms["__GID__"]            = TRUE
     deferred_syms["__HOST__"]           = TRUE
     deferred_syms["__HOSTNAME__"]       = TRUE
-    deferred_syms["__INPUT__"]          = TRUE
-    deferred_syms["__M2_UUID__"]        = TRUE
-    deferred_syms["__M2_VERSION__"]     = TRUE
     deferred_syms["__OSNAME__"]         = TRUE
-    deferred_syms["__SCALE__"]          = TRUE
     deferred_syms["__UID__"]            = TRUE
     deferred_syms["__USER__"]           = TRUE
 
     # These symbols can be modified by the user
+    unprotected_syms["__BOOL__"]        = TRUE
     unprotected_syms["__DBG__"]         = TRUE
     unprotected_syms["__FTIME__"]       = TRUE
     unprotected_syms["__INPUT__"]       = TRUE
@@ -2012,7 +2037,9 @@ function initialize(    d, dateout)
 }
 
 
-# The code here is relatively expensive, so it's only run on-demand.
+# The code here requires invoking several subprocesses, a somewhat slow
+# operation.  Since these features may not be used often, they are run
+# only on-demand in order to speed up general usage.
 function initialize_run_deferred(    gid, host, hostname, osname, uid, user)
 {
     init_deferred = FALSE
@@ -2024,20 +2051,10 @@ function initialize_run_deferred(    gid, host, hostname, osname, uid, user)
     build_prog_cmdline("id", "-u")       | getline uid
     build_prog_cmdline("id", "-un")      | getline user
 
-    sym2_store("__FTIME__", "date",     "%Y-%m-%d")
-    sym2_store("__FTIME__", "epoch",    "%s")
-    sym2_store("__FTIME__", "time",     "%H:%M:%S")
-    sym2_store("__FTIME__", "tz",       "%Z")
-    sym2_store("__GENSYM__", "count",   0)
-    sym2_store("__GENSYM__", "prefix",  "_gen")
     sym_store("__GID__",                gid)
     sym_store("__HOST__",               host)
     sym_store("__HOSTNAME__",           hostname)
-    sym_store("__INPUT__",              "")
-    sym_store("__M2_UUID__",            uuid())
-    sym_store("__M2_VERSION__",         version)
     sym_store("__OSNAME__",             osname)
-    sym_store("__SCALE__",              6)
     sym_store("__UID__",                uid)
     sym_store("__USER__",               user)
 }

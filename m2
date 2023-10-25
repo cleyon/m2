@@ -93,7 +93,6 @@
 #
 #       Specifying more than one word between @ signs, as in
 #           @xxxx AA BB CC@
-
 #       is used as a crude form of function invocation.  Macros can
 #       expand positional parameters whose actual values will be
 #       supplied when the macro is called.  The definition should refer
@@ -327,7 +326,7 @@ BEGIN {
 #
 #*****************************************************************************
 
-function format_message(text, line, file)
+function format_message(text, line, file,    s)
 {
     if (line == "")
         line = sym_fetch("__LINE__")
@@ -336,7 +335,10 @@ function format_message(text, line, file)
     if (file == "/dev/stdin" || file == "-")
         file = "<STDIN>"
 
-    return file ":" line  ":" text
+    if (file) { s = s file ":" }
+    if (line) { s = s line ":" }
+    if (text) { s = s text     }
+    return s                    # file ":" line  ":" text
 }
 
 
@@ -494,6 +496,16 @@ function sym_printable_form(sym,    sep, arr, key)
         return sym
     arr = substr(sym, 1, sep-1)
     key = substr(sym, sep+1)
+    return sym2_printable_form(arr, key)
+}
+
+# Convert an array name and key into a nice, user-friendly format, usually for
+# printing (i.e., put the array-looking brackets back if needed).
+#       (arr, key)  =>  "arr[key]"
+# Since we're calling with the 2-arg form, it is known there is 
+# no <SUBSEP> present, so the strings can be used raw safely.
+function sym2_printable_form(arr, key)
+{
     return arr "[" key "]"
 }
 
@@ -535,7 +547,7 @@ function sym_system_p(sym)
 
 function sym_true_p(sym)
 {
-    return (sym_defined_p(sym)    &&
+    return (sym_defined_p(sym)      &&
             sym_fetch(sym) != FALSE &&
             sym_fetch(sym) != "")
 }
@@ -575,6 +587,34 @@ function sym_valid_p(sym,    result, lbracket, rbracket, sym_root, sym_key)
     return result
 }
 
+####    Assertions on symbols
+
+# Throw an error if symbol is NOT defined
+function assert_sym_defined(sym, hint,    s)
+{
+    if (sym_defined_p(sym))
+        return TRUE
+    s = sprintf("Symbol '%s' not defined%s%s",  sym,
+                ((hint != "")     ? " [" hint "]" : ""),
+                ((length($0) > 0) ? ":" $0        : "") )
+    error(s)
+}
+
+# Throw an error if symbol IS protected
+function assert_sym_unprotected(sym)
+{
+    if (! sym_protected_p(sym))
+        return TRUE
+    error("Symbol '" sym "' protected:" $0)
+}
+
+# Throw an error if the symbol name is NOT valid
+function assert_sym_valid_name(sym)
+{
+    if (sym_valid_p(sym))
+        return TRUE
+    error("Symbol '" sym "' invalid name:" $0)
+}
 
 #*****************************************************************************
 #
@@ -601,14 +641,6 @@ function assert_valid_env_var_name(var)
     if (env_var_name_valid_p(var))
         return TRUE
     error("Environment variable '" var "' invalid name:" $0)
-}
-
-# Throw an error if the symbol is not valid
-function assert_valid_symbol_name(sym)
-{
-    if (sym_valid_p(sym))
-        return TRUE
-    error("Symbol '" sym "' invalid name:" $0)
 }
 
 
@@ -653,8 +685,7 @@ function strictp()
 
 function build_prog_cmdline(prog, arg, silent)
 {
-    if (! sym2_defined_p("__PROG__", prog))
-        error("Symbol '__PROG__[" prog "]' not defined [build_prog_cmdline]:" $0)
+    assert_sym_defined(sym2_printable_form("__PROG__", prog), "build_prog_cmdline")
     return sprintf("%s %s%s", \
                    sym2_fetch("__PROG__", prog), \
                    arg, \
@@ -664,8 +695,7 @@ function build_prog_cmdline(prog, arg, silent)
 
 function exec_prog_cmdline(prog, arg,    sym)
 {
-    if (! sym2_defined_p("__PROG__", prog))
-        error("Symbol '__PROG__[" prog "]' not defined [exec_prog_cmdline]:" $0)
+    assert_sym_defined(sym2_printable_form("__PROG__", prog), "exec_prog_cmdline")
     return system(build_prog_cmdline(prog, arg, TRUE)) # always silent
 }
 
@@ -820,9 +850,8 @@ function m2_default(    sym)
     if (! currently_active_p())
         return
     sym = $2
-    if (sym_protected_p(sym))
-        error("Symbol '" sym "' protected:" $0)
-    assert_valid_symbol_name(sym)
+    assert_sym_valid_name(sym)
+    assert_sym_unprotected(sym)
     if (sym_defined_p(sym)) {
         if ($1 == "@init" || $1 == "@initialize")
             error("Symbol '" sym "' already defined:" $0)
@@ -838,11 +867,10 @@ function m2_define(    append_flag, sym)
         error("Bad parameters:" $0)
     if (! currently_active_p())
         return
-    sym = $2
-    if (sym_protected_p(sym))
-        error("Symbol '" sym "' protected:" $0)
-    assert_valid_symbol_name(sym)
     append_flag = ($1 == "@append")
+    sym = $2
+    assert_sym_valid_name(sym)
+    assert_sym_unprotected(sym)
     dodef(append_flag)
 }
 
@@ -962,15 +990,15 @@ function m2_if(    sym, cond, op, val2, val4)
             # @if [!]FOO
             if (first($2) == "!") {
                 sym = substr($2, 2)
-                assert_valid_symbol_name(sym)
+                assert_sym_valid_name(sym)
                 cond = ! sym_true_p(sym)
             } else {
-                assert_valid_symbol_name($2)
+                assert_sym_valid_name($2)
                 cond = sym_true_p($2)
             }
         } else if (NF == 3 && $2 == "!") {
             # @if ! FOO
-            assert_valid_symbol_name($3)
+            assert_sym_valid_name($3)
             cond = ! sym_true_p($3)
         } else if (NF == 4) {
             # @if FOO <op> BAR
@@ -991,17 +1019,17 @@ function m2_if(    sym, cond, op, val2, val4)
 
     } else if ($1 == "if_not" || $1 == "unless") {
         if (NF < 2) error("Bad parameters:" $0)
-        assert_valid_symbol_name($2)
+        assert_sym_valid_name($2)
         cond = ! sym_true_p($2)
 
     } else if ($1 == "if_defined" || $1 == "ifdef") {
         if (NF < 2) error("Bad parameters:" $0)
-        assert_valid_symbol_name($2)
+        assert_sym_valid_name($2)
         cond = sym_defined_p($2)
 
     } else if ($1 == "if_not_defined" || $1 == "ifndef") {
         if (NF < 2) error("Bad parameters:" $0)
-        assert_valid_symbol_name($2)
+        assert_sym_valid_name($2)
         cond = ! sym_defined_p($2)
 
     } else if ($1 == "if_env") {
@@ -1028,12 +1056,12 @@ function m2_if(    sym, cond, op, val2, val4)
     } else if ($1 == "if_in") {   # @if_in us-east-1 VALID_REGIONS
         # @if_in KEY ARR
         if (NF < 3) error("Bad parameters:" $0)
-        assert_valid_symbol_name($3)
+        assert_sym_valid_name($3)
         cond = sym2_defined_p($3, $2)
 
     } else if ($1 == "if_not_in") {
         if (NF < 3) error("Bad parameters:" $0)
-        assert_valid_symbol_name($3)
+        assert_sym_valid_name($3)
         cond = ! sym2_defined_p($3, $2)
 
     } else
@@ -1095,13 +1123,11 @@ function m2_incr(    incr, sym)
     if (! currently_active_p())
         return
     sym = $2
-    if (sym_protected_p(sym))
-        error("Symbol '" sym "' protected:" $0)
+    assert_sym_valid_name(sym)
+    assert_sym_unprotected(sym)
+    assert_sym_defined(sym, "incr")
     if (NF >= 3 && ! integerp($3))
         error("Value '" $3 "' must be numeric:" $0)
-    assert_valid_symbol_name(sym)
-    if (! sym_defined_p(sym))
-        error("Symbol '" sym "' not defined [incr]:" $0)
     incr = (NF >= 3) ? $3 : 1
     sym_increment(sym, ($1 == "@incr") ? incr : -incr)
 }
@@ -1116,9 +1142,8 @@ function m2_input(    getstat, input, sym)
     if (! currently_active_p())
         return
     sym = (NF < 2) ? "__INPUT__" : $2
-    if (sym_protected_p(sym))
-        error("Symbol '" sym "' protected:" $0)
-    assert_valid_symbol_name(sym)
+    assert_sym_valid_name(sym)
+    assert_sym_unprotected(sym)
     getstat = getline input < "/dev/tty"
     if (getstat < 0) {
         warn("Error reading '/dev/tty' [input]:" $0)
@@ -1138,6 +1163,8 @@ function m2_let(    sym, math, bcfile, val, cmd)
         return
 
     sym = $2
+    assert_sym_valid_name(sym)
+    assert_sym_unprotected(sym)
     sub(/^[ \t]*[^ \t]+[ \t]+[^ \t]+[ \t]*/, "")
     math = "scale=" sym_fetch("__SCALE__") "; " dosubs($0)
     bcfile = tmpdir() "m2-bcfile." sym_fetch("__M2_UUID__")
@@ -1168,9 +1195,8 @@ function m2_longdef(    buf, save_line, save_lineno, sym)
     save_line = $0
     save_lineno = sym_fetch("__LINE__")
     sym = $2
-    if (sym_protected_p(sym))
-        error("Symbol '" sym "' protected:" $0)
-    assert_valid_symbol_name(sym)
+    assert_sym_valid_name(sym)
+    assert_sym_unprotected(sym)
     buf = read_lines_until("@longend")
     if (buf == EoF_marker)
         error("Delimiter '@longend' not found:" save_line, save_lineno)
@@ -1199,9 +1225,8 @@ function m2_read(    sym, filename, line, val, getstat)
     if (! currently_active_p())
         return
     sym  = $2
-    assert_valid_symbol_name(sym)
-    if (sym_protected_p(sym))
-        error("Symbol '" sym "' protected:" $0)
+    assert_sym_valid_name(sym)
+    assert_sym_unprotected(sym)
     $1 = $2 = ""
     sub("^[ \t]*", "")
     filename = rm_quotes(dosubs($0))
@@ -1280,10 +1305,8 @@ function m2_undef(    sym)
     if (! currently_active_p())
         return
     sym = sym_root($2)
-    # Prevent user from deleting ANY system symbol, not just protected ones
-    if (sym_protected_p(sym))
-        error("Symbol '" sym "' protected:" $0)
-    assert_valid_symbol_name(sym)
+    assert_sym_valid_name(sym)
+    assert_sym_unprotected(sym)
     sym_destroy(sym)
 }
 
@@ -1528,9 +1551,9 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
         if (symfunc == "basename") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
             p = param[1 + _fencepost]
-            if (sym_valid_p(p) && sym_defined_p(p))
-                p = sym_fetch(p)
-            cmd = build_prog_cmdline("basename", rm_quotes(p))
+            assert_sym_valid_name(p)
+            assert_sym_defined(p, "basename")
+            cmd = build_prog_cmdline("basename", rm_quotes(sym_fetch(p)))
             cmd | getline expand
             close(cmd)
             r = expand r
@@ -1546,7 +1569,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
         } else if (symfunc == "boolval") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
             p = param[1 + _fencepost]
-            assert_valid_symbol_name(p)
+            assert_sym_valid_name(p)
             if (sym_defined_p(p))
                 r = sym2_fetch("__BOOL__", sym_true_p(p)) r
             else if (strictp())
@@ -1576,16 +1599,16 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
         } else if (symfunc == "dirname") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
             p = param[1 + _fencepost]
-            if (sym_valid_p(p) && sym_defined_p(p))
-                p = sym_fetch(p)
-            cmd = build_prog_cmdline("dirname", rm_quotes(p))
+            assert_sym_valid_name(p)
+            assert_sym_defined(p, "dirname")
+            cmd = build_prog_cmdline("dirname", rm_quotes(sym_fetch(p)))
             cmd | getline expand
             close(cmd)
             r = expand r
 
         # gensym ...: Generate symbol
-        #   @gensym@        => _gen0
-        #   @gensym 42@     => (prefix unchanged, count now 42) => _gen42
+        #   @gensym@        => _sym0
+        #   @gensym 42@     => (prefix unchanged, count now 42) => _sym42
         #   @gensym foo 42@ => (prefix now "foo", count now 42) => foo42
         } else if (symfunc == "gensym") {
             if (nparam == 1) {
@@ -1601,7 +1624,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
                 if (! integerp(y))
                     error("Value '" y "' must be numeric:" $0)
                 # Make sure the new requested prefix is valid
-                assert_valid_symbol_name(x)
+                assert_sym_valid_name(x)
                 sym2_store("__GENSYM__", "prefix", x)
                 sym2_store("__GENSYM__", "count",  y)
             } else if (nparam > 2)
@@ -1628,9 +1651,8 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
         } else if (symfunc == "lc") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
             p = param[1 + _fencepost]
-            assert_valid_symbol_name(p)
-            if (! sym_defined_p(p))
-                error("Symbol '" p "' not defined [lc]:" $0)
+            assert_sym_valid_name(p)
+            assert_sym_defined(p, "lc")
             r = tolower(sym_fetch(p)) r
 
         # left : Left (substring)
@@ -1638,9 +1660,8 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
         } else if (symfunc == "left") {
             if (nparam < 1 || nparam > 2) error("Bad parameters in '" m "':" $0)
             p = param[1 + _fencepost]
-            assert_valid_symbol_name(p)
-            if (! sym_defined_p(p))
-                error("Symbol '" p "' not defined [left]:" $0)
+            assert_sym_valid_name(p)
+            assert_sym_defined(p, "left")
             x = 1
             if (nparam == 2) {
                 x = param[2 + _fencepost]
@@ -1654,9 +1675,8 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
         } else if (symfunc == "len") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
             p = param[1 + _fencepost]
-            assert_valid_symbol_name(p)
-            if (! sym_defined_p(p))
-                error("Symbol '" p "' not defined [len]:" $0)
+            assert_sym_valid_name(p)
+            assert_sym_defined(p, "len")
             r = length(sym_fetch(p)) r
 
         # mid : Substring ...  SYMBOL, START[, LENGTH]
@@ -1667,9 +1687,8 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
             if (nparam < 2 || nparam > 3)
                 error("Bad parameters in '" m "':" $0)
             p = param[1 + _fencepost]
-            assert_valid_symbol_name(p)
-            if (! sym_defined_p(p))
-                error("Symbol '" p "' not defined [mid]:" $0)
+            assert_sym_valid_name(p)
+            assert_sym_defined(p, "mid")
             x = param[2 + _fencepost]
             if (! integerp(x))
                 error("Value '" x "' must be numeric:" $0)
@@ -1687,9 +1706,8 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
         } else if (symfunc == "right") {
             if (nparam < 1 || nparam > 2) error("Bad parameters in '" m "':" $0)
             p = param[1 + _fencepost]
-            assert_valid_symbol_name(p)
-            if (! sym_defined_p(p))
-                error("Symbol '" p "' not defined [left]:" $0)
+            assert_sym_valid_name(p)
+            assert_sym_defined(p, "left")
             x = length(sym_fetch(p))
             if (nparam == 2) {
                 x = param[2 + _fencepost]
@@ -1715,9 +1733,8 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
         } else if (symfunc == "trim") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
             p = param[1 + _fencepost]
-            assert_valid_symbol_name(p)
-            if (! sym_defined_p(p))
-                error("Symbol '" p "' not defined [trim]:" $0)
+            assert_sym_valid_name(p)
+            assert_sym_defined(p, "trim")
             expand = sym_fetch(p)
             sub(/^[ \t]+/, "", expand)
             sub(/[ \t]+$/, "", expand)
@@ -1727,9 +1744,8 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
         } else if (symfunc == "uc") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
             p = param[1 + _fencepost]
-            assert_valid_symbol_name(p)
-            if (! sym_defined_p(p))
-                error("Symbol '" p "' not defined [uc]:" $0)
+            assert_sym_valid_name(p)
+            assert_sym_defined(p, "uc")
             r = toupper(sym_fetch(p)) r
 
         # uuid : Something that resembles but is not a UUID
@@ -1928,8 +1944,8 @@ function load_init_files()
         return
 
     if ("HOME" in ENVIRON)
-        dofile(ENVIRON["HOME"] "/.m2rc")
-    dofile("./.m2rc")
+        dofile(ENVIRON["HOME"] "/" init_file_name)
+    dofile(init_file_name)
 
     # Don't count init files in total file tally - it's better to keep
     # in sync with the command line.
@@ -1982,14 +1998,15 @@ function initialize(    d, dateout)
 
     EoF_marker        = build_subsep("EoF1", "EoF2") # Unlikely to occur in normal text
     exit_code         = EX_OK
-    init_deferred     = TRUE    # becomes FALSE in initialize_run_deferred()
-    init_files_loaded = FALSE   # becomes TRUE in load_init_files()
+    init_deferred     = TRUE            # becomes FALSE in initialize_run_deferred()
+    init_file_name    = ".m2rc"         # basename only, no path
+    init_files_loaded = FALSE           # becomes TRUE in load_init_files()
     ifdepth           =  0
     active[ifdepth]   = TRUE
     _fencepost        =  1
     buffer            = ""
 
-    srand()                     # Seed random number generator
+    srand()                             # Seed random number generator
     setup_prog_paths()
 
     # Capture m2 run start time.  1  2  3  4  5  6  7  8

@@ -28,7 +28,10 @@
 #          the text can be included in the final output, often based
 #          upon whether a macro is or is not defined.
 #
-#       4. Comment lines will be removed from the final output.
+#       4. Comments are removed from the output.  @comment commands
+#          appear on a line of their own and are dropped from the
+#          output.  @rem ...@ macros are embedded in the input text and
+#          produce no output.  Use @ignore for a multi-line comment.
 #
 #       Control commands (@if, @define, etc) are distinguished by a "@"
 #       as the first character at the beginning of a line.  They consume
@@ -36,7 +39,7 @@
 #       evaluate, control, or define macros for subsequent processing:
 #
 #           @append NAME TEXT      Add TEXT to an already defined macro NAME
-#           @comment [TEXT]        Comment; ignore line.  Also @@, @c, @#, @rem
+#           @comment [TEXT]        Comment; ignore line.  Also @@, @c, @#
 #           @decr NAME [N]         Subtract N (1) from an already defined NAME
 #           @default NAME VAL      Like @define, but no-op if NAME already defined
 #           @define NAME TEXT      Set NAME to TEXT
@@ -125,6 +128,7 @@
 #           @left SYM [N]@         Substring of SYM from 1 to Nth character
 #           @len SYM@              Number of characters in SYM's value
 #           @mid SYM BEG [LEN]@    Substring of SYM from BEG, LEN chars long
+#           @rem COMMENT@          Embedded comment text is ignored
 #           @right SYM [N]@        Substring of SYM from N to last character
 #           @spaces [N]@           Output N space characters  (default 1)
 #           @time@                 Current time (format as __FMT__[time])
@@ -1619,7 +1623,6 @@ function process_line(read_literally,    newstring)
     else if (/^@longend([ \t]|$)/)        { m2_longend() }
     else if (/^@paste([ \t]|$)/)          { m2_include() }
     else if (/^@read([ \t]|$)/)           { m2_read() }
-    else if (/^@rem([ \t]|$)/)            { } # Comments are ignored
     else if (/^@shell([ \t]|$)/)          { m2_shell() }
     else if (/^@stderr([ \t]|$)/)         { m2_error() }
     else if (/^@typeout([ \t]|$)/)        { m2_typeout() }
@@ -1882,6 +1885,11 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
                     error("Value '" y "' must be numeric:" $0)
                 r = substr(sym_fetch(p), x, y) r
             }
+
+        # rem : Remark
+        #   @rem STUFF@ is considered a comment and ignored
+        } else if (symfunc == "rem") {
+            ;
 
         # right : Right (substring)
         #   @right ALPHABET 20@ => TUVWXYZ

@@ -64,7 +64,6 @@
 #           @read NAME FILE        Read FILE contents to define NAME
 #           @shell DELIM [PROG]    Evaluate input until DELIM, send raw data to PROG
 #                                    Output from prog is captured in output stream
-#           @sleep [N]             Pause execution for N seconds (default 1)
 #           @typeout               Print remainder of input file literally, no macros
 #           @undef NAME            Remove definition of NAME
 #           @unless NAME           Include subsequent text if NAME == 0 (or undefined)
@@ -1031,7 +1030,7 @@ function calc3_calculate_function(fun, e,    c)
     if (fun == "log(")     return log(e)
     if (fun == "log10(")   return log(e) / LOG10
     if (fun == "rad(")     return e * (TAU / 360)
-    if (fun == "randint(") return int(e * rand()) + 1
+    if (fun == "randint(") return randint(e) + 1
     if (fun == "sin(")     return sin(e)
     if (fun == "sqrt(")    return sqrt(e)
     if (fun == "tan(")     { c = cos(e)
@@ -1463,17 +1462,6 @@ function m2_shell(    buf, delim, save_line, save_lineno, sendto)
 }
 
 
-# @sleep                [N]
-function m2_sleep(    sec)
-{
-    if (! currently_active_p())
-        return
-    sec = (NF > 1 && integerp($2)) ? $2 : 1
-    flush_stdout()
-    exec_prog_cmdline("sleep", sec)
-}
-
-
 # @typeout
 function m2_typeout(    buf)
 {
@@ -1633,7 +1621,6 @@ function process_line(read_literally,    newstring)
     else if (/^@read([ \t]|$)/)           { m2_read() }
     else if (/^@rem([ \t]|$)/)            { } # Comments are ignored
     else if (/^@shell([ \t]|$)/)          { m2_shell() }
-    else if (/^@sleep([ \t]|$)/)          { m2_sleep() }
     else if (/^@stderr([ \t]|$)/)         { m2_error() }
     else if (/^@typeout([ \t]|$)/)        { m2_typeout() }
     else if (/^@undef(ine)?([ \t]|$)/)    { m2_undef() }
@@ -2163,7 +2150,6 @@ function setup_prog_paths()
     sym2_store("__PROG__", "id",       "/usr/bin/id")
     sym2_store("__PROG__", "rm",       "/bin/rm")
     sym2_store("__PROG__", "sh",       "/bin/sh")
-    sym2_store("__PROG__", "sleep",    "/bin/sleep")
     sym2_store("__PROG__", "stat",     "/usr/bin/stat")
     sym2_store("__PROG__", "uname",    "/usr/bin/uname")
     sym_store("__TMPDIR__",            "/tmp")

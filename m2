@@ -612,16 +612,20 @@ function sym_valid_p(sym,    result, lbracket, sym_root, sym_key)
              break
 
         # Fake/hack out any "array name" by removing brackets
-        if ((lbracket = index(sym, "[")) && (sym ~ /^.+\[.+\]$/)) {
+        if (lbracket = index(sym, "[")) {
+            # 2. Doesn't look exactly like "xx[yy]"
+            if (sym !~ /^.+\[.+\]$/)
+                break
             sym_root = substr(sym, 1, lbracket-1)
             sym_key  = substr(sym, lbracket+1, length(sym)-lbracket-1)
-            # 2. Empty parts are not valid
+
+            # 3. Empty parts are not valid
             if (length(sym_root) == 0 || length(sym_key) == 0)
                 break
             sym = sym_root
         }
 
-        # 3. We're in strict mode and the name doesn't pass regexp check
+        # 4. We're in strict mode and the name doesn't pass regexp check
         if (strictp() && sym !~ /^[A-Za-z#_][A-Za-z#_0-9]*$/)
             break
 
@@ -1742,16 +1746,24 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
         # them to "t" and "nil".  If the symbol SYM is not defined:
         #  - In strict mode, throw an error if the symbol is not defined.
         #  - In non-strict mode, you get a 'false' output if not defined.
+        #  - If it's not a symbol, use its value as a boolean state.
         } else if (symfunc == "boolval") {
-            if (nparam != 1) error("Bad parameters in '" m "':" $0)
             p = param[1 + _fencepost]
-            assert_sym_valid_name(p)
-            if (sym_defined_p(p))
-                r = sym2_fetch("__FMT__", sym_true_p(p)) r
-            else if (strictp())
-                error("Symbol '" p "' not defined [boolval]:" $0)
-            else
-                r = sym2_fetch("__FMT__", FALSE) r
+            if (p == sym2_fetch("__FMT__", TRUE) ||
+                p == sym2_fetch("__FMT__", FALSE))
+                r = p r
+            else if (sym_valid_p(p)) {
+                # It's a valid name -- now see if it's defined or not.
+                # If not, check if we're in strict mode (error) or not.
+                if (sym_defined_p(p))
+                    r = sym2_fetch("__FMT__", sym_true_p(p)) r
+                else if (strictp())
+                    error("Symbol '" p "' not defined [boolval]:" $0)
+                else
+                    r = sym2_fetch("__FMT__", FALSE) r
+            } else
+                # It's not a symbol, so use its value interpreted as a boolean
+                r = sym2_fetch("__FMT__", !!p) r
 
         # date  : Current date as YYYY-MM-DD
         # epoch : Number of seconds since Epoch

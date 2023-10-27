@@ -113,7 +113,7 @@
 #
 #           @basename SYM@         Base (file) name of SYM
 #           @boolval SYM@          Output "1" if SYM is true, else "0"
-#           @date@                 Current date (format as __FTIME__[date])
+#           @date@                 Current date (format as __FMT__[date])
 #           @dirname SYM@          Directory name of SYM
 #           @epoch@                Number of seconds since the Epoch, UTC
 #           @expr MATH@            Evaluate mathematical expression
@@ -127,9 +127,9 @@
 #           @mid SYM BEG [LEN]@    Substring of SYM from BEG, LEN chars long
 #           @right SYM [N]@        Substring of SYM from N to last character
 #           @spaces [N]@           Output N space characters  (default 1)
-#           @time@                 Current time (format as __FTIME__[time])
+#           @time@                 Current time (format as __FMT__[time])
 #           @trim SYM@             Remove leading and trailing whitespace
-#           @tz@                   Time zone name (format as __FTIME__[tz])
+#           @tz@                   Time zone name (format as __FMT__[tz])
 #           @uc SYM@               Upper case
 #           @uuid@                 Something that resembles a UUID:
 #                                    C3525388-E400-43A7-BC95-9DF5FA3C4A52
@@ -145,16 +145,16 @@
 #       cannot be modified by the user.  The following are pre-defined;
 #       example values or defaults are shown:
 #
-#           __BOOL__[0]       [**] Output when @boolval@ is false ("0")
-#           __BOOL__[1]       [**] Output when @boolval@ is true ("1")
 #           __DATE__               m2 run start date as YYYYMMDD (eg 19450716)
 #           __DEBUG__[<id>]   [**] Debugging levels for m2 systems
 #           __EPOCH__              Seconds since Epoch at m2 run start time
 #           __FILE__               Current file name
 #           __FILE_UUID__          UUID unique to this file
-#           __FTIME__[date]   [**] Date format for @date@ (%Y-%m-%d)
-#           __FTIME__[time]   [**] Time format for @time@ (%H:%M:%S)
-#           __FTIME__[tz]     [**] Time format for @tz@   (%Z)
+#           __FMT__[0]        [**] Output when @boolval@ is false ("0")
+#           __FMT__[1]        [**] Output when @boolval@ is true ("1")
+#           __FMT__[date]     [**] Date format for @date@ (%Y-%m-%d)
+#           __FMT__[time]     [**] Time format for @time@ (%H:%M:%S)
+#           __FMT__[tz]       [**] Time format for @tz@   (%Z)
 #           __GENSYM__[count]      Count for generated symbols (def 0)
 #           __GENSYM__[prefix]     Prefix for generated symbols (def _gen)
 #           __GID__                Group id (effective gid)
@@ -234,7 +234,7 @@
 #                 its terminating delimiter line.
 #               - An @if block was not properly terminated before end of input.
 #               - Indicates an "starting" command did not find its finish.
-#               - Single quotes not allowed in __FTIME__ format string.
+#               - Single quotes not allowed in __FMT__ format string.
 #           Division by zero
 #               - @expr@ attempted to divide by zero.
 #           Duplicate '@else' not allowed
@@ -359,7 +359,7 @@
 #*****************************************************************************
 
 BEGIN {
-    version = "3.0.0"
+    version = "3.0.1"
 }
 
 
@@ -1732,9 +1732,9 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
             close(cmd)
             r = expand r
 
-        # boolval SYM: Print __BOOL__[0 or 1], depending on SYM truthiness.
+        # boolval SYM: Print __FMT__[0 or 1], depending on SYM truthiness.
         #   @boolval SYM@ => <string>
-        # The actual output is taken from __BOOL__[].  The defaults are
+        # The actual output is taken from __FMT__[].  The defaults are
         # "1" and "0", but a Fortran programmer might change them to
         # ".TRUE." and ".FALSE.", while a Lisp programmer might change
         # them to "t" and "nil".  If the symbol SYM is not defined:
@@ -1745,11 +1745,11 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
             p = param[1 + _fencepost]
             assert_sym_valid_name(p)
             if (sym_defined_p(p))
-                r = sym2_fetch("__BOOL__", sym_true_p(p)) r
+                r = sym2_fetch("__FMT__", sym_true_p(p)) r
             else if (strictp())
                 error("Symbol '" p "' not defined [boolval]:" $0)
             else
-                r = sym2_fetch("__BOOL__", FALSE) r
+                r = sym2_fetch("__FMT__", FALSE) r
 
         # date  : Current date as YYYY-MM-DD
         # epoch : Number of seconds since Epoch
@@ -1759,11 +1759,11 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
                    symfunc == "epoch" ||
                    symfunc == "time" ||
                    symfunc == "tz") {
-            y = sym2_fetch("__FTIME__", symfunc)
+            y = sym2_fetch("__FMT__", symfunc)
             if (index(y, "'") != IDX_NOT_FOUND)
                 # sh cannot find matching `'' (despite attempts at quoting)
                 # so I'll just disallow it.  Perhaps this can be fixed?
-                error("Delimiter ''' not found:__FTIME__[" symfunc "]=" y ":" $0)
+                error("Delimiter ''' not found:__FMT__[" symfunc "]=" y ":" $0)
             cmd = build_prog_cmdline("date", "+'" y "'")
             cmd | getline expand
             close(cmd)
@@ -2195,14 +2195,14 @@ function initialize(    d, dateout)
     build_prog_cmdline("date", "+'%Y %m %d %H %M %S %z %s'") | getline dateout
     split(dateout, d)
 
-    sym2_store("__BOOL__", TRUE,        "1")
-    sym2_store("__BOOL__", FALSE,       "0")
     sym_store("__DATE__",               d[1] d[2] d[3])
     sym_store("__EPOCH__",              d[8])
-    sym2_store("__FTIME__", "date",     "%Y-%m-%d")
-    sym2_store("__FTIME__", "epoch",    "%s")
-    sym2_store("__FTIME__", "time",     "%H:%M:%S")
-    sym2_store("__FTIME__", "tz",       "%Z")
+    sym2_store("__FMT__", TRUE,         "1")
+    sym2_store("__FMT__", FALSE,        "0")
+    sym2_store("__FMT__", "date",       "%Y-%m-%d")
+    sym2_store("__FMT__", "epoch",      "%s")
+    sym2_store("__FMT__", "time",       "%H:%M:%S")
+    sym2_store("__FMT__", "tz",         "%Z")
     sym2_store("__GENSYM__", "count",   0)
     sym2_store("__GENSYM__", "prefix",  "_gen")
     sym_store("__INPUT__",              "")
@@ -2226,9 +2226,8 @@ function initialize(    d, dateout)
     deferred_syms["__USER__"]           = TRUE
 
     # These symbols can be modified by the user
-    unprotected_syms["__BOOL__"]        = TRUE
     unprotected_syms["__DEBUG__"]       = TRUE
-    unprotected_syms["__FTIME__"]       = TRUE
+    unprotected_syms["__FMT__"]         = TRUE
     unprotected_syms["__INPUT__"]       = TRUE
     unprotected_syms["__STRICT__"]      = TRUE
     unprotected_syms["__TMPDIR__"]      = TRUE

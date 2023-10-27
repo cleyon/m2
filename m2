@@ -57,7 +57,6 @@
 #           @incr NAME [N]         Add N (1) to an already defined NAME
 #           @initialize NAME VAL   Like @define, but abort if NAME already defined
 #           @input [NAME]          Read a single line from keyboard and define NAME
-#           @let NAME TEXT         Pass TEXT to bc(1), result in NAME
 #           @longdef NAME          Set NAME to <...> (all lines until @longend)
 #             <...>                  Don't use other @ commands inside definition
 #           @longend                 But simple @NAME@ references should be okay
@@ -118,6 +117,7 @@
 #           @date@                 Current date (format as __FTIME__[date])
 #           @dirname SYM@          Directory name of SYM
 #           @epoch@                Number of seconds since the Epoch, UTC
+#           @expr MATH@            Evaluate mathematical expression
 #           @gensym@               Generate symbol: <prefix><counter>
 #             @gensym 42@            Set counter; prefix unchanged
 #             @gensym pre 0@         Set prefix and counter
@@ -149,7 +149,7 @@
 #           __BOOL__[0]       [**] Output when @boolval@ is false ("0")
 #           __BOOL__[1]       [**] Output when @boolval@ is true ("1")
 #           __DATE__               m2 run start date as YYYYMMDD (eg 19450716)
-#           __DBG__[<id>]     [**] Debugging levels for m2 systems
+#           __DEBUG__[<id>]   [**] Debugging levels for m2 systems
 #           __EPOCH__              Seconds since Epoch at m2 run start time
 #           __FILE__               Current file name
 #           __FILE_UUID__          UUID unique to this file
@@ -167,7 +167,7 @@
 #           __M2_VERSION__         m2 version
 #           __NFILE__              Number of files processed so far (eg 2)
 #           __OSNAME__             Operating system name
-#           __SCALE__         [**] Value of "scale" passed to bc (def 6)
+#           __RESULT__             Value from most recent @expr ...@ expression
 #           __STRICT__        [**] Strict mode (def TRUE)
 #           __TIME__               m2 run start time as HHMMSS (eg 053000)
 #           __TIMESTAMP__          ISO 8601 timestamp (1945-07-16T05:30:00-0600)
@@ -182,6 +182,39 @@
 #       at program start and do not change.  @date@ and @time@ do change, so:
 #           @date@T@time@@__TZ__@
 #       will generate an up-to-date timestamp.
+#
+# MATHEMATICAL EXPRESSIONS
+#       The @expr ...@ macro evaluates mathematical expressions and
+#       inserts their results.  It is based on "calc3" from "The AWK
+#       Programming Language" p. 146, with enhancements by Kenny
+#       McCormack and Alan Linton.  @expr@ supports the standard
+#       arithmetic operators:      +  -  *  /  %  ^
+#
+#       @expr@ supports the following functions:
+#           atan2(y,x)             Arctangent of y/x, -pi <= atan2 <= pi
+#           cos(x)                 Cosine of x, in radians
+#           deg(x)                 Convert radians to degrees
+#           exp(x)                 Exponential (anti-logarithm) of x, e^x
+#           int(x)                 Integer part of x
+#           log(x)                 Natural logarithm of x, base e
+#           log10(x)               Common logarithm of x, base 10
+#           rad(x)                 Convert degrees to radians
+#           rand()                 Random float, 0 <= rand < 1
+#           randint(x)             Random integer, 1 <= randint <= x
+#           sin(x)                 Sine of x, in radians
+#           sqrt(x)                Square root of x
+#           tan(x)                 Tangent of x, in radians
+#
+#       @expr@ can automatically use symbols' values in expressions.
+#       Inside @expr ...@, there is no need to surround symbol names
+#       with "@" characters to retrieve their values.  @expr@ also
+#       recognizes the built-in constants "e", "pi", and "tau".
+#
+#       The most recent expression value is automatically stored in
+#       __RESULT__.  @expr@ can also assign values to symbols with the
+#       "=" assignment operator.  Assignment is itself an expression, so
+#       @expr x=5@ assigns the value 5 to x and also outputs the result.
+#       To assign a value to a variable without printing, use @define.
 #
 # ERROR MESSAGES
 #       Error messages are printed to standard error in the following format:
@@ -203,6 +236,8 @@
 #               - An @if block was not properly terminated before end of input.
 #               - Indicates an "starting" command did not find its finish.
 #               - Single quotes not allowed in __FTIME__ format string.
+#           Division by zero
+#               - @expr@ attempted to divide by zero.
 #           Duplicate '@else' not allowed
 #               - More than one @else found in a single @if block.
 #           Empty symbol table
@@ -214,8 +249,15 @@
 #                 while __STRICT__ is in effect.
 #           Error reading 'FILE'
 #               - Read error on file.
+#           Expected number or '(' at 'XXX'
+#               - @expr ...@ received unexpected input or bad syntax.
 #           File 'XXX' does not exist
 #               - Attempt to @include a non-existent file in strict mode.
+#           Math expression error [hint]
+#               - An error occurred during @expr ...@ evaluation.
+#               - A math expression returned +/-Infinity or NaN.
+#           Missing 'X' at 'XXX'
+#               - @expr ...@ did not match syntax required for expression.
 #           No corresponding 'XXX'
 #               - @if: An @else or @endif was seen without a matching @if.
 #               - @longdef: A @longend was seen without a matching @longdef.
@@ -237,6 +279,8 @@
 #                 (__STRICT__ is an exception and can be modified.)
 #           Unexpected end of definition
 #               - Input ended before macro definition was complete.
+#           Unknown function 'FUNC'
+#               - @expr ...@ found an unrecognized mathematical function.
 #           Value 'XXX' must be numeric
 #               - Something expected to be a number was not.
 #
@@ -316,7 +360,7 @@
 #*****************************************************************************
 
 BEGIN {
-    version = "2.3.0"
+    version = "3.0.0"
 }
 
 
@@ -530,13 +574,13 @@ function sym_root(sym,    s)
 function sym_store(sym, val)
 {
     dbg_print("m2", 5, ("sym_store(" sym "," val ")"))
-    symtab[sym_internal_form(sym)] = val
+    return symtab[sym_internal_form(sym)] = val
 }
 
 function sym2_store(arr, key, val)
 {
     dbg_print("m2", 5, ("sym2_store(" arr "," key "," val ")"))
-    symtab[arr, key] = val
+    return symtab[arr, key] = val
 }
 
 # System symbols start and end with double underscores
@@ -553,7 +597,7 @@ function sym_true_p(sym)
 }
 
 # In strict mode, a symbol must match the following regexp:
-#       /^[A-Za-z#_][-A-Za-z#_0-9]*$/
+#       /^[A-Za-z#_][A-Za-z#_0-9]*$/
 # In non-strict mode, any non-empty string is valid.
 function sym_valid_p(sym,    result, lbracket, rbracket, sym_root, sym_key)
 {
@@ -577,7 +621,7 @@ function sym_valid_p(sym,    result, lbracket, rbracket, sym_root, sym_key)
         }
 
         # 3. We're in strict mode and the name doesn't pass regexp check
-        if (strictp() && sym !~ /^[A-Za-z#_][-A-Za-z#_0-9]*$/)
+        if (strictp() && sym !~ /^[A-Za-z#_][A-Za-z#_0-9]*$/)
             break
 
         # We've passed all the tests
@@ -650,9 +694,9 @@ function dbg(key, lev)
         lev = 1
     if (key == "")
         key = "m2"
-    if (! sym2_defined_p("__DBG__", key))
+    if (! sym2_defined_p("__DEBUG__", key))
         return false
-    return sym2_fetch("__DBG__", key) >= lev
+    return sym2_fetch("__DEBUG__", key) >= lev
 }
 
 function dbg_set_level(key, lev)
@@ -661,7 +705,7 @@ function dbg_set_level(key, lev)
         lev = 1
     if (key == "")
         key = "m2"
-    sym2_store("__DBG__", key, lev)
+    sym2_store("__DEBUG__", key, lev)
 }
 
 function dbg_print(key, lev, str)
@@ -702,6 +746,7 @@ function exec_prog_cmdline(prog, arg,    sym)
 
 # Return a likely path for storing temporary files.
 # This path is guaranteed to end with a "/" character.
+# NOTE: This function is not currently used.
 function tmpdir(    t)
 {
     if (sym_defined_p("M2_TMPDIR"))
@@ -768,7 +813,7 @@ function uuid()
 }
 
 
-# Quicksort - from "The AWK Programming Language", p.161
+# Quicksort - from "The AWK Programming Language" p.161.
 # Used in m2_dump() to sort the symbol table.
 function qsort(A, left, right,    i, last)
 {
@@ -827,6 +872,181 @@ function read_lines_until(delim,    buf, delim_len)
     }
     return chop(buf)
 }
+
+
+#*****************************************************************************
+#
+#       Calc3
+#
+#*****************************************************************************
+
+# calc3_eval is the main entry point.  All other calc3_* functions are
+# for internal use and should not be called by the user.
+function calc3_eval(s,    e)
+{
+    _S_expr = s
+    gsub(/[ \t]+/, "", _S_expr)
+
+    # Bare @expr@ returns most recent result
+    if (length(_S_expr) == 0)
+        return sym_fetch("__RESULT__")
+
+    _f = 1
+    e = calc3_expr()
+    if (_f <= length(_S_expr))
+        error(sprintf("Math expression error at '%s'", substr(_S_expr, _f)))
+    else if (e == "nan" || e == "inf" || e == "-inf")
+        error(sprintf("Math expression error:'%s' returned \"%s\":%s", s, e, $0))
+     else
+        return e
+}
+
+# term | term [+-] term
+function calc3_expr(    var, e)
+{
+    if (match(substr(_S_expr, _f), /^[A-Za-z#_][A-Za-z#_0-9]*=/)) {
+        var = calc3_advance()
+        sub(/=$/, "", var)
+        return sym_store(var, calc3_expr())
+    }
+    e = calc3_term()
+    while (substr(_S_expr, _f, 1) ~ /[+-]/)
+        e = substr(_S_expr, _f++, 1) == "+" \
+            ? e + calc3_term() : e - calc3_term()
+    return e
+}
+
+# factor | factor [*/%] factor
+function calc3_term(    e, f)
+{
+    e = calc3_factor1()
+    while (substr(_S_expr, _f, 1) ~ /[*\/%]/) {
+        _f++
+        if (substr(_S_expr, _f-1, 1) == "*") return e * calc3_factor1()
+        if (substr(_S_expr, _f-1, 1) == "/") {
+            f = calc3_factor1()
+            if (f + 0 == 0)     # Ugh, I know...
+                error("Division by zero:" $0)
+            return e / f
+        }
+        if (substr(_S_expr, _f-1, 1) == "%") {
+            f = calc3_factor1()
+            if (f + 0 == 0)
+                error("Division by zero:" $0)
+            return e % f
+        }
+    }
+    return e
+}
+
+# factor2 | factor2 ^ factor
+function calc3_factor1(    e)
+{
+    e = calc3_factor2()
+    if (substr(_S_expr, _f, 1) != "^") return e
+    _f++
+    return e ^ calc3_factor1()
+}
+
+# [+-]?factor3 | !*factor2
+function calc3_factor2(    e)
+{
+    e = substr(_S_expr, _f)
+    if (e ~ /^[\+\-\!]/) {      #unary operators [+-!]
+        _f++
+        if (e ~ /^\+/) return +calc3_factor3() # only one unary + allowed
+        if (e ~ /^\-/) return -calc3_factor3() # only one unary - allowed
+        if (e ~ /^\!/) return !(calc3_factor2() + 0) # unary ! may repeat
+    }
+    return calc3_factor3()
+}
+
+# number | varname | (expr) | function(...)
+function calc3_factor3(    e, fun, e2)
+{
+    e = substr(_S_expr, _f)
+
+    # number
+    if (match(e, /^([0-9]+[.]?[0-9]*|[.][0-9]+)([Ee][+-]?[0-9]+)?/)) {
+        return calc3_advance()
+    }
+
+    # function ()
+    if (match(e, /^([A-Za-z#_][A-Za-z#_0-9]+)?\(\)/)) {
+        fun = calc3_advance()
+       #if (fun ~ /^srand()/) return srand()
+        if (fun ~ /^rand()/)  return rand()
+        error(sprintf("Unknown function '%s'", fun))
+    }
+
+    # (expr) | function(expr) | function(expr,expr)
+    if (match(e, /^([A-Za-z#_][A-Za-z#_0-9]+)?\(/)) {
+        fun = calc3_advance()
+        if (fun ~ /^(cos|deg|exp|int|log(10)?|rad|randint|sin|sqrt|tan)?\(/) {
+            e = calc3_expr()
+            e = calc3_calculate_function(fun, e)
+        } else if (fun ~ /^atan2\(/) {
+            e = calc3_expr()
+            if (substr(_S_expr, _f, 1) != ",") {
+                error(sprintf("Missing ',' at '%s'", substr(_S_expr, _f)))
+                # return 0 # NOTREACHED
+            }
+            _f++
+            e2 = calc3_expr()
+            e = atan2(e, e2)
+        } else
+            error(sprintf("Unknown function '%s'", fun))
+
+        if (substr(_S_expr, _f++, 1) != ")")
+            error(sprintf("Missing ')' at '%s'", substr(_S_expr, _f)))
+        return e
+    }
+
+    # variable name
+    if (match(e, /^[A-Za-z#_][A-Za-z#_0-9]*/)) {
+        e2 = calc3_advance()
+        if      (e2 == "e")   return E
+        else if (e2 == "pi")  return PI
+        else if (e2 == "tau") return TAU
+        else {
+            assert_sym_valid_name(e2)
+            assert_sym_defined(e2)
+            dbg_print("expr", 5, "var=" e2 ", val=" sym_fetch(e2))
+            return sym_fetch(e2)
+        }
+    }
+
+    # error
+    error(sprintf("Expected number or '(' at '%s'", substr(_S_expr, _f)))
+}
+
+# Built-in functions of one variable
+function calc3_calculate_function(fun, e,    c)
+{
+    if (fun == "(")        return e
+    if (fun == "cos(")     return cos(e)
+    if (fun == "deg(")     return e * (360 / TAU)
+    if (fun == "exp(")     return exp(e)
+    if (fun == "int(")     return int(e)
+    if (fun == "log(")     return log(e)
+    if (fun == "log10(")   return log(e) / LOG10
+    if (fun == "rad(")     return e * (TAU / 360)
+    if (fun == "randint(") return int(e * rand()) + 1
+    if (fun == "sin(")     return sin(e)
+    if (fun == "sqrt(")    return sqrt(e)
+    if (fun == "tan(")     { c = cos(e)
+                             if (c == 0) error("Division by zero:" $0)
+                             return sin(e) / c }
+    error(sprintf("Unknown function '%s'", fun))
+}
+
+function calc3_advance(    tmp)
+{
+    tmp = substr(_S_expr, _f, RLENGTH)
+    _f += RLENGTH
+    return tmp
+}
+
 
 
 #*****************************************************************************
@@ -1153,38 +1373,6 @@ function m2_input(    getstat, input, sym)
 }
 
 
-# @let                  NAME TEXT
-function m2_let(    sym, math, bcfile, val, cmd)
-{
-    dbg_print("let", 7, ("@let: NF=" NF " $0='" $0 "'"))
-    if (NF < 3)
-        error("Bad parameters:" $0)
-    if (! currently_active_p())
-        return
-
-    sym = $2
-    assert_sym_valid_name(sym)
-    assert_sym_unprotected(sym)
-    sub(/^[ \t]*[^ \t]+[ \t]+[^ \t]+[ \t]*/, "")
-    math = "scale=" sym_fetch("__SCALE__") "; " dosubs($0)
-    bcfile = tmpdir() "m2-bcfile." sym_fetch("__M2_UUID__")
-    dbg_print("let", 7, ("@let: bcfile='" bcfile "', math='" math "'"))
-    print math > bcfile
-    close(bcfile)
-
-    cmd = build_prog_cmdline("cat", bcfile) \
-          " | " \
-          build_prog_cmdline("bc", "-l") # pass "-l" (library) option to bc(1)
-    val = ""
-    while ((cmd | getline) > 0) {
-        val = val $0 "\n"
-    }
-    close(cmd)
-    exec_prog_cmdline("rm", ("-f " bcfile))
-    sym_store(sym, chop(val))
-}
-
-
 # @longdef              NAME
 function m2_longdef(    buf, save_line, save_lineno, sym)
 {
@@ -1401,7 +1589,7 @@ function readline(    getstat, i, status)
     # Hack: allow @Mname at start of line without a closing @.
     # This only applies if in non-strict mode.  Note, macro name must
     # start with a capital letter and must not be passed any parameters.
-    if (! strictp() && ($0 ~ /^@[A-Z][-A-Za-z#_0-9]*[ \t]*$/))
+    if (! strictp() && ($0 ~ /^@[A-Z][A-Za-z#_0-9]*[ \t]*$/))
         sub(/[ \t]*$/, "@")
     return status
 }
@@ -1439,7 +1627,6 @@ function process_line(read_literally,    newstring)
     else if (/^@incr([ \t]|$)/)           { m2_incr() }
     else if (/^@init(ialize)?([ \t]|$)/)  { m2_default() }
     else if (/^@input([ \t]|$)/)          { m2_input() }
-    else if (/^@let([ \t]|$)/)            { m2_let() }
     else if (/^@longdef([ \t]|$)/)        { m2_longdef() }
     else if (/^@longend([ \t]|$)/)        { m2_longend() }
     else if (/^@paste([ \t]|$)/)          { m2_include() }
@@ -1605,6 +1792,14 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
             cmd | getline expand
             close(cmd)
             r = expand r
+
+        # expr ...: Evaluate mathematical epxression, store in __RESULT__
+        } else if (symfunc == "expr") {
+            sub(/^expr[ \t]*/, "", m) # clean up expression to evaluate
+            x = calc3_eval(m)
+            dbg_print("expr", 1, sprintf("expr{%s} = %s", m, x))
+            sym_store("__RESULT__", x)
+            r = x r
 
         # gensym ...: Generate symbol
         #   @gensym@        => _sym0
@@ -1775,7 +1970,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
 
         # Throw an error on undefined symbol (strict-only)
         } else if (strictp()) {
-            error("Symbol '" m "' not defined [strict]:" $0)
+            error("Symbol '" m "' not defined:" $0)
 
         } else {
             l = l "@" m
@@ -1962,8 +2157,6 @@ function load_init_files()
 function setup_prog_paths()
 {
     sym2_store("__PROG__", "basename", "/usr/bin/basename")
-    sym2_store("__PROG__", "bc",       "/usr/bin/bc")
-    sym2_store("__PROG__", "cat",      "/bin/cat")
     sym2_store("__PROG__", "date",     "/bin/date")
     sym2_store("__PROG__", "dirname",  "/usr/bin/dirname")
     sym2_store("__PROG__", "hostname", "/bin/hostname")
@@ -1980,14 +2173,17 @@ function setup_prog_paths()
 # Nothing here is user-customizable
 function initialize(    d, dateout)
 {
-    TRUE              =  1
-    FALSE             =  0
+    E                 = exp(1)
+    FALSE             = 0
+    IDX_NOT_FOUND     = 0
+    LOG10             = log(10)
     MAX_PARAM         = 20
-
-    IDX_NOT_FOUND     =  0
+    PI                = atan2(0, -1)
     READLINE_ERROR    = -1
-    READLINE_EOF      =  0
-    READLINE_OK       =  1
+    READLINE_EOF      = 0
+    READLINE_OK       = 1
+    TAU               = 2 * PI
+    TRUE              = 1
 
     # Exit codes
     EX_OK             =  0
@@ -2027,7 +2223,7 @@ function initialize(    d, dateout)
     sym_store("__M2_UUID__",            uuid())
     sym_store("__M2_VERSION__",         version)
     sym_store("__NFILE__",              0)
-    sym_store("__SCALE__",              6)
+    sym_store("__RESULT__",             0)
     sym_store("__STRICT__",             TRUE)
     sym_store("__TIME__",               d[4] d[5] d[6])
     sym_store("__TIMESTAMP__",          d[1] "-" d[2] "-" d[3] "T" \
@@ -2045,10 +2241,9 @@ function initialize(    d, dateout)
 
     # These symbols can be modified by the user
     unprotected_syms["__BOOL__"]        = TRUE
-    unprotected_syms["__DBG__"]         = TRUE
+    unprotected_syms["__DEBUG__"]       = TRUE
     unprotected_syms["__FTIME__"]       = TRUE
     unprotected_syms["__INPUT__"]       = TRUE
-    unprotected_syms["__SCALE__"]       = TRUE
     unprotected_syms["__STRICT__"]      = TRUE
     unprotected_syms["__TMPDIR__"]      = TRUE
 }
@@ -2102,8 +2297,8 @@ BEGIN {
                 name = substr(arg, 1, eq-1)
                 if (name == "strict")
                     name = "__STRICT__"
-                else if (name == "debug" || name == "dbg")
-                    name = "__DBG__[m2]"
+                else if (name == "debug")
+                    name = "__DEBUG__[m2]"
                 val = substr(arg, eq+1)
                 if (! sym_valid_p(name))
                     error("Symbol '" name "' invalid name:" arg, i, "ARGV")

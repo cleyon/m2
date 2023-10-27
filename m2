@@ -363,7 +363,7 @@
 #*****************************************************************************
 
 BEGIN {
-    version = "3.0.1"
+    version = "3.0.2"
 }
 
 
@@ -481,7 +481,7 @@ function sym_defined_p(sym,    s)
 
 function sym2_defined_p(arr, key)
 {
-    if (init_deferred && sym_printable_form(build_subsep(arr, key)) in deferred_syms)
+    if (init_deferred && sym2_printable_form(arr, key) in deferred_syms)
         initialize_run_deferred()
     return (arr, key) in symtab
 }
@@ -504,7 +504,7 @@ function sym_fetch(sym,    s)
 
 function sym2_fetch(arr, key)
 {
-    if (init_deferred && sym_printable_form(build_subsep(arr, key)) in deferred_syms)
+    if (init_deferred && sym2_printable_form(arr, key) in deferred_syms)
         initialize_run_deferred()
     return symtab[arr, key]
 }
@@ -521,15 +521,14 @@ function sym_increment(sym, incr)
 #       "arr[key]"  =>  "arr <SUBSEP> key"
 # If there are no array-referring brackets, the symbol is returned
 # unchanged, without a <SUBSEB>.
-function sym_internal_form(sym,    lbracket, rbracket, arr, key)
+function sym_internal_form(sym,    lbracket, arr, key)
 {
     if ((lbracket = index(sym, "[")) == IDX_NOT_FOUND)
         return sym
     if (sym !~ /^.+\[.+\]$/)
-        return sym
-    rbracket = index(sym, "]")
+        error("Symbol '" sym "' invalid name:" $0)
     arr = substr(sym, 1, lbracket-1)
-    key = substr(sym, lbracket+1, rbracket-lbracket-1)
+    key = substr(sym, lbracket+1, length(sym)-lbracket-1)
     return build_subsep(arr, key)
 }
 
@@ -602,7 +601,7 @@ function sym_true_p(sym)
 # In strict mode, a symbol must match the following regexp:
 #       /^[A-Za-z#_][A-Za-z#_0-9]*$/
 # In non-strict mode, any non-empty string is valid.
-function sym_valid_p(sym,    result, lbracket, rbracket, sym_root, sym_key)
+function sym_valid_p(sym,    result, lbracket, sym_root, sym_key)
 {
     # These are the ways a symbol is not valid:
     result = FALSE
@@ -614,9 +613,8 @@ function sym_valid_p(sym,    result, lbracket, rbracket, sym_root, sym_key)
 
         # Fake/hack out any "array name" by removing brackets
         if ((lbracket = index(sym, "[")) && (sym ~ /^.+\[.+\]$/)) {
-            rbracket = index(sym, "]")
             sym_root = substr(sym, 1, lbracket-1)
-            sym_key  = substr(sym, lbracket+1, rbracket-lbracket-1)
+            sym_key  = substr(sym, lbracket+1, length(sym)-lbracket-1)
             # 2. Empty parts are not valid
             if (length(sym_root) == 0 || length(sym_key) == 0)
                 break
@@ -1107,9 +1105,7 @@ function m2_dump(    buf, cnt, definition, dumpfile, i, key, keys, sym_name, all
         if (init_deferred)
             initialize_run_deferred() # Show all system symbols
 
-    if (NF == 1)
-        dumpfile = "/dev/stderr"
-    else {
+    if (NF > 1) {
         $1 = ""
         sub("^[ \t]*", "")
         dumpfile = rm_quotes(dosubs($0))
@@ -1138,16 +1134,19 @@ function m2_dump(    buf, cnt, definition, dumpfile, i, key, keys, sym_name, all
         }
     }
     buf = chop(buf)
-    if (length(buf) > 0) {
-        print buf > dumpfile    # More portable: print_stderr(buf)
-        close(dumpfile)
-    } else
+    if (length(buf) == 0) {
         # I don't usually condone chatty programs, but it seems to me
         # that if the user asks for the symbol table and there's nothing
         # to print, she'd probably like to know.  Perhaps a config file
         # was not read properly...  Still, we only warn in strict mode.
         if (strictp())
             warn("Empty symbol table:" $0)
+    } else if (dumpfile == "")  # No FILE arg provided to @dump command
+        print_stderr(buf)
+    else {
+        print buf > dumpfile
+        close(dumpfile)
+    }
 }
 
 

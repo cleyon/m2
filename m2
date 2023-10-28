@@ -122,7 +122,7 @@
 #           @expr MATH@            Evaluate mathematical expression
 #           @gensym@               Generate symbol: <prefix><counter>
 #             @gensym 42@            Set counter; prefix unchanged
-#             @gensym pre 0@         Set prefix and counter
+#             @gensym PREFIX N@      Set prefix and counter
 #           @getenv VAR@       [*] Get environment variable
 #           @lc SYM@               Lower case
 #           @left SYM [N]@         Substring of SYM from 1 to Nth character
@@ -154,8 +154,8 @@
 #           __EPOCH__              Seconds since Epoch at m2 run start time
 #           __FILE__               Current file name
 #           __FILE_UUID__          UUID unique to this file
-#           __FMT__[0]        [**] Output when @boolval@ is false ("0")
-#           __FMT__[1]        [**] Output when @boolval@ is true ("1")
+#           __FMT__[0]        [**] Output when @boolval@ is false (0)
+#           __FMT__[1]        [**] Output when @boolval@ is true (1)
 #           __FMT__[date]     [**] Date format for @date@ (%Y-%m-%d)
 #           __FMT__[time]     [**] Time format for @time@ (%H:%M:%S)
 #           __FMT__[tz]       [**] Time format for @tz@   (%Z)
@@ -191,7 +191,8 @@
 #       inserts their results.  It is based on "calc3" from "The AWK
 #       Programming Language" p. 146, with enhancements by Kenny
 #       McCormack and Alan Linton.  @expr@ supports the standard
-#       arithmetic operators:      +  -  *  /  %  ^
+#       arithmetic operators:      +  -  *  /  %  ^  (  )
+#       Comparison and logical/boolean operations are not supported.
 #
 #       @expr@ supports the following functions:
 #           atan2(y,x)             Arctangent of y/x, -pi <= atan2 <= pi
@@ -238,7 +239,6 @@
 #                 its terminating delimiter line.
 #               - An @if block was not properly terminated before end of input.
 #               - Indicates an "starting" command did not find its finish.
-#               - Single quotes not allowed in __FMT__ format string.
 #           Division by zero
 #               - @expr@ attempted to divide by zero.
 #           Duplicate '@else' not allowed
@@ -302,6 +302,8 @@
 #       This means that in:
 #           @foo "a b" c
 #       foo has three arguments -- ('"a', 'b"', 'c') -- not two.
+#
+#       Self-referential/recursive macros will hang the program.
 #
 # EXAMPLE
 #       This example demonstrates arrays, conditionals, and @{...}:
@@ -1774,11 +1776,8 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
                    symfunc == "time" ||
                    symfunc == "tz") {
             y = sym2_fetch("__FMT__", symfunc)
-            if (index(y, "'") != IDX_NOT_FOUND)
-                # sh cannot find matching `'' (despite attempts at quoting)
-                # so I'll just disallow it.  Perhaps this can be fixed?
-                error("Delimiter ''' not found:__FMT__[" symfunc "]=" y ":" $0)
-            cmd = build_prog_cmdline("date", "+'" y "'")
+            gsub(/"/, "\\\"", y)
+            cmd = build_prog_cmdline("date", "+\"" y "\"")
             cmd | getline expand
             close(cmd)
             r = expand r

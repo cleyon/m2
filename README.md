@@ -6,7 +6,7 @@ you look closely.
 
 # m2
 
-## m2/etc/
+## m2/etc/m0/
 
 Bentley's initial development of m1, from m1.ps.
 

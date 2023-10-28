@@ -889,7 +889,7 @@ function read_lines_until(delim,    buf, delim_len)
 #
 #*****************************************************************************
 
-# calc3_eval is the main entry point.  All other calc3_* functions are
+# calc3_eval is the main entry point.  All other _c3_* functions are
 # for internal use and should not be called by the user.
 function calc3_eval(s,    e)
 {
@@ -901,7 +901,7 @@ function calc3_eval(s,    e)
         return sym_fetch("__RESULT__")
 
     _f = 1
-    e = calc3_expr()
+    e = _c3_expr()
     if (_f <= length(_S_expr))
         error(sprintf("Math expression error at '%s'", substr(_S_expr, _f)))
     else if (e == "nan" || e == "inf" || e == "-inf")
@@ -911,35 +911,35 @@ function calc3_eval(s,    e)
 }
 
 # term | term [+-] term
-function calc3_expr(    var, e)
+function _c3_expr(    var, e)
 {
     if (match(substr(_S_expr, _f), /^[A-Za-z#_][A-Za-z#_0-9]*=/)) {
-        var = calc3_advance()
+        var = _c3_advance()
         sub(/=$/, "", var)
-        return sym_store(var, calc3_expr())
+        return sym_store(var, _c3_expr())
     }
-    e = calc3_term()
+    e = _c3_term()
     while (substr(_S_expr, _f, 1) ~ /[+-]/)
         e = substr(_S_expr, _f++, 1) == "+" \
-            ? e + calc3_term() : e - calc3_term()
+            ? e + _c3_term() : e - _c3_term()
     return e
 }
 
 # factor | factor [*/%] factor
-function calc3_term(    e, f)
+function _c3_term(    e, f)
 {
-    e = calc3_factor1()
+    e = _c3_factor1()
     while (substr(_S_expr, _f, 1) ~ /[*\/%]/) {
         _f++
-        if (substr(_S_expr, _f-1, 1) == "*") return e * calc3_factor1()
+        if (substr(_S_expr, _f-1, 1) == "*") return e * _c3_factor1()
         if (substr(_S_expr, _f-1, 1) == "/") {
-            f = calc3_factor1()
+            f = _c3_factor1()
             if (f + 0 == 0)     # Ugh, I know...
                 error("Division by zero:" $0)
             return e / f
         }
         if (substr(_S_expr, _f-1, 1) == "%") {
-            f = calc3_factor1()
+            f = _c3_factor1()
             if (f + 0 == 0)
                 error("Division by zero:" $0)
             return e % f
@@ -949,40 +949,40 @@ function calc3_term(    e, f)
 }
 
 # factor2 | factor2 ^ factor
-function calc3_factor1(    e)
+function _c3_factor1(    e)
 {
-    e = calc3_factor2()
+    e = _c3_factor2()
     if (substr(_S_expr, _f, 1) != "^") return e
     _f++
-    return e ^ calc3_factor1()
+    return e ^ _c3_factor1()
 }
 
 # [+-]?factor3 | !*factor2
-function calc3_factor2(    e)
+function _c3_factor2(    e)
 {
     e = substr(_S_expr, _f)
     if (e ~ /^[\+\-\!]/) {      #unary operators [+-!]
         _f++
-        if (e ~ /^\+/) return +calc3_factor3() # only one unary + allowed
-        if (e ~ /^\-/) return -calc3_factor3() # only one unary - allowed
-        if (e ~ /^\!/) return !(calc3_factor2() + 0) # unary ! may repeat
+        if (e ~ /^\+/) return +_c3_factor3() # only one unary + allowed
+        if (e ~ /^\-/) return -_c3_factor3() # only one unary - allowed
+        if (e ~ /^\!/) return !(_c3_factor2() + 0) # unary ! may repeat
     }
-    return calc3_factor3()
+    return _c3_factor3()
 }
 
 # number | varname | (expr) | function(...)
-function calc3_factor3(    e, fun, e2)
+function _c3_factor3(    e, fun, e2)
 {
     e = substr(_S_expr, _f)
 
     # number
     if (match(e, /^([0-9]+[.]?[0-9]*|[.][0-9]+)([Ee][+-]?[0-9]+)?/)) {
-        return calc3_advance()
+        return _c3_advance()
     }
 
     # function ()
     if (match(e, /^([A-Za-z#_][A-Za-z#_0-9]+)?\(\)/)) {
-        fun = calc3_advance()
+        fun = _c3_advance()
        #if (fun ~ /^srand()/) return srand()
         if (fun ~ /^rand()/)  return rand()
         error(sprintf("Unknown function '%s'", fun))
@@ -990,18 +990,18 @@ function calc3_factor3(    e, fun, e2)
 
     # (expr) | function(expr) | function(expr,expr)
     if (match(e, /^([A-Za-z#_][A-Za-z#_0-9]+)?\(/)) {
-        fun = calc3_advance()
+        fun = _c3_advance()
+       #if (fun ~ /^(cos|deg|exp|int|log(10)?|rad|randint|sin|sqrt|srand|tan)?\(/) {
         if (fun ~ /^(cos|deg|exp|int|log(10)?|rad|randint|sin|sqrt|tan)?\(/) {
-            e = calc3_expr()
-            e = calc3_calculate_function(fun, e)
+            e = _c3_expr()
+            e = _c3_calculate_function(fun, e)
         } else if (fun ~ /^atan2\(/) {
-            e = calc3_expr()
+            e = _c3_expr()
             if (substr(_S_expr, _f, 1) != ",") {
                 error(sprintf("Missing ',' at '%s'", substr(_S_expr, _f)))
-                # return 0 # NOTREACHED
             }
             _f++
-            e2 = calc3_expr()
+            e2 = _c3_expr()
             e = atan2(e, e2)
         } else
             error(sprintf("Unknown function '%s'", fun))
@@ -1013,7 +1013,7 @@ function calc3_factor3(    e, fun, e2)
 
     # variable name
     if (match(e, /^[A-Za-z#_][A-Za-z#_0-9]*/)) {
-        e2 = calc3_advance()
+        e2 = _c3_advance()
         if      (e2 == "e")   return E
         else if (e2 == "pi")  return PI
         else if (e2 == "tau") return TAU
@@ -1030,7 +1030,7 @@ function calc3_factor3(    e, fun, e2)
 }
 
 # Built-in functions of one variable
-function calc3_calculate_function(fun, e,    c)
+function _c3_calculate_function(fun, e,    c)
 {
     if (fun == "(")        return e
     if (fun == "cos(")     return cos(e)
@@ -1043,13 +1043,14 @@ function calc3_calculate_function(fun, e,    c)
     if (fun == "randint(") return randint(e) + 1
     if (fun == "sin(")     return sin(e)
     if (fun == "sqrt(")    return sqrt(e)
+   #if (fun == "srand(")   return srand(e)
     if (fun == "tan(")     { c = cos(e)
                              if (c == 0) error("Division by zero:" $0)
                              return sin(e) / c }
     error(sprintf("Unknown function '%s'", fun))
 }
 
-function calc3_advance(    tmp)
+function _c3_advance(    tmp)
 {
     tmp = substr(_S_expr, _f, RLENGTH)
     _f += RLENGTH

@@ -169,6 +169,7 @@
 #           __M2_UUID__            UUID unique to this m2 run
 #           __M2_VERSION__         m2 version
 #           __NFILE__              Number of files processed so far (eg 2)
+#           __NLINE__              Number of lines read so far from all files
 #           __OSNAME__             Operating system name
 #           __RESULT__             Value from most recent @expr ...@ expression
 #           __STRICT__        [**] Strict mode (def TRUE)
@@ -851,7 +852,8 @@ function _less_than(s1, s2,    s1_un, s2_un)
     if      (  s1_un &&   s2_un) return _less_than(substr(s1,2), substr(s2,2))
     else if (  s1_un && ! s2_un) return FALSE
     else if (! s1_un &&   s2_un) return TRUE
-    else                         return s1 < s2
+    else if (toupper(s1) != toupper(s2)) return toupper(s1) < toupper(s2)
+    else return s1 < s2
 }
 
 
@@ -1575,13 +1577,15 @@ function readline(    getstat, i, status)
         }
     } else {
         getstat = getline < sym_fetch("__FILE__")
-        if (getstat < 0) {      # Error
+        if (getstat < 0) {       # Error
             status = READLINE_ERROR
             warn("Error reading '" sym_fetch("__FILE__") "' [readline]")
-        } else if (getstat == 0)  # End of file
+        } else if (getstat == 0) # End of file
             status = READLINE_EOF
-        else                    # Read a line
+        else {                   # Read a line
             sym_increment("__LINE__")
+            sym_increment("__NLINE__")
+        }
     }
     # Hack: allow @Mname at start of line without a closing @.
     # This only applies if in non-strict mode.  Note, macro name must
@@ -2147,9 +2151,10 @@ function load_init_files()
         dofile(ENVIRON["HOME"] "/" init_file_name)
     dofile(init_file_name)
 
-    # Don't count init files in total file tally - it's better to keep
-    # in sync with the command line.
+    # Don't count init files in total line/file tally - it's better to
+    # keep them in sync with the files from the command line.
     sym_store("__NFILE__", 0)
+    sym_store("__NLINE__", 0)
     init_files_loaded = TRUE
 }
 

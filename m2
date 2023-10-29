@@ -192,8 +192,10 @@
 #       inserts their results.  It is based on "calc3" from "The AWK
 #       Programming Language" p. 146, with enhancements by Kenny
 #       McCormack and Alan Linton.  @expr@ supports the standard
-#       arithmetic operators:      +  -  *  /  %  ^  (  )
-#       Comparison and logical/boolean operations are not supported.
+#       arithmetic operators  +  -  *  /  %  ^  (  )
+#       Comparison operators  <  <=  ==  !=  >=  >  return 0 or 1,
+#       as per Awk.  Logical negation (!) is also allowed, but no other
+#       boolean operations (notably && and ||) are supported.
 #
 #       @expr@ supports the following functions:
 #           atan2(y,x)             Arctangent of y/x, -pi <= atan2 <= pi
@@ -210,7 +212,7 @@
 #           sqrt(x)                Square root of x
 #           tan(x)                 Tangent of x, in radians
 #
-#       @expr@ can automatically use symbols' values in expressions.
+#       @expr@ will automatically use symbols' values in expressions.
 #       Inside @expr ...@, there is no need to surround symbol names
 #       with "@" characters to retrieve their values.  @expr@ also
 #       recognizes the built-in constants "e", "pi", and "tau".
@@ -366,7 +368,7 @@
 #*****************************************************************************
 
 BEGIN {
-    version = "3.0.2"
+    version = "3.0.3"
 }
 
 
@@ -551,7 +553,7 @@ function sym_printable_form(sym,    sep, arr, key)
 # Convert an array name and key into a nice, user-friendly format, usually for
 # printing (i.e., put the array-looking brackets back if needed).
 #       (arr, key)  =>  "arr[key]"
-# Since we're calling with the 2-arg form, it is known there is 
+# Since we're calling with the 2-arg form, it is known there is
 # no <SUBSEP> present, so the strings can be used raw safely.
 function sym2_printable_form(arr, key)
 {
@@ -906,55 +908,74 @@ function calc3_eval(s,    e)
         error(sprintf("Math expression error at '%s'", substr(_S_expr, _f)))
     else if (e == "nan" || e == "inf" || e == "-inf")
         error(sprintf("Math expression error:'%s' returned \"%s\":%s", s, e, $0))
-     else
+    else
         return e
 }
 
-# term | term [+-] term
-function _c3_expr(    var, e)
+# rel | rel relop rel
+function _c3_expr(    var, e, op1, op2, m2)
 {
     if (match(substr(_S_expr, _f), /^[A-Za-z#_][A-Za-z#_0-9]*=/)) {
         var = _c3_advance()
         sub(/=$/, "", var)
         return sym_store(var, _c3_expr())
     }
+
+    e = _c3_rel()
+    # Only one relational operator allowed: 1<2<3 is a syntax error
+    if ((m2 = ((op2 = substr(_S_expr, _f, 2)) ~ /<=|==|!=|>=/))  ||
+              ((op1 = substr(_S_expr, _f, 1)) ~ /<|>/)) {
+        if (m2) {
+            _f += 2             # Use +0 to force numeric comparison
+            if (op2 == "<=") return e+0 <= _c3_rel()+0
+            if (op2 == "==") return e+0 == _c3_rel()+0
+            if (op2 == "!=") return e+0 != _c3_rel()+0
+            if (op2 == ">=") return e+0 >= _c3_rel()+0
+        } else {
+            _f += 1
+            if (op1 == "<")  return e+0 <  _c3_rel()+0
+            if (op1 == ">")  return e+0 >  _c3_rel()+0
+        }
+    }
+    return e
+}
+
+# term | term [+-] term
+function _c3_rel(    e, op)
+{
     e = _c3_term()
-    while (substr(_S_expr, _f, 1) ~ /[+-]/)
-        e = substr(_S_expr, _f++, 1) == "+" \
-            ? e + _c3_term() : e - _c3_term()
+    while ((op = substr(_S_expr, _f, 1)) ~ /[+-]/) {
+        _f++
+        e = op == "+" ? e + _c3_term() : e - _c3_term()
+    }
     return e
 }
 
 # factor | factor [*/%] factor
-function _c3_term(    e, f)
+function _c3_term(    e, op, f)
 {
-    e = _c3_factor1()
-    while (substr(_S_expr, _f, 1) ~ /[*\/%]/) {
+    e = _c3_factor()
+    while ((op = substr(_S_expr, _f, 1)) ~ /[*\/%]/) {
         _f++
-        if (substr(_S_expr, _f-1, 1) == "*") return e * _c3_factor1()
-        if (substr(_S_expr, _f-1, 1) == "/") {
-            f = _c3_factor1()
-            if (f + 0 == 0)     # Ugh, I know...
+        f = _c3_factor()
+        if (op == "*")
+            e = e * f
+        else {
+            if (f == 0)         # Ugh
                 error("Division by zero:" $0)
-            return e / f
-        }
-        if (substr(_S_expr, _f-1, 1) == "%") {
-            f = _c3_factor1()
-            if (f + 0 == 0)
-                error("Division by zero:" $0)
-            return e % f
+            e = (op == "/") ? e / f : e % f
         }
     }
     return e
 }
 
 # factor2 | factor2 ^ factor
-function _c3_factor1(    e)
+function _c3_factor(    e)
 {
     e = _c3_factor2()
     if (substr(_S_expr, _f, 1) != "^") return e
     _f++
-    return e ^ _c3_factor1()
+    return e ^ _c3_factor()
 }
 
 # [+-]?factor3 | !*factor2

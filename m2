@@ -108,9 +108,11 @@
 #               => Hello, world!  m2 sends you greetings.
 #
 #       To alleviate scanning ambiguities, any characters enclosed in
-#       at-sign braces will be recursively scanned and expanded.  E.g.,
-#           @data_list[@{@my_key@}]@
+#       at-sign braces will be recursively scanned and expanded.  Thus
+#           @data_list[@{my_key}]@
 #       uses the value in "my_key" to look up data from "data_list".
+#       The text between the braces is implicitly interpreted as if it
+#       were surrounded by "@" characters, so @{SYMBOL} is correct.
 #
 #       The following definitions are recognized:
 #
@@ -330,11 +332,11 @@
 #           @error Region '@region@' is not valid: choose us-{east,west}-{1,2}
 #           @endif
 #           @#              Configure image name according to region
-#           @define imgs[us-east-1]     my-east1-image-name
-#           @define imgs[us-east-2]     my-east2-image-name
-#           @define imgs[us-west-1]     my-west1-image-name
-#           @define imgs[us-west-2]     my-west2-image-name
-#           @define my_image @imgs[@{@region@}]@
+#           @define images[us-east-1]   my-east1-image-name
+#           @define images[us-east-2]   my-east2-image-name
+#           @define images[us-west-1]   my-west1-image-name
+#           @define images[us-west-2]   my-west2-image-name
+#           @define my_image @images[@{region}]@
 #           @#              Output begins here
 #           Region: @region@
 #           Image:  @my_image@
@@ -2038,7 +2040,7 @@ function expand_braces(s,    atbr, cb, ltext, mtext, rtext)
             print_stderr("   expand_braces: rtext='" rtext "'")
         }
 
-        s = ltext dosubs(mtext) rtext
+        s = ltext dosubs("@" mtext "@") rtext
     }
 
     dbg_print("braces", 3, ("<< expand_braces: returning '" s "'"))

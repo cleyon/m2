@@ -107,6 +107,13 @@
 #           @greet world@
 #               => Hello, world!  m2 sends you greetings.
 #
+#       m2 can incorporate the contents of files into its data stream.
+#       @include scans and processes the file data for macros; @paste
+#       will retrieve the contents with no modifications.  Attempting to
+#       @include or @paste a non-existent file results in an error.
+#       However, if the "silent" variants (@sinclude, @spaste) are used,
+#       no message is printed.
+#
 #       To alleviate scanning ambiguities, any characters enclosed in
 #       at-sign braces will be recursively scanned and expanded.  Thus
 #           @data_list[@{my_key}]@
@@ -1348,18 +1355,20 @@ function m2_ignore(    buf, delim, save_line, save_lineno)
 }
 
 
-# @include, @paste      FILE
-function m2_include(    error_text, filename, read_literally)
+# @{s,}{include,paste}  FILE
+function m2_include(    error_text, filename, read_literally, silent)
 {
     if (NF < 2)
         error("Bad parameters:" $0)
     if (! currently_active_p())
         return
-    read_literally = ($1 == "@paste")   # @paste does not process macros
+    read_literally = (substr($1, length($1) - 4) == "paste") # paste does not process macros
+    silent         = (substr($1, 2, 1) == "s") # silent mutes file errors, even in strict mode
     $1 = ""
     sub("^[ \t]*", "")
     filename = rm_quotes(dosubs($0))
     if (! dofile(filename, read_literally)) {
+        if (silent) return
         error_text = "File '" filename "' does not exist:" $0
         if (strictp())
             error(error_text)
@@ -1648,13 +1657,13 @@ function process_line(read_literally,    newstring)
                                           { m2_if() }
     else if (/^@ifn?def([ \t]|$)/)        { m2_if() }
     else if (/^@ignore([ \t]|$)/)         { m2_ignore() }
-    else if (/^@include([ \t]|$)/)        { m2_include() }
+    else if (/^@s?include([ \t]|$)/)      { m2_include() }
     else if (/^@incr([ \t]|$)/)           { m2_incr() }
     else if (/^@init(ialize)?([ \t]|$)/)  { m2_default() }
     else if (/^@input([ \t]|$)/)          { m2_input() }
     else if (/^@longdef([ \t]|$)/)        { m2_longdef() }
     else if (/^@longend([ \t]|$)/)        { m2_longend() }
-    else if (/^@paste([ \t]|$)/)          { m2_include() }
+    else if (/^@s?paste([ \t]|$)/)        { m2_include() }
     else if (/^@read([ \t]|$)/)           { m2_read() }
     else if (/^@shell([ \t]|$)/)          { m2_shell() }
     else if (/^@stderr([ \t]|$)/)         { m2_error() }

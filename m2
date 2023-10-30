@@ -33,6 +33,8 @@
 #          output.  @rem ...@ macros are embedded in the input text and
 #          produce no output.  Use @ignore for a multi-line comment.
 #
+#       5. Manage multiple output streams with diversions.
+#
 #       Control commands (@if, @define, etc) are distinguished by a "@"
 #       as the first character at the beginning of a line.  They consume
 #       the entire line.  The following table lists control commands to
@@ -43,6 +45,7 @@
 #           @decr NAME [N]         Subtract N (1) from an already defined NAME
 #           @default NAME VAL      Like @define, but no-op if NAME already defined
 #           @define NAME TEXT      Set NAME to TEXT
+#           @divert [N]            Divert output to stream N (default 0 means stdout)
 #           @dump(all) [FILE]      Output symbol names & definitions to FILE (stderr)
 #           @error [TEXT]          Send TEXT to standard error; exit code 2
 #           @exit [CODE]           Immediately stop parsing; exit CODE (default 0)
@@ -69,6 +72,7 @@
 #                                    Output from prog is captured in output stream
 #           @typeout               Print remainder of input file literally, no macros
 #           @undef NAME            Remove definition of NAME
+#           @undivert [N]          Inject stream N (def all) into current stream
 #           @unless NAME           Include subsequent text if NAME == 0 (or undefined)
 #           @warn [TEXT]           Send TEXT to standard error; continue
 #                                    Also called @echo, @stderr
@@ -160,6 +164,7 @@
 #
 #           __DATE__               m2 run start date as YYYYMMDD (eg 19450716)
 #           __DEBUG__[<id>]   [**] Debugging levels for m2 systems
+#           __DIVNUM__             Current stream number (0; 0-9 valid)
 #           __EPOCH__              Seconds since Epoch at m2 run start time
 #           __FILE__               Current file name
 #           __FILE_UUID__          UUID unique to this file
@@ -428,8 +433,39 @@ function warn(text, line, file)
 function error(text, line, file)
 {
     warn(text, line, file)
-    flush_stdout()
-    exit EX_M2_ERROR
+    end_program(EX_M2_ERROR, FALSE) # Do not output diverted streams
+}
+
+
+function undivert(stream)
+{
+    dbg_print("divert", 1, "undivert(" stream ")")
+    if (stream <= 0 || stream == sym_fetch("__DIVNUM__"))
+        return
+    if (length(streambuf[stream]) > 0) {
+        ship_out(streambuf[stream])
+        streambuf[stream] = ""
+    }
+}
+
+function undivert_all(    stream)
+{
+    for (stream = 1; stream <= MAX_STREAM; stream++)
+        undivert(stream)
+}
+
+
+# Send text to the destination stream __DIVNUM__
+#   < 0         Discard
+#   = 0         Standard output
+#   > 0         Stream # N
+function ship_out(text,    divnum)
+{
+    divnum = sym_fetch("__DIVNUM__")
+    if (divnum == 0)
+        printf("%s", text)
+    else if (divnum > 0)
+        streambuf[divnum] = streambuf[divnum] text
 }
 
 
@@ -1135,6 +1171,24 @@ function m2_define(    append_flag, sym)
 }
 
 
+# @divert               [N]
+function m2_divert()
+{
+    if (! currently_active_p())
+        return
+    if (NF > 2)
+        error("Bad parameters:" $0)
+    $2 = (NF == 1) ? "0" : dosubs($2)
+    if (! integerp($2))
+        error(sprintf("Value '%s' must be numeric:%s", $2, $0))
+    if ($2 > MAX_STREAM)
+        error("Bad parameters:" $0)
+
+    dbg_print("divert", 1, "divert(" $2 ")")
+    sym_store("__DIVNUM__", int($2))
+}
+
+
 # @dump[all]            [FILE]
 function m2_dump(    buf, cnt, definition, dumpfile, i, key, keys, sym_name, all_flag)
 {
@@ -1223,10 +1277,8 @@ function m2_error(    m2_will_exit, message)
         message = dosubs($0)
     }
     print_stderr(message)
-    if (m2_will_exit) {
-        flush_stdout()
-        exit EX_USER_REQUEST
-    }
+    if (m2_will_exit)
+        end_program(EX_USER_REQUEST, FALSE) # Do not output diverted streams
 }
 
 
@@ -1235,8 +1287,7 @@ function m2_exit()
 {
     if (! currently_active_p())
         return
-    flush_stdout()
-    exit (NF > 1 && integerp($2)) ? $2 : EX_OK
+    end_program((NF > 1 && integerp($2)) ? $2 : EX_OK, TRUE)
 }
 
 
@@ -1513,7 +1564,7 @@ function m2_typeout(    buf)
         return
     buf = read_lines_until("")
     if (length(buf) > 0)
-        printf("%s\n", buf)
+        ship_out(buf "\n")
 }
 
 
@@ -1528,6 +1579,27 @@ function m2_undef(    sym)
     assert_sym_valid_name(sym)
     assert_sym_unprotected(sym)
     sym_destroy(sym)
+}
+
+
+# @undivert             [N]
+function m2_undivert(    stream, i)
+{
+    if (! currently_active_p())
+        return
+    if (NF == 1)
+        undivert_all()
+    else {
+        i = 1
+        while (++i <= NF) {
+            stream = dosubs($i)
+            if (! integerp(stream))
+                error(sprintf("Value '%s' must be numeric:%s", stream, $0))
+            if (stream > MAX_STREAM)
+                error("Bad parameters:" $0)
+            undivert(stream)
+        }
+    }
 }
 
 
@@ -1634,7 +1706,7 @@ function process_line(read_literally,    newstring)
     # Short circuit if we're not processing macros, or no @ found
     if (read_literally ||
         (currently_active_p() && index($0, "@") == IDX_NOT_FOUND)) {
-        printf("%s\n", $0)
+        ship_out($0 "\n")
         return
     }
 
@@ -1646,6 +1718,7 @@ function process_line(read_literally,    newstring)
     else if (/^@decr([ \t]|$)/)           { m2_incr() }
     else if (/^@default([ \t]|$)/)        { m2_default() }
     else if (/^@define([ \t]|$)/)         { m2_define() }
+    else if (/^@divert([ \t]|$)/)         { m2_divert() }
     else if (/^@dump(all|def)?([ \t]|$)/) { m2_dump() }
     else if (/^@echo([ \t]|$)/)           { m2_error() }
     else if (/^@else([ \t]|$)/)           { m2_else() }
@@ -1669,6 +1742,7 @@ function process_line(read_literally,    newstring)
     else if (/^@stderr([ \t]|$)/)         { m2_error() }
     else if (/^@typeout([ \t]|$)/)        { m2_typeout() }
     else if (/^@undef(ine)?([ \t]|$)/)    { m2_undef() }
+    else if (/^@undivert([ \t]|$)/)       { m2_undivert() }
     else if (/^@unless([ \t]|$)/)         { m2_if() }
     else if (/^@warn([ \t]|$)/)           { m2_error() }
 
@@ -1677,7 +1751,7 @@ function process_line(read_literally,    newstring)
         newstring = dosubs($0)
         if (newstring == $0 || index(newstring, "@") == IDX_NOT_FOUND) {
             if (currently_active_p())
-                printf("%s\n", newstring)
+                ship_out(newstring "\n")
         } else {
             buffer = newstring "\n" buffer
         }
@@ -2220,6 +2294,7 @@ function initialize(    d, dateout)
     IDX_NOT_FOUND     = 0
     LOG10             = log(10)
     MAX_PARAM         = 20
+    MAX_STREAM        =  9
     PI                = atan2(0, -1)
     READLINE_ERROR    = -1
     READLINE_EOF      = 0
@@ -2252,6 +2327,7 @@ function initialize(    d, dateout)
     split(dateout, d)
 
     sym_store("__DATE__",               d[1] d[2] d[3])
+    sym_store("__DIVNUM__",             0)
     sym_store("__EPOCH__",              d[8])
     sym2_store("__FMT__", TRUE,         "1")
     sym2_store("__FMT__", FALSE,        "0")
@@ -2372,6 +2448,19 @@ BEGIN {
         exit_code = EX_USAGE
     }
 
+    end_program(exit_code, TRUE)
+}
+
+
+# Prepare to exit: undivert all pending streams (usually), flush output,
+# and exit with specified code.  I don't call this "END" simply because
+# I need finer control over when/if it is invoked.
+function end_program(exit_code, output_diverted_streams)
+{
+    if (output_diverted_streams) {
+        sym_store("__DIVNUM__", 0)
+        undivert_all()
+    }
     flush_stdout()
     exit exit_code
 }

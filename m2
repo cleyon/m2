@@ -812,7 +812,6 @@ function seq_destroy(id)
     delete seqtab[id, "init"]
     delete seqtab[id, "fmt"]
     delete seqtab[id, "value"]
-    delete seqtab[id]
 }
 
 

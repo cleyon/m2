@@ -1241,10 +1241,10 @@ function _c3_advance(    tmp)
 # @default, @initialize NAME TEXT
 function m2_default(    sym)
 {
-    if (NF < 2)
-        error("Bad parameters:" $0)
     if (! currently_active_p())
         return
+    if (NF < 2)
+        error("Bad parameters:" $0)
     sym = $2
     assert_sym_valid_name(sym)
     assert_sym_unprotected(sym)
@@ -1263,10 +1263,10 @@ function m2_default(    sym)
 # @append, @define      NAME TEXT
 function m2_define(    append_flag, sym)
 {
-    if (NF < 2)
-        error("Bad parameters:" $0)
     if (! currently_active_p())
         return
+    if (NF < 2)
+        error("Bad parameters:" $0)
     append_flag = ($1 == "@append")
     sym = $2
     assert_sym_valid_name(sym)
@@ -1500,10 +1500,10 @@ function m2_ignore(    buf, delim, save_line, save_lineno)
     #       <...>
     #     Theodore Roosevelt
     # ignores <...> text up to the president's name.
-    if (NF != 2)
-        error("Bad parameters:" $0)
     if (! currently_active_p())
         return
+    if (NF != 2)
+        error("Bad parameters:" $0)
     save_line = $0
     save_lineno = sym_fetch("__LINE__")
     delim = $2
@@ -1516,10 +1516,10 @@ function m2_ignore(    buf, delim, save_line, save_lineno)
 # @{s,}{include,paste}  FILE
 function m2_include(    error_text, filename, read_literally, silent)
 {
-    if (NF < 2)
-        error("Bad parameters:" $0)
     if (! currently_active_p())
         return
+    if (NF < 2)
+        error("Bad parameters:" $0)
     read_literally = (substr($1, length($1) - 4) == "paste") # paste does not process macros
     silent         = (substr($1, 2, 1) == "s") # silent mutes file errors, even in strict mode
     $1 = ""
@@ -1539,10 +1539,10 @@ function m2_include(    error_text, filename, read_literally, silent)
 # @decr, @incr          NAME [N]
 function m2_incr(    incr, sym)
 {
-    if (NF < 2)
-        error("Bad parameters:" $0)
     if (! currently_active_p())
         return
+    if (NF < 2)
+        error("Bad parameters:" $0)
     sym = $2
     assert_sym_valid_name(sym)
     assert_sym_unprotected(sym)
@@ -1579,10 +1579,10 @@ function m2_input(    getstat, input, sym)
 # @longdef              NAME
 function m2_longdef(    buf, save_line, save_lineno, sym)
 {
-    if (NF != 2)
-        error("Bad parameters:" $0)
     if (! currently_active_p())
         return
+    if (NF != 2)
+        error("Bad parameters:" $0)
     save_line = $0
     save_lineno = sym_fetch("__LINE__")
     sym = $2
@@ -1610,11 +1610,11 @@ function m2_read(    sym, filename, line, val, getstat)
     # This is not intended to be a full-blown file inputter but rather just
     # to read short snippets like a file path or username.  As usual, multi-
     # line values are accepted but the final trailing \n (if any) is stripped.
+    if (! currently_active_p())
+        return
     #dbg_print("read", 7, ("@read: $0='" $0 "'"))
     if (NF < 3)
         error("Bad parameters:" $0)
-    if (! currently_active_p())
-        return
     sym  = $2
     assert_sym_valid_name(sym)
     assert_sym_unprotected(sym)
@@ -1651,8 +1651,7 @@ function m2_sequence(    id, cmd, arg, saveline)
         error("Name '" id "' not defined:" $0)
     if (NF == 3) {
         if (cmd == "delete") {
-            if (seq_defined_p(id))
-                seq_destroy(id)
+            seq_destroy(id)
         } else if (cmd == "new") {
             # Fail if builtiin or already defined symbol or sequence (i.e, can't redefine)
             if (id in builtins    || name_system_p(id) ||
@@ -1717,10 +1716,10 @@ function m2_shell(    buf, delim, save_line, save_lineno, sendto)
     # The sendto program defaults to a reasonable shell but you can specify
     # where you want to send your data.  Possibly useful choices would be an
     # alternative shell, an email message reader, or /usr/bin/bc.
-    if (NF < 2)
-        error("Bad parameters:" $0)
     if (! currently_active_p())
         return
+    if (NF < 2)
+        error("Bad parameters:" $0)
     save_line = $0
     save_lineno = sym_fetch("__LINE__")
     delim = $2
@@ -1754,10 +1753,10 @@ function m2_typeout(    buf)
 # @undef[ine]           NAME
 function m2_undef(    name)
 {
-    if (NF != 2)
-        error("Bad parameters:" $0)
     if (! currently_active_p())
         return
+    if (NF != 2)
+        error("Bad parameters:" $0)
     if (seq_valid_p($2) && seq_defined_p($2))
         seq_destroy($2)
     else {

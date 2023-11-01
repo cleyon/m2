@@ -584,6 +584,18 @@ function sym2_defined_p(arr, key)
     return (arr, key) in symtab
 }
 
+function sym_definition_pp(sym,    sym_name, definition)
+{
+    sym_name = sym_printable_form(sym)
+    definition = sym_fetch(sym)
+    return (index(definition, "\n") == IDX_NOT_FOUND) \
+        ? "@define " sym_name "\t" definition "\n" \
+        : "@longdef " sym_name "\n" \
+          definition           "\n" \
+          "@longend"           "\n"
+}
+
+
 # Caller is responsible for ensuring user is allowed to delete symbol
 function sym_destroy(sym)
 {
@@ -775,6 +787,21 @@ function assert_sym_valid_name(sym)
 function seq_defined_p(id,    s)
 {
     return (id, "defined") in seqtab
+}
+
+
+function seq_definition_pp(id,    buf)
+{
+    buf = "@sequence " id "\tnew\n"
+    if (seqtab[id, "value"] != SEQ_DEFAULT_INIT)
+        buf = buf "@sequence " id "\tvalue " seqtab[id, "value"] "\n"
+    if (seqtab[id, "init"] != SEQ_DEFAULT_INIT)
+        buf = buf "@sequence " id "\tinit " seqtab[id, "init"] "\n"
+    if (seqtab[id, "inc"] != SEQ_DEFAULT_INC)
+        buf = buf "@sequence " id "\tinc " seqtab[id, "inc"] "\n"
+    if (seqtab[id, "fmt"] != SEQ_DEFAULT_FMT)
+        buf = buf "@sequence " id "\tformat " seqtab[id, "fmt"] "\n"
+    return buf
 }
 
 
@@ -1297,7 +1324,7 @@ function m2_divert()
 
 
 # @dump[all]            [FILE]
-function m2_dump(    buf, cnt, definition, dumpfile, i, key, keys, sym_name, all_flag)
+function m2_dump(    buf, cnt, definition, dumpfile, i, key, keys, seqfields, sym_name, all_flag)
 {
     if (! currently_active_p())
         return
@@ -1310,11 +1337,16 @@ function m2_dump(    buf, cnt, definition, dumpfile, i, key, keys, sym_name, all
         sub("^[ \t]*", "")
         dumpfile = rm_quotes(dosubs($0))
     }
-    # Count and sort the symbol table keys
+    # Count and sort the keys from the symbol and sequence tables
     cnt = 0
     for (key in symtab) {
         if (all_flag || ! sym_system_p(key))
             keys[++cnt] = key
+    }
+    for (key in seqtab) {
+        split(key, seqfields, SUBSEP)
+        if (seqfields[2] == "defined")
+            keys[++cnt] = seqfields[1]
     }
     qsort(keys, 1, cnt)
 
@@ -1322,16 +1354,12 @@ function m2_dump(    buf, cnt, definition, dumpfile, i, key, keys, sym_name, all
     buf = ""
     for (i = 1; i <= cnt; i++) {
         key = keys[i]
-        definition = sym_fetch(key)
-        sym_name = sym_printable_form(key)
-        if (index(definition, "\n") == IDX_NOT_FOUND)
-            # No newline means it's a one-liner
-            buf = buf "@define " sym_name "\t" definition "\n"
-        else {
-            buf = buf "@longdef " sym_name "\n"
-            buf = buf definition           "\n"
-            buf = buf "@longend"           "\n"
-        }
+        if (key in symtab)
+            buf = buf sym_definition_pp(key)
+        else if ((key, "defined") in seqtab)
+            buf = buf seq_definition_pp(key)
+        else                    # Can't happen
+            error("Name '" key "' not available:" $0)
     }
     buf = chop(buf)
     if (length(buf) == 0) {

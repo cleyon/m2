@@ -68,6 +68,7 @@
 #           @longend                 But simple @NAME@ references should be okay
 #           @paste FILE            Insert FILE contents literally, no macros
 #           @read NAME FILE        Read FILE contents to define NAME
+#           @sequence ID CMD [ARG] Create and manage sequences
 #           @shell DELIM [PROG]    Evaluate input until DELIM, send raw data to PROG
 #                                    Output from prog is captured in output stream
 #           @typeout               Print remainder of input file literally, no macros
@@ -201,6 +202,37 @@
 #           @date@T@time@@__TZ__@
 #       will generate an up-to-date timestamp.
 #
+# SEQUENCES
+#       m2 supports sequences which are integer values.  You create and
+#       manage sequences by ID with the @sequence command.  By default,
+#       sequences begin at value 1 and increment by 1 upon each use.
+#       @sequence is always given ID and CMD parameters, and an
+#       additional argument might be supplied.  @sequence accepts the
+#       following commands:
+#
+#           delete                 Eradicate sequence ID
+#           format PRINTF          Format string to printf value
+#           inc N                  Set increment to N
+#           init N                 Set initial value to N
+#           new                    Create a new sequence named ID
+#           next                   Increment value normally (no output)
+#           reset                  Set current value to initial value
+#           value N                Set value directly to N
+#
+#       To use a sequence, surround the sequence ID with @ characters
+#       just like a macro.  First, this adds the increment to the value,
+#       and then injects the new value, formatting it with sprintf as
+#       specified.  The initial value is normally zero, and therefore
+#       the first usage returns 1.  To simply get the current value
+#       without incrementing or special formatting, say @ID currval@.
+#
+#       Example:
+#           @sequence foo new
+#           @sequence foo init 10
+#           @sequence foo format # %X.
+#           @foo@
+#               => # B.
+#
 # MATHEMATICAL EXPRESSIONS
 #       The @expr ...@ macro evaluates mathematical expressions and
 #       inserts their results.  It is based on "calc3" from "The AWK
@@ -212,6 +244,7 @@
 #       boolean operations (notably && and ||) are supported.
 #
 #       @expr@ supports the following functions:
+#
 #           atan2(y,x)             Arctangent of y/x, -pi <= atan2 <= pi
 #           cos(x)                 Cosine of x, in radians
 #           deg(x)                 Convert radians to degrees
@@ -262,8 +295,6 @@
 #               - More than one @else found in a single @if block.
 #           Empty symbol table
 #               - A @dump command found no definitions to display.
-#           Environment variable 'XXX' invalid name
-#               - Environment variable name does not pass validity check.
 #           Environment variable 'XXX' not defined
 #               - Attempt to getenv an undefined environment variable
 #                 while __STRICT__ is in effect.
@@ -273,11 +304,22 @@
 #               - @expr ...@ received unexpected input or bad syntax.
 #           File 'XXX' does not exist
 #               - Attempt to @include a non-existent file in strict mode.
+#           Invalid name 'XXX'
+#               - A symbol name does not pass validity check.  In __STRICT__
+#                 mode (the default), a symbol name may only contain letters,
+#                 digits, #, -, or _ characters.
+#               - Environment variable name does not pass validity check.
 #           Math expression error [hint]
 #               - An error occurred during @expr ...@ evaluation.
 #               - A math expression returned +/-Infinity or NaN.
 #           Missing 'X' at 'XXX'
 #               - @expr ...@ did not match syntax required for expression.
+#           Name 'XXX' not available
+#               - Despite being valid, the name cannot be used here.
+#           Name 'XXX' not defined
+#               - A symbol name without a value was passed to a function
+#               - An undefined macro was referenced and __STRICT__ is true.
+#               - Attempt to use an undefined sequence (new is allowed)
 #           No corresponding 'XXX'
 #               - @if: An @else or @endif was seen without a matching @if.
 #               - @longdef: A @longend was seen without a matching @longdef.
@@ -287,13 +329,6 @@
 #                 no value was supplied.
 #           Symbol 'XXX' already defined
 #               - @initialize attempted to define a previously defined symbol.
-#           Symbol 'XXX' invalid name
-#               - A symbol name does not pass validity check.  In __STRICT__
-#                 mode (the default), a symbol name may only contain letters,
-#                 digits, #, -, or _ characters.
-#           Symbol 'XXX' not defined
-#               - A symbol name without a value was passed to a function
-#               - An undefined macro was referenced and __STRICT__ is true.
 #           Symbol 'XXX' protected
 #               - Attempt to modify a protected symbol (__XXX__).
 #                 (__STRICT__ is an exception and can be modified.)
@@ -382,8 +417,9 @@
 #*****************************************************************************
 
 BEGIN {
-    version = "3.0.3"
+    version = "3.1.0"
 }
+
 
 
 #*****************************************************************************
@@ -437,6 +473,31 @@ function error(text, line, file)
 }
 
 
+
+#*****************************************************************************
+#
+#       Stream functions
+#
+#*****************************************************************************
+
+# Send text to the destination stream __DIVNUM__
+#   < 0         Discard
+#   = 0         Standard output
+#   > 0         Stream # N
+function ship_out(text,    divnum)
+{
+    divnum = sym_fetch("__DIVNUM__")
+    if (divnum == 0)
+        printf("%s", text)
+    else if (divnum > 0)
+        streambuf[divnum] = streambuf[divnum] text
+}
+
+
+# Inject (i.e., ship out to current stream) the contents of a different
+# stream.  Negative streams and current diversion are silently ignored.
+# Buffer text is not re-parsed for macros, and buffer is cleared after
+# injection into target stream.
 function undivert(stream)
 {
     dbg_print("divert", 1, "undivert(" stream ")")
@@ -454,19 +515,6 @@ function undivert_all(    stream)
         undivert(stream)
 }
 
-
-# Send text to the destination stream __DIVNUM__
-#   < 0         Discard
-#   = 0         Standard output
-#   > 0         Stream # N
-function ship_out(text,    divnum)
-{
-    divnum = sym_fetch("__DIVNUM__")
-    if (divnum == 0)
-        printf("%s", text)
-    else if (divnum > 0)
-        streambuf[divnum] = streambuf[divnum] text
-}
 
 
 #*****************************************************************************
@@ -576,7 +624,7 @@ function sym_internal_form(sym,    lbracket, arr, key)
     if ((lbracket = index(sym, "[")) == IDX_NOT_FOUND)
         return sym
     if (sym !~ /^.+\[.+\]$/)
-        error("Symbol '" sym "' invalid name:" $0)
+        error("Invalid name '" sym "':" $0)
     arr = substr(sym, 1, lbracket-1)
     key = substr(sym, lbracket+1, length(sym)-lbracket-1)
     return build_subsep(arr, key)
@@ -606,12 +654,13 @@ function sym2_printable_form(arr, key)
 }
 
 # Protected symbols cannot be changed by the user.
-function sym_protected_p(sym)
+function sym_protected_p(sym,    root)
 {
+    root = sym_root(sym)
     # Whitelist of known safe symbols
-    if (sym_root(sym) in unprotected_syms)
+    if (root in unprotected_syms)
         return FALSE
-    return sym_system_p(sym)
+    return name_system_p(root)
 }
 
 function sym_root(sym,    s)
@@ -638,7 +687,7 @@ function sym2_store(arr, key, val)
 # System symbols start and end with double underscores
 function sym_system_p(sym)
 {
-    return sym_root(sym) ~ /^__.*__$/
+    return name_system_p(sym_root(sym))
 }
 
 function sym_true_p(sym)
@@ -676,7 +725,7 @@ function sym_valid_p(sym,    result, lbracket, sym_root, sym_key)
         }
 
         # 4. We're in strict mode and the name doesn't pass regexp check
-        if (strictp() && sym !~ /^[A-Za-z#_][A-Za-z#_0-9]*$/)
+        if (strictp() && ! name_strict_symbol_p(sym))
             break
 
         # We've passed all the tests
@@ -693,7 +742,7 @@ function assert_sym_defined(sym, hint,    s)
 {
     if (sym_defined_p(sym))
         return TRUE
-    s = sprintf("Symbol '%s' not defined%s%s",  sym,
+    s = sprintf("Name '%s' not defined%s%s",  sym,
                 ((hint != "")     ? " [" hint "]" : ""),
                 ((length($0) > 0) ? ":" $0        : "") )
     error(s)
@@ -712,8 +761,59 @@ function assert_sym_valid_name(sym)
 {
     if (sym_valid_p(sym))
         return TRUE
-    error("Symbol '" sym "' invalid name:" $0)
+    error("Invalid name '" sym "':" $0)
 }
+
+
+
+#*****************************************************************************
+#
+#       Sequence API
+#
+#*****************************************************************************
+
+function seq_defined_p(id,    s)
+{
+    return (id, "defined") in seqtab
+}
+
+
+function seq_destroy(id)
+{
+    delete seqtab[id, "defined"]
+    delete seqtab[id, "inc"]
+    delete seqtab[id, "init"]
+    delete seqtab[id, "fmt"]
+    delete seqtab[id, "value"]
+    delete seqtab[id]
+}
+
+
+# Sequence names must always match strict symbol name syntax:
+#       /^[A-Za-z#_][A-Za-z#_0-9]*$/
+function seq_valid_p(id)
+{
+    return name_strict_symbol_p(id)
+}
+
+
+
+#*****************************************************************************
+#
+#       Names API
+#
+#*****************************************************************************
+
+function name_system_p(name)
+{
+    return name ~ /^__.*__$/
+}
+function name_strict_symbol_p(name)
+{
+    return name ~ /^[A-Za-z#_][A-Za-z#_0-9]*$/
+}
+
+
 
 #*****************************************************************************
 #
@@ -739,7 +839,7 @@ function assert_valid_env_var_name(var)
 {
     if (env_var_name_valid_p(var))
         return TRUE
-    error("Environment variable '" var "' invalid name:" $0)
+    error("Invalid name '" var "':" $0)
 }
 
 
@@ -1148,6 +1248,10 @@ function m2_default(    sym)
     sym = $2
     assert_sym_valid_name(sym)
     assert_sym_unprotected(sym)
+    # You can redefine a symbol, but not a built-in or a sequence
+    if (sym in builtins || seq_defined_p(sym))
+        error("Name '" sym "' not available:" $0)
+
     if (sym_defined_p(sym)) {
         if ($1 == "@init" || $1 == "@initialize")
             error("Symbol '" sym "' already defined:" $0)
@@ -1167,6 +1271,9 @@ function m2_define(    append_flag, sym)
     sym = $2
     assert_sym_valid_name(sym)
     assert_sym_unprotected(sym)
+    # You can redefine a symbol, but not a built-in or a sequence
+    if (sym in builtins || seq_defined_p(sym))
+        error("Name '" sym "' not available:" $0)
     dodef(append_flag)
 }
 
@@ -1458,6 +1565,8 @@ function m2_input(    getstat, input, sym)
     sym = (NF < 2) ? "__INPUT__" : $2
     assert_sym_valid_name(sym)
     assert_sym_unprotected(sym)
+    if (sym in builtins || seq_defined_p(sym))
+        error("Name '" sym "' not available:" $0)
     getstat = getline input < "/dev/tty"
     if (getstat < 0) {
         warn("Error reading '/dev/tty' [input]:" $0)
@@ -1527,6 +1636,80 @@ function m2_read(    sym, filename, line, val, getstat)
 }
 
 
+# @sequence             ID CMD [ARG...]
+function m2_sequence(    id, cmd, arg, saveline)
+{
+    if (! currently_active_p())
+        return
+    if (NF < 3)
+        error("Bad parameters:" $0)
+    id = $2
+    if (! seq_valid_p(id))
+        error("Invalid name '" id "':" $0)
+    cmd = $3
+    if (cmd != "new" && ! seq_defined_p(id))
+        error("Name '" id "' not defined:" $0)
+    if (NF == 3) {
+        if (cmd == "delete") {
+            if (seq_defined_p(id))
+                seq_destroy(id)
+        } else if (cmd == "new") {
+            # Fail if builtiin or already defined symbol or sequence (i.e, can't redefine)
+            if (id in builtins    || name_system_p(id) ||
+                seq_defined_p(id) || sym_defined_p(id))
+                error("Name '" id "' not available:" $0)
+            seqtab[id, "defined"] = TRUE
+            seqtab[id, "inc"]     = SEQ_DEFAULT_INC
+            seqtab[id, "init"]    = SEQ_DEFAULT_INIT
+            seqtab[id, "fmt"]     = SEQ_DEFAULT_FMT
+            seqtab[id, "value"]   = SEQ_DEFAULT_INIT
+        } else if (cmd == "next") { # Increment counter only, no output
+            seqtab[id, "value"] += seqtab[id, "inc"]
+        } else if (cmd == "reset") { # Set current counter value to initial value
+            seqtab[id, "value"] = seqtab[id, "init"]
+        } else
+            error("Bad parameters:" $0)
+    } else {    # NF >= 4
+        saveline = $0
+        sub(/^[ \t]*[^ \t]+[ \t]+[^ \t]+[ \t]+[^ \t]+[ \t]+/, "") # a + this time because ARGS is required
+        arg = $0
+        if (cmd == "format") {
+            # format STRING :: Set format string for printf to STRING.
+            # Arg should be the format string to use with printf.  It
+            # must include exactly one %d for the sequence value, and no
+            # other argument-consuming formatting characters.  Or you
+            # might use %x to print in hexadecimal instead.  The point
+            # is, m2 can't police your format string and a bad value
+            # might cause a crash if printf() fails.
+            seqtab[id, "fmt"] = arg
+        } else if (cmd == "inc") {
+            # inc N :: Set increment value to N.
+            if (! integerp(arg))
+                error(sprintf("Value '%s' must be numeric:%s", arg, saveline))
+            if (arg+0 == 0)
+                error(sprintf("Bad parameters in 'inc':%s", saveline))
+            seqtab[id, "inc"] = int(arg)
+        } else if (cmd == "init") {
+            # init N :: Set initial  value to N.  If current
+            # value == old init value (i.e., never been used), then set
+            # the current value to the new init value also.  Otherwise
+            # current value remains unchanged.
+            if (! integerp(arg))
+                error(sprintf("Value '%s' must be numeric:%s", arg, saveline))
+            if (seqtab[id, "value"] == seqtab[id, "init"])
+                seqtab[id, "value"] = int(arg)
+            seqtab[id, "init"] = int(arg)
+        } else if (cmd == "value") {
+            # value N :: Set counter value directly to N.
+            if (! integerp(arg))
+                error(sprintf("Value '%s' must be numeric:%s", arg, saveline))
+            seqtab[id, "value"] = int(arg)
+        } else
+           error("Bad parameters:" saveline)
+    }
+}
+
+
 # @shell                DELIM [PROG]
 # Set symbol "M2_SHELL" to override.
 function m2_shell(    buf, delim, save_line, save_lineno, sendto)
@@ -1569,16 +1752,20 @@ function m2_typeout(    buf)
 
 
 # @undef[ine]           NAME
-function m2_undef(    sym)
+function m2_undef(    name)
 {
     if (NF != 2)
         error("Bad parameters:" $0)
     if (! currently_active_p())
         return
-    sym = sym_root($2)
-    assert_sym_valid_name(sym)
-    assert_sym_unprotected(sym)
-    sym_destroy(sym)
+    if (seq_valid_p($2) && seq_defined_p($2))
+        seq_destroy($2)
+    else {
+        name = sym_root($2)
+        assert_sym_valid_name(name)
+        assert_sym_unprotected(name)
+        sym_destroy(name)
+    }
 }
 
 
@@ -1738,6 +1925,7 @@ function process_line(read_literally,    newstring)
     else if (/^@longend([ \t]|$)/)        { m2_longend() }
     else if (/^@s?paste([ \t]|$)/)        { m2_include() }
     else if (/^@read([ \t]|$)/)           { m2_read() }
+    else if (/^@sequence([ \t]|$)/)       { m2_sequence() }
     else if (/^@shell([ \t]|$)/)          { m2_shell() }
     else if (/^@stderr([ \t]|$)/)         { m2_error() }
     else if (/^@typeout([ \t]|$)/)        { m2_typeout() }
@@ -1871,7 +2059,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
                 if (sym_defined_p(p))
                     r = sym2_fetch("__FMT__", sym_true_p(p)) r
                 else if (strictp())
-                    error("Symbol '" p "' not defined [boolval]:" $0)
+                    error("Name '" p "' not defined [boolval]:" $0)
                 else
                     r = sym2_fetch("__FMT__", FALSE) r
             } else
@@ -2084,9 +2272,31 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
             }
             r = expand r
 
+        # Check if it's a sequence
+        } else if (seq_valid_p(symfunc) && seq_defined_p(symfunc)) {
+            if (nparam == 0) {
+                # normal call : increment value, insert new value with pre & suffix, etc.
+                seqtab[symfunc, "value"] += seqtab[symfunc, "inc"]
+                r = sprintf(seqtab[symfunc, "fmt"], seqtab[symfunc, "value"]) r
+            } else {
+                subcmd = param[1 + _fencepost]
+                if (nparam == 1) {
+                    # These subcommands do not take any parameters
+                    if (subcmd = "currval") {
+                        # - currval :: Return current value of counter
+                        # without modifying it.  Also, no prefix/suffix.
+                        r = seqtab[symfunc, "value"] r
+                    } else
+                        error("Bad parameters in '" m "':" $0)
+                } else {
+                    # These take one or more params.  Nothing here!
+                    error("Bad parameters in '" m "':" $0)
+                }
+            }
+
         # Throw an error on undefined symbol (strict-only)
         } else if (strictp()) {
-            error("Symbol '" m "' not defined:" $0)
+            error("Name '" m "' not defined:" $0)
 
         } else {
             l = l "@" m
@@ -2287,18 +2497,21 @@ function setup_prog_paths()
 
 
 # Nothing here is user-customizable
-function initialize(    d, dateout)
+function initialize(    d, dateout, array, elem)
 {
     E                 = exp(1)
     FALSE             = 0
     IDX_NOT_FOUND     = 0
     LOG10             = log(10)
     MAX_PARAM         = 20
-    MAX_STREAM        =  9
+    MAX_STREAM        = 9
     PI                = atan2(0, -1)
     READLINE_ERROR    = -1
     READLINE_EOF      = 0
     READLINE_OK       = 1
+    SEQ_DEFAULT_INC   = 1
+    SEQ_DEFAULT_INIT  = 0
+    SEQ_DEFAULT_FMT   = "%d"
     TAU               = 2 * PI
     TRUE              = 1
 
@@ -2350,19 +2563,22 @@ function initialize(    d, dateout)
 
     # These symbols' definitions are deferred until needed, because
     # initialization requires several relatively expensive subprocesses.
-    deferred_syms["__GID__"]            = TRUE
-    deferred_syms["__HOST__"]           = TRUE
-    deferred_syms["__HOSTNAME__"]       = TRUE
-    deferred_syms["__OSNAME__"]         = TRUE
-    deferred_syms["__UID__"]            = TRUE
-    deferred_syms["__USER__"]           = TRUE
+    split("__GID__ __HOST__ __HOSTNAME__ __OSNAME__ __UID__ __USER__",
+          array, " ")
+    for (elem in array)
+        deferred_syms[array[elem]] = TRUE
 
     # These symbols can be modified by the user
-    unprotected_syms["__DEBUG__"]       = TRUE
-    unprotected_syms["__FMT__"]         = TRUE
-    unprotected_syms["__INPUT__"]       = TRUE
-    unprotected_syms["__STRICT__"]      = TRUE
-    unprotected_syms["__TMPDIR__"]      = TRUE
+    split("__DEBUG__ __FMT__ __INPUT__ __STRICT__ __TMPDIR__", array, " ")
+    for (elem in array)
+        unprotected_syms[array[elem]] = TRUE
+
+    # Built-in symfuncs cannot be used as symbol or sequence names.
+    split("basename boolval date dirname epoch expr gensym getenv lc left len " \
+          "mid rem right spaces time trim tz uc uuid",
+          array, " ")
+    for (elem in array)
+        builtins[array[elem]] = TRUE
 }
 
 
@@ -2380,12 +2596,12 @@ function initialize_run_deferred(    gid, host, hostname, osname, uid, user)
     build_prog_cmdline("id", "-u")       | getline uid
     build_prog_cmdline("id", "-un")      | getline user
 
-    sym_store("__GID__",                gid)
-    sym_store("__HOST__",               host)
-    sym_store("__HOSTNAME__",           hostname)
-    sym_store("__OSNAME__",             osname)
-    sym_store("__UID__",                uid)
-    sym_store("__USER__",               user)
+    sym_store("__GID__",      gid)
+    sym_store("__HOST__",     host)
+    sym_store("__HOSTNAME__", hostname)
+    sym_store("__OSNAME__",   osname)
+    sym_store("__UID__",      uid)
+    sym_store("__USER__",     user)
 }
 
 
@@ -2418,7 +2634,7 @@ BEGIN {
                     name = "__DEBUG__[m2]"
                 val = substr(arg, eq+1)
                 if (! sym_valid_p(name))
-                    error("Symbol '" name "' invalid name:" arg, i, "ARGV")
+                    error("Invalid name '" name "':" arg, i, "ARGV")
                 if (sym_protected_p(name))
                     error("Symbol '" name "' protected:" arg, i, "ARGV")
                 sym_store(name, val)
@@ -2457,6 +2673,11 @@ BEGIN {
 # I need finer control over when/if it is invoked.
 function end_program(exit_code, output_diverted_streams)
 {
+    # Perform an implicit "@divert" and "@undivert" to output any
+    # remaining diverted data.  If you want skip this step, place the
+    # following lines at the very end of the input data stream:
+    #     @divert -1
+    #     @undivert
     if (output_diverted_streams) {
         sym_store("__DIVNUM__", 0)
         undivert_all()

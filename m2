@@ -188,6 +188,7 @@
 #           __OSNAME__             Operating system name
 #           __PID__                m2 process id
 #           __RESULT__             Value from most recent @expr ...@ expression
+#           __STATUS__             Exit status of most recent @shell command
 #           __STRICT__        [**] Strict mode (def TRUE)
 #           __TIME__               m2 run start time as HHMMSS (eg 053000)
 #           __TIMESTAMP__          ISO 8601 timestamp (1945-07-16T05:30:00-0600)
@@ -928,7 +929,6 @@ function exec_prog_cmdline(prog, arg,    sym)
 
 # Return a likely path for storing temporary files.
 # This path is guaranteed to end with a "/" character.
-# NOTE: This function is not currently used.
 function tmpdir(    t)
 {
     if (sym_defined_p("M2_TMPDIR"))
@@ -1749,11 +1749,16 @@ function m2_sequence(    id, cmd, arg, saveline)
 
 # @shell                DELIM [PROG]
 # Set symbol "M2_SHELL" to override.
-function m2_shell(    buf, delim, save_line, save_lineno, sendto)
+function m2_shell(    delim, save_line, save_lineno, input_text, input_file,
+                      output_text, output_file, sendto, path_fmt, getstat, cmd)
 {
-    # The sendto program defaults to a reasonable shell but you can specify
-    # where you want to send your data.  Possibly useful choices would be an
-    # alternative shell, an email message reader, or /usr/bin/bc.
+    # The sendto program defaults to a reasonable shell but you can
+    # specify where you want to send your data.  Possibly useful choices
+    # would be an alternative shell, an email message reader, or
+    # /usr/bin/bc.  It must be a program that functions as a filter (in
+    # the Unix sense, i.e., reading from standard input and writing to
+    # standard output).  Standard error is not redirected, so any errors
+    # will appear on the user's terminal.
     if (! currently_active_p())
         return
     if (NF < 2)
@@ -1769,11 +1774,33 @@ function m2_shell(    buf, delim, save_line, save_lineno, sendto)
         sendto = rm_quotes(dosubs($0))
     }
 
-    buf = read_lines_until(delim)
-    if (buf == EoF_marker)
+    input_text = read_lines_until(delim)
+    if (input_text == EoF_marker)
         error("Delimiter '" delim "' not found:" save_line, save_lineno)
-    print dosubs(buf) | sendto
-    close(sendto)
+
+    path_fmt    = sprintf("%sm2-%d.shell-%%s", tmpdir(), sym_fetch("__PID__"))
+    input_file  = sprintf(path_fmt, "in")
+    output_file = sprintf(path_fmt, "out")
+    print dosubs(input_text) > input_file
+    close(input_file)
+
+    # Don't tell me how fragile this is, we're whistling past the
+    # graveyard here.  But it suffices to run /bin/sh, which is enough.
+    cmd = sprintf("%s < %s > %s", sendto, input_file, output_file)
+    sym_store("__STATUS__", system(cmd))
+    while (TRUE) {
+        getstat = getline line < output_file
+        if (getstat < 0)        # Error
+            warn("Error reading '" output_file "' [shell]")
+        if (getstat <= 0)       # End of file
+            break
+        output_text = output_text line "\n" # Read a line
+    }
+    close(output_file)
+
+    exec_prog_cmdline("rm", ("-f " input_file))
+    exec_prog_cmdline("rm", ("-f " output_file))
+    ship_out(output_text)
 }
 
 

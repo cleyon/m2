@@ -1870,7 +1870,6 @@ function dofile(filename, read_literally,    savefile, saveline, savebuffer)
         error("Cannot recursively read '" filename "':" $0)
 
     # Save old file context
-    flush_stdout()
     savefile   = sym_fetch("__FILE__")
     saveline   = sym_fetch("__LINE__")
     saveuuid   = sym_fetch("__FILE_UUID__")
@@ -1992,6 +1991,10 @@ function process_line(read_literally,    newstring)
     else if (/^@unless([ \t]|$)/)         { m2_if() }
     else if (/^@warn([ \t]|$)/)           { m2_error() }
 
+    # Check for user commands
+    else if (/^@test([ \t]|$)/)           { user_test() }
+    else if (/^@clear_streams([ \t]|$)/)  { user_clear_streams() }
+
     # Process @
     else {
         newstring = dosubs($0)
@@ -2003,6 +2006,47 @@ function process_line(read_literally,    newstring)
         }
     }
 }
+
+function user_test(    savebuffer, i)
+{
+    savebuffer = buffer
+    buffer = "Hello from test !!\n"
+
+    while (buffer != "") {
+        # Extract each line from buffer, one by one
+        if ((i = index(buffer, "\n")) == IDX_NOT_FOUND) {
+            $0 = buffer
+            buffer = ""
+        } else {
+            $0 = substr(buffer, 1, i-1)
+            buffer = substr(buffer, i+1)
+        }
+
+        # Hack: allow @Mname at start of line without a closing @.
+        # This only applies if in non-strict mode.  Note, macro name must
+        # start with a capital letter and must not be passed any parameters.
+        if (! strictp() && ($0 ~ /^@[A-Z][A-Za-z#_0-9]*[ \t]*$/))
+            sub(/[ \t]*$/, "@")
+
+        # String we want is in $0, go evaluate it
+        process_line()
+    }
+
+    buffer = savebuffer
+}
+
+function user_clear_streams()
+{
+    warn("Invoking clear_streams")
+    buf = "@divert -1\n" buf
+    print_stderr(sprintf("@divert -1 ; buf='%s'", buf))
+    process_line()
+
+    buf = "@undivert\n" buf
+    print_stderr(sprintf("@undivert ; buf='%s'", buf))
+    process_line()
+}
+
 
 
 # The dosubs() function actually performs the macro substitution.  It
@@ -2169,11 +2213,11 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
             p = param[1 + _fencepost]
             assert_sym_valid_name(p)
             assert_sym_defined(p, symfunc)
-            r = (symfunc == "lc")  ? tolower(sym_fetch(p)) \
-              : (symfunc == "len") ?  length(sym_fetch(p)) \
-              : (symfunc == "uc")  ? toupper(sym_fetch(p)) \
-              : error("Name '" m "' not defined:" $0) \
-              r
+            r = ((symfunc == "lc")  ? tolower(sym_fetch(p)) : \
+                 (symfunc == "len") ?  length(sym_fetch(p)) : \
+                 (symfunc == "uc")  ? toupper(sym_fetch(p)) : \
+                 error("Name '" m "' not defined:" $0)) \
+                r
 
         # left : Left (substring)
         #   @left ALPHABET 7@ => ABCDEFG

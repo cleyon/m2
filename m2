@@ -186,6 +186,7 @@
 #           __NFILE__              Number of files processed so far (eg 2)
 #           __NLINE__              Number of lines read so far from all files
 #           __OSNAME__             Operating system name
+#           __PID__                m2 process id
 #           __RESULT__             Value from most recent @expr ...@ expression
 #           __STRICT__        [**] Strict mode (def TRUE)
 #           __TIME__               m2 run start time as HHMMSS (eg 053000)
@@ -2599,7 +2600,7 @@ function initialize(    d, dateout, array, elem)
 
     # These symbols' definitions are deferred until needed, because
     # initialization requires several relatively expensive subprocesses.
-    split("__GID__ __HOST__ __HOSTNAME__ __OSNAME__ __UID__ __USER__",
+    split("__GID__ __HOST__ __HOSTNAME__ __OSNAME__ __PID__ __UID__ __USER__",
           array, " ")
     for (elem in array)
         deferred_syms[array[elem]] = TRUE
@@ -2620,21 +2621,23 @@ function initialize(    d, dateout, array, elem)
 # The code here requires invoking several subprocesses, a somewhat slow
 # operation.  Since these features may not be used often, they are run
 # only on-demand in order to speed up general usage.
-function initialize_run_deferred(    gid, host, hostname, osname, uid, user)
+function initialize_run_deferred(    gid, host, hostname, osname, pid, uid, user)
 {
     init_deferred = FALSE
 
-    build_prog_cmdline("id", "-g")       | getline gid
-    build_prog_cmdline("hostname", "-s") | getline host
-    build_prog_cmdline("hostname")       | getline hostname
-    build_prog_cmdline("uname", "-s")    | getline osname
-    build_prog_cmdline("id", "-u")       | getline uid
-    build_prog_cmdline("id", "-un")      | getline user
+    build_prog_cmdline("id", "-g")              | getline gid
+    build_prog_cmdline("hostname", "-s")        | getline host
+    build_prog_cmdline("hostname")              | getline hostname
+    build_prog_cmdline("uname", "-s")           | getline osname
+    build_prog_cmdline("sh", "-c 'echo $PPID'") | getline pid
+    build_prog_cmdline("id", "-u")              | getline uid
+    build_prog_cmdline("id", "-un")             | getline user
 
     sym_store("__GID__",      gid)
     sym_store("__HOST__",     host)
     sym_store("__HOSTNAME__", hostname)
     sym_store("__OSNAME__",   osname)
+    sym_store("__PID__",      pid)
     sym_store("__UID__",      uid)
     sym_store("__USER__",     user)
 }

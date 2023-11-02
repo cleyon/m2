@@ -2087,12 +2087,13 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
         # dbg_print("dosubs", 7, sprintf("dosubs: symfunc=%s, nparam=%d; l='%s', m='%s', r='%s', expand='%s'", symfunc, nparam, l, m, r, expand))
 
         # basename SYM: Base (i.e., file name) of path
-        if (symfunc == "basename") {
+        # dirname SYM: Directory name of path
+        if (symfunc == "basename" || symfunc == "dirname") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
             p = param[1 + _fencepost]
             assert_sym_valid_name(p)
-            assert_sym_defined(p, "basename")
-            cmd = build_prog_cmdline("basename", rm_quotes(sym_fetch(p)))
+            assert_sym_defined(p, symfunc)
+            cmd = build_prog_cmdline(symfunc, rm_quotes(sym_fetch(p)))
             cmd | getline expand
             close(cmd)
             r = expand r
@@ -2139,17 +2140,6 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
             close(cmd)
             r = expand r
 
-        # dirname SYM: Directory name of path
-        } else if (symfunc == "dirname") {
-            if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[1 + _fencepost]
-            assert_sym_valid_name(p)
-            assert_sym_defined(p, "dirname")
-            cmd = build_prog_cmdline("dirname", rm_quotes(sym_fetch(p)))
-            cmd | getline expand
-            close(cmd)
-            r = expand r
-
         # expr ...: Evaluate mathematical epxression, store in __RESULT__
         } else if (symfunc == "expr") {
             sub(/^expr[ \t]*/, "", m) # clean up expression to evaluate
@@ -2170,12 +2160,20 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
                 error("Environment variable '" p "' not defined:" $0)
 
         # lc : Lower case
-        } else if (symfunc == "lc") {
+        # len : Length.        @len SYM@ => N
+        # uc SYM: Upper case
+        } else if (symfunc == "lc" ||
+                   symfunc == "len" ||
+                   symfunc == "uc") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
             p = param[1 + _fencepost]
             assert_sym_valid_name(p)
-            assert_sym_defined(p, "lc")
-            r = tolower(sym_fetch(p)) r
+            assert_sym_defined(p, symfunc)
+            r = (symfunc == "lc")  ? tolower(sym_fetch(p)) \
+              : (symfunc == "len") ?  length(sym_fetch(p)) \
+              : (symfunc == "uc")  ? toupper(sym_fetch(p)) \
+                : error("JUNK") \
+              r
 
         # left : Left (substring)
         #   @left ALPHABET 7@ => ABCDEFG
@@ -2191,15 +2189,6 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
                     error("Value '" x "' must be numeric:" $0)
             }
             r = substr(sym_fetch(p), 1, x) r
-
-        # len : Length
-        #   @len SYM@ => N
-        } else if (symfunc == "len") {
-            if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[1 + _fencepost]
-            assert_sym_valid_name(p)
-            assert_sym_defined(p, "len")
-            r = length(sym_fetch(p)) r
 
         # mid : Substring ...  SYMBOL, START[, LENGTH]
         #   @mid ALPHABET 15 5@ => OPQRS
@@ -2266,14 +2255,6 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
             sub(/^[ \t]+/, "", expand)
             sub(/[ \t]+$/, "", expand)
             r = expand r
-
-        # uc SYM: Upper case
-        } else if (symfunc == "uc") {
-            if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[1 + _fencepost]
-            assert_sym_valid_name(p)
-            assert_sym_defined(p, "uc")
-            r = toupper(sym_fetch(p)) r
 
         # uuid : Something that resembles but is not a UUID
         #   @uuid@ => C3525388-E400-43A7-BC95-9DF5FA3C4A52

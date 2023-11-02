@@ -134,9 +134,6 @@
 #           @dirname SYM@          Directory name of SYM
 #           @epoch@                Number of seconds since the Epoch, UTC
 #           @expr MATH@            Evaluate mathematical expression
-#           @gensym@               Generate symbol: <prefix><counter>
-#             @gensym 42@            Set counter; prefix unchanged
-#             @gensym PREFIX N@      Set prefix and counter
 #           @getenv VAR@       [*] Get environment variable
 #           @lc SYM@               Lower case
 #           @left SYM [N]@         Substring of SYM from 1 to Nth character
@@ -174,8 +171,6 @@
 #           __FMT__[date]     [**] Date format for @date@ (%Y-%m-%d)
 #           __FMT__[time]     [**] Time format for @time@ (%H:%M:%S)
 #           __FMT__[tz]       [**] Time format for @tz@   (%Z)
-#           __GENSYM__[count]      Count for generated symbols (def 0)
-#           __GENSYM__[prefix]     Prefix for generated symbols (def _gen)
 #           __GID__                Group id (effective gid)
 #           __HOST__               Short host name (eg myhost)
 #           __HOSTNAME__           FQDN host name (eg myhost.example.com)
@@ -419,7 +414,7 @@
 #*****************************************************************************
 
 BEGIN {
-    version = "3.1.0"
+    version = "3.1.1"
 }
 
 
@@ -2066,15 +2061,15 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
         r = substr(r, i+1)
 
         # In the code that follows:
-        # - m :: Entire text between @'s.  Example: "gensym foo 42".
+        # - m :: Entire text between @'s.  Example: "mid foo 3".
         # - symfunc :: The name of the "function" to call.  The first
-        #     element of m.  Example: "gensym".
+        #     element of m.  Example: "mid".
         # - nparam :: Number of parameters supplied to the symfunc.
         #     @foo@         --> nparam == 0
         #     @foo BAR@     --> nparam == 1
         #     @foo BAR BAZ@ --> nparam == 2
         # In general, a symfunc's parameter N is available in variable
-        #   param[N+1].  Consider "gensym foo 42".  nparam is 2.
+        #   param[N+1].  Consider "mid foo 3".  nparam is 2.
         #   The symfunc is found in the first position, at param [0+1].
         #   The new prefix is at param[1+1] and new count is at param[2+1].
         #   This offset of one is referred to as `_fencepost' below.
@@ -2163,36 +2158,6 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
             dbg_print("expr", 1, sprintf("expr{%s} = %s", m, x))
             sym_store("__RESULT__", x)
             r = x r
-
-        # gensym ...: Generate symbol
-        #   @gensym@        => _sym0
-        #   @gensym 42@     => (prefix unchanged, count now 42) => _sym42
-        #   @gensym foo 42@ => (prefix now "foo", count now 42) => foo42
-        } else if (symfunc == "gensym") {
-            if (nparam == 1) {
-                # @gensym 42@
-                x = param[1 + _fencepost]
-                if (! integerp(x))
-                    error("Value '" x "' must be numeric:" $0)
-                sym2_store("__GENSYM__", "count", x)
-            } else if (nparam == 2) {
-                # @gensym foo 42@
-                x = param[1 + _fencepost]
-                y = param[2 + _fencepost]
-                if (! integerp(y))
-                    error("Value '" y "' must be numeric:" $0)
-                # Make sure the new requested prefix is valid
-                assert_sym_valid_name(x)
-                sym2_store("__GENSYM__", "prefix", x)
-                sym2_store("__GENSYM__", "count",  y)
-            } else if (nparam > 2)
-                error("Bad parameters in '" m "':" $0)
-
-            # gensym returns something in all cases
-            r = sym2_fetch("__GENSYM__", "prefix") \
-                sym2_fetch("__GENSYM__", "count") \
-                r
-            sym_increment("__GENSYM__[count]")
 
         # getenv : Get environment variable
         #   @getenv HOME@ => /home/user
@@ -2612,8 +2577,6 @@ function initialize(    d, dateout, array, elem)
     sym2_store("__FMT__", "epoch",      "%s")
     sym2_store("__FMT__", "time",       "%H:%M:%S")
     sym2_store("__FMT__", "tz",         "%Z")
-    sym2_store("__GENSYM__", "count",   0)
-    sym2_store("__GENSYM__", "prefix",  "_gen")
     sym_store("__INPUT__",              "")
     sym_store("__M2_UUID__",            uuid())
     sym_store("__M2_VERSION__",         version)
@@ -2638,7 +2601,7 @@ function initialize(    d, dateout, array, elem)
         unprotected_syms[array[elem]] = TRUE
 
     # Built-in symfuncs cannot be used as symbol or sequence names.
-    split("basename boolval date dirname epoch expr gensym getenv lc left len" \
+    split("basename boolval date dirname epoch expr getenv lc left len" \
           " mid rem right spaces time trim tz uc uuid", array, " ")
     for (elem in array)
         builtins[array[elem]] = TRUE

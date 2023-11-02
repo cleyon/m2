@@ -304,22 +304,22 @@
 #               - @expr ...@ received unexpected input or bad syntax.
 #           File 'XXX' does not exist
 #               - Attempt to @include a non-existent file in strict mode.
-#           Invalid name 'XXX'
-#               - A symbol name does not pass validity check.  In __STRICT__
-#                 mode (the default), a symbol name may only contain letters,
-#                 digits, #, -, or _ characters.
-#               - Environment variable name does not pass validity check.
 #           Math expression error [hint]
 #               - An error occurred during @expr ...@ evaluation.
 #               - A math expression returned +/-Infinity or NaN.
 #           Missing 'X' at 'XXX'
 #               - @expr ...@ did not match syntax required for expression.
 #           Name 'XXX' not available
-#               - Despite being valid, the name cannot be used here.
+#               - Despite being valid, the name cannot be used/found here.
 #           Name 'XXX' not defined
 #               - A symbol name without a value was passed to a function
 #               - An undefined macro was referenced and __STRICT__ is true.
-#               - Attempt to use an undefined sequence (new is allowed)
+#               - Attempt to use an undefined sequence ("new" is allowed)
+#           Name 'XXX' not valid
+#               - A symbol name does not pass validity check.  In __STRICT__
+#                 mode (the default), a symbol name may only contain letters,
+#                 digits, #, -, or _ characters.
+#               - Environment variable name does not pass validity check.
 #           No corresponding 'XXX'
 #               - @if: An @else or @endif was seen without a matching @if.
 #               - @longdef: A @longend was seen without a matching @longdef.
@@ -330,7 +330,7 @@
 #           Symbol 'XXX' already defined
 #               - @initialize attempted to define a previously defined symbol.
 #           Symbol 'XXX' protected
-#               - Attempt to modify a protected symbol (__XXX__).
+#               - Attempt to modify a protected symbol (__EXAMPLE__).
 #                 (__STRICT__ is an exception and can be modified.)
 #           Unexpected end of definition
 #               - Input ended before macro definition was complete.
@@ -636,7 +636,7 @@ function sym_internal_form(sym,    lbracket, arr, key)
     if ((lbracket = index(sym, "[")) == IDX_NOT_FOUND)
         return sym
     if (sym !~ /^.+\[.+\]$/)
-        error("Invalid name '" sym "':" $0)
+        error("Name '" sym "' not valid:" $0)
     arr = substr(sym, 1, lbracket-1)
     key = substr(sym, lbracket+1, length(sym)-lbracket-1)
     return build_subsep(arr, key)
@@ -773,7 +773,7 @@ function assert_sym_valid_name(sym)
 {
     if (sym_valid_p(sym))
         return TRUE
-    error("Invalid name '" sym "':" $0)
+    error("Name '" sym "' not valid:" $0)
 }
 
 
@@ -865,7 +865,7 @@ function assert_valid_env_var_name(var)
 {
     if (env_var_name_valid_p(var))
         return TRUE
-    error("Invalid name '" var "':" $0)
+    error("Name '" var "' not valid:" $0)
 }
 
 
@@ -1123,6 +1123,11 @@ function _c3_rel(    e, op)
 }
 
 # factor | factor [*/%] factor
+#
+# NOTE: Alan Linton's version of this function introduced a bug whereby
+# the function returns prematurely instead of continuing the while loop
+# when another op of equal precedence is encountered.  This results in
+# "1*2*3" being rejected at the second `*'.
 function _c3_term(    e, op, f)
 {
     e = _c3_factor()
@@ -1327,9 +1332,8 @@ function m2_dump(    buf, cnt, definition, dumpfile, i, key, keys, seqfields, sy
 {
     if (! currently_active_p())
         return
-    if (all_flag = ($1 == "@dumpall"))
-        if (init_deferred)
-            initialize_run_deferred() # Show all system symbols
+    if ((all_flag = $1 == "@dumpall") && init_deferred)
+        initialize_run_deferred() # Show all system symbols
 
     if (NF > 1) {
         $1 = ""
@@ -1526,7 +1530,7 @@ function m2_ignore(    buf, delim, save_line, save_lineno)
     #     @ignore The
     #       <...>
     #     Theodore Roosevelt
-    # ignores <...> text up to the president's name.
+    # ignores <...> text up to, and including, the president's name.
     if (! currently_active_p())
         return
     if (NF != 2)
@@ -1615,6 +1619,9 @@ function m2_longdef(    buf, save_line, save_lineno, sym)
     sym = $2
     assert_sym_valid_name(sym)
     assert_sym_unprotected(sym)
+    # You can redefine a symbol, but not a built-in or a sequence
+    if (sym in builtins || seq_defined_p(sym))
+        error("Name '" sym "' not available:" $0)
     buf = read_lines_until("@longend")
     if (buf == EoF_marker)
         error("Delimiter '@longend' not found:" save_line, save_lineno)
@@ -1645,6 +1652,9 @@ function m2_read(    sym, filename, line, val, getstat)
     sym  = $2
     assert_sym_valid_name(sym)
     assert_sym_unprotected(sym)
+    # You can redefine a symbol, but not a built-in or a sequence
+    if (sym in builtins || seq_defined_p(sym))
+        error("Name '" sym "' not available:" $0)
     $1 = $2 = ""
     sub("^[ \t]*", "")
     filename = rm_quotes(dosubs($0))
@@ -1672,7 +1682,7 @@ function m2_sequence(    id, cmd, arg, saveline)
         error("Bad parameters:" $0)
     id = $2
     if (! seq_valid_p(id))
-        error("Invalid name '" id "':" $0)
+        error("Name '" id "' not valid:" $0)
     cmd = $3
     if (cmd != "new" && ! seq_defined_p(id))
         error("Name '" id "' not defined:" $0)
@@ -1680,7 +1690,7 @@ function m2_sequence(    id, cmd, arg, saveline)
         if (cmd == "delete") {
             seq_destroy(id)
         } else if (cmd == "new") {
-            # Fail if builtiin or already defined symbol or sequence (i.e, can't redefine)
+            # Fail if builtiin or already defined symbol or sequence
             if (id in builtins    || name_system_p(id) ||
                 seq_defined_p(id) || sym_defined_p(id))
                 error("Name '" id "' not available:" $0)
@@ -2600,9 +2610,8 @@ function initialize(    d, dateout, array, elem)
         unprotected_syms[array[elem]] = TRUE
 
     # Built-in symfuncs cannot be used as symbol or sequence names.
-    split("basename boolval date dirname epoch expr gensym getenv lc left len " \
-          "mid rem right spaces time trim tz uc uuid",
-          array, " ")
+    split("basename boolval date dirname epoch expr gensym getenv lc left len" \
+          " mid rem right spaces time trim tz uc uuid", array, " ")
     for (elem in array)
         builtins[array[elem]] = TRUE
 }
@@ -2660,7 +2669,7 @@ BEGIN {
                     name = "__DEBUG__[m2]"
                 val = substr(arg, eq+1)
                 if (! sym_valid_p(name))
-                    error("Invalid name '" name "':" arg, i, "ARGV")
+                    error("Name '" name "' not valid:" arg, i, "ARGV")
                 if (sym_protected_p(name))
                     error("Symbol '" name "' protected:" arg, i, "ARGV")
                 sym_store(name, val)

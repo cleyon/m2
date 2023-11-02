@@ -2172,7 +2172,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
             r = (symfunc == "lc")  ? tolower(sym_fetch(p)) \
               : (symfunc == "len") ?  length(sym_fetch(p)) \
               : (symfunc == "uc")  ? toupper(sym_fetch(p)) \
-                : error("JUNK") \
+              : error("Name '" m "' not defined:" $0) \
               r
 
         # left : Left (substring)

@@ -1176,7 +1176,7 @@ function _c3_factor3(    e, fun, e2)
     # function ()
     if (match(e, /^([A-Za-z#_][A-Za-z#_0-9]+)?\(\)/)) {
         fun = _c3_advance()
-       #if (fun ~ /^srand()/) return srand()
+        if (fun ~ /^srand()/) return srand()
         if (fun ~ /^rand()/)  return rand()
         error(sprintf("Unknown function '%s'", fun))
     }
@@ -1184,8 +1184,7 @@ function _c3_factor3(    e, fun, e2)
     # (expr) | function(expr) | function(expr,expr)
     if (match(e, /^([A-Za-z#_][A-Za-z#_0-9]+)?\(/)) {
         fun = _c3_advance()
-       #if (fun ~ /^(cos|deg|exp|int|log(10)?|rad|randint|sin|sqrt|srand|tan)?\(/) {
-        if (fun ~ /^(cos|deg|exp|int|log(10)?|rad|randint|sin|sqrt|tan)?\(/) {
+        if (fun ~ /^(cos|deg|exp|int|log(10)?|rad|randint|sin|sqrt|srand|tan)?\(/) {
             e = _c3_expr()
             e = _c3_calculate_function(fun, e)
         } else if (fun ~ /^atan2\(/) {
@@ -1236,7 +1235,7 @@ function _c3_calculate_function(fun, e,    c)
     if (fun == "randint(") return randint(e) + 1
     if (fun == "sin(")     return sin(e)
     if (fun == "sqrt(")    return sqrt(e)
-   #if (fun == "srand(")   return srand(e)
+    if (fun == "srand(")   return srand(e)
     if (fun == "tan(")     { c = cos(e)
                              if (c == 0) error("Division by zero:" $0)
                              return sin(e) / c }

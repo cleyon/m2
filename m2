@@ -33,7 +33,7 @@
 #          output.  @rem ...@ macros are embedded in the input text and
 #          produce no output.  Use @ignore for a multi-line comment.
 #
-#       5. Manage multiple output streams with diversions.
+#       5. Manage multiple output data streams with diversions.
 #
 #       Control commands (@if, @define, etc) are distinguished by a "@"
 #       as the first character at the beginning of a line.  They consume
@@ -66,9 +66,12 @@
 #           @longdef NAME          Set NAME to <...> (all lines until @longend)
 #             <...>                  Don't use other @ commands inside definition
 #           @longend                 But simple @NAME@ references should be okay
+#           @newcmd NAME           Create a user command NAME
+#             <...>
+#           @cmdend
 #           @paste FILE            Insert FILE contents literally, no macros
 #           @read NAME FILE        Read FILE contents to define NAME
-#           @sequence ID CMD [ARG] Create and manage sequences
+#           @sequence ID ACT [N]   Create and manage sequences
 #           @shell DELIM [PROG]    Evaluate input until DELIM, send raw data to PROG
 #                                    Output from prog is captured in output stream
 #           @typeout               Print remainder of input file literally, no macros
@@ -203,7 +206,7 @@
 #       m2 supports sequences which are integer values.  You create and
 #       manage sequences by ID with the @sequence command.  By default,
 #       sequences begin at value 1 and increment by 1 upon each use.
-#       @sequence is always given ID and CMD parameters, and an
+#       @sequence is always given ID and ACT(ion) parameters, and an
 #       additional argument might be supplied.  @sequence accepts the
 #       following commands:
 #
@@ -231,7 +234,7 @@
 #               => # B.
 #
 # MATHEMATICAL EXPRESSIONS
-#       The @expr ...@ macro evaluates mathematical expressions and
+#       The @expr ...@ function evaluates mathematical expressions and
 #       inserts their results.  It is based on "calc3" from "The AWK
 #       Programming Language" p. 146, with enhancements by Kenny
 #       McCormack and Alan Linton.  @expr@ supports the standard
@@ -259,7 +262,7 @@
 #       @expr@ will automatically use symbols' values in expressions.
 #       Inside @expr ...@, there is no need to surround symbol names
 #       with "@" characters to retrieve their values.  @expr@ also
-#       recognizes the built-in constants "e", "pi", and "tau".
+#       recognizes the predefined constants "e", "pi", and "tau".
 #
 #       The most recent expression value is automatically stored in
 #       __RESULT__.  @expr@ can also assign values to symbols with the
@@ -320,6 +323,7 @@
 #           No corresponding 'XXX'
 #               - @if: An @else or @endif was seen without a matching @if.
 #               - @longdef: A @longend was seen without a matching @longdef.
+#               - @newcmd: A @cmdend was seen without a matching @newcmd
 #               - Indicates a "finishing" command was seen without a starter.
 #           Parameter N not supplied in 'XXX'
 #               - A macro referred to a parameter (such as $1) for which
@@ -414,7 +418,7 @@
 #*****************************************************************************
 
 BEGIN {
-    version = "3.1.1"
+    version = "3.2.0"
 }
 
 
@@ -425,6 +429,7 @@ BEGIN {
 #
 #*****************************************************************************
 
+# file ":" line  ":" text
 function format_message(text, line, file,    s)
 {
     if (line == "")
@@ -757,6 +762,16 @@ function assert_sym_defined(sym, hint,    s)
     error(s)
 }
 
+function assert_sym_okay_to_define(name)
+{
+    assert_sym_valid_name(name)
+    assert_sym_unprotected(name)
+    # You can redefine a symbol, but not a cmd, function, or sequence
+    if (! name_available_in_all_p(name, TYPE_CMD TYPE_FUNCTION TYPE_SEQUENCE))
+        error("Name '" name "' not available:" $0)
+    return TRUE
+}
+
 # Throw an error if symbol IS protected
 function assert_sym_unprotected(sym)
 {
@@ -771,6 +786,31 @@ function assert_sym_valid_name(sym)
     if (sym_valid_p(sym))
         return TRUE
     error("Name '" sym "' not valid:" $0)
+}
+
+
+
+#*****************************************************************************
+#
+#       Cmd API
+#
+#*****************************************************************************
+
+function cmd_defined_p(id,    s)
+{
+    return (id, "defined") in cmdtab
+}
+
+function cmd_definition_pp(id)
+{
+    return "@newcmd " id            "\n" \
+           cmdtab[id, "definition"] "\n" \
+           "@cmdend"                "\n"
+}
+
+function cmd_valid_p(id)
+{
+    return name_strict_symbol_p(id) && !name_system_p(id)
 }
 
 
@@ -816,7 +856,25 @@ function seq_destroy(id)
 #       /^[A-Za-z#_][A-Za-z#_0-9]*$/
 function seq_valid_p(id)
 {
-    return name_strict_symbol_p(id)
+    return name_strict_symbol_p(id) && !name_system_p(id)
+}
+
+function assert_seq_valid_name(name)
+{
+    if (seq_valid_p(name))
+        return TRUE
+    error("Name '" name "' not valid:" $0)
+}
+
+function assert_seq_okay_to_define(name)
+{
+    assert_seq_valid_name(name)
+    # name cannot be a cmd, function, an existing sequence (no
+    # redefinitions), or a symbol.  Furthermore, it can't be a
+    # system-type name: __SEQ__ is not allowed.
+    if (! name_available_in_all_p(name, TYPE_ANY))
+        error("Name '" id "' not available:" $0)
+    return TRUE
 }
 
 
@@ -825,12 +883,77 @@ function seq_valid_p(id)
 #
 #       Names API
 #
+#       TYPE_CMD:               cmdtab
+#           cmdtab[NAME, "defined"] ::= TRUE | FALSE
+#           cmdtab[NAME, "definition"] ::= <definition>
+#
+#       TYPE_FUNCTION:          functab
+#           functab[NAME] ::= TRUE | FALSE
+#
+#       TYPE_SEQUENCE:          seqtab
+#           seqtab[NAME, KEY] // various types for different KEYs
+#
+#       TYPE_SYMBOL:            symtab
+#           symtab[NAME] = <definition>
+#           Check "foo in symtab" for defined
+#
+#
+#       DOESN'T EXIST YET!      nametab
+#           nametab[NAME, "deferred"]  ::= TRUE | FALSE
+#           nametab[NAME, "defined"]   ::= TRUE | FALSE
+#           nametab[NAME, "protected"] ::= TRUE | FALSE
+#           nametab[NAME, "type"]      ::= "S" | "Q" | "M" | "F"
+#
 #*****************************************************************************
+
+# TRUE  if name is defined in at least one of the components (logical OR, not sure which)
+# FALSE if name is not defined in any of the components at all
+function name_defined_in_any_p(name, components,    def)
+{
+    if (first(name) == "@")
+        name = substr(name, 2)
+    if (length(name) == 0)
+        return FALSE
+    def = FALSE
+    if (components == TYPE_ANY || index(components, TYPE_CMD))
+        def = def || cmd_defined_p(name)
+    if (components == TYPE_ANY || index(components, TYPE_FUNCTION))
+        def = def || (name in functab)
+    if (components == TYPE_ANY || index(components, TYPE_SEQUENCE))
+        def = def || seq_defined_p(name)
+    if (components == TYPE_ANY || index(components, TYPE_SYMBOL))
+        def = def || sym_defined_p(name)
+    return def
+}
+
+
+# TRUE if name is available in all components (logical AND)
+# FALSE if name is unavailable in at least one of the components, not sure which
+function name_available_in_all_p(name, components,    avail)
+{
+    if (first(name) == "@")
+        name = substr(name, 2)
+    if (length(name) == 0)
+        return FALSE
+    avail = TRUE
+    if (components == TYPE_ANY || index(components, TYPE_CMD))
+        avail = avail && ! ((name, "defined") in cmdtab)
+    if (components == TYPE_ANY || index(components, TYPE_FUNCTION))
+        avail = avail && ! (name in functab)
+    if (components == TYPE_ANY || index(components, TYPE_SEQUENCE))
+        avail = avail && ! seq_defined_p(name)
+    if (components == TYPE_ANY || index(components, TYPE_SYMBOL))
+        avail = avail && ! sym_defined_p(name)
+    return avail
+}
+
 
 function name_system_p(name)
 {
     return name ~ /^__.*__$/
 }
+
+
 function name_strict_symbol_p(name)
 {
     return name ~ /^[A-Za-z#_][A-Za-z#_0-9]*$/
@@ -863,6 +986,17 @@ function assert_valid_env_var_name(var)
     if (env_var_name_valid_p(var))
         return TRUE
     error("Name '" var "' not valid:" $0)
+}
+
+
+function assert_cmd_name_okay_to_define(name)
+{
+    if (! cmd_valid_p(name))
+        error("Name '" name "' not valid:" $0)
+    # fail if symbol or sequence or function
+    if (! name_available_in_all_p(name, TYPE_FUNCTION TYPE_SEQUENCE TYPE_SYMBOL))
+        error("Name '" name "' not available:" $0)
+    return TRUE                 # not really necessary
 }
 
 
@@ -1073,7 +1207,7 @@ function calc3_eval(s,    e)
     e = _c3_expr()
     if (_f <= length(_S_expr))
         error(sprintf("Math expression error at '%s'", substr(_S_expr, _f)))
-    else if (e == "nan" || e == "inf" || e == "-inf")
+    else if (match(e, /^[-+]?(nan|inf)/))
         error(sprintf("Math expression error:'%s' returned \"%s\":%s", s, e, $0))
     else
         return e
@@ -1120,10 +1254,10 @@ function _c3_rel(    e, op)
 
 # factor | factor [*/%] factor
 #
-# NOTE: Alan Linton's version of this function introduced a bug whereby
-# the function returns prematurely instead of continuing the while loop
-# when another op of equal precedence is encountered.  This results in
-# "1*2*3" being rejected at the second `*'.
+# NOTE: Alan Linton's version of this function has a bug: the function
+# returned prematurely, even when another op of equal precedence was
+# encountered.  This results in "1*2*3" being rejected at the second `*'.
+# The correction is to continue the while loop instead of returning.
 function _c3_term(    e, op, f)
 {
     e = _c3_factor()
@@ -1203,25 +1337,23 @@ function _c3_factor3(    e, fun, e2)
         return e
     }
 
-    # variable name
+    # predefined, symbol, or sequence name
     if (match(e, /^[A-Za-z#_][A-Za-z#_0-9]*/)) {
         e2 = _c3_advance()
         if      (e2 == "e")   return E
         else if (e2 == "pi")  return PI
         else if (e2 == "tau") return TAU
-        else {
-            assert_sym_valid_name(e2)
-            assert_sym_defined(e2)
-            dbg_print("expr", 5, "var=" e2 ", val=" sym_fetch(e2))
+        else if (sym_valid_p(e2) && sym_defined_p(e2))
             return sym_fetch(e2)
-        }
+        else if (seq_valid_p(e2) && seq_defined_p(e2))
+            return seqtab[e2, "value"]
     }
 
     # error
     error(sprintf("Expected number or '(' at '%s'", substr(_S_expr, _f)))
 }
 
-# Built-in functions of one variable
+# Mathematical functions of one variable
 function _c3_calculate_function(fun, e,    c)
 {
     if (fun == "(")        return e
@@ -1264,6 +1396,15 @@ function _c3_advance(    tmp)
 #
 #*****************************************************************************
 
+# @cmdend
+function m2_cmdend()
+{
+    # @cmdend should never be encountered alone because m2_newcmd()
+    # consumes any matching @cmdend.
+    error("No corresponding '@newcmd':" $0)
+}
+
+
 # @default, @initialize NAME TEXT
 function m2_default(    sym)
 {
@@ -1272,11 +1413,7 @@ function m2_default(    sym)
     if (NF < 2)
         error("Bad parameters:" $0)
     sym = $2
-    assert_sym_valid_name(sym)
-    assert_sym_unprotected(sym)
-    # You can redefine a symbol, but not a built-in or a sequence
-    if (sym in builtins || seq_defined_p(sym))
-        error("Name '" sym "' not available:" $0)
+    assert_sym_okay_to_define(sym)
 
     if (sym_defined_p(sym)) {
         if ($1 == "@init" || $1 == "@initialize")
@@ -1287,19 +1424,15 @@ function m2_default(    sym)
 
 
 # @append, @define      NAME TEXT
-function m2_define(    append_flag, sym)
+function m2_define(    append_flag)
 {
     if (! currently_active_p())
         return
     if (NF < 2)
         error("Bad parameters:" $0)
     append_flag = ($1 == "@append")
-    sym = $2
-    assert_sym_valid_name(sym)
-    assert_sym_unprotected(sym)
-    # You can redefine a symbol, but not a built-in or a sequence
-    if (sym in builtins || seq_defined_p(sym))
-        error("Name '" sym "' not available:" $0)
+    assert_sym_okay_to_define($2)
+
     dodef(append_flag)
 }
 
@@ -1323,7 +1456,7 @@ function m2_divert()
 
 
 # @dump[all]            [FILE]
-function m2_dump(    buf, cnt, definition, dumpfile, i, key, keys, seqfields, sym_name, all_flag)
+function m2_dump(    buf, cnt, definition, dumpfile, i, key, keys, fields, sym_name, all_flag)
 {
     if (! currently_active_p())
         return
@@ -1342,9 +1475,14 @@ function m2_dump(    buf, cnt, definition, dumpfile, i, key, keys, seqfields, sy
             keys[++cnt] = key
     }
     for (key in seqtab) {
-        split(key, seqfields, SUBSEP)
-        if (seqfields[2] == "defined")
-            keys[++cnt] = seqfields[1]
+        split(key, fields, SUBSEP)
+        if (fields[2] == "defined")
+            keys[++cnt] = fields[1]
+    }
+    for (key in cmdtab) {
+        split(key, fields, SUBSEP)
+        if (fields[2] == "defined")
+            keys[++cnt] = fields[1]
     }
     qsort(keys, 1, cnt)
 
@@ -1352,10 +1490,12 @@ function m2_dump(    buf, cnt, definition, dumpfile, i, key, keys, seqfields, sy
     buf = ""
     for (i = 1; i <= cnt; i++) {
         key = keys[i]
-        if (key in symtab)
+        if (sym_defined_p(key))
             buf = buf sym_definition_pp(key)
-        else if ((key, "defined") in seqtab)
+        else if (seq_defined_p(key))
             buf = buf seq_definition_pp(key)
+        else if (cmd_defined_p(key))
+            buf = buf cmd_definition_pp(key)
         else                    # Can't happen
             error("Name '" key "' not available:" $0)
     }
@@ -1397,17 +1537,22 @@ function m2_endif()
 
 
 # @echo, @error, @stderr, @warn TEXT
-function m2_error(    m2_will_exit, message)
+# error and warn format the message with file & line, etc
+# echo and stderr do no additional formatting
+function m2_error(    m2_will_exit, do_format, message)
 {
     if (! currently_active_p())
         return
     m2_will_exit = ($1 == "@error")
+    do_format = ($1 == "@error" || $1 == "@warn")
     if (NF == 1) {
         message = format_message($1)
     } else {
         $1 = ""
         sub("^[ \t]*", "")
         message = dosubs($0)
+        if (do_format)
+            message = format_message(message)
     }
     print_stderr(message)
     if (m2_will_exit)
@@ -1563,15 +1708,14 @@ function m2_include(    error_text, filename, read_literally, silent)
 
 
 # @decr, @incr          NAME [N]
-function m2_incr(    incr, sym)
+function m2_incr(    sym, incr)
 {
     if (! currently_active_p())
         return
     if (NF < 2)
         error("Bad parameters:" $0)
     sym = $2
-    assert_sym_valid_name(sym)
-    assert_sym_unprotected(sym)
+    assert_sym_okay_to_define(sym)
     assert_sym_defined(sym, "incr")
     if (NF >= 3 && ! integerp($3))
         error("Value '" $3 "' must be numeric:" $0)
@@ -1589,10 +1733,7 @@ function m2_input(    getstat, input, sym)
     if (! currently_active_p())
         return
     sym = (NF < 2) ? "__INPUT__" : $2
-    assert_sym_valid_name(sym)
-    assert_sym_unprotected(sym)
-    if (sym in builtins || seq_defined_p(sym))
-        error("Name '" sym "' not available:" $0)
+    assert_sym_okay_to_define(sym)
     getstat = getline input < "/dev/tty"
     if (getstat < 0) {
         warn("Error reading '/dev/tty' [input]:" $0)
@@ -1612,11 +1753,7 @@ function m2_longdef(    buf, save_line, save_lineno, sym)
     save_line = $0
     save_lineno = sym_fetch("__LINE__")
     sym = $2
-    assert_sym_valid_name(sym)
-    assert_sym_unprotected(sym)
-    # You can redefine a symbol, but not a built-in or a sequence
-    if (sym in builtins || seq_defined_p(sym))
-        error("Name '" sym "' not available:" $0)
+    assert_sym_okay_to_define(sym)
     buf = read_lines_until("@longend")
     if (buf == EoF_marker)
         error("Delimiter '@longend' not found:" save_line, save_lineno)
@@ -1633,6 +1770,27 @@ function m2_longend()
 }
 
 
+# @newcmd               NAME
+function m2_newcmd(    buf, save_line, save_lineno, name)
+{
+    if (! currently_active_p())
+        return
+    if (NF != 2)
+        error("Bad parameters:" $0)
+    name = $2
+    assert_cmd_name_okay_to_define(name)
+    save_line = $0
+    save_lineno = sym_fetch("__LINE__")
+
+    buf = read_lines_until("@cmdend")
+    if (buf == EoF_marker)
+        error("Delimiter '@cmdend' not found:" save_line, save_lineno)
+
+    cmdtab[name, "defined"]    = TRUE
+    cmdtab[name, "definition"] = buf
+}
+
+
 # @read                 NAME FILE
 function m2_read(    sym, filename, line, val, getstat)
 {
@@ -1645,11 +1803,8 @@ function m2_read(    sym, filename, line, val, getstat)
     if (NF < 3)
         error("Bad parameters:" $0)
     sym  = $2
-    assert_sym_valid_name(sym)
-    assert_sym_unprotected(sym)
-    # You can redefine a symbol, but not a built-in or a sequence
-    if (sym in builtins || seq_defined_p(sym))
-        error("Name '" sym "' not available:" $0)
+    assert_sym_okay_to_define(sym)
+
     $1 = $2 = ""
     sub("^[ \t]*", "")
     filename = rm_quotes(dosubs($0))
@@ -1668,35 +1823,31 @@ function m2_read(    sym, filename, line, val, getstat)
 }
 
 
-# @sequence             ID CMD [ARG...]
-function m2_sequence(    id, cmd, arg, saveline)
+# @sequence             ID SUBCMD [ARG...]
+function m2_sequence(    id, subcmd, arg, saveline)
 {
     if (! currently_active_p())
         return
     if (NF < 3)
         error("Bad parameters:" $0)
     id = $2
-    if (! seq_valid_p(id))
-        error("Name '" id "' not valid:" $0)
-    cmd = $3
-    if (cmd != "new" && ! seq_defined_p(id))
+    assert_seq_valid_name(id)
+    subcmd = $3
+    if (subcmd != "new" && ! seq_defined_p(id))
         error("Name '" id "' not defined:" $0)
     if (NF == 3) {
-        if (cmd == "delete") {
+        if (subcmd == "delete") {
             seq_destroy(id)
-        } else if (cmd == "new") {
-            # Fail if builtiin or already defined symbol or sequence
-            if (id in builtins    || name_system_p(id) ||
-                seq_defined_p(id) || sym_defined_p(id))
-                error("Name '" id "' not available:" $0)
+        } else if (subcmd == "new") {
+            assert_seq_okay_to_define(id)
             seqtab[id, "defined"] = TRUE
             seqtab[id, "inc"]     = SEQ_DEFAULT_INC
             seqtab[id, "init"]    = SEQ_DEFAULT_INIT
             seqtab[id, "fmt"]     = SEQ_DEFAULT_FMT
             seqtab[id, "value"]   = SEQ_DEFAULT_INIT
-        } else if (cmd == "next") { # Increment counter only, no output
+        } else if (subcmd == "next") { # Increment counter only, no output
             seqtab[id, "value"] += seqtab[id, "inc"]
-        } else if (cmd == "reset") { # Set current counter value to initial value
+        } else if (subcmd == "reset") { # Set current counter value to initial value
             seqtab[id, "value"] = seqtab[id, "init"]
         } else
             error("Bad parameters:" $0)
@@ -1704,7 +1855,7 @@ function m2_sequence(    id, cmd, arg, saveline)
         saveline = $0
         sub(/^[ \t]*[^ \t]+[ \t]+[^ \t]+[ \t]+[^ \t]+[ \t]+/, "") # a + this time because ARGS is required
         arg = $0
-        if (cmd == "format") {
+        if (subcmd == "format") {
             # format STRING :: Set format string for printf to STRING.
             # Arg should be the format string to use with printf.  It
             # must include exactly one %d for the sequence value, and no
@@ -1713,14 +1864,14 @@ function m2_sequence(    id, cmd, arg, saveline)
             # is, m2 can't police your format string and a bad value
             # might cause a crash if printf() fails.
             seqtab[id, "fmt"] = arg
-        } else if (cmd == "inc") {
+        } else if (subcmd == "inc") {
             # inc N :: Set increment value to N.
             if (! integerp(arg))
                 error(sprintf("Value '%s' must be numeric:%s", arg, saveline))
             if (arg+0 == 0)
                 error(sprintf("Bad parameters in 'inc':%s", saveline))
             seqtab[id, "inc"] = int(arg)
-        } else if (cmd == "init") {
+        } else if (subcmd == "init") {
             # init N :: Set initial  value to N.  If current
             # value == old init value (i.e., never been used), then set
             # the current value to the new init value also.  Otherwise
@@ -1730,7 +1881,7 @@ function m2_sequence(    id, cmd, arg, saveline)
             if (seqtab[id, "value"] == seqtab[id, "init"])
                 seqtab[id, "value"] = int(arg)
             seqtab[id, "init"] = int(arg)
-        } else if (cmd == "value") {
+        } else if (subcmd == "value") {
             # value N :: Set counter value directly to N.
             if (! integerp(arg))
                 error(sprintf("Value '%s' must be numeric:%s", arg, saveline))
@@ -1744,7 +1895,8 @@ function m2_sequence(    id, cmd, arg, saveline)
 # @shell                DELIM [PROG]
 # Set symbol "M2_SHELL" to override.
 function m2_shell(    delim, save_line, save_lineno, input_text, input_file,
-                      output_text, output_file, sendto, path_fmt, getstat, cmd)
+                      output_text, output_file, sendto, path_fmt, getstat,
+                      cmdline)
 {
     # The sendto program defaults to a reasonable shell but you can
     # specify where you want to send your data.  Possibly useful choices
@@ -1780,8 +1932,8 @@ function m2_shell(    delim, save_line, save_lineno, input_text, input_file,
 
     # Don't tell me how fragile this is, we're whistling past the
     # graveyard here.  But it suffices to run /bin/sh, which is enough.
-    cmd = sprintf("%s < %s > %s", sendto, input_file, output_file)
-    sym_store("__STATUS__", system(cmd))
+    cmdline = sprintf("%s < %s > %s", sendto, input_file, output_file)
+    sym_store("__STATUS__", system(cmdline))
     while (TRUE) {
         getstat = getline line < output_file
         if (getstat < 0)        # Error
@@ -1816,10 +1968,14 @@ function m2_undef(    name)
         return
     if (NF != 2)
         error("Bad parameters:" $0)
-    if (seq_valid_p($2) && seq_defined_p($2))
-        seq_destroy($2)
-    else {
-        name = sym_root($2)
+    name = $2
+    if (seq_valid_p(name) && seq_defined_p(name))
+        seq_destroy(name)
+    else if (cmd_valid_p(name) && cmd_defined_p(name)) {
+        delete cmdtab[name, "defined"]
+        delete cmdtab[name, "definition"]
+    } else {
+        name = sym_root(name)
         assert_sym_valid_name(name)
         assert_sym_unprotected(name)
         sym_destroy(name)
@@ -1857,7 +2013,7 @@ function m2_undivert(    stream, i)
 # Read this function carefully--there are some nice tricks here.
 #
 # Caller is responsible for removing potential quotes from filename.
-function dofile(filename, read_literally,    savefile, saveline, savebuffer)
+function dofile(filename, read_literally,    savebuffer, savefile, saveifdepth, saveline, saveuuid)
 {
     if (filename == "-")
         filename = "/dev/stdin"
@@ -1870,10 +2026,11 @@ function dofile(filename, read_literally,    savefile, saveline, savebuffer)
         error("Cannot recursively read '" filename "':" $0)
 
     # Save old file context
-    savefile   = sym_fetch("__FILE__")
-    saveline   = sym_fetch("__LINE__")
-    saveuuid   = sym_fetch("__FILE_UUID__")
-    savebuffer = buffer
+    savebuffer  = buffer
+    savefile    = sym_fetch("__FILE__")
+    saveifdepth = ifdepth
+    saveline    = sym_fetch("__LINE__")
+    saveuuid    = sym_fetch("__FILE_UUID__")
 
     # Set up new file context
     activefiles[filename] = TRUE
@@ -1892,15 +2049,15 @@ function dofile(filename, read_literally,    savefile, saveline, savebuffer)
     # Avoid I/O errors (on BSD at least) on attempt to close stdin
     if (filename != "-" && filename != "/dev/stdin")
         close(filename)
-    if (ifdepth > 0)
-        error("Delimiter '@endif' not found")
     delete activefiles[filename]
 
     # Restore previous file context
+    if (ifdepth > saveifdepth)
+        error("Delimiter '@endif' not found")
+    buffer = savebuffer
     sym_store("__FILE__", savefile)
     sym_store("__LINE__", saveline)
     sym_store("__FILE_UUID__", saveuuid)
-    buffer = savebuffer
 
     return TRUE
 }
@@ -1954,10 +2111,11 @@ function process_line(read_literally,    newstring)
         return
     }
 
-    # Look for built-in control commands.
-    # Note, these only match at beginning of line.
+    # Look for control commands.  These are hard-wired, and cannot be
+    # overridden by @newcmd.  Note, they only match at beginning of line.
     if      (/^@(@|#)/)                   { } # Comments are ignored
     else if (/^@append([ \t]|$)/)         { m2_define() }
+    else if (/^@cmdend([ \t]|$)/)         { m2_cmdend() }
     else if (/^@c(omment)?([ \t]|$)/)     { } # Comments are ignored
     else if (/^@decr([ \t]|$)/)           { m2_incr() }
     else if (/^@default([ \t]|$)/)        { m2_default() }
@@ -1980,6 +2138,7 @@ function process_line(read_literally,    newstring)
     else if (/^@input([ \t]|$)/)          { m2_input() }
     else if (/^@longdef([ \t]|$)/)        { m2_longdef() }
     else if (/^@longend([ \t]|$)/)        { m2_longend() }
+    else if (/^@newcmd([ \t])/)           { m2_newcmd() }
     else if (/^@s?paste([ \t]|$)/)        { m2_include() }
     else if (/^@read([ \t]|$)/)           { m2_read() }
     else if (/^@sequence([ \t]|$)/)       { m2_sequence() }
@@ -1992,8 +2151,8 @@ function process_line(read_literally,    newstring)
     else if (/^@warn([ \t]|$)/)           { m2_error() }
 
     # Check for user commands
-    else if (/^@test([ \t]|$)/)           { user_test() }
-    else if (/^@clear_streams([ \t]|$)/)  { user_clear_streams() }
+    else if (first($1) == "@" && cmd_defined_p(substr($1, 2)))
+        docommand()
 
     # Process @
     else {
@@ -2007,13 +2166,29 @@ function process_line(read_literally,    newstring)
     }
 }
 
-function user_test(    savebuffer, i)
+# This is only called by process_line(), which guarantees that $0 is
+# unchanged, and that $1 is "@<CMD>".  This is important because we have
+# to get the command name from here -- it's not passed in as a parameter
+# as you might have expected.  Also, process_line checks to make sure
+# cmdtab[NAME] is defined; we just blindly grab the definition.
+# Arguments/parameters are not supported yet.
+function docommand(    name, i, savebuffer, savefile, saveifdepth, saveline)
 {
-    savebuffer = buffer
-    buffer = "Hello from test !!\n"
+    # print_stderr("Entering docommand: " $0)
+
+    savebuffer  = buffer
+    savefile    = sym_fetch("__FILE__")
+    saveifdepth = ifdepth
+    saveline    = sym_fetch("__LINE__")
+
+    name = substr($1, 2)
+    buffer = cmdtab[name, "definition"]
+    sym_store("__FILE__", $1)
+    sym_store("__LINE__", 0)
 
     while (buffer != "") {
         # Extract each line from buffer, one by one
+        sym_increment("__LINE__") # __LINE__ is local, but not __NLINE__
         if ((i = index(buffer, "\n")) == IDX_NOT_FOUND) {
             $0 = buffer
             buffer = ""
@@ -2032,19 +2207,12 @@ function user_test(    savebuffer, i)
         process_line()
     }
 
+    # Restore to before command ran
+    if (ifdepth > saveifdepth)
+        error("Delimiter '@endif' not found")
     buffer = savebuffer
-}
-
-function user_clear_streams()
-{
-    warn("Invoking clear_streams")
-    buf = "@divert -1\n" buf
-    print_stderr(sprintf("@divert -1 ; buf='%s'", buf))
-    process_line()
-
-    buf = "@undivert\n" buf
-    print_stderr(sprintf("@undivert ; buf='%s'", buf))
-    process_line()
+    sym_store("__FILE__", savefile)
+    sym_store("__LINE__", saveline)
 }
 
 
@@ -2078,7 +2246,8 @@ function user_clear_streams()
 #             L = L "@" M
 #             R = "@" R
 #     return L R
-function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_brace, x, y)
+function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
+                      at_brace, x, y)
 {
     l = ""                   # Left of current pos  - ready for output
     r = s                    # Right of current pos - as yet unexamined
@@ -2105,41 +2274,41 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
 
         # In the code that follows:
         # - m :: Entire text between @'s.  Example: "mid foo 3".
-        # - symfunc :: The name of the "function" to call.  The first
-        #     element of m.  Example: "mid".
-        # - nparam :: Number of parameters supplied to the symfunc.
-        #     @foo@         --> nparam == 0
-        #     @foo BAR@     --> nparam == 1
-        #     @foo BAR BAZ@ --> nparam == 2
-        # In general, a symfunc's parameter N is available in variable
+        # - fn :: The name of the "function" to call.  The first element
+        #         of m.  Example: "mid".
+        # - nparam :: Number of parameters supplied to the function.
+        #     @mid@         --> nparam == 0
+        #     @mid foo@     --> nparam == 1
+        #     @mid foo 3@   --> nparam == 2
+        # In general, a function's parameter N is available in variable
         #   param[N+1].  Consider "mid foo 3".  nparam is 2.
-        #   The symfunc is found in the first position, at param [0+1].
+        #   The fn is found in the first position, at param [0+1].
         #   The new prefix is at param[1+1] and new count is at param[2+1].
         #   This offset of one is referred to as `_fencepost' below.
-        # Each symfunc condition eventually executes
+        # Each function condition eventually executes
         #     r = <SOMETHING> r
         #   which injects <SOMETHING> just before the current value of
         #   r.  (r is defined above.)  r is what is to the right of the
         #   current position and contains as yet unexamined text that
         #   needs to be evaluated for possible macro processing.  This
         #   is the data we were going to evaluate anyway.  In other
-        #   words, this injects the result of "invoking" symfunc.
+        #   words, this injects the result of "invoking" fn.
         # Eventually this big while loop exits and we return "l r".
 
         nparam = split(m, param) - _fencepost
-        symfunc = param[0 + _fencepost]
-        # dbg_print("dosubs", 7, sprintf("dosubs: symfunc=%s, nparam=%d; l='%s', m='%s', r='%s', expand='%s'", symfunc, nparam, l, m, r, expand))
+        fn = param[0 + _fencepost]
+        # dbg_print("dosubs", 7, sprintf("dosubs: fn=%s, nparam=%d; l='%s', m='%s', r='%s', expand='%s'", fn, nparam, l, m, r, expand))
 
         # basename SYM: Base (i.e., file name) of path
         # dirname SYM: Directory name of path
-        if (symfunc == "basename" || symfunc == "dirname") {
+        if (fn == "basename" || fn == "dirname") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
             p = param[1 + _fencepost]
             assert_sym_valid_name(p)
-            assert_sym_defined(p, symfunc)
-            cmd = build_prog_cmdline(symfunc, rm_quotes(sym_fetch(p)))
-            cmd | getline expand
-            close(cmd)
+            assert_sym_defined(p, fn)
+            cmdline = build_prog_cmdline(fn, rm_quotes(sym_fetch(p)))
+            cmdline | getline expand
+            close(cmdline)
             r = expand r
 
         # boolval SYM: Print __FMT__[0 or 1], depending on SYM truthiness.
@@ -2151,7 +2320,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
         #  - In strict mode, throw an error if the symbol is not defined.
         #  - In non-strict mode, you get a 'false' output if not defined.
         #  - If it's not a symbol, use its value as a boolean state.
-        } else if (symfunc == "boolval") {
+        } else if (fn == "boolval") {
             p = param[1 + _fencepost]
             if (p == sym2_fetch("__FMT__", TRUE) ||
                 p == sym2_fetch("__FMT__", FALSE))
@@ -2173,19 +2342,19 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
         # epoch : Number of seconds since Epoch
         # time  : Current time as HH:MM:SS
         # tz    : Current time zone name
-        } else if (symfunc == "date" ||
-                   symfunc == "epoch" ||
-                   symfunc == "time" ||
-                   symfunc == "tz") {
-            y = sym2_fetch("__FMT__", symfunc)
+        } else if (fn == "date" ||
+                   fn == "epoch" ||
+                   fn == "time" ||
+                   fn == "tz") {
+            y = sym2_fetch("__FMT__", fn)
             gsub(/"/, "\\\"", y)
-            cmd = build_prog_cmdline("date", "+\"" y "\"")
-            cmd | getline expand
-            close(cmd)
+            cmdline = build_prog_cmdline("date", "+\"" y "\"")
+            cmdline | getline expand
+            close(cmdline)
             r = expand r
 
         # expr ...: Evaluate mathematical epxression, store in __RESULT__
-        } else if (symfunc == "expr") {
+        } else if (fn == "expr") {
             sub(/^expr[ \t]*/, "", m) # clean up expression to evaluate
             x = calc3_eval(m)
             dbg_print("expr", 1, sprintf("expr{%s} = %s", m, x))
@@ -2194,7 +2363,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
 
         # getenv : Get environment variable
         #   @getenv HOME@ => /home/user
-        } else if (symfunc == "getenv") {
+        } else if (fn == "getenv") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
             p = param[1 + _fencepost]
             assert_valid_env_var_name(p)
@@ -2206,22 +2375,22 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
         # lc : Lower case
         # len : Length.        @len SYM@ => N
         # uc SYM: Upper case
-        } else if (symfunc == "lc" ||
-                   symfunc == "len" ||
-                   symfunc == "uc") {
+        } else if (fn == "lc" ||
+                   fn == "len" ||
+                   fn == "uc") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
             p = param[1 + _fencepost]
             assert_sym_valid_name(p)
-            assert_sym_defined(p, symfunc)
-            r = ((symfunc == "lc")  ? tolower(sym_fetch(p)) : \
-                 (symfunc == "len") ?  length(sym_fetch(p)) : \
-                 (symfunc == "uc")  ? toupper(sym_fetch(p)) : \
+            assert_sym_defined(p, fn)
+            r = ((fn == "lc")  ? tolower(sym_fetch(p)) : \
+                 (fn == "len") ?  length(sym_fetch(p)) : \
+                 (fn == "uc")  ? toupper(sym_fetch(p)) : \
                  error("Name '" m "' not defined:" $0)) \
                 r
 
         # left : Left (substring)
         #   @left ALPHABET 7@ => ABCDEFG
-        } else if (symfunc == "left") {
+        } else if (fn == "left") {
             if (nparam < 1 || nparam > 2) error("Bad parameters in '" m "':" $0)
             p = param[1 + _fencepost]
             assert_sym_valid_name(p)
@@ -2238,7 +2407,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
         #   @mid ALPHABET 15 5@ => OPQRS
         #   @mid FOO 3@
         #   @mid FOO 2 2@
-        } else if (symfunc == "mid" || symfunc == "substr") {
+        } else if (fn == "mid" || fn == "substr") {
             if (nparam < 2 || nparam > 3)
                 error("Bad parameters in '" m "':" $0)
             p = param[1 + _fencepost]
@@ -2258,12 +2427,12 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
 
         # rem : Remark
         #   @rem STUFF@ is considered a comment and ignored
-        } else if (symfunc == "rem") {
+        } else if (fn == "rem") {
             ;
 
         # right : Right (substring)
         #   @right ALPHABET 20@ => TUVWXYZ
-        } else if (symfunc == "right") {
+        } else if (fn == "right") {
             if (nparam < 1 || nparam > 2) error("Bad parameters in '" m "':" $0)
             p = param[1 + _fencepost]
             assert_sym_valid_name(p)
@@ -2277,7 +2446,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
             r = substr(sym_fetch(p), x) r
 
         # spaces [N]: N spaces
-        } else if (symfunc == "spaces") {
+        } else if (fn == "spaces") {
             if (nparam > 1) error("Bad parameters in '" m "':" $0)
             x = 1
             if (nparam == 1) {
@@ -2290,7 +2459,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
             r = expand r
 
         # trim SYM: Remove leading and trailing whitespace
-        } else if (symfunc == "trim") {
+        } else if (fn == "trim") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
             p = param[1 + _fencepost]
             assert_sym_valid_name(p)
@@ -2302,12 +2471,12 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
 
         # uuid : Something that resembles but is not a UUID
         #   @uuid@ => C3525388-E400-43A7-BC95-9DF5FA3C4A52
-        } else if (symfunc == "uuid") {
+        } else if (fn == "uuid") {
             r = uuid() r
 
         # <SOMETHING ELSE> : Call a user-defined macro, handles arguments
-        } else if (sym_valid_p(symfunc) && sym_defined_p(symfunc)) {
-            expand = sym_fetch(symfunc)
+        } else if (sym_valid_p(fn) && sym_defined_p(fn)) {
+            expand = sym_fetch(fn)
             # Expand $N parameters (includes $0 for macro name)
             j = MAX_PARAM   # but don't go overboard with params
             # Count backwards to get around $10 problem.
@@ -2326,11 +2495,11 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
             r = expand r
 
         # Check if it's a sequence
-        } else if (seq_valid_p(symfunc) && seq_defined_p(symfunc)) {
+        } else if (seq_valid_p(fn) && seq_defined_p(fn)) {
             if (nparam == 0) {
                 # normal call : increment value, insert new value with pre & suffix, etc.
-                seqtab[symfunc, "value"] += seqtab[symfunc, "inc"]
-                r = sprintf(seqtab[symfunc, "fmt"], seqtab[symfunc, "value"]) r
+                seqtab[fn, "value"] += seqtab[fn, "inc"]
+                r = sprintf(seqtab[fn, "fmt"], seqtab[fn, "value"]) r
             } else {
                 subcmd = param[1 + _fencepost]
                 if (nparam == 1) {
@@ -2338,7 +2507,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, symfunc, cmd, at_
                     if (subcmd = "currval") {
                         # - currval :: Return current value of counter
                         # without modifying it.  Also, no prefix/suffix.
-                        r = seqtab[symfunc, "value"] r
+                        r = seqtab[fn, "value"] r
                     } else
                         error("Bad parameters in '" m "':" $0)
                 } else {
@@ -2567,6 +2736,11 @@ function initialize(    d, dateout, array, elem)
     SEQ_DEFAULT_FMT   = "%d"
     TAU               = 2 * PI
     TRUE              = 1
+    TYPE_ANY          = "*"
+    TYPE_CMD          = "C"     # cmdtab
+    TYPE_FUNCTION     = "F"     # functab
+    TYPE_SEQUENCE     = "Q"     # seqtab
+    TYPE_SYMBOL       = "S"     # symtab
 
     # Exit codes
     EX_OK             =  0
@@ -2624,11 +2798,11 @@ function initialize(    d, dateout, array, elem)
     for (elem in array)
         unprotected_syms[array[elem]] = TRUE
 
-    # Built-in symfuncs cannot be used as symbol or sequence names.
+    # Functions cannot be used as symbol or sequence names.
     split("basename boolval date dirname epoch expr getenv lc left len" \
           " mid rem right spaces time trim tz uc uuid", array, " ")
     for (elem in array)
-        builtins[array[elem]] = TRUE
+        functab[array[elem]] = TRUE
 }
 
 

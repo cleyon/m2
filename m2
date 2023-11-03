@@ -706,15 +706,15 @@ function sym_system_p(sym)
 
 function sym_true_p(sym)
 {
-    return (sym_defined_p(sym)      &&
-            sym_fetch(sym) != FALSE &&
+    return (sym_defined_p(sym)      && \
+            sym_fetch(sym) != FALSE && \
             sym_fetch(sym) != "")
 }
 
 # In strict mode, a symbol must match the following regexp:
 #       /^[A-Za-z#_][A-Za-z#_0-9]*$/
 # In non-strict mode, any non-empty string is valid.
-function sym_valid_p(sym,    result, lbracket, sym_root, sym_key)
+function sym_valid_p(sym,    result, lbracket, root, key)
 {
     # These are the ways a symbol is not valid:
     result = FALSE
@@ -729,13 +729,13 @@ function sym_valid_p(sym,    result, lbracket, sym_root, sym_key)
             # 2. Doesn't look exactly like "xx[yy]"
             if (sym !~ /^.+\[.+\]$/)
                 break
-            sym_root = substr(sym, 1, lbracket-1)
-            sym_key  = substr(sym, lbracket+1, length(sym)-lbracket-1)
+            root = substr(sym, 1, lbracket-1)
+            key  = substr(sym, lbracket+1, length(sym)-lbracket-1)
 
             # 3. Empty parts are not valid
-            if (length(sym_root) == 0 || length(sym_key) == 0)
+            if (length(root) == 0 || length(key) == 0)
                 break
-            sym = sym_root
+            sym = root
         }
 
         # 4. We're in strict mode and the name doesn't pass regexp check
@@ -1126,18 +1126,18 @@ function uuid()
 
 # Quicksort - from "The AWK Programming Language" p.161.
 # Used in m2_dump() to sort the symbol table.
-function qsort(A, left, right,    i, last)
+function qsort(A, left, right,    i, lastpos)
 {
     if (left >= right)          # Do nothing if array contains
         return                  # less than two elements
     swap(A, left, left + int((right-left+1)*rand()))
-    last = left                 # A[left] is now partition element
+    lastpos = left              # A[left] is now partition element
     for (i = left+1; i <= right; i++)
         if (_less_than(A[i], A[left]))
-            swap(A, ++last, i)
-    swap(A, left, last)
-    qsort(A, left,   last-1)
-    qsort(A, last+1, right)
+            swap(A, ++lastpos, i)
+    swap(A, left, lastpos)
+    qsort(A, left,   lastpos-1)
+    qsort(A, lastpos+1, right)
 }
 
 function swap(A, i, j,    t)
@@ -1288,11 +1288,11 @@ function _c3_factor(    e)
 function _c3_factor2(    e)
 {
     e = substr(_S_expr, _f)
-    if (e ~ /^[\+\-\!]/) {      #unary operators [+-!]
+    if (e ~ /^[-+!]/) {      #unary operators [+-!]
         _f++
         if (e ~ /^\+/) return +_c3_factor3() # only one unary + allowed
-        if (e ~ /^\-/) return -_c3_factor3() # only one unary - allowed
-        if (e ~ /^\!/) return !(_c3_factor2() + 0) # unary ! may repeat
+        if (e ~ /^-/)  return -_c3_factor3() # only one unary - allowed
+        if (e ~ /^!/)  return !(_c3_factor2() + 0) # unary ! may repeat
     }
     return _c3_factor3()
 }
@@ -2481,7 +2481,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
             j = MAX_PARAM   # but don't go overboard with params
             # Count backwards to get around $10 problem.
             while (j-- >= 0) {
-                if (index(expand, "$\{" j "\}") != IDX_NOT_FOUND) {
+                if (index(expand, "${" j "}") != IDX_NOT_FOUND) {
                     if (j > nparam)
                         error("Parameter " j " not supplied in '" m "':" $0)
                     gsub("\\$\\{" j "\\}", param[j + _fencepost], expand)

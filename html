@@ -1,0 +1,26 @@
+@comment HTML utility macro:
+@@ define(`H2_COUNT', 0)
+@sequence H2_COUNT new
+@@
+@@ # The H2_COUNT macro is redefined every time the H2 macro is used:
+@@
+@@ define(`H2',
+@@      `define(`H2_COUNT', incr(H2_COUNT))<h2>H2_COUNT. $1</h2>')
+@newcmd H2
+<h2>@H2_COUNT@. $1</h2>
+@cmdend
+@@
+@divert 1
+@@ dnl
+@@ dnl The dnl macro causes m4 to discard the rest of the line, thus
+@@ dnl preventing unwanted blank lines from appearing in the output.
+@@ dnl
+@H2 First Section
+@H2 Second Section
+@H2 Conclusion
+@@
+@divert 0
+@@
+<HTML>
+@undivert 1
+</HTML>

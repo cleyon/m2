@@ -12,8 +12,10 @@
 # DESCRIPTION
 #       m2 is a line-oriented macro processor, a "little brother" to the
 #       m4(1) macro processor found on Unix systems.  It is written in
-#       portable "standard" Awk and does not depend on any GNU extensions.
-#       It can perform several functions, including:
+#       portable "standard" Awk and does not depend on Gawk or any other
+#       files.  Even later Awk additions such as systime() are avoided.
+#
+#       The program can perform several functions, including:
 #
 #       1. Define and expand macros.  Macros have two parts, a name and
 #          a body.  All occurrences of a macro's name are replaced with
@@ -406,6 +408,17 @@
 #
 # EMBIGGENER
 #       Chris Leyon, cleyon@gmail.com
+#
+# RELATIVES
+#       m1  Bentley
+#       m2  This program
+#       m3
+#       m4  Unix
+#       m5
+#       m6  From Unix V6 (perhaps earlier), a "general purpose macroprocessor" by M. D. McIlroy.
+#           - A. D. Hall, M6 Reference Manual.  Computer Science Technical
+#             Report #2, Bell Laboratories, 1969.
+#           - http://man.cat-v.org/unix-6th/6/m6
 #
 # SEE ALSO
 #       "m1: A Mini Macro Processor", Computer Language, June 1990,
@@ -1853,7 +1866,7 @@ function m2_sequence(    id, subcmd, arg, saveline)
             error("Bad parameters:" $0)
     } else {    # NF >= 4
         saveline = $0
-        sub(/^[ \t]*[^ \t]+[ \t]+[^ \t]+[ \t]+[^ \t]+[ \t]+/, "") # a + this time because ARGS is required
+        sub(/^[ \t]*[^ \t]+[ \t]+[^ \t]+[ \t]+[^ \t]+[ \t]+/, "") # a + this time because ARG is required
         arg = $0
         if (subcmd == "format") {
             # format STRING :: Set format string for printf to STRING.
@@ -2899,9 +2912,9 @@ BEGIN {
 # I need finer control over when/if it is invoked.
 function end_program(exit_code, output_diverted_streams)
 {
-    # Perform an implicit "@divert" and "@undivert" to output any
-    # remaining diverted data.  If you want skip this step, place the
-    # following lines at the very end of the input data stream:
+    # Perform a "@divert 0" and "@undivert" to output any remaining
+    # diverted data.  If you wish to skip this step and clear all
+    # streams, place the following at the very end of your input data:
     #     @divert -1
     #     @undivert
     if (output_diverted_streams) {

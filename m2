@@ -65,12 +65,12 @@
 #           @incr NAME [N]         Add N (1) to an already defined NAME
 #           @initialize NAME VAL   Like @define, but abort if NAME already defined
 #           @input [NAME]          Read a single line from keyboard and define NAME
-#           @longdef NAME          Set NAME to <...> (all lines until @longend)
+#           @longdef NAME          Set NAME to <...> (all lines until @endlongdef)
 #             <...>                  Don't use other @ commands inside definition
-#           @longend                 But simple @NAME@ references should be okay
-#           @newcmd NAME           Create a user command NAME
+#           @endlongdef              But simple @NAME@ references should be okay
+#           @newcmd NAME           Create a user command NAME (lines until @endcmd)
 #             <...>
-#           @cmdend
+#           @endcmd
 #           @paste FILE            Insert FILE contents literally, no macros
 #           @read NAME FILE        Read FILE contents to define NAME
 #           @sequence ID ACT [N]   Create and manage sequences
@@ -324,8 +324,8 @@
 #               - Environment variable name does not pass validity check.
 #           No corresponding 'XXX'
 #               - @if: An @else or @endif was seen without a matching @if.
-#               - @longdef: A @longend was seen without a matching @longdef.
-#               - @newcmd: A @cmdend was seen without a matching @newcmd
+#               - @longdef: An @endlongdef was seen without a matching @longdef.
+#               - @newcmd: An @endcmd was seen without a matching @newcmd
 #               - Indicates a "finishing" command was seen without a starter.
 #           Parameter N not supplied in 'XXX'
 #               - A macro referred to a parameter (such as $1) for which
@@ -356,7 +356,7 @@
 #       Positional parameters are parsed by splitting on white space.
 #       This means that in:
 #           @foo "a b" c
-#       foo has three arguments -- ('"a', 'b"', 'c') -- not two.
+#       foo has three arguments -- '"a', 'b"', 'c' -- not two.
 #
 #       Self-referential/recursive macros will hang the program.
 #
@@ -409,15 +409,15 @@
 # EMBIGGENER
 #       Chris Leyon, cleyon@gmail.com
 #
-# RELATIVES
+# RELATED PROGRAMS
 #       m1  Bentley
 #       m2  This program
 #       m3
 #       m4  Unix
 #       m5
-#       m6  From Unix V6 (perhaps earlier), a "general purpose macroprocessor" by M. D. McIlroy.
-#           - A. D. Hall, M6 Reference Manual.  Computer Science Technical
-#             Report #2, Bell Laboratories, 1969.
+#       m6  From Unix V6 (or earlier), a "general purpose macroprocessor"
+#           by M. D. McIlroy.  See A. D. Hall, M6 Reference Manual.  Computer
+#           Science Technical Report #2, Bell Laboratories, 1969.
 #           - http://man.cat-v.org/unix-6th/6/m6
 #
 # SEE ALSO
@@ -443,19 +443,23 @@ BEGIN {
 #*****************************************************************************
 
 # file ":" line  ":" text
-function format_message(text, line, file,    s)
+function format_message(text, file, line,    s)
 {
-    if (line == "")
-        line = sym_fetch("__LINE__")
     if (file == "")
         file = sym_fetch("__FILE__")
     if (file == "/dev/stdin" || file == "-")
         file = "<STDIN>"
+    if (line == "")
+        line = sym_fetch("__LINE__")
 
+    # If file and line are provided with default values, why is the if()
+    # guard still necessary?  Ah, because this function might get invoked
+    # very early in m2 execution, before the symbol table is populated.
+    # The defaults are therefore empty, resulting in superfluous ":"s.
     if (file) { s = s file ":" }
     if (line) { s = s line ":" }
     if (text) { s = s text     }
-    return s                    # file ":" line  ":" text
+    return s
 }
 
 
@@ -476,14 +480,14 @@ function print_stderr(text)
 }
 
 
-function warn(text, line, file)
+function warn(text, file, line)
 {
-    print_stderr(format_message(text, line, file))
+    print_stderr(format_message(text, file, line))
 }
 
-function error(text, line, file)
+function error(text, file, line)
 {
-    warn(text, line, file)
+    warn(text, file, line)
     end_program(EX_M2_ERROR, FALSE) # Do not output diverted streams
 }
 
@@ -607,7 +611,7 @@ function sym_definition_pp(sym,    sym_name, definition)
         ? "@define " sym_name "\t" definition "\n" \
         : "@longdef " sym_name "\n" \
           definition           "\n" \
-          "@longend"           "\n"
+          "@endlongdef"        "\n"
 }
 
 
@@ -816,9 +820,17 @@ function cmd_defined_p(id,    s)
 
 function cmd_definition_pp(id)
 {
+    # XXX parameters
     return "@newcmd " id            "\n" \
            cmdtab[id, "definition"] "\n" \
-           "@cmdend"                "\n"
+           "@endcmd"                "\n"
+}
+
+function cmd_destroy(id)
+{
+    delete cmdtab[name, "defined"]
+    delete cmdtab[name, "definition"]
+    delete cmdtab[name, "nparam"]
 }
 
 function cmd_valid_p(id)
@@ -1033,12 +1045,17 @@ function dbg_set_level(key, lev)
     sym2_store("__DEBUG__", key, lev)
 }
 
-function dbg_print(key, lev, str)
+function dbg_print(key, lev, text)
 {
     if (dbg(key, lev))
-        print_stderr(str)
+        print_stderr(text)
 }
 
+function dbg_message(key, lev, text, file, line)
+{
+    if (dbg(key, lev))
+        print_stderr(format_message(text, file, line))
+}
 
 function currently_active_p()
 {
@@ -1219,9 +1236,9 @@ function calc3_eval(s,    e)
     _f = 1
     e = _c3_expr()
     if (_f <= length(_S_expr))
-        error(sprintf("Math expression error at '%s'", substr(_S_expr, _f)))
+        error(sprintf("Math expression error at '%s':", substr(_S_expr, _f)) $0)
     else if (match(e, /^[-+]?(nan|inf)/))
-        error(sprintf("Math expression error:'%s' returned \"%s\":%s", s, e, $0))
+        error(sprintf("Math expression error:'%s' returned \"%s\":", s, e) $0)
     else
         return e
 }
@@ -1409,11 +1426,11 @@ function _c3_advance(    tmp)
 #
 #*****************************************************************************
 
-# @cmdend
-function m2_cmdend()
+# @endcmd
+function m2_endcmd()
 {
-    # @cmdend should never be encountered alone because m2_newcmd()
-    # consumes any matching @cmdend.
+    # @endcmd should never be encountered alone because m2_newcmd()
+    # consumes any matching @endcmd.
     error("No corresponding '@newcmd':" $0)
 }
 
@@ -1459,7 +1476,7 @@ function m2_divert()
         error("Bad parameters:" $0)
     $2 = (NF == 1) ? "0" : dosubs($2)
     if (! integerp($2))
-        error(sprintf("Value '%s' must be numeric:%s", $2, $0))
+        error(sprintf("Value '%s' must be numeric:", $2) $0)
     if ($2 > MAX_STREAM)
         error("Bad parameters:" $0)
 
@@ -1693,7 +1710,7 @@ function m2_ignore(    buf, delim, save_line, save_lineno)
     delim = $2
     buf = read_lines_until(delim)
     if (buf == EoF_marker)
-        error("Delimiter '" delim "' not found:" save_line, save_lineno)
+        error(sprintf("Delimiter '%s' not found:%s" delim, save_line), "", save_lineno)
 }
 
 
@@ -1767,18 +1784,18 @@ function m2_longdef(    buf, save_line, save_lineno, sym)
     save_lineno = sym_fetch("__LINE__")
     sym = $2
     assert_sym_okay_to_define(sym)
-    buf = read_lines_until("@longend")
+    buf = read_lines_until("@endlong")
     if (buf == EoF_marker)
-        error("Delimiter '@longend' not found:" save_line, save_lineno)
+        error("Delimiter '@endlongdef' not found:" save_line, "", save_lineno)
     sym_store(sym, buf)
 }
 
 
-# @longend
-function m2_longend()
+# @endlongdef
+function m2_endlongdef()
 {
-    # @longend should never be encountered alone because m2_longdef()
-    # consumes any matching @longend.
+    # @endlongdef should never be encountered alone because m2_longdef()
+    # consumes any matching @endlongdef.
     error("No corresponding '@longdef':" $0)
 }
 
@@ -1935,7 +1952,7 @@ function m2_shell(    delim, save_line, save_lineno, input_text, input_file,
 
     input_text = read_lines_until(delim)
     if (input_text == EoF_marker)
-        error("Delimiter '" delim "' not found:" save_line, save_lineno)
+        error("Delimiter '" delim "' not found:" save_line, "", save_lineno)
 
     path_fmt    = sprintf("%sm2-%d.shell-%%s", tmpdir(), sym_fetch("__PID__"))
     input_file  = sprintf(path_fmt, "in")
@@ -1985,8 +2002,7 @@ function m2_undef(    name)
     if (seq_valid_p(name) && seq_defined_p(name))
         seq_destroy(name)
     else if (cmd_valid_p(name) && cmd_defined_p(name)) {
-        delete cmdtab[name, "defined"]
-        delete cmdtab[name, "definition"]
+        cmd_destroy(name)
     } else {
         name = sym_root(name)
         assert_sym_valid_name(name)
@@ -2008,7 +2024,7 @@ function m2_undivert(    stream, i)
         while (++i <= NF) {
             stream = dosubs($i)
             if (! integerp(stream))
-                error(sprintf("Value '%s' must be numeric:%s", stream, $0))
+                error(sprintf("Value '%s' must be numeric:", stream) $0)
             if (stream > MAX_STREAM)
                 error("Bad parameters:" $0)
             undivert(stream)
@@ -2128,7 +2144,6 @@ function process_line(read_literally,    newstring)
     # overridden by @newcmd.  Note, they only match at beginning of line.
     if      (/^@(@|#)/)                   { } # Comments are ignored
     else if (/^@append([ \t]|$)/)         { m2_define() }
-    else if (/^@cmdend([ \t]|$)/)         { m2_cmdend() }
     else if (/^@c(omment)?([ \t]|$)/)     { } # Comments are ignored
     else if (/^@decr([ \t]|$)/)           { m2_incr() }
     else if (/^@default([ \t]|$)/)        { m2_default() }
@@ -2137,7 +2152,9 @@ function process_line(read_literally,    newstring)
     else if (/^@dump(all|def)?([ \t]|$)/) { m2_dump() }
     else if (/^@echo([ \t]|$)/)           { m2_error() }
     else if (/^@else([ \t]|$)/)           { m2_else() }
+    else if (/^@endcmd([ \t]|$)/)         { m2_endcmd() }
     else if (/^@endif([ \t]|$)/)          { m2_endif() }
+    else if (/^@endlong(def)?([ \t]|$)/)  { m2_endlongdef() }
     else if (/^@err(or|print)([ \t]|$)/)  { m2_error() }
     else if (/^@(m2)?exit([ \t]|$)/)      { m2_exit() }
     else if (/^@fi([ \t]|$)/)             { m2_endif() }
@@ -2150,8 +2167,7 @@ function process_line(read_literally,    newstring)
     else if (/^@init(ialize)?([ \t]|$)/)  { m2_default() }
     else if (/^@input([ \t]|$)/)          { m2_input() }
     else if (/^@longdef([ \t]|$)/)        { m2_longdef() }
-    else if (/^@longend([ \t]|$)/)        { m2_longend() }
-    else if (/^@newcmd([ \t])/)           { m2_newcmd() }
+    else if (/^@newcmd([ \t]|$)/)         { m2_newcmd() }
     else if (/^@s?paste([ \t]|$)/)        { m2_include() }
     else if (/^@read([ \t]|$)/)           { m2_read() }
     else if (/^@sequence([ \t]|$)/)       { m2_sequence() }
@@ -2554,7 +2570,7 @@ function expand_braces(s,    atbr, cb, ltext, mtext, rtext)
         # closing brace and expand the enclosed text.
         cb = find_closing_brace(s, atbr)
         if (cb <= 0)
-            error("Bad @{...} expansion:" s, sym_fetch("__LINE__"))
+            error("Bad @{...} expansion:" s)
         dbg_print("braces", 5, ("   expand_braces: in loop, atbr=" atbr ", cb=" cb))
 
         # LTEXT  @{  MTEXT  }  RTEXT
@@ -2873,16 +2889,16 @@ BEGIN {
                     name = "__DEBUG__[m2]"
                 val = substr(arg, eq+1)
                 if (! sym_valid_p(name))
-                    error("Name '" name "' not valid:" arg, i, "ARGV")
+                    error("Name '" name "' not valid:" arg, "ARGV", i)
                 if (sym_protected_p(name))
-                    error("Symbol '" name "' protected:" arg, i, "ARGV")
+                    error("Symbol '" name "' protected:" arg, "ARGV", i)
                 sym_store(name, val)
 
             # Otherwise load a file
             } else {
                 load_init_files()
                 if (! dofile(rm_quotes(arg))) {
-                    warn("File '" arg "' does not exist", i, "ARGV")
+                    warn("File '" arg "' does not exist", "ARGV", i)
                     exit_code = EX_NOINPUT
                 }
             }

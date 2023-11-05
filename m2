@@ -400,6 +400,7 @@
 #
 # ENVIRONMENT VARIABLES
 #       HOME            Used to access your ~/.m2rc file
+#       M2RC            If exists, overrides $HOME/.m2rc
 #       SHELL           Used as a possible default shell
 #       TMPDIR          Used as a possible temporary directory
 #
@@ -2707,17 +2708,22 @@ function dodef(append_flag,    name, str, x)
 }
 
 
-# Try to read init files: $HOME/.m2rc and/or ./.m2rc
-# No worries if they don't exist.
+# Try to read init files: $M2RC, $HOME/.m2rc, and/or ./.m2rc
+# M2RC is intended to *override* $HOME, so if the variable is specified
+# and the file exists, then do that file; only otherwise do $HOME/.m2rc.
+# An init file from the current directory is always attempted in any
+# case.  No worries/errors if they don't exist.
 function load_init_files()
 {
     # Don't load the init files more than once
     if (init_files_loaded == TRUE)
         return
 
-    if ("HOME" in ENVIRON)
-        dofile(ENVIRON["HOME"] "/" init_file_name)
-    dofile(init_file_name)
+    if ("M2RC" in ENVIRON && path_exists_p(ENVIRON["M2RC"]))
+        dofile(ENVIRON["M2RC"])
+    else if ("HOME" in ENVIRON)
+        dofile(ENVIRON["HOME"] "/.m2rc")
+    dofile("./.m2rc")
 
     # Don't count init files in total line/file tally - it's better to
     # keep them in sync with the files from the command line.
@@ -2781,7 +2787,6 @@ function initialize(    d, dateout, array, elem)
     EoF_marker        = build_subsep("EoF1", "EoF2") # Unlikely to occur in normal text
     exit_code         = EX_OK
     init_deferred     = TRUE            # becomes FALSE in initialize_run_deferred()
-    init_file_name    = ".m2rc"         # basename only, no path
     init_files_loaded = FALSE           # becomes TRUE in load_init_files()
     ifdepth           =  0
     active[ifdepth]   = TRUE

@@ -410,13 +410,14 @@
 # EMBIGGENER
 #       Chris Leyon, cleyon@gmail.com
 #
-# RELATED PROGRAMS
-#       m1  Bentley
-#       m2  This program
-#       m3
-#       m4  Unix
-#       m5
-#       m6  From Unix V6 (or earlier), a "general purpose macroprocessor"
+# OTHER Ms
+#       M   Admiral Sir Miles Messervy KCMG
+#       M1  Bentley
+#       M2  This program
+#       M3
+#       M4  Unix
+#       M5
+#       M6  From Unix V6 (or earlier), a "general purpose macroprocessor"
 #           by M. D. McIlroy.  See A. D. Hall, M6 Reference Manual.  Computer
 #           Science Technical Report #2, Bell Laboratories, 1969.
 #           - http://man.cat-v.org/unix-6th/6/m6
@@ -432,7 +433,16 @@
 #*****************************************************************************
 
 BEGIN {
-    version = "3.2.0"
+    version = "3.2.1"
+
+    # Exit codes
+    EX_OK             =  0
+    EX_M2_ERROR       =  1
+    EX_USER_REQUEST   =  2
+    EX_USAGE          = 64
+    EX_NOINPUT        = 66
+
+    exit_code         = EX_OK
 }
 
 
@@ -489,7 +499,8 @@ function warn(text, file, line)
 function error(text, file, line)
 {
     warn(text, file, line)
-    end_program(EX_M2_ERROR, FALSE) # Do not output diverted streams
+    exit_code = EX_M2_ERROR
+    end_program(FALSE)          # Do not output diverted streams
 }
 
 
@@ -743,7 +754,7 @@ function sym_valid_p(sym,    result, lbracket, root, key)
              break
 
         # Fake/hack out any "array name" by removing brackets
-        if (lbracket = index(sym, "[")) {
+        if ((lbracket = index(sym, "["))) {
             # 2. Doesn't look exactly like "xx[yy]"
             if (sym !~ /^.+\[.+\]$/)
                 break
@@ -829,9 +840,9 @@ function cmd_definition_pp(id)
 
 function cmd_destroy(id)
 {
-    delete cmdtab[name, "defined"]
-    delete cmdtab[name, "definition"]
-    delete cmdtab[name, "nparam"]
+    delete cmdtab[id, "defined"]
+    delete cmdtab[id, "definition"]
+    delete cmdtab[id, "nparam"]
 }
 
 function cmd_valid_p(id)
@@ -932,27 +943,6 @@ function assert_seq_okay_to_define(name)
 #
 #*****************************************************************************
 
-# TRUE  if name is defined in at least one of the components (logical OR, not sure which)
-# FALSE if name is not defined in any of the components at all
-function name_defined_in_any_p(name, components,    def)
-{
-    if (first(name) == "@")
-        name = substr(name, 2)
-    if (length(name) == 0)
-        return FALSE
-    def = FALSE
-    if (components == TYPE_ANY || index(components, TYPE_CMD))
-        def = def || cmd_defined_p(name)
-    if (components == TYPE_ANY || index(components, TYPE_FUNCTION))
-        def = def || (name in functab)
-    if (components == TYPE_ANY || index(components, TYPE_SEQUENCE))
-        def = def || seq_defined_p(name)
-    if (components == TYPE_ANY || index(components, TYPE_SYMBOL))
-        def = def || sym_defined_p(name)
-    return def
-}
-
-
 # TRUE if name is available in all components (logical AND)
 # FALSE if name is unavailable in at least one of the components, not sure which
 function name_available_in_all_p(name, components,    avail)
@@ -1033,7 +1023,7 @@ function dbg(key, lev)
     if (key == "")
         key = "m2"
     if (! sym2_defined_p("__DEBUG__", key))
-        return false
+        return FALSE
     return sym2_fetch("__DEBUG__", key) >= lev
 }
 
@@ -1050,12 +1040,6 @@ function dbg_print(key, lev, text)
 {
     if (dbg(key, lev))
         print_stderr(text)
-}
-
-function dbg_message(key, lev, text, file, line)
-{
-    if (dbg(key, lev))
-        print_stderr(format_message(text, file, line))
 }
 
 function currently_active_p()
@@ -1195,8 +1179,8 @@ function _less_than(s1, s2,    s1_un, s2_un)
 # If delimiter is not found, return eof marker.  Intermediate lines are
 # terminated with a newline character, but last line has it stripped
 # away.  The lines read are NOT macro-expanded; if desired, the caller
-# can invoke dosubs() on the returned buffer.  Special case if delim is
-# "" - read until end of file and return whatever is found, without error.
+# can invoke dosubs() on the returned buffer.  Special case if delim is "":
+# read until end of file and return whatever is found, without error.
 function read_lines_until(delim,    buf, delim_len)
 {
     buf = ""
@@ -1209,7 +1193,8 @@ function read_lines_until(delim,    buf, delim_len)
             else
                 break
         }
-        if (delim_len > 0 && substr($0, 1, delim_len) == delim)
+        dbg_print("cmd", 1, "(read_lines_until) readline='" $0 "'")
+        if (delim_len > 0 && length($0) > 0 && substr($0, 1, delim_len) == delim)
             break
         buf = buf $0 "\n"
     }
@@ -1586,8 +1571,10 @@ function m2_error(    m2_will_exit, do_format, message)
             message = format_message(message)
     }
     print_stderr(message)
-    if (m2_will_exit)
-        end_program(EX_USER_REQUEST, FALSE) # Do not output diverted streams
+    if (m2_will_exit) {
+        exit_code = EX_USER_REQUEST
+        end_program(FALSE)      # Do not output diverted streams
+    }
 }
 
 
@@ -1596,7 +1583,8 @@ function m2_exit()
 {
     if (! currently_active_p())
         return
-    end_program((NF > 1 && integerp($2)) ? $2 : EX_OK, TRUE)
+    exit_code = (NF > 1 && integerp($2)) ? $2 : EX_OK
+    end_program(TRUE)           # Flush any streams
 }
 
 
@@ -1699,7 +1687,7 @@ function m2_ignore(    buf, delim, save_line, save_lineno)
 {
     # Ignore input until line starts with $2.  This means
     #     @ignore The
-    #       <...>
+    #        <...>
     #     Theodore Roosevelt
     # ignores <...> text up to, and including, the president's name.
     if (! currently_active_p())
@@ -1802,23 +1790,24 @@ function m2_endlongdef()
 
 
 # @newcmd               NAME
-function m2_newcmd(    buf, save_line, save_lineno, name)
+function m2_newcmd(    buf, save_line, save_lineno, name, nparam, i)
 {
     if (! currently_active_p())
         return
-    if (NF != 2)
+    if (NF < 2)
         error("Bad parameters:" $0)
     name = $2
     assert_cmd_name_okay_to_define(name)
     save_line = $0
     save_lineno = sym_fetch("__LINE__")
 
-    buf = read_lines_until("@cmdend")
+    buf = read_lines_until("@endcmd")
     if (buf == EoF_marker)
-        error("Delimiter '@cmdend' not found:" save_line, save_lineno)
+        error("Delimiter '@endcmd' not found:" save_line, "", save_lineno)
 
     cmdtab[name, "defined"]    = TRUE
     cmdtab[name, "definition"] = buf
+    cmdtab[name, "nparam"]     = nparam
 }
 
 
@@ -2049,7 +2038,7 @@ function dofile(filename, read_literally,    savebuffer, savefile, saveifdepth, 
         filename = "/dev/stdin"
     if (! path_exists_p(filename))
         return FALSE
-    dbg_print("m2", 1, ("dofile(" filename \
+    dbg_print("m2", 1, ("(dofile) filename='" filename "'" \
                         (read_literally ? ", read_literally=TRUE" : "") \
                         ")"))
     if (filename in activefiles)
@@ -2065,7 +2054,7 @@ function dofile(filename, read_literally,    savebuffer, savefile, saveifdepth, 
     # Set up new file context
     activefiles[filename] = TRUE
     buffer = ""
-    sym_increment("__NFILE__")
+    sym_increment("__NFILE__", 1)
     sym_store("__FILE__", filename)
     sym_store("__LINE__", 0)
     sym_store("__FILE_UUID__", uuid())
@@ -2119,8 +2108,8 @@ function readline(    getstat, i, status)
         } else if (getstat == 0) # End of file
             status = READLINE_EOF
         else {                   # Read a line
-            sym_increment("__LINE__")
-            sym_increment("__NLINE__")
+            sym_increment("__LINE__", 1)
+            sym_increment("__NLINE__", 1)
         }
     }
     # Hack: allow @Mname at start of line without a closing @.
@@ -2132,8 +2121,10 @@ function readline(    getstat, i, status)
 }
 
 
-function process_line(read_literally,    newstring)
+function process_line(read_literally,    name, sp, lbrace, cut, newstring, user_cmd)
 {
+    dbg_print("cmd", 1, "(process_line) Start; line " sym_fetch("__LINE__") ": $0='" $0 "'")
+
     # Short circuit if we're not processing macros, or no @ found
     if (read_literally ||
         (currently_active_p() && index($0, "@") == IDX_NOT_FOUND)) {
@@ -2194,31 +2185,33 @@ function process_line(read_literally,    newstring)
             buffer = newstring "\n" buffer
         }
     }
+    dbg_print("cmd", 1, "(process_line) End")
 }
 
 # This is only called by process_line(), which guarantees that $0 is
 # unchanged, and that $1 is "@<CMD>".  This is important because we have
-# to get the command name from here -- it's not passed in as a parameter
-# as you might have expected.  Also, process_line checks to make sure
-# cmdtab[NAME] is defined; we just blindly grab the definition.
-# Arguments/parameters are not supported yet.
-function docommand(    name, i, savebuffer, savefile, saveifdepth, saveline)
+# to get the command name from there (i.e., $1).  It's *not* passed in
+# as a parameter as you might expect.  Also, process_line checks to make
+# sure cmdtab[NAME] is defined; we trust that and just blindly grab the
+# definition.  Arguments/parameters are WIP.
+function docommand(    cmdname, narg, args, i, nparam, savebuffer, savefile, saveifdepth, saveline)
 {
-    # print_stderr("Entering docommand: " $0)
+    dbg_print("cmd", 1, "(docommand:" dolev ") Start; line " sym_fetch("__LINE__") ": $0='" $0 "'")
+    narg = NF - 1
 
     savebuffer  = buffer
     savefile    = sym_fetch("__FILE__")
     saveifdepth = ifdepth
     saveline    = sym_fetch("__LINE__")
 
-    name = substr($1, 2)
-    buffer = cmdtab[name, "definition"]
+    cmdname = substr($1, 2)
+    buffer = cmdtab[cmdname, "definition"]
     sym_store("__FILE__", $1)
     sym_store("__LINE__", 0)
 
     while (buffer != "") {
         # Extract each line from buffer, one by one
-        sym_increment("__LINE__") # __LINE__ is local, but not __NLINE__
+        sym_increment("__LINE__", 1) # __LINE__ is local, but not __NLINE__
         if ((i = index(buffer, "\n")) == IDX_NOT_FOUND) {
             $0 = buffer
             buffer = ""
@@ -2234,6 +2227,7 @@ function docommand(    name, i, savebuffer, savefile, saveifdepth, saveline)
             sub(/[ \t]*$/, "@")
 
         # String we want is in $0, go evaluate it
+        dbg_print("cmd", 5, "(docommand:" dolev ") About to call process line with $0 = '" $0 "'")
         process_line()
     }
 
@@ -2243,6 +2237,7 @@ function docommand(    name, i, savebuffer, savefile, saveifdepth, saveline)
     buffer = savebuffer
     sym_store("__FILE__", savefile)
     sym_store("__LINE__", saveline)
+    dbg_print("cmd", 1, "(docommand:" dolev ") End")
 }
 
 
@@ -2277,7 +2272,7 @@ function docommand(    name, i, savebuffer, savefile, saveifdepth, saveline)
 #             R = "@" R
 #     return L R
 function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
-                      at_brace, x, y)
+                      at_brace, x, y, subcmd)
 {
     l = ""                   # Left of current pos  - ready for output
     r = s                    # Right of current pos - as yet unexamined
@@ -2290,7 +2285,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
         if (i == IDX_NOT_FOUND)
             break
 
-        # dbg_print("dosubs", 7, (sprintf("dosubs: top of loop: l='%s', r='%s', expand='%s'", l, r, expand)))
+        # dbg_print("dosubs", 7, (sprintf("(dosubs) Top of loop: l='%s', r='%s', expand='%s'", l, r, expand)))
         l = l substr(r, 1, i-1)
         r = substr(r, i+1)      # Currently scanning @
 
@@ -2327,7 +2322,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
 
         nparam = split(m, param) - _fencepost
         fn = param[0 + _fencepost]
-        # dbg_print("dosubs", 7, sprintf("dosubs: fn=%s, nparam=%d; l='%s', m='%s', r='%s', expand='%s'", fn, nparam, l, m, r, expand))
+        # dbg_print("dosubs", 7, sprintf("(dosubs) fn=%s, nparam=%d; l='%s', m='%s', r='%s', expand='%s'", fn, nparam, l, m, r, expand))
 
         # basename SYM: Base (i.e., file name) of path
         # dirname SYM: Directory name of path
@@ -2336,7 +2331,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
             p = param[1 + _fencepost]
             assert_sym_valid_name(p)
             assert_sym_defined(p, fn)
-            cmdline = build_prog_cmdline(fn, rm_quotes(sym_fetch(p)))
+            cmdline = build_prog_cmdline(fn, rm_quotes(sym_fetch(p)), FALSE)
             cmdline | getline expand
             close(cmdline)
             r = expand r
@@ -2378,7 +2373,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
                    fn == "tz") {
             y = sym2_fetch("__FMT__", fn)
             gsub(/"/, "\\\"", y)
-            cmdline = build_prog_cmdline("date", "+\"" y "\"")
+            cmdline = build_prog_cmdline("date", "+\"" y "\"", FALSE)
             cmdline | getline expand
             close(cmdline)
             r = expand r
@@ -2557,7 +2552,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
         i = index(r, "@")
     }
 
-    # dbg_print("dosubs", 3, sprintf("dosubs: out of loop, returning l r: l='%s', r='%s'", l, r))
+    # dbg_print("dosubs", 3, sprintf("(dosubs) Out of loop, returning l r: l='%s', r='%s'", l, r))
     return l r
 }
 
@@ -2712,7 +2707,7 @@ function dodef(append_flag,    name, str, x)
 # M2RC is intended to *override* $HOME, so if the variable is specified
 # and the file exists, then do that file; only otherwise do $HOME/.m2rc.
 # An init file from the current directory is always attempted in any
-# case.  No worries/errors if they don't exist.
+# case.  No worries or errors if any of them don't exist.
 function load_init_files()
 {
     # Don't load the init files more than once
@@ -2720,10 +2715,10 @@ function load_init_files()
         return
 
     if ("M2RC" in ENVIRON && path_exists_p(ENVIRON["M2RC"]))
-        dofile(ENVIRON["M2RC"])
+        dofile(ENVIRON["M2RC"], FALSE)
     else if ("HOME" in ENVIRON)
-        dofile(ENVIRON["HOME"] "/.m2rc")
-    dofile("./.m2rc")
+        dofile(ENVIRON["HOME"] "/.m2rc", FALSE)
+    dofile("./.m2rc", FALSE)
 
     # Don't count init files in total line/file tally - it's better to
     # keep them in sync with the files from the command line.
@@ -2754,7 +2749,7 @@ function setup_prog_paths()
 
 
 # Nothing here is user-customizable
-function initialize(    d, dateout, array, elem)
+function initialize(    get_date_cmd, d, dateout, array, elem, i)
 {
     E                 = exp(1)
     FALSE             = 0
@@ -2777,15 +2772,7 @@ function initialize(    d, dateout, array, elem)
     TYPE_SEQUENCE     = "Q"     # seqtab
     TYPE_SYMBOL       = "S"     # symtab
 
-    # Exit codes
-    EX_OK             =  0
-    EX_M2_ERROR       =  1
-    EX_USER_REQUEST   =  2
-    EX_USAGE          = 64
-    EX_NOINPUT        = 66
-
     EoF_marker        = build_subsep("EoF1", "EoF2") # Unlikely to occur in normal text
-    exit_code         = EX_OK
     init_deferred     = TRUE            # becomes FALSE in initialize_run_deferred()
     init_files_loaded = FALSE           # becomes TRUE in load_init_files()
     ifdepth           =  0
@@ -2797,12 +2784,16 @@ function initialize(    d, dateout, array, elem)
     setup_prog_paths()
 
     # Capture m2 run start time.  1  2  3  4  5  6  7  8
-    build_prog_cmdline("date", "+'%Y %m %d %H %M %S %z %s'") | getline dateout
+    get_date_cmd = build_prog_cmdline("date", "+'%Y %m %d %H %M %S %z %s'", FALSE)
+    get_date_cmd | getline dateout
     split(dateout, d)
+    close(get_date_cmd)
 
     sym_store("__DATE__",               d[1] d[2] d[3])
     sym_store("__DIVNUM__",             0)
     sym_store("__EPOCH__",              d[8])
+    sym_store("__FILE__",               "")
+    sym_store("__FILE_UUID__",          "")
     sym2_store("__FMT__", TRUE,         "1")
     sym2_store("__FMT__", FALSE,        "0")
     sym2_store("__FMT__", "date",       "%Y-%m-%d")
@@ -2810,9 +2801,11 @@ function initialize(    d, dateout, array, elem)
     sym2_store("__FMT__", "time",       "%H:%M:%S")
     sym2_store("__FMT__", "tz",         "%Z")
     sym_store("__INPUT__",              "")
+    sym_store("__LINE__",               0)
     sym_store("__M2_UUID__",            uuid())
     sym_store("__M2_VERSION__",         version)
     sym_store("__NFILE__",              0)
+    sym_store("__NLINE__",              0)
     sym_store("__RESULT__",             0)
     sym_store("__STRICT__",             TRUE)
     sym_store("__TIME__",               d[4] d[5] d[6])
@@ -2837,6 +2830,10 @@ function initialize(    d, dateout, array, elem)
           " mid rem right spaces time trim tz uc uuid", array, " ")
     for (elem in array)
         functab[array[elem]] = TRUE
+
+    # Zero stream buffers
+    for (i = 1; i <= MAX_STREAM; i++)
+        streambuf[i] = ""
 }
 
 
@@ -2847,13 +2844,13 @@ function initialize_run_deferred(    gid, host, hostname, osname, pid, uid, user
 {
     init_deferred = FALSE
 
-    build_prog_cmdline("id", "-g")              | getline gid
-    build_prog_cmdline("hostname", "-s")        | getline host
-    build_prog_cmdline("hostname")              | getline hostname
-    build_prog_cmdline("uname", "-s")           | getline osname
-    build_prog_cmdline("sh", "-c 'echo $PPID'") | getline pid
-    build_prog_cmdline("id", "-u")              | getline uid
-    build_prog_cmdline("id", "-un")             | getline user
+    build_prog_cmdline("id", "-g", FALSE)              | getline gid
+    build_prog_cmdline("hostname", "-s", FALSE)        | getline host
+    build_prog_cmdline("hostname", FALSE)              | getline hostname
+    build_prog_cmdline("uname", "-s", FALSE)           | getline osname
+    build_prog_cmdline("sh", "-c 'echo $PPID'", FALSE) | getline pid
+    build_prog_cmdline("id", "-u", FALSE)              | getline uid
+    build_prog_cmdline("id", "-un", FALSE)             | getline user
 
     sym_store("__GID__",      gid)
     sym_store("__HOST__",     host)
@@ -2865,6 +2862,14 @@ function initialize_run_deferred(    gid, host, hostname, osname, pid, uid, user
 }
 
 
+function initialize_debugging()
+{
+    dbg_set_level("cmd", 5)
+    dbg_set_level("dosubs", 5)
+    dbg_set_level("names", 5)
+}
+
+
 # The main program occurs in the BEGIN procedure below.
 BEGIN {
     initialize()
@@ -2872,7 +2877,7 @@ BEGIN {
     # No command line arguments: process standard input.
     if (ARGC == 1) {
         load_init_files()
-        exit_code = dofile("-") ? EX_OK : EX_NOINPUT
+        exit_code = dofile("-", FALSE) ? EX_OK : EX_NOINPUT
 
     # Else, process all command line files/macro definitions.
     } else if (ARGC > 1) {
@@ -2888,21 +2893,24 @@ BEGIN {
             if (arg ~ /^([^= ][^= ]*)=(.*)/) {
                 eq = index(arg, "=")
                 name = substr(arg, 1, eq-1)
-                if (name == "strict")
-                    name = "__STRICT__"
-                else if (name == "debug")
-                    name = "__DEBUG__[m2]"
                 val = substr(arg, eq+1)
                 if (! sym_valid_p(name))
                     error("Name '" name "' not valid:" arg, "ARGV", i)
                 if (sym_protected_p(name))
                     error("Symbol '" name "' protected:" arg, "ARGV", i)
+                if (name == "strict")
+                    name = "__STRICT__"
+                else if (name == "debug") {
+                    name = "__DEBUG__[m2]"
+                    if (val)
+                        initialize_debugging()
+                }
                 sym_store(name, val)
 
             # Otherwise load a file
             } else {
                 load_init_files()
-                if (! dofile(rm_quotes(arg))) {
+                if (! dofile(rm_quotes(arg), FALSE)) {
                     warn("File '" arg "' does not exist", "ARGV", i)
                     exit_code = EX_NOINPUT
                 }
@@ -2915,7 +2923,7 @@ BEGIN {
         # read standard input, so that is what we must now do.
         if (! init_files_loaded) {
             load_init_files()
-            exit_code = dofile("-") ? EX_OK : EX_NOINPUT
+            exit_code = dofile("-", FALSE) ? EX_OK : EX_NOINPUT
         }
 
     # ARGC < 1, can't happen...
@@ -2924,14 +2932,14 @@ BEGIN {
         exit_code = EX_USAGE
     }
 
-    end_program(exit_code, TRUE)
+    end_program(TRUE)
 }
 
 
 # Prepare to exit: undivert all pending streams (usually), flush output,
 # and exit with specified code.  I don't call this "END" simply because
 # I need finer control over when/if it is invoked.
-function end_program(exit_code, output_diverted_streams)
+function end_program(output_diverted_streams)
 {
     # Perform a "@divert 0" and "@undivert" to output any remaining
     # diverted data.  If you wish to skip this step and clear all

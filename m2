@@ -163,7 +163,7 @@
 #       Symbols that start and end with "__" (like __FOO__) are called
 #       "system" symbols.  Except for certain unprotected symbols, they
 #       cannot be modified by the user.  The following are pre-defined;
-#       example values or defaults are shown:
+#       example values, defaults, or types are shown:
 #
 #           __DATE__               m2 run start date as YYYYMMDD (eg 19450716)
 #           __DEBUG__         [**] Whether debugging is enabled or not (boolean)
@@ -173,8 +173,8 @@
 #           __EXPR__               Value from most recent @expr ...@ result
 #           __FILE__               Current file name
 #           __FILE_UUID__          UUID unique to this file
-#           __FMT__[0]        [**] Output when @boolval@ is false (0)
-#           __FMT__[1]        [**] Output when @boolval@ is true (1)
+#           __FMT__[0]        [**] Text output when @boolval@ is false (0)
+#           __FMT__[1]        [**] Text output when @boolval@ is true (1)
 #           __FMT__[date]     [**] Date format for @date@ (%Y-%m-%d)
 #           __FMT__[time]     [**] Time format for @time@ (%H:%M:%S)
 #           __FMT__[tz]       [**] Time format for @tz@   (%Z)
@@ -182,7 +182,7 @@
 #           __HOST__               Short host name (eg myhost)
 #           __HOSTNAME__           FQDN host name (eg myhost.example.com)
 #           __INPUT__         [**] The data read by @input
-#           __LINE__               Current line number in __FILE__
+#           __LINE__               Current line number inside __FILE__
 #           __M2_UUID__            UUID unique to this m2 run
 #           __M2_VERSION__         m2 version
 #           __NFILE__              Number of files processed so far (eg 2)
@@ -412,24 +412,35 @@
 #       Chris Leyon, cleyon@gmail.com
 #
 # OTHER Ms
-#       M   Admiral Sir Miles Messervy KCMG
-#       M1  Bentley
-#       M2  This program
-#       M3
-#       M4  Unix
-#       M5
-#       M6  From Unix V6 (or earlier), a "general purpose macroprocessor"
-#           by M. D. McIlroy.  See A. D. Hall, M6 Reference Manual.  Computer
-#           Science Technical Report #2, Bell Laboratories, 1969.
+#       M   Admiral Sir Miles Messervy
+#       M1  Jon Bentley's original macro processor, the progenitor of this
+#           program.  See: "m1: A Mini Macro Processor", Computer Language,
+#           June 1990, Volume 7, Number 6, pages 47-61.
+#       M2  This program.
+#       M3  Kernighan & Plauger's book "Software Tools", Addison-Wesley (1976),
+#           describes a macro-processor language which inspired D. M. Ritchie
+#           to write m3, a macro processor for the AP-3 minicomputer.
+#           Originally, the Kernighan and Plauger macro-processor, and
+#           then m3, formed the engine for the Rational FORTRAN
+#           preprocessor, although it was later replaced with m4.
+#       M4  From Unix V7, a macro processor "intended as a front end for Ratfor,
+#           C, and other languages."  See: B. W. Kernighan and D. M. Ritchie,
+#           The M4 Macro Processor, AT&T Bell Laboratories, Computing Science
+#           Technical Report #59, July 1977.
+#       M5  Prof. A. Dain Samples described and implemented M5.
+#           See: User's Guide to the M5 Macro Language 2ed [in comp.compilers
+#           newsgroup, 1992].  May also refer to a multitronic computer designed
+#           and built by Dr Richard Daystrom, ~2268.  (Not entirely successful.)
+#       M6  Andrew D. Hall - M6, "a general purpose macro processor used to port
+#           the Fortran source code of the Altran computer algebra system."
+#           See: A. D. Hall, M6 Reference Manual.  Computer Science Technical
+#           Report #2, Bell Laboratories, 1972.
 #           - http://man.cat-v.org/unix-6th/6/m6
+#           - http://cm.bell-labs.com/cm/cs/cstr/2.pdf
 #
 # SEE ALSO
-#       "m1: A Mini Macro Processor", Computer Language, June 1990,
-#          Volume 7, Number 6, pages 47-61.
-#
-#       http://www.drdobbs.com/open-source/m1-a-mini-macro-processor/200001791
-#
-#       https://docstore.mik.ua/orelly/unix3/sedawk/ch13_10.htm
+#       - http://www.drdobbs.com/open-source/m1-a-mini-macro-processor/200001791
+#       - https://docstore.mik.ua/orelly/unix3/sedawk/ch13_10.htm
 #
 #*****************************************************************************
 
@@ -501,7 +512,7 @@ function error(text, file, line)
 {
     warn(text, file, line)
     exit_code = EX_M2_ERROR
-    end_program(FALSE)          # Do not output diverted streams
+    end_program(FALSE)          # Do not flush any diverted streams
 }
 
 
@@ -605,14 +616,14 @@ function sym_defined_p(sym,    s)
 {
     s = sym_internal_form(sym)
     if (init_deferred && s in deferred_syms)
-        initialize_run_deferred()
+        initialize_deferred_symbols()
     return s in symtab
 }
 
 function sym2_defined_p(arr, key)
 {
     if (init_deferred && sym2_printable_form(arr, key) in deferred_syms)
-        initialize_run_deferred()
+        initialize_deferred_symbols()
     return (arr, key) in symtab
 }
 
@@ -640,14 +651,14 @@ function sym_fetch(sym,    s)
 {
     s = sym_internal_form(sym)
     if (init_deferred && s in deferred_syms)
-        initialize_run_deferred()
+        initialize_deferred_symbols()
     return symtab[s]
 }
 
 function sym2_fetch(arr, key)
 {
     if (init_deferred && sym2_printable_form(arr, key) in deferred_syms)
-        initialize_run_deferred()
+        initialize_deferred_symbols()
     return symtab[arr, key]
 }
 
@@ -701,6 +712,9 @@ function sym2_printable_form(arr, key)
 function sym_protected_p(sym,    root)
 {
     root = sym_root(sym)
+    # Names known to be protected
+    if (root in protected_syms)
+        return TRUE
     # Whitelist of known safe symbols
     if (root in unprotected_syms)
         return FALSE
@@ -757,7 +771,7 @@ function sym_valid_p(sym,    result, lbracket, root, key)
              break
 
         # Fake/hack out any "array name" by removing brackets
-        if ((lbracket = index(sym, "["))) {
+        if ((lbracket = index(sym, "[")) != IDX_NOT_FOUND) {
             # 2. Doesn't look exactly like "xx[yy]"
             if (sym !~ /^.+\[.+\]$/)
                 break
@@ -936,13 +950,6 @@ function assert_seq_okay_to_define(name)
 #       TYPE_SYMBOL:            symtab
 #           symtab[NAME] = <definition>
 #           Check "foo in symtab" for defined
-#
-#
-#       DOESN'T EXIST YET!      nametab
-#           nametab[NAME, "deferred"]  ::= TRUE | FALSE
-#           nametab[NAME, "defined"]   ::= TRUE | FALSE
-#           nametab[NAME, "protected"] ::= TRUE | FALSE
-#           nametab[NAME, "type"]      ::= "S" | "Q" | "M" | "F"
 #
 #*****************************************************************************
 
@@ -1484,7 +1491,7 @@ function m2_dump(    buf, cnt, definition, dumpfile, i, key, keys, fields, sym_n
     if (! currently_active_p())
         return
     if ((all_flag = $1 == "@dumpall") && init_deferred)
-        initialize_run_deferred() # Show all system symbols
+        initialize_deferred_symbols() # Show all system symbols
 
     if (NF > 1) {
         $1 = ""
@@ -1580,7 +1587,7 @@ function m2_error(    m2_will_exit, do_format, message)
     print_stderr(message)
     if (m2_will_exit) {
         exit_code = EX_USER_REQUEST
-        end_program(FALSE)      # Do not output diverted streams
+        end_program(FALSE)      # Do not flush any diverted streams
     }
 }
 
@@ -1591,7 +1598,7 @@ function m2_exit()
     if (! currently_active_p())
         return
     exit_code = (NF > 1 && integerp($2)) ? $2 : EX_OK
-    end_program(TRUE)           # Flush any streams
+    end_program(TRUE)           # Flush any diverted streams
 }
 
 
@@ -2417,8 +2424,9 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
             r = ((fn == "lc")  ? tolower(sym_fetch(p)) : \
                  (fn == "len") ?  length(sym_fetch(p)) : \
                  (fn == "uc")  ? toupper(sym_fetch(p)) : \
-                 error("Name '" m "' not defined:" $0)) \
-                r
+                 error("Name '" m "' not defined [can't happen]:" $0)) \
+                r   # ^^^ This error() bit can't happen but I need something
+                    # to the right of the :, and error() will abend.
 
         # left : Left (substring)
         #   @left ALPHABET 7@ => ABCDEFG
@@ -2550,7 +2558,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
 
         # Throw an error on undefined symbol (strict-only)
         } else if (strictp()) {
-            error("Name '" m "' not defined:" $0)
+            error("Name '" m "' not defined [strict mode]:" $0)
 
         } else {
             l = l "@" m
@@ -2780,17 +2788,17 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i)
     TYPE_SYMBOL       = "S"     # symtab
 
     EoF_marker        = build_subsep("EoF1", "EoF2") # Unlikely to occur in normal text
-    init_deferred     = TRUE            # becomes FALSE in initialize_run_deferred()
-    init_files_loaded = FALSE           # becomes TRUE in load_init_files()
-    ifdepth           =  0
+    init_deferred     = TRUE    # Becomes FALSE in initialize_deferred_symbols()
+    init_files_loaded = FALSE   # Becomes TRUE in load_init_files()
+    ifdepth           = 0
     active[ifdepth]   = TRUE
-    _fencepost        =  1
+    _fencepost        = 1
     buffer            = ""
 
-    srand()                             # Seed random number generator
+    srand()                     # Seed random number generator
     setup_prog_paths()
 
-    # Capture m2 run start time.  1  2  3  4  5  6  7  8
+    # Capture m2 run start time.                 1  2  3  4  5  6  7  8
     get_date_cmd = build_prog_cmdline("date", "+'%Y %m %d %H %M %S %z %s'", FALSE)
     get_date_cmd | getline dateout
     split(dateout, d)
@@ -2823,10 +2831,16 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i)
 
     # These symbols' definitions are deferred until needed, because
     # initialization requires several relatively expensive subprocesses.
-    split("__GID__ __HOST__ __HOSTNAME__ __OSNAME__ __PID__ __UID__ __USER__",
+    split("__GID__ __HOST__ __HOSTNAME__ __OSNAME__ __PID__" \
+          " __UID__ __USER__ unix",                          \
           array, " ")
     for (elem in array)
         deferred_syms[array[elem]] = TRUE
+
+    # These names are protected and cannot be modified
+    split("e pi tau unix", array, " ")
+    for (elem in array)
+        protected_syms[array[elem]] = TRUE
 
     # These symbols can be modified by the user
     split("__DEBUG__ __FMT__ __INPUT__ __STRICT__ __TMPDIR__", array, " ")
@@ -2848,7 +2862,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i)
 # The code here requires invoking several subprocesses, a somewhat slow
 # operation.  Since these features may not be used often, they are run
 # only on-demand in order to speed up general usage.
-function initialize_run_deferred(    gid, host, hostname, osname, pid, uid, user)
+function initialize_deferred_symbols(    gid, host, hostname, osname, pid, uid, user, array)
 {
     init_deferred = FALSE
 
@@ -2867,6 +2881,10 @@ function initialize_run_deferred(    gid, host, hostname, osname, pid, uid, user
     sym_store("__PID__",      pid)
     sym_store("__UID__",      uid)
     sym_store("__USER__",     user)
+
+    split("Darwin FreeBSD Linux OpenBSD SunOS", array, " ")
+    if (osname in array)
+        sym_store("unix", TRUE)
 }
 
 
@@ -2937,21 +2955,20 @@ BEGIN {
         exit_code = EX_USAGE
     }
 
-    end_program(TRUE)
+    end_program(TRUE)           # Flush any diverted streams
 }
 
 
 # Prepare to exit: undivert all pending streams (usually), flush output,
-# and exit with specified code.  I don't call this "END" simply because
-# I need finer control over when/if it is invoked.
-function end_program(output_diverted_streams)
+# and exit with specified code.
+function end_program(flush_diverted_streams)
 {
     # Perform a "@divert 0" and "@undivert" to output any remaining
     # diverted data.  If you wish to skip this step and clear all
     # streams, place the following at the very end of your input data:
     #     @divert -1
     #     @undivert
-    if (output_diverted_streams) {
+    if (flush_diverted_streams) {
         sym_store("__DIVNUM__", 0)
         undivert_all()
     }

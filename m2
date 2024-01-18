@@ -77,7 +77,7 @@
 #           @shell DELIM [PROG]    Evaluate input until DELIM, send raw data to PROG
 #                                    Output from prog is captured in output stream
 #           @typeout               Print remainder of input file literally, no macros
-#           @undef NAME            Remove definition of NAME
+#           @undefine NAME         Remove definition of NAME
 #           @undivert [N]          Inject stream N (def all) into current stream
 #           @unless NAME           Include subsequent text if NAME == 0 (or undefined)
 #           @warn [TEXT]           Send TEXT to standard error; continue
@@ -1982,7 +1982,7 @@ function m2_typeout(    buf)
 
 
 # @undef[ine]           NAME
-function m2_undef(    name)
+function m2_undefine(    name)
 {
     if (! currently_active_p())
         return
@@ -2166,7 +2166,7 @@ function process_line(read_literally,    name, sp, lbrace, cut, newstring, user_
     else if (/^@shell([ \t]|$)/)          { m2_shell() }
     else if (/^@stderr([ \t]|$)/)         { m2_error() }
     else if (/^@typeout([ \t]|$)/)        { m2_typeout() }
-    else if (/^@undef(ine)?([ \t]|$)/)    { m2_undef() }
+    else if (/^@undef(ine)?([ \t]|$)/)    { m2_undefine() }
     else if (/^@undivert([ \t]|$)/)       { m2_undivert() }
     else if (/^@unless([ \t]|$)/)         { m2_if() }
     else if (/^@warn([ \t]|$)/)           { m2_error() }

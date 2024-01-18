@@ -1,0 +1,51 @@
+DIVERT
+======
+@divert
+    Same as @divert 0
+
+@divert -1
+    All subsequent output in this diversion is discarded.
+
+@divert 0
+    Resume normal output -- all subsequent output is sent to standard
+    output (aka stream # 0)
+
+@divert N       # N ::= 1..9
+    All subsequent output is sent to stream N
+
+@divert N1 N2...
+    Error!  Multiple arguments are not allowed.
+
+If divert argument is not an integer, no action is taken and no error is
+thrown.
+
+
+UNDIVERT
+========
+@undivert
+    Inject all diversions, in numerical order, into current stream.
+
+@undivert -1
+    No effect.
+
+@undivert 0
+    No effect.
+
+@undivert N
+    Inject only the numbered diversion into current stream.
+
+@undivert N1 N2 ...
+    Inject all specified diversions (in argument order, not numerical
+    order), if legal, into current stream.
+
+If undivert argument is not an integer, no action is taken and no error
+is thrown.
+
+
+END-OF-DATA PROCESSING
+======================
+There is an implicit @divert 0/ @undivert when m2 reaches the end of
+its input.  If you want to avoid this, end your last data with:
+
+    @divert -1
+    @undivert

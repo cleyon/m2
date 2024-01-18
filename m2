@@ -169,6 +169,7 @@
 #           __DEBUG__[<id>]   [**] Debugging levels for m2 systems
 #           __DIVNUM__             Current stream number (0; 0-9 valid)
 #           __EPOCH__              Seconds since Epoch at m2 run start time
+#           __EXPR__               Value from most recent @expr ...@ result
 #           __FILE__               Current file name
 #           __FILE_UUID__          UUID unique to this file
 #           __FMT__[0]        [**] Output when @boolval@ is false (0)
@@ -187,7 +188,6 @@
 #           __NLINE__              Number of lines read so far from all files
 #           __OSNAME__             Operating system name
 #           __PID__                m2 process id
-#           __RESULT__             Value from most recent @expr ...@ expression
 #           __STATUS__             Exit status of most recent @shell command
 #           __STRICT__        [**] Strict mode (def TRUE)
 #           __TIME__               m2 run start time as HHMMSS (eg 053000)
@@ -267,7 +267,7 @@
 #       recognizes the predefined constants "e", "pi", and "tau".
 #
 #       The most recent expression value is automatically stored in
-#       __RESULT__.  @expr@ can also assign values to symbols with the
+#       __EXPR__.  @expr@ can also assign values to symbols with the
 #       "=" assignment operator.  Assignment is itself an expression, so
 #       @expr x=5@ assigns the value 5 to x and also outputs the result.
 #       To assign a value to a variable without printing, use @define.
@@ -1217,7 +1217,7 @@ function calc3_eval(s,    e)
 
     # Bare @expr@ returns most recent result
     if (length(_S_expr) == 0)
-        return sym_fetch("__RESULT__")
+        return sym_fetch("__EXPR__")
 
     _f = 1
     e = _c3_expr()
@@ -2378,12 +2378,12 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
             close(cmdline)
             r = expand r
 
-        # expr ...: Evaluate mathematical epxression, store in __RESULT__
+        # expr ...: Evaluate mathematical epxression, store in __EXPR__
         } else if (fn == "expr") {
             sub(/^expr[ \t]*/, "", m) # clean up expression to evaluate
             x = calc3_eval(m)
             dbg_print("expr", 1, sprintf("expr{%s} = %s", m, x))
-            sym_store("__RESULT__", x)
+            sym_store("__EXPR__", x)
             r = x r
 
         # getenv : Get environment variable
@@ -2792,6 +2792,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i)
     sym_store("__DATE__",               d[1] d[2] d[3])
     sym_store("__DIVNUM__",             0)
     sym_store("__EPOCH__",              d[8])
+    sym_store("__EXPR__",               0)
     sym_store("__FILE__",               "")
     sym_store("__FILE_UUID__",          "")
     sym2_store("__FMT__", TRUE,         "1")
@@ -2806,7 +2807,6 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i)
     sym_store("__M2_VERSION__",         version)
     sym_store("__NFILE__",              0)
     sym_store("__NLINE__",              0)
-    sym_store("__RESULT__",             0)
     sym_store("__STRICT__",             TRUE)
     sym_store("__TIME__",               d[4] d[5] d[6])
     sym_store("__TIMESTAMP__",          d[1] "-" d[2] "-" d[3] "T" \

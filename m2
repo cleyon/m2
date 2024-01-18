@@ -166,7 +166,8 @@
 #       example values or defaults are shown:
 #
 #           __DATE__               m2 run start date as YYYYMMDD (eg 19450716)
-#           __DEBUG__[<id>]   [**] Debugging levels for m2 systems
+#           __DEBUG__         [**] Whether debugging is enabled or not (boolean)
+#           __DEBUG__[<id>]   [**] Debugging levels for m2 systems (integer)
 #           __DIVNUM__             Current stream number (0; 0-9 valid)
 #           __EPOCH__              Seconds since Epoch at m2 run start time
 #           __EXPR__               Value from most recent @expr ...@ result
@@ -718,6 +719,8 @@ function sym_root(sym,    s)
 function sym_store(sym, val)
 {
     dbg_print("m2", 5, ("sym_store(" sym "," val ")"))
+    if (sym == "__DEBUG__" && val)
+        initialize_debugging()
     return symtab[sym_internal_form(sym)] = val
 }
 
@@ -1016,15 +1019,19 @@ function assert_cmd_name_okay_to_define(name)
 }
 
 
+function debugging_enabled_p()
+{
+    return sym_defined_p("__DEBUG__") && sym_fetch("__DEBUG__") > 0
+}
+
 function dbg(key, lev)
 {
-    if (lev == "")
-        lev = 1
-    if (key == "")
-        key = "m2"
-    if (! sym2_defined_p("__DEBUG__", key))
-        return FALSE
-    return sym2_fetch("__DEBUG__", key) >= lev
+    if (lev == "") lev = 1
+    if (key == "") key = "m2"
+    if (lev <= 0)  return TRUE
+    return (debugging_enabled_p() && sym2_defined_p("__DEBUG__", key)) \
+        ? sym2_fetch("__DEBUG__", key) >= lev \
+        : FALSE
 }
 
 function dbg_set_level(key, lev)
@@ -1193,7 +1200,7 @@ function read_lines_until(delim,    buf, delim_len)
             else
                 break
         }
-        dbg_print("cmd", 1, "(read_lines_until) readline='" $0 "'")
+        dbg_print("cmd", 3, "(read_lines_until) readline='" $0 "'")
         if (delim_len > 0 && length($0) > 0 && substr($0, 1, delim_len) == delim)
             break
         buf = buf $0 "\n"
@@ -2196,7 +2203,7 @@ function process_line(read_literally,    name, sp, lbrace, cut, newstring, user_
 # definition.  Arguments/parameters are WIP.
 function docommand(    cmdname, narg, args, i, nparam, savebuffer, savefile, saveifdepth, saveline)
 {
-    dbg_print("cmd", 1, "(docommand:" dolev ") Start; line " sym_fetch("__LINE__") ": $0='" $0 "'")
+    dbg_print("cmd", 1, "(docommand) Start; line " sym_fetch("__LINE__") ": $0='" $0 "'")
     narg = NF - 1
 
     savebuffer  = buffer
@@ -2227,7 +2234,7 @@ function docommand(    cmdname, narg, args, i, nparam, savebuffer, savefile, sav
             sub(/[ \t]*$/, "@")
 
         # String we want is in $0, go evaluate it
-        dbg_print("cmd", 5, "(docommand:" dolev ") About to call process line with $0 = '" $0 "'")
+        dbg_print("cmd", 5, "(docommand) About to call process line with $0 = '" $0 "'")
         process_line()
     }
 
@@ -2237,7 +2244,7 @@ function docommand(    cmdname, narg, args, i, nparam, savebuffer, savefile, sav
     buffer = savebuffer
     sym_store("__FILE__", savefile)
     sym_store("__LINE__", saveline)
-    dbg_print("cmd", 1, "(docommand:" dolev ") End")
+    dbg_print("cmd", 1, "(docommand) End")
 }
 
 
@@ -2285,7 +2292,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
         if (i == IDX_NOT_FOUND)
             break
 
-        # dbg_print("dosubs", 7, (sprintf("(dosubs) Top of loop: l='%s', r='%s', expand='%s'", l, r, expand)))
+        dbg_print("dosubs", 7, (sprintf("(dosubs) Top of loop: l='%s', r='%s', expand='%s'", l, r, expand)))
         l = l substr(r, 1, i-1)
         r = substr(r, i+1)      # Currently scanning @
 
@@ -2322,7 +2329,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
 
         nparam = split(m, param) - _fencepost
         fn = param[0 + _fencepost]
-        # dbg_print("dosubs", 7, sprintf("(dosubs) fn=%s, nparam=%d; l='%s', m='%s', r='%s', expand='%s'", fn, nparam, l, m, r, expand))
+        dbg_print("dosubs", 7, sprintf("(dosubs) fn=%s, nparam=%d; l='%s', m='%s', r='%s', expand='%s'", fn, nparam, l, m, r, expand))
 
         # basename SYM: Base (i.e., file name) of path
         # dirname SYM: Directory name of path
@@ -2552,7 +2559,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
         i = index(r, "@")
     }
 
-    # dbg_print("dosubs", 3, sprintf("(dosubs) Out of loop, returning l r: l='%s', r='%s'", l, r))
+    dbg_print("dosubs", 3, sprintf("(dosubs) Out of loop, returning l r: l='%s', r='%s'", l, r))
     return l r
 }
 
@@ -2790,6 +2797,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i)
     close(get_date_cmd)
 
     sym_store("__DATE__",               d[1] d[2] d[3])
+    sym_store("__DEBUG__",              FALSE)
     sym_store("__DIVNUM__",             0)
     sym_store("__EPOCH__",              d[8])
     sym_store("__EXPR__",               0)
@@ -2865,8 +2873,7 @@ function initialize_run_deferred(    gid, host, hostname, osname, pid, uid, user
 function initialize_debugging()
 {
     dbg_set_level("cmd", 5)
-    dbg_set_level("dosubs", 5)
-    dbg_set_level("names", 5)
+    dbg_set_level("dosubs", 7)
 }
 
 
@@ -2901,11 +2908,9 @@ BEGIN {
                 if (name == "strict")
                     name = "__STRICT__"
                 else if (name == "debug") {
-                    name = "__DEBUG__[m2]"
-                    if (val)
-                        initialize_debugging()
+                    name = "__DEBUG__"
                 }
-                sym_store(name, val)
+                sym_store(name, !!val)
 
             # Otherwise load a file
             } else {

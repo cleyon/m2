@@ -176,6 +176,7 @@
 #           __FMT__[0]        [**] Text output when @boolval@ is false (0)
 #           __FMT__[1]        [**] Text output when @boolval@ is true (1)
 #           __FMT__[date]     [**] Date format for @date@ (%Y-%m-%d)
+#           __FMT__[seq]      [**] Format for printing sequence values (%d)
 #           __FMT__[time]     [**] Time format for @time@ (%H:%M:%S)
 #           __FMT__[tz]       [**] Time format for @tz@   (%Z)
 #           __GID__                Group id (effective gid)
@@ -206,35 +207,42 @@
 #       will generate an up-to-date timestamp.
 #
 # SEQUENCES
-#       m2 supports sequences which are integer values.  You create and
-#       manage sequences by ID with the @sequence command.  By default,
-#       sequences begin at value 1 and increment by 1 upon each use.
-#       @sequence is always given ID and ACT(ion) parameters, and an
-#       additional argument might be supplied.  @sequence accepts the
-#       following commands:
+#       m2 supports named sequences which are integer values.  By
+#       default, sequences begin at value 1 and increment by one
+#       appropriately.  These defaults can be changed, and the value
+#       updated or restarted.  You create and manage sequences with the
+#       @sequence command.  The following actions are valid:
 #
-#           delete                 Eradicate sequence ID
-#           format PRINTF          Format string to printf value
-#           inc N                  Set increment to N
-#           init N                 Set initial value to N
-#           new                    Create a new sequence named ID
-#           next                   Increment value normally (no output)
-#           reset                  Set current value to initial value
-#           value N                Set value directly to N
+#           ID create              Create a new sequence named ID
+#           ID delete              Destroy sequence named ID
+#           ID format PRINTFSTR    Format string used to print value (%d)
+#           ID inc    N            Set increment to N (1)
+#           ID init   N            Set initial value to N (1)
+#           ID next                Increment value (no output)
+#           ID prev                Decrement value (no output)
+#           ID restart             Set current value to initial value
+#           ID set    N            Set value directly to N
 #
 #       To use a sequence, surround the sequence ID with @ characters
-#       just like a macro.  First, this adds the increment to the value,
-#       and then injects the new value, formatting it with sprintf as
-#       specified.  The initial value is normally zero, and therefore
-#       the first usage returns 1.  To simply get the current value
-#       without incrementing or special formatting, say @ID currval@.
+#       just like a macro.  This injects the current value, formatted by
+#       calling sprintf with the specified format.  To get the current
+#       value printed in decimal wihthout any special formatting, say
+#       "@ID currval@".
+#
+#       Sequence values can be modified in two ways:
+#
+#       1. The @sequence command actions next, prev, restart, and set will
+#          change the value as specified without generating any output.
+#
+#       2. Used inline, ++ or -- (prefix or postfix) will automatically
+#          modify the sequence while outputting the desired value.
 #
 #       Example:
-#           @sequence foo new
+#           @sequence foo create
 #           @sequence foo init 10
-#           @sequence foo format # %X.
-#           @foo@
-#               => # B.
+#           @sequence foo format ## %X.
+#           @++foo@ Second header
+#               => ## B. Second header
 #
 # MATHEMATICAL EXPRESSIONS
 #       The @expr ...@ function evaluates mathematical expressions and
@@ -317,7 +325,7 @@
 #           Name 'XXX' not defined
 #               - A symbol name without a value was passed to a function
 #               - An undefined macro was referenced and __STRICT__ is true.
-#               - Attempt to use an undefined sequence ("new" is allowed)
+#               - Attempt to use an undefined sequence ("create" is allowed)
 #           Name 'XXX' not valid
 #               - A symbol name does not pass validity check.  In __STRICT__
 #                 mode (the default), a symbol name may only contain letters,
@@ -360,6 +368,11 @@
 #       foo has three arguments -- '"a', 'b"', 'c' -- not two.
 #
 #       Self-referential/recursive macros will hang the program.
+#
+#       Left-to-right order of evaluation is not necessarily guaranteed.
+#           @++N@ - We are now on step @N@
+#       may not produce exactly the output you expect.  This is
+#       especially noticeable if @{...} is used in complex ways.
 #
 # EXAMPLE
 #       This example demonstrates arrays, conditionals, and @{...}:
@@ -546,7 +559,7 @@ function undivert(stream)
     dbg_print("divert", 1, "undivert(" stream ")")
     if (stream <= 0 || stream == sym_fetch("__DIVNUM__"))
         return
-    if (length(streambuf[stream]) > 0) {
+    if (! emptyp(streambuf[stream])) {
         ship_out(streambuf[stream])
         streambuf[stream] = ""
     }
@@ -565,6 +578,12 @@ function undivert_all(    stream)
 #       String functions
 #
 #*****************************************************************************
+
+# Predicate - empty string?
+function emptyp(s)
+{
+    return length(s) == 0
+}
 
 # Return first character of s
 function first(s)
@@ -767,7 +786,7 @@ function sym_valid_p(sym,    result, lbracket, root, key)
 
     do {
         # 1. Empty string is never a valid symbol name
-        if (length(sym) == 0)
+        if (emptyp(sym))
              break
 
         # Fake/hack out any "array name" by removing brackets
@@ -779,7 +798,7 @@ function sym_valid_p(sym,    result, lbracket, root, key)
             key  = substr(sym, lbracket+1, length(sym)-lbracket-1)
 
             # 3. Empty parts are not valid
-            if (length(root) == 0 || length(key) == 0)
+            if (emptyp(root) || emptyp(key))
                 break
             sym = root
         }
@@ -803,8 +822,8 @@ function assert_sym_defined(sym, hint,    s)
     if (sym_defined_p(sym))
         return TRUE
     s = sprintf("Name '%s' not defined%s%s",  sym,
-                ((hint != "")     ? " [" hint "]" : ""),
-                ((length($0) > 0) ? ":" $0        : "") )
+                ((hint != "")   ? " [" hint "]" : ""),
+                ((! emptyp($0)) ? ":" $0        : "") )
     error(s)
 }
 
@@ -883,14 +902,14 @@ function seq_defined_p(id,    s)
 
 function seq_definition_pp(id,    buf)
 {
-    buf = "@sequence " id "\tnew\n"
+    buf = "@sequence " id "\tcreate\n"
     if (seqtab[id, "value"] != SEQ_DEFAULT_INIT)
-        buf = buf "@sequence " id "\tvalue " seqtab[id, "value"] "\n"
+        buf = buf "@sequence " id "\tset " seqtab[id, "value"] "\n"
     if (seqtab[id, "init"] != SEQ_DEFAULT_INIT)
         buf = buf "@sequence " id "\tinit " seqtab[id, "init"] "\n"
     if (seqtab[id, "inc"] != SEQ_DEFAULT_INC)
         buf = buf "@sequence " id "\tinc " seqtab[id, "inc"] "\n"
-    if (seqtab[id, "fmt"] != SEQ_DEFAULT_FMT)
+    if (seqtab[id, "fmt"] != sym2_fetch("__FMT__", "seq"))
         buf = buf "@sequence " id "\tformat " seqtab[id, "fmt"] "\n"
     return buf
 }
@@ -959,7 +978,7 @@ function name_available_in_all_p(name, components,    avail)
 {
     if (first(name) == "@")
         name = substr(name, 2)
-    if (length(name) == 0)
+    if (emptyp(name))
         return FALSE
     avail = TRUE
     if (components == TYPE_ANY || index(components, TYPE_CMD))
@@ -1208,7 +1227,7 @@ function read_lines_until(delim,    buf, delim_len)
                 break
         }
         dbg_print("cmd", 3, "(read_lines_until) readline='" $0 "'")
-        if (delim_len > 0 && length($0) > 0 && substr($0, 1, delim_len) == delim)
+        if (delim_len > 0 && !emptyp($0) && substr($0, 1, delim_len) == delim)
             break
         buf = buf $0 "\n"
     }
@@ -1230,7 +1249,7 @@ function calc3_eval(s,    e)
     gsub(/[ \t]+/, "", _S_expr)
 
     # Bare @expr@ returns most recent result
-    if (length(_S_expr) == 0)
+    if (emptyp(_S_expr))
         return sym_fetch("__EXPR__")
 
     _f = 1
@@ -1530,7 +1549,7 @@ function m2_dump(    buf, cnt, definition, dumpfile, i, key, keys, fields, sym_n
             error("Name '" key "' not available:" $0)
     }
     buf = chop(buf)
-    if (length(buf) == 0) {
+    if (emptyp(buf)) {
         # I don't usually condone chatty programs, but it seems to me
         # that if the user asks for the symbol table and there's nothing
         # to print, she'd probably like to know.  Perhaps a config file
@@ -1858,7 +1877,7 @@ function m2_read(    sym, filename, line, val, getstat)
 
 
 # @sequence             ID SUBCMD [ARG...]
-function m2_sequence(    id, subcmd, arg, saveline)
+function m2_sequence(    id, action, arg, saveline)
 {
     if (! currently_active_p())
         return
@@ -1866,22 +1885,24 @@ function m2_sequence(    id, subcmd, arg, saveline)
         error("Bad parameters:" $0)
     id = $2
     assert_seq_valid_name(id)
-    subcmd = $3
-    if (subcmd != "new" && ! seq_defined_p(id))
-        error("Name '" id "' not defined:" $0)
+    action = $3
+    if (action != "create" && ! seq_defined_p(id))
+        error("Name '" id "' not defined [sequence]:" $0)
     if (NF == 3) {
-        if (subcmd == "delete") {
-            seq_destroy(id)
-        } else if (subcmd == "new") {
+        if (action == "create") {
             assert_seq_okay_to_define(id)
             seqtab[id, "defined"] = TRUE
             seqtab[id, "inc"]     = SEQ_DEFAULT_INC
             seqtab[id, "init"]    = SEQ_DEFAULT_INIT
-            seqtab[id, "fmt"]     = SEQ_DEFAULT_FMT
+            seqtab[id, "fmt"]     = sym2_fetch("__FMT__", "seq")
             seqtab[id, "value"]   = SEQ_DEFAULT_INIT
-        } else if (subcmd == "next") { # Increment counter only, no output
+        } else if (action == "delete") {
+            seq_destroy(id)
+        } else if (action == "next") { # Increment counter only, no output
             seqtab[id, "value"] += seqtab[id, "inc"]
-        } else if (subcmd == "reset") { # Set current counter value to initial value
+        } else if (action == "prev") { # Decrement counter only, no output
+            seqtab[id, "value"] -= seqtab[id, "inc"]
+        } else if (action == "restart") { # Set current counter value to initial value
             seqtab[id, "value"] = seqtab[id, "init"]
         } else
             error("Bad parameters:" $0)
@@ -1889,23 +1910,23 @@ function m2_sequence(    id, subcmd, arg, saveline)
         saveline = $0
         sub(/^[ \t]*[^ \t]+[ \t]+[^ \t]+[ \t]+[^ \t]+[ \t]+/, "") # a + this time because ARG is required
         arg = $0
-        if (subcmd == "format") {
+        if (action == "format") {
             # format STRING :: Set format string for printf to STRING.
             # Arg should be the format string to use with printf.  It
             # must include exactly one %d for the sequence value, and no
-            # other argument-consuming formatting characters.  Or you
-            # might use %x to print in hexadecimal instead.  The point
-            # is, m2 can't police your format string and a bad value
-            # might cause a crash if printf() fails.
+            # other argument-consuming formatting characters.  You might
+            # specify %x to print in hexadecimal instead.  The point is,
+            # m2 can't police your format string and a bad value might
+            # cause a crash if printf() fails.
             seqtab[id, "fmt"] = arg
-        } else if (subcmd == "inc") {
+        } else if (action == "inc") {
             # inc N :: Set increment value to N.
             if (! integerp(arg))
                 error(sprintf("Value '%s' must be numeric:%s", arg, saveline))
             if (arg+0 == 0)
                 error(sprintf("Bad parameters in 'inc':%s", saveline))
             seqtab[id, "inc"] = int(arg)
-        } else if (subcmd == "init") {
+        } else if (action == "init") {
             # init N :: Set initial  value to N.  If current
             # value == old init value (i.e., never been used), then set
             # the current value to the new init value also.  Otherwise
@@ -1915,8 +1936,8 @@ function m2_sequence(    id, subcmd, arg, saveline)
             if (seqtab[id, "value"] == seqtab[id, "init"])
                 seqtab[id, "value"] = int(arg)
             seqtab[id, "init"] = int(arg)
-        } else if (subcmd == "value") {
-            # value N :: Set counter value directly to N.
+        } else if (action == "set") {
+            # set N :: Set counter value directly to N.
             if (! integerp(arg))
                 error(sprintf("Value '%s' must be numeric:%s", arg, saveline))
             seqtab[id, "value"] = int(arg)
@@ -1990,7 +2011,7 @@ function m2_typeout(    buf)
     if (! currently_active_p())
         return
     buf = read_lines_until("")
-    if (length(buf) > 0)
+    if (! emptyp(buf))
         ship_out(buf "\n")
 }
 
@@ -2286,10 +2307,12 @@ function docommand(    cmdname, narg, args, i, nparam, savebuffer, savefile, sav
 #             R = "@" R
 #     return L R
 function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
-                      at_brace, x, y, subcmd)
+                      at_brace, x, y, inc_dec, pre_post, subcmd)
 {
     l = ""                   # Left of current pos  - ready for output
     r = s                    # Right of current pos - as yet unexamined
+    inc_dec = pre_post = 0   # track ++ or -- on sequences
+
     while (TRUE) {
         # Check entire string for recursive evaluation
         if (index(r, "@{") != IDX_NOT_FOUND)
@@ -2337,6 +2360,26 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
         nparam = split(m, param) - _fencepost
         fn = param[0 + _fencepost]
         dbg_print("dosubs", 7, sprintf("(dosubs) fn=%s, nparam=%d; l='%s', m='%s', r='%s', expand='%s'", fn, nparam, l, m, r, expand))
+
+        # Check for sequence modifiers.  First one wins, and
+        # invalid syntax is silently ignored.
+        if (substr(fn, 1, 2) == "++") {
+            inc_dec  = +1
+            pre_post = -1
+            fn = substr(fn, 3)
+        } else if (substr(fn, 1, 2) == "--") {
+            inc_dec  = -1
+            pre_post = -1
+            fn = substr(fn, 3)
+        } else if (substr(fn, length(fn)-1, 2) == "++") {
+            inc_dec  = +1
+            pre_post = +1
+            fn = substr(fn, 1, length(fn) - 2)
+        } else if (substr(fn, length(fn)-1, 2) == "--") {
+            inc_dec  = -1
+            pre_post = +1
+            fn = substr(fn, 1, length(fn) - 2)
+        }
 
         # basename SYM: Base (i.e., file name) of path
         # dirname SYM: Directory name of path
@@ -2537,16 +2580,39 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
         # Check if it's a sequence
         } else if (seq_valid_p(fn) && seq_defined_p(fn)) {
             if (nparam == 0) {
-                # normal call : increment value, insert new value with pre & suffix, etc.
-                seqtab[fn, "value"] += seqtab[fn, "inc"]
-                r = sprintf(seqtab[fn, "fmt"], seqtab[fn, "value"]) r
+                if (pre_post == 0)
+                    # normal call : insert current value with formatting
+                    r = sprintf(seqtab[fn, "fmt"], seqtab[fn, "value"]) r
+                else {
+                    # Handle prefix xor postfix increment/decrement
+                    if (pre_post == -1)    # prefix
+                        if (inc_dec == -1) # decrement
+                            seqtab[fn, "value"] -= seqtab[fn, "inc"]
+                        else
+                            seqtab[fn, "value"] += seqtab[fn, "inc"]
+                    r = sprintf(seqtab[fn, "fmt"], seqtab[fn, "value"]) r
+                    if (pre_post == +1)    # postfix
+                        if (inc_dec == -1)
+                            seqtab[fn, "value"] -= seqtab[fn, "inc"]
+                        else
+                            seqtab[fn, "value"] += seqtab[fn, "inc"]
+                }
             } else {
+                if (pre_post != 0)
+                    error("Bad parameters in '" m "':" $0)
                 subcmd = param[1 + _fencepost]
+                # @ID currval@ and @ID nextval@ are similar to @ID@ and
+                # @++ID@ but {curr,next}val eschew any formatting.
                 if (nparam == 1) {
                     # These subcommands do not take any parameters
-                    if (subcmd = "currval") {
+                    if (subcmd == "currval") {
                         # - currval :: Return current value of counter
                         # without modifying it.  Also, no prefix/suffix.
+                        r = seqtab[fn, "value"] r
+                    } else if (subcmd == "nextval") {
+                        # - nextval :: Increment and return new value of
+                        # counter.  No prefix/suffix.
+                        seqtab[fn, "value"] += seqtab[fn, "inc"]
                         r = seqtab[fn, "value"] r
                     } else
                         error("Bad parameters in '" m "':" $0)
@@ -2777,8 +2843,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i)
     READLINE_EOF      = 0
     READLINE_OK       = 1
     SEQ_DEFAULT_INC   = 1
-    SEQ_DEFAULT_INIT  = 0
-    SEQ_DEFAULT_FMT   = "%d"
+    SEQ_DEFAULT_INIT  = 1
     TAU               = 2 * PI
     TRUE              = 1
     TYPE_ANY          = "*"
@@ -2815,6 +2880,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i)
     sym2_store("__FMT__", FALSE,        "0")
     sym2_store("__FMT__", "date",       "%Y-%m-%d")
     sym2_store("__FMT__", "epoch",      "%s")
+    sym2_store("__FMT__", "seq",        "%d")
     sym2_store("__FMT__", "time",       "%H:%M:%S")
     sym2_store("__FMT__", "tz",         "%Z")
     sym_store("__INPUT__",              "")

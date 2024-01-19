@@ -208,8 +208,8 @@
 #
 # SEQUENCES
 #       m2 supports named sequences which are integer values.  By
-#       default, sequences begin at value 1 and increment by one
-#       appropriately.  These defaults can be changed, and the value
+#       default, sequences begin at zero and increment by one as
+#       appropriate.  These defaults can be changed, and the value
 #       updated or restarted.  You create and manage sequences with the
 #       @sequence command.  The following actions are valid:
 #
@@ -238,11 +238,12 @@
 #          modify the sequence while outputting the desired value.
 #
 #       Example:
-#           @sequence foo create
-#           @sequence foo init 10
-#           @sequence foo format ## %X.
-#           @++foo@ Second header
-#               => ## B. Second header
+#           @sequence counter create
+#           @sequence counter format # %d.
+#           @++counter@ First header
+#           @++counter@ Second header
+#               => # 1. First header
+#               => # 2. Second header
 #
 # MATHEMATICAL EXPRESSIONS
 #       The @expr ...@ function evaluates mathematical expressions and
@@ -1172,7 +1173,7 @@ function uuid()
 }
 
 
-# Quicksort - from "The AWK Programming Language" p.161.
+# Quicksort - from "The AWK Programming Language" p. 161.
 # Used in m2_dump() to sort the symbol table.
 function qsort(A, left, right,    i, lastpos)
 {
@@ -2180,11 +2181,10 @@ function process_line(read_literally,    name, sp, lbrace, cut, newstring, user_
     else if (/^@echo([ \t]|$)/)           { m2_error() }
     else if (/^@else([ \t]|$)/)           { m2_else() }
     else if (/^@endcmd([ \t]|$)/)         { m2_endcmd() }
-    else if (/^@endif([ \t]|$)/)          { m2_endif() }
+    else if (/^@(endif|fi)([ \t]|$)/)     { m2_endif() }
     else if (/^@endlong(def)?([ \t]|$)/)  { m2_endlongdef() }
     else if (/^@err(or|print)([ \t]|$)/)  { m2_error() }
     else if (/^@(m2)?exit([ \t]|$)/)      { m2_exit() }
-    else if (/^@fi([ \t]|$)/)             { m2_endif() }
     else if (/^@if(_not)?(_(defined|env|exists|in))?([ \t]|$)/)
                                           { m2_if() }
     else if (/^@ifn?def([ \t]|$)/)        { m2_if() }
@@ -2843,7 +2843,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i)
     READLINE_EOF      = 0
     READLINE_OK       = 1
     SEQ_DEFAULT_INC   = 1
-    SEQ_DEFAULT_INIT  = 1
+    SEQ_DEFAULT_INIT  = 0
     TAU               = 2 * PI
     TRUE              = 1
     TYPE_ANY          = "*"
@@ -2934,7 +2934,7 @@ function initialize_deferred_symbols(    gid, host, hostname, osname, pid, uid, 
 
     build_prog_cmdline("id", "-g", FALSE)              | getline gid
     build_prog_cmdline("hostname", "-s", FALSE)        | getline host
-    build_prog_cmdline("hostname", "", FALSE)          | getline hostname
+    build_prog_cmdline("hostname", "-f", FALSE)        | getline hostname
     build_prog_cmdline("uname", "-s", FALSE)           | getline osname
     build_prog_cmdline("sh", "-c 'echo $PPID'", FALSE) | getline pid
     build_prog_cmdline("id", "-u", FALSE)              | getline uid
@@ -2959,8 +2959,8 @@ function initialize_deferred_symbols(    gid, host, hostname, osname, pid, uid, 
 
 function initialize_debugging()
 {
-    dbg_set_level("cmd", 5)
-    dbg_set_level("dosubs", 7)
+    # dbg_set_level("cmd", 5)
+    # dbg_set_level("dosubs", 7)
 }
 
 
@@ -2997,7 +2997,7 @@ BEGIN {
                 else if (name == "debug") {
                     name = "__DEBUG__"
                 }
-                sym_store(name, !!val)
+                sym_store(name, val)
 
             # Otherwise load a file
             } else {

@@ -1,0 +1,3 @@
+#!/bin/sh
+
+$HOME/repos.cp/github.com/koknat/callGraph/callGraph m2 -language awk

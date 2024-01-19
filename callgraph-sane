@@ -1,0 +1,3 @@
+#!/bin/sh
+
+$HOME/repos.cp/github.com/koknat/callGraph/callGraph m2 -language awk -ignore '(rm_quotes|assert_(valid_env_var_name|sym_unprotected|(cmd_name|sym|seq)_(valid_name|okay_to_define))|chomp|end_program|dbg|tmpdir|uuid|build_subsep|find_closing_brace|hex_digits|load_init_files|initialize|initialize_debugging|strictp|flush_stdout|error|currently_active_p|dbg_print|warn|integerp|calc3_eval|randint|print_stderr|first|last|chop|qsort)'

@@ -458,7 +458,7 @@
 #*****************************************************************************
 
 BEGIN {
-    version = "3.3.0"
+    version = "3.3.1"
 
     # Exit codes
     EX_OK             =  0
@@ -2903,7 +2903,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i)
     for (elem in array)
         deferred_syms[array[elem]] = TRUE
 
-    # These names are protected and cannot be modified
+    # These non-system symbol names are protected and cannot be modified
     split("e pi tau unix", array, " ")
     for (elem in array)
         protected_syms[array[elem]] = TRUE
@@ -2928,13 +2928,13 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i)
 # The code here requires invoking several subprocesses, a somewhat slow
 # operation.  Since these features may not be used often, they are run
 # only on-demand in order to speed up general usage.
-function initialize_deferred_symbols(    gid, host, hostname, osname, pid, uid, user, array)
+function initialize_deferred_symbols(    gid, host, hostname, osname, pid, uid, user, elem, array)
 {
     init_deferred = FALSE
 
     build_prog_cmdline("id", "-g", FALSE)              | getline gid
     build_prog_cmdline("hostname", "-s", FALSE)        | getline host
-    build_prog_cmdline("hostname", FALSE)              | getline hostname
+    build_prog_cmdline("hostname", "", FALSE)          | getline hostname
     build_prog_cmdline("uname", "-s", FALSE)           | getline osname
     build_prog_cmdline("sh", "-c 'echo $PPID'", FALSE) | getline pid
     build_prog_cmdline("id", "-u", FALSE)              | getline uid
@@ -2949,8 +2949,11 @@ function initialize_deferred_symbols(    gid, host, hostname, osname, pid, uid, 
     sym_store("__USER__",     user)
 
     split("Darwin FreeBSD Linux OpenBSD SunOS", array, " ")
-    if (osname in array)
-        sym_store("unix", TRUE)
+    for (elem in array)
+        if (osname == array[elem]) {
+            sym_store("unix", TRUE)
+            break
+        }
 }
 
 

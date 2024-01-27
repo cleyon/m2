@@ -525,7 +525,7 @@ function error(text, file, line)
 {
     warn(text, file, line)
     exit_code = EX_M2_ERROR
-    end_program(FALSE)          # Do not flush any diverted streams
+    end_program(DISCARD_STREAMS)
 }
 
 
@@ -1606,7 +1606,7 @@ function m2_error(    m2_will_exit, do_format, message)
     print_stderr(message)
     if (m2_will_exit) {
         exit_code = EX_USER_REQUEST
-        end_program(FALSE)      # Do not flush any diverted streams
+        end_program(DISCARD_STREAMS)
     }
 }
 
@@ -1617,7 +1617,7 @@ function m2_exit()
     if (! currently_active_p())
         return
     exit_code = (NF > 1 && integerp($2)) ? $2 : EX_OK
-    end_program(TRUE)           # Flush any diverted streams
+    end_program(SHIP_OUT_STREAMS)
 }
 
 
@@ -2831,6 +2831,7 @@ function setup_prog_paths()
 # Nothing here is user-customizable
 function initialize(    get_date_cmd, d, dateout, array, elem, i)
 {
+    DISCARD_STREAMS   = 0
     E                 = exp(1)
     FALSE             = 0
     IDX_NOT_FOUND     = 0
@@ -2843,6 +2844,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i)
     READLINE_OK       = 1
     SEQ_DEFAULT_INC   = 1
     SEQ_DEFAULT_INIT  = 0
+    SHIP_OUT_STREAMS  = 1
     TAU               = 2 * PI
     TRUE              = 1
     TYPE_ANY          = "*"
@@ -3023,12 +3025,15 @@ BEGIN {
         exit_code = EX_USAGE
     }
 
-    end_program(TRUE)           # Flush any diverted streams
+    end_program(SHIP_OUT_STREAMS)
 }
 
 
-# Prepare to exit: undivert all pending streams (usually), flush output,
-# and exit with specified code.
+# Prepare to exit.  Normally, flush_diverted_streams has a true value,
+# viz. SHIP_OUT_STREAMS, so we usually undivert all pending streams.
+# When flush_diverted_streams is false (DISCARD_STREAMS), any diverted
+# data is dropped.  Standard output is always flushed, and program exits
+# with value from global variable exit_code.
 function end_program(flush_diverted_streams)
 {
     # Perform a "@divert 0" and "@undivert" to output any remaining

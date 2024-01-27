@@ -2040,6 +2040,10 @@ function m2_undefine(    name)
         name = sym_root(name)
         assert_sym_valid_name(name)
         assert_sym_unprotected(name)
+        # System symbols, even unprotected ones -- despite being subject
+        # to user modification -- cannot be undefined.
+        if (sym_system_p(name))
+            error("Name '" name "' not available:" $0)
         sym_destroy(name)
     }
 }

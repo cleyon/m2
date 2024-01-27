@@ -1048,7 +1048,8 @@ function assert_cmd_name_okay_to_define(name)
 
 function debugging_enabled_p()
 {
-    return sym_defined_p("__DEBUG__") && sym_fetch("__DEBUG__") > 0
+    return sym_true_p("__DEBUG__")
+    #return sym_defined_p("__DEBUG__") && sym_fetch("__DEBUG__") > 0
 }
 
 function dbg(key, lev)

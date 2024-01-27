@@ -209,6 +209,46 @@ BEGIN { version = "3.3.2" }
 #           @date@T@time@@__TZ__@
 #       will generate an up-to-date timestamp.
 #
+# STREAMS & DIVERSIONS
+#       m2 attempts to follow m4 in its use of @divert and @undivert.
+#       If argument is not an integer, no action is taken and no error
+#       is thrown.
+#
+#       DIVERT
+#           @divert
+#               - Same as @divert 0
+#           @divert -1
+#               - All subsequent output in this diversion is discarded.
+#           @divert 0
+#               - Resume normal output: all subsequent output is sent
+#                 to standard output (aka stream # 0)
+#           @divert N       # N ::= 1..9
+#               - All subsequent output is sent to stream N
+#           @divert N1 N2...
+#               - Error!  Multiple arguments are not allowed.
+#
+#       UNDIVERT
+#           @undivert
+#               - Inject all diversions, in numerical order, into
+#                 current stream.
+#           @undivert -1
+#               - No effect.
+#           @undivert 0
+#               - No effect.
+#           @undivert N
+#               - Inject only the numbered diversion into current stream.
+#           @undivert N1 N2 ...
+#               - Inject all specified diversions (in argument order,
+#                 not numerical order), if legal, into current stream.
+#
+#       END-OF-DATA PROCESSING
+#           There is an implicit "@divert 0" and "@undivert" performed
+#           when m2 reaches the end of its input.  If you want to avoid
+#           this and discard any diverted data that hasn't shipped out yet,
+#           add the following to the end of your input data:
+#               @divert -1
+#               @undivert
+#
 # SEQUENCES
 #       m2 supports named sequences which are integer values.  By
 #       default, sequences begin at zero and increment by one as
@@ -3050,11 +3090,9 @@ BEGIN {
 # with value from global variable exit_code.
 function end_program(flush_diverted_streams)
 {
-    # Perform a "@divert 0" and "@undivert" to output any remaining
-    # diverted data.  If you wish to skip this step and clear all
-    # streams, place the following at the very end of your input data:
-    #     @divert -1
-    #     @undivert
+    # If requested (the normal case), ship out any remaining diverted
+    # data.  See "STREAMS & DIVERSIONS" documentation above to see how
+    # the user can prevent this if desired.
     if (flush_diverted_streams) {
         sym_store("__DIVNUM__", 0)
         undivert_all()

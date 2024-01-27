@@ -1,6 +1,6 @@
 #!/usr/bin/awk -f
 
-BEGIN { version = "3.3.2" }
+BEGIN { version = "3.3.3" }
 
 #*****************************************************************************
 #
@@ -214,7 +214,7 @@ BEGIN { version = "3.3.2" }
 #       If argument is not an integer, no action is taken and no error
 #       is thrown.
 #
-#       DIVERT
+#       Divert:
 #           @divert
 #               - Same as @divert 0
 #           @divert -1
@@ -227,7 +227,7 @@ BEGIN { version = "3.3.2" }
 #           @divert N1 N2...
 #               - Error!  Multiple arguments are not allowed.
 #
-#       UNDIVERT
+#       Undivert:
 #           @undivert
 #               - Inject all diversions, in numerical order, into
 #                 current stream.
@@ -241,13 +241,21 @@ BEGIN { version = "3.3.2" }
 #               - Inject all specified diversions (in argument order,
 #                 not numerical order), if legal, into current stream.
 #
-#       END-OF-DATA PROCESSING
+#       End-of-Data Processing:
 #           There is an implicit "@divert 0" and "@undivert" performed
 #           when m2 reaches the end of its input.  If you want to avoid
 #           this and discard any diverted data that hasn't shipped out yet,
 #           add the following to the end of your input data:
 #               @divert -1
 #               @undivert
+#
+#       Example:
+#           @divert 1
+#           World!
+#           @divert
+#           Hello,
+#               => Hello,
+#               => World!
 #
 # SEQUENCES
 #       m2 supports named sequences which are integer values.  By
@@ -1871,6 +1879,19 @@ function m2_endlongdef()
 
 
 # @newcmd               NAME
+#
+# Q. What is the difference between @define and @newcmd?
+# A. @define (and @longdef) create a symbol whose value can be substituted
+# in-line whenever you wish, by surrounding it with "@" characters, as in:
+#
+#     Hello @name@, I just got a great deal on this new @item@ !!!
+#
+# You can also invoke mini "functions", little in-line functions that may
+# take parameters but generally produce or modify output in some way.
+#
+# Names declared with @newcmd are recognized and run in the procedure
+# that processes the control commands (@if, @define, etc).  These things
+# can only be on a line of their own and (mostly) do not produce output.
 function m2_newcmd(    buf, save_line, save_lineno, name, nparam, i)
 {
     if (! currently_active_p())

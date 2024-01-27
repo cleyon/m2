@@ -46,6 +46,7 @@ BEGIN { version = "3.3.2" }
 #
 #           @append NAME TEXT      Add TEXT to an already defined macro NAME
 #           @comment [TEXT]        Comment; ignore line.  Also @@, @c, @#
+#           @debug [TEXT]          If debugging, send TEXT to standard error
 #           @decr NAME [N]         Subtract N (1) from an already defined NAME
 #           @default NAME VAL      Like @define, but no-op if NAME already defined
 #           @define NAME TEXT      Set NAME to TEXT
@@ -1585,15 +1586,20 @@ function m2_endif()
 }
 
 
-# @echo, @error, @stderr, @warn TEXT
-# error and warn format the message with file & line, etc
-# echo and stderr do no additional formatting
-function m2_error(    m2_will_exit, do_format, message)
+# @debug, @echo, @error, @stderr, @warn TEXT
+# debug, error and warn format the message with file & line, etc.
+# echo and stderr do no additional formatting.
+#
+# @debug only prints its message if debugging is enabled.  The user can
+# control this since __DEBUG__ is an unprotected symbol.  @debug is
+# purposefully not given access to the various dbg() keys and levels.
+function m2_error(    m2_will_exit, do_format, do_print, message)
 {
     if (! currently_active_p())
         return
     m2_will_exit = ($1 == "@error")
-    do_format = ($1 == "@error" || $1 == "@warn")
+    do_format = ($1 == "@debug" || $1 == "@error" || $1 == "@warn")
+    do_print  = ($1 != "@debug" || debugging_enabled_p())
     if (NF == 1) {
         message = format_message($1)
     } else {
@@ -1603,7 +1609,8 @@ function m2_error(    m2_will_exit, do_format, message)
         if (do_format)
             message = format_message(message)
     }
-    print_stderr(message)
+    if (do_print)
+        print_stderr(message)
     if (m2_will_exit) {
         exit_code = EX_USER_REQUEST
         end_program(DISCARD_STREAMS)
@@ -2958,6 +2965,8 @@ function initialize_deferred_symbols(    gid, host, hostname, osname, pid, uid, 
 }
 
 
+# This function is called automagically (it's baked into sym_store())
+# every time a non-zero value is stored into __DEBUG__.
 function initialize_debugging()
 {
     # dbg_set_level("cmd", 5)

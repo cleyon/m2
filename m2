@@ -801,7 +801,7 @@ function sym_root(sym,    s)
 function sym_store(sym, val)
 {
     dbg_print("m2", 5, ("sym_store(" sym "," val ")"))
-    if (sym == "__DEBUG__" && val)
+    if (sym == "__DEBUG__" && sym_fetch(sym) == 0 && val > 0)
         initialize_debugging()
     return symtab[sym_internal_form(sym)] = val
 }

@@ -169,7 +169,7 @@ BEGIN { version = "3.3.3" }
 #       example values, defaults, or types are shown:
 #
 #           __DATE__               m2 run start date as YYYYMMDD (eg 19450716)
-#           __DEBUG__         [**] Whether debugging is enabled or not (boolean)
+#           __DEBUG__         [**] Debugging enabled? (boolean, def FALSE)
 #           __DEBUG__[<id>]   [**] Debugging levels for m2 systems (integer)
 #           __DIVNUM__             Current stream number (0; 0-9 valid)
 #           __EPOCH__              Seconds since Epoch at m2 run start time
@@ -194,7 +194,7 @@ BEGIN { version = "3.3.3" }
 #           __OSNAME__             Operating system name
 #           __PID__                m2 process id
 #           __STATUS__             Exit status of most recent @shell command
-#           __STRICT__        [**] Strict mode (def TRUE)
+#           __STRICT__        [**] Strict mode? (boolean, def TRUE)
 #           __TIME__               m2 run start time as HHMMSS (eg 053000)
 #           __TIMESTAMP__          ISO 8601 timestamp (1945-07-16T05:30:00-0600)
 #           __TMPDIR__        [**] Location for temporary files (def /tmp)
@@ -303,8 +303,8 @@ BEGIN { version = "3.3.3" }
 #       McCormack and Alan Linton.  @expr@ supports the standard
 #       arithmetic operators  +  -  *  /  %  ^  (  )
 #       Comparison operators  <  <=  ==  !=  >=  >  return 0 or 1,
-#       as per Awk.  Logical negation (!) is also allowed, but no other
-#       boolean operations (notably && and ||) are supported.
+#       as per Awk.  Logical negation (!) is allowed, but no other
+#       boolean operators are permitted.  && and || are NOT supported!
 #
 #       @expr@ supports the following functions:
 #
@@ -801,7 +801,10 @@ function sym_root(sym,    s)
 function sym_store(sym, val)
 {
     dbg_print("m2", 5, ("sym_store(" sym "," val ")"))
-    if (sym == "__DEBUG__" && sym_fetch(sym) == 0 && val > 0)
+    # __DEBUG__ and __STRICT__ can only store boolean values
+    if (sym == "__DEBUG__" || sym == "__DEBUG__")
+        val = !!val
+    if (sym == "__DEBUG__" && sym_fetch(sym) == FALSE && val == TRUE)
         initialize_debugging()
     return symtab[sym_internal_form(sym)] = val
 }
@@ -2248,6 +2251,7 @@ function process_line(read_literally,    name, sp, lbrace, cut, newstring, user_
     else if (/^@decr([ \t]|$)/)           { m2_incr() }
     else if (/^@default([ \t]|$)/)        { m2_default() }
     else if (/^@define([ \t]|$)/)         { m2_define() }
+    else if (/^@debug([ \t]|$)/)          { m2_error() }
     else if (/^@divert([ \t]|$)/)         { m2_divert() }
     else if (/^@dump(all|def)?([ \t]|$)/) { m2_dump() }
     else if (/^@echo([ \t]|$)/)           { m2_error() }
@@ -2476,6 +2480,8 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
         #  - If it's not a symbol, use its value as a boolean state.
         } else if (fn == "boolval") {
             p = param[1 + _fencepost]
+            # Always accept your current representation of true or false
+            # to actually be true or false without further evaluation.
             if (p == sym2_fetch("__FMT__", TRUE) ||
                 p == sym2_fetch("__FMT__", FALSE))
                 r = p r
@@ -2651,7 +2657,16 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
 
         # Check if it's a sequence
         } else if (seq_valid_p(fn) && seq_defined_p(fn)) {
+            # Check for pre/post increment/decrement.
+            # This is only performed on a bare reference.
             if (nparam == 0) {
+                #   |          | pre_post | inc_dec |
+                #   |----------+----------+---------|
+                #   | foo      |        0 |     n/a |
+                #   | --foo    |       -1 |      -1 |
+                #   | ++foo    |       -1 |      +1 |
+                #   | foo--    |       +1 |      -1 |
+                #   | foo++    |       +1 |      +1 |
                 if (pre_post == 0)
                     # normal call : insert current value with formatting
                     r = sprintf(seqtab[fn, "fmt"], seqtab[fn, "value"]) r
@@ -2662,6 +2677,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
                             seqtab[fn, "value"] -= seqtab[fn, "inc"]
                         else
                             seqtab[fn, "value"] += seqtab[fn, "inc"]
+                    # Get current value with desired formatting
                     r = sprintf(seqtab[fn, "fmt"], seqtab[fn, "value"]) r
                     if (pre_post == +1)    # postfix
                         if (inc_dec == -1)
@@ -2680,6 +2696,11 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
                     if (subcmd == "currval") {
                         # - currval :: Return current value of counter
                         # without modifying it.  Also, no prefix/suffix.
+                        # (This reference to "prefix/suffix" is of
+                        # historical interest: it refers to an earlier
+                        # version of m2 which did not have full sequence
+                        # value formatting.  Instead, you had two strings
+                        # which printed before and after the value.)
                         r = seqtab[fn, "value"] r
                     } else if (subcmd == "nextval") {
                         # - nextval :: Increment and return new value of

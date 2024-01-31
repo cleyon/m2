@@ -1,6 +1,6 @@
 #!/usr/bin/awk -f
 
-BEGIN { version = "3.3.3" }
+BEGIN { version = "3.3.4" }
 
 #*****************************************************************************
 #
@@ -54,6 +54,7 @@ BEGIN { version = "3.3.3" }
 #           @dump(all) [FILE]      Output symbol names & definitions to FILE (stderr)
 #           @error [TEXT]          Send TEXT to standard error; exit code 2
 #           @exit [CODE]           Immediately stop parsing; exit CODE (default 0)
+#           @flush                 Flush standard output
 #           @if NAME               Include subsequent text if NAME is true (!= 0)
 #           @if NAME <OP> TEXT     Test if NAME compares to TEXT (names or values)
 #           @if(_not)_defined NAME Test if NAME is defined
@@ -1680,6 +1681,15 @@ function m2_exit()
 }
 
 
+# @flush
+function m2_flush()
+{
+    if (! currently_active_p())
+        return
+    flush_stdout()
+}
+
+
 # @if[_not][_{defined|env|exists|in}], @if[n]def, @unless
 function m2_if(    sym, cond, op, val2, val4)
 {
@@ -2245,7 +2255,7 @@ function process_line(read_literally,    name, sp, lbrace, cut, newstring, user_
 
     # Look for control commands.  These are hard-wired, and cannot be
     # overridden by @newcmd.  Note, they only match at beginning of line.
-    if      (/^@(@|#)/)                   { } # Comments are ignored
+    if      (/^@(@|;|#)/)                 { } # Comments are ignored
     else if (/^@append([ \t]|$)/)         { m2_define() }
     else if (/^@c(omment)?([ \t]|$)/)     { } # Comments are ignored
     else if (/^@decr([ \t]|$)/)           { m2_incr() }
@@ -2261,6 +2271,7 @@ function process_line(read_literally,    name, sp, lbrace, cut, newstring, user_
     else if (/^@endlong(def)?([ \t]|$)/)  { m2_endlongdef() }
     else if (/^@err(or|print)([ \t]|$)/)  { m2_error() }
     else if (/^@(m2)?exit([ \t]|$)/)      { m2_exit() }
+    else if (/^@flush([ \t]|$)/)          { m2_flush() }
     else if (/^@if(_not)?(_(defined|env|exists|in))?([ \t]|$)/)
                                           { m2_if() }
     else if (/^@ifn?def([ \t]|$)/)        { m2_if() }
@@ -2283,7 +2294,9 @@ function process_line(read_literally,    name, sp, lbrace, cut, newstring, user_
     else if (/^@warn([ \t]|$)/)           { m2_error() }
 
     # Check for user commands
-    else if (first($1) == "@" && cmd_defined_p(substr($1, 2)))
+    else if (currently_active_p() &&
+             first($1) == "@"     &&
+             cmd_defined_p(substr($1, 2)))
         docommand()
 
     # Process @

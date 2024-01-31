@@ -803,7 +803,7 @@ function sym_store(sym, val)
 {
     dbg_print("m2", 5, ("sym_store(" sym "," val ")"))
     # __DEBUG__ and __STRICT__ can only store boolean values
-    if (sym == "__DEBUG__" || sym == "__DEBUG__")
+    if (sym == "__DEBUG__" || sym == "__STRICT__")
         val = !!val
     if (sym == "__DEBUG__" && sym_fetch(sym) == FALSE && val == TRUE)
         initialize_debugging()

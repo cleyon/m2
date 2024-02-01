@@ -36,6 +36,19 @@ function name_S_parse(str, part,    cnt, i)
     }
 
 
+
+function ceil(x,    t)
+{
+    t = int(x)
+    return x > t ? t+1 : t
+}
+
+function floor(x,    t)
+{
+    t = int(x)
+    return x < t ? t-1 : t
+}
+
 function min(m, n)
 {
     return m < n ? m : n

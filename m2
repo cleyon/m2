@@ -272,7 +272,7 @@ BEGIN { version = "3.3.4" }
 #           ID delete              Destroy sequence named ID
 #           ID format PRINTFSTR    Format string used to print value (%d)
 #           ID inc    N            Set increment to N (1)
-#           ID init   N            Set initial value to N (1)
+#           ID init   N            Set initial value to N (0)
 #           ID next                Increment value (no output)
 #           ID prev                Decrement value (no output)
 #           ID restart             Set current value to initial value
@@ -313,15 +313,18 @@ BEGIN { version = "3.3.4" }
 #       @expr@ supports the following functions:
 #
 #           atan2(y,x)             Arctangent of y/x, -pi <= atan2 <= pi
+#           ceil(x)                Ceiling of x, small integer >= x
 #           cos(x)                 Cosine of x, in radians
 #           deg(x)                 Convert radians to degrees
 #           exp(x)                 Exponential (anti-logarithm) of x, e^x
+#           floor(x)               Floor of x, largest integer <= x
 #           int(x)                 Integer part of x
 #           log(x)                 Natural logarithm of x, base e
 #           log10(x)               Common logarithm of x, base 10
 #           rad(x)                 Convert degrees to radians
 #           rand()                 Random float, 0 <= rand < 1
 #           randint(x)             Random integer, 1 <= randint <= x
+#           round(x)               Normal rounding to nearest integer
 #           sin(x)                 Sine of x, in radians
 #           sqrt(x)                Square root of x
 #           tan(x)                 Tangent of x, in radians
@@ -1193,6 +1196,34 @@ function path_exists_p(path)
 }
 
 
+# do normal rounding
+# https://www.gnu.org/software/gawk/manual/html_node/Round-Function.html
+function round(x,   ival, aval, fraction)
+{
+   ival = int(x)    # integer part, int() truncates
+
+   # see if fractional part
+   if (ival == x)   # no fraction
+      return ival   # ensure no decimals
+
+   if (x < 0) {
+      aval = -x     # absolute value
+      ival = int(aval)
+      fraction = aval - ival
+      if (fraction >= .5)
+         return int(x) - 1   # -2.5 --> -3
+      else
+         return int(x)       # -2.3 --> -2
+   } else {
+      fraction = x - ival
+      if (fraction >= .5)
+         return ival + 1
+      else
+         return ival
+   }
+}
+
+
 # 0  <=  randint(N)  <  N
 # To generate a hex digit (0..15), say `randint(16)'
 # To roll a die (generate 1..6),   say `randint(6)+1'.
@@ -1424,7 +1455,7 @@ function _c3_factor3(    e, fun, e2)
     # (expr) | function(expr) | function(expr,expr)
     if (match(e, /^([A-Za-z#_][A-Za-z#_0-9]+)?\(/)) {
         fun = _c3_advance()
-        if (fun ~ /^(cos|deg|exp|int|log(10)?|rad|randint|sin|sqrt|srand|tan)?\(/) {
+        if (fun ~ /^(ceil|cos|deg|exp|floor|int|log(10)?|rad|randint|round|sin|sqrt|srand|tan)?\(/) {
             e = _c3_expr()
             e = _c3_calculate_function(fun, e)
         } else if (fun ~ /^atan2\(/) {
@@ -1463,14 +1494,19 @@ function _c3_factor3(    e, fun, e2)
 function _c3_calculate_function(fun, e,    c)
 {
     if (fun == "(")        return e
+    if (fun == "ceil(")    { c = int(e)
+                             return e > c ? c+1 : c }
     if (fun == "cos(")     return cos(e)
     if (fun == "deg(")     return e * (360 / TAU)
     if (fun == "exp(")     return exp(e)
+    if (fun == "floor(")   { c = int(e)
+                             return e < c ? c-1 : c }
     if (fun == "int(")     return int(e)
     if (fun == "log(")     return log(e)
     if (fun == "log10(")   return log(e) / LOG10
     if (fun == "rad(")     return e * (TAU / 360)
     if (fun == "randint(") return randint(e) + 1
+    if (fun == "round(")   return round(e)
     if (fun == "sin(")     return sin(e)
     if (fun == "sqrt(")    return sqrt(e)
     if (fun == "srand(")   return srand(e)
@@ -1501,15 +1537,6 @@ function _c3_advance(    tmp)
 #       - NF==3 means @xxx called with 2 arguments.
 #
 #*****************************************************************************
-
-# @endcmd
-function m2_endcmd()
-{
-    # @endcmd should never be encountered alone because m2_newcmd()
-    # consumes any matching @endcmd.
-    error("No corresponding '@newcmd':" $0)
-}
-
 
 # @default, @initialize NAME TEXT
 function m2_default(    sym)
@@ -1631,6 +1658,15 @@ function m2_else()
         error("Duplicate '@else' not allowed:" $0)
     seen_else[ifdepth] = TRUE
     active[ifdepth] = active[ifdepth-1] ? ! currently_active_p() : FALSE
+}
+
+
+# @endcmd
+function m2_endcmd()
+{
+    # @endcmd should never be encountered alone because m2_newcmd()
+    # consumes any matching @endcmd.
+    error("No corresponding '@newcmd':" $0)
 }
 
 

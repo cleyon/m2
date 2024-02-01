@@ -139,9 +139,9 @@ BEGIN { version = "3.3.4" }
 #
 #           @basename SYM@         Base (file) name of SYM
 #           @boolval SYM@          Output "1" if SYM is true, else "0"
-#           @date@                 Current date (format as __FMT__[date])
+#           @date@           [***] Current date (format as __FMT__[date])
 #           @dirname SYM@          Directory name of SYM
-#           @epoch@                Number of seconds since the Epoch, UTC
+#           @epoch@          [***] Number of seconds since the Epoch, UTC
 #           @expr MATH@            Evaluate mathematical expression
 #           @getenv VAR@       [*] Get environment variable
 #           @lc SYM@               Lower case
@@ -151,16 +151,12 @@ BEGIN { version = "3.3.4" }
 #           @rem COMMENT@          Embedded comment text is ignored
 #           @right SYM [N]@        Substring of SYM from N to last character
 #           @spaces [N]@           Output N space characters  (default 1)
-#           @time@                 Current time (format as __FMT__[time])
+#           @time@           [***] Current time (format as __FMT__[time])
 #           @trim SYM@             Remove leading and trailing whitespace
-#           @tz@                   Time zone name (format as __FMT__[tz])
+#           @tz@             [***] Time zone name (format as __FMT__[tz])
 #           @uc SYM@               Upper case
 #           @uuid@                 Something that resembles a UUID:
 #                                    C3525388-E400-43A7-BC95-9DF5FA3C4A52
-#
-#       [*] @getenv VAR@ will be replaced by the value of the environment
-#           variable VAR.  An error is thrown if VAR is not defined.  To
-#           ignore error and continue with empty string, disable __STRICT__.
 #
 #       Symbols can be suffixed with "[<key>]" to form simple arrays.
 #
@@ -169,11 +165,11 @@ BEGIN { version = "3.3.4" }
 #       cannot be modified by the user.  The following are pre-defined;
 #       example values, defaults, or types are shown:
 #
-#           __DATE__               m2 run start date as YYYYMMDD (eg 19450716)
+#           __DATE__         [***] m2 run start date as YYYYMMDD (eg 19450716)
 #           __DEBUG__         [**] Debugging enabled? (boolean, def FALSE)
 #           __DEBUG__[<id>]   [**] Debugging levels for m2 systems (integer)
 #           __DIVNUM__             Current stream number (0; 0-9 valid)
-#           __EPOCH__              Seconds since Epoch at m2 run start time
+#           __EPOCH__        [***] Seconds since Epoch at m2 run start time
 #           __EXPR__               Value from most recent @expr ...@ result
 #           __FILE__               Current file name
 #           __FILE_UUID__          UUID unique to this file
@@ -196,19 +192,26 @@ BEGIN { version = "3.3.4" }
 #           __PID__                m2 process id
 #           __STATUS__             Exit status of most recent @shell command
 #           __STRICT__        [**] Strict mode? (boolean, def TRUE)
-#           __TIME__               m2 run start time as HHMMSS (eg 053000)
-#           __TIMESTAMP__          ISO 8601 timestamp (1945-07-16T05:30:00-0600)
+#           __TIME__         [***] m2 run start time as HHMMSS (eg 053000)
+#           __TIMESTAMP__    [***] ISO 8601 timestamp (1945-07-16T05:30:00-0600)
 #           __TMPDIR__        [**] Location for temporary files (def /tmp)
-#           __TZ__                 Time zone numeric offset from UTC (-0400)
+#           __TZ__           [***] Time zone numeric offset from UTC (-0400)
 #           __UID__                User id (effective uid)
 #           __USER__               User name
 #
+#       [*] @getenv VAR@ will be replaced by the value of the environment
+#           variable VAR.  An error is thrown if VAR is not defined.  To
+#           ignore error and continue with empty string, disable __STRICT__.
+#
 #       [**] denotes an "unprotected" system symbol.
 #
-#       __DATE__, __EPOCH__, __TIME__, __TIMESTAMP__, and __TZ__ are fixed
-#       at program start and do not change.  @date@ and @time@ do change, so:
-#           @date@T@time@@__TZ__@
-#       will generate an up-to-date timestamp.
+#       [***] __DATE__, __EPOCH__, __TIME__, __TIMESTAMP__, and __TZ__
+#             are fixed at program start and do not change.  @date@,
+#             @epoch@, @time@, and @tz@ do change, so:
+#                 @date@T@time@@__TZ__@
+#             will generate an up-to-date timestamp.  Of course time
+#             zones don't normally change; the point is that @__TZ__@
+#             prints "-0800" while @tz@ prints "PST".
 #
 # STREAMS & DIVERSIONS
 #       m2 attempts to follow m4 in its use of @divert and @undivert.

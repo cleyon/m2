@@ -138,7 +138,7 @@ BEGIN { version = "3.3.4" }
 #       The following definitions are recognized:
 #
 #           @basename SYM@         Base (file) name of SYM
-#           @boolval SYM@          Output "1" if SYM is true, else "0"
+#           @boolval [SYM]@        Output "1" if SYM is true, else "0"
 #           @date@           [***] Current date (format as __FMT__[date])
 #           @dirname SYM@          Directory name of SYM
 #           @epoch@          [***] Number of seconds since the Epoch, UTC
@@ -2537,24 +2537,34 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
         #  - In non-strict mode, you get a 'false' output if not defined.
         #  - If it's not a symbol, use its value as a boolean state.
         } else if (fn == "boolval") {
-            p = param[1 + _fencepost]
-            # Always accept your current representation of true or false
-            # to actually be true or false without further evaluation.
-            if (p == sym2_fetch("__FMT__", TRUE) ||
-                p == sym2_fetch("__FMT__", FALSE))
-                r = p r
-            else if (sym_valid_p(p)) {
-                # It's a valid name -- now see if it's defined or not.
-                # If not, check if we're in strict mode (error) or not.
-                if (sym_defined_p(p))
-                    r = sym2_fetch("__FMT__", sym_true_p(p)) r
-                else if (strictp())
-                    error("Name '" p "' not defined [boolval]:" $0)
+            if (nparam == 0) {
+                # In a bid to spread a bit more chaos in the universe,
+                # if you don't give an argument to boolval then you get
+                # True 50% of the time and False the other 50% (non-strict).
+                if (!strictp())
+                    r = sym2_fetch("__FMT__", rand() < 0.50) r
                 else
-                    r = sym2_fetch("__FMT__", FALSE) r
-            } else
-                # It's not a symbol, so use its value interpreted as a boolean
-                r = sym2_fetch("__FMT__", !!p) r
+                    error("Bad parameters in '" m "':" $0) # Boring!
+            } else {
+                p = param[1 + _fencepost]
+                # Always accept your current representation of true or false
+                # to actually be true or false without further evaluation.
+                if (p == sym2_fetch("__FMT__", TRUE) ||
+                    p == sym2_fetch("__FMT__", FALSE))
+                    r = p r
+                else if (sym_valid_p(p)) {
+                    # It's a valid name -- now see if it's defined or not.
+                    # If not, check if we're in strict mode (error) or not.
+                    if (sym_defined_p(p))
+                        r = sym2_fetch("__FMT__", sym_true_p(p)) r
+                    else if (strictp())
+                        error("Name '" p "' not defined [boolval]:" $0)
+                    else
+                        r = sym2_fetch("__FMT__", FALSE) r
+                } else
+                    # It's not a symbol, so use its value interpreted as a boolean
+                    r = sym2_fetch("__FMT__", !!p) r
+            }
 
         # date  : Current date as YYYY-MM-DD
         # epoch : Number of seconds since Epoch
@@ -3144,10 +3154,10 @@ BEGIN {
                     error("Name '" name "' not valid:" arg, "ARGV", i)
                 if (sym_protected_p(name))
                     error("Symbol '" name "' protected:" arg, "ARGV", i)
-                if (name == "strict")
-                    name = "__STRICT__"
-                else if (name == "debug") {
-                    name = "__DEBUG__"
+                if (name == "strict") {
+                    name = "__STRICT__"; val = 0 + val
+                } else if (name == "debug") {
+                    name = "__DEBUG__";  val = 0 + val
                 }
                 sym_store(name, val)
 

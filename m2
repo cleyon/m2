@@ -166,8 +166,8 @@ BEGIN { version = "3.3.4" }
 #       example values, defaults, or types are shown:
 #
 #           __DATE__         [***] m2 run start date as YYYYMMDD (eg 19450716)
+#           __DBG__[<id>]          Debugging levels for m2 systems (integer)
 #           __DEBUG__         [**] Debugging enabled? (boolean, def FALSE)
-#           __DEBUG__[<id>]   [**] Debugging levels for m2 systems (integer)
 #           __DIVNUM__             Current stream number (0; 0-9 valid)
 #           __EPOCH__        [***] Seconds since Epoch at m2 run start time
 #           __EXPR__               Value from most recent @expr ...@ result
@@ -517,13 +517,19 @@ BEGIN { version = "3.3.4" }
 #*****************************************************************************
 
 BEGIN {
-    EX_OK             =  0      # Exit codes
-    EX_M2_ERROR       =  1
-    EX_USER_REQUEST   =  2
-    EX_USAGE          = 64
-    EX_NOINPUT        = 66
+    TRUE                =  1
+    FALSE               =  0
 
-    exit_code         = EX_OK
+    # Exit codes
+    EX_OK               =  0
+    EX_M2_ERROR         =  1
+    EX_USER_REQUEST     =  2
+    EX_USAGE            = 64
+    EX_NOINPUT          = 66
+
+    # Early initialize some variables.  This makes `gawk --lint' happy.
+    exit_code           = EX_OK
+    symtab["__DEBUG__"] = FALSE
 }
 
 
@@ -1115,8 +1121,8 @@ function dbg(key, lev)
     if (lev == "") lev = 1
     if (key == "") key = "m2"
     if (lev <= 0)  return TRUE
-    return (debugging_enabled_p() && sym2_defined_p("__DEBUG__", key)) \
-        ? sym2_fetch("__DEBUG__", key) >= lev \
+    return (debugging_enabled_p() && sym2_defined_p("__DBG__", key)) \
+        ? sym2_fetch("__DBG__", key) >= lev \
         : FALSE
 }
 
@@ -1126,7 +1132,7 @@ function dbg_set_level(key, lev)
         lev = 1
     if (key == "")
         key = "m2"
-    sym2_store("__DEBUG__", key, lev)
+    sym2_store("__DBG__", key, lev)
 }
 
 function dbg_print(key, lev, text)
@@ -2979,7 +2985,6 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i)
 {
     DISCARD_STREAMS   = 0
     E                 = exp(1)
-    FALSE             = 0
     IDX_NOT_FOUND     = 0
     LOG10             = log(10)
     MAX_PARAM         = 20
@@ -2992,7 +2997,6 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i)
     SEQ_DEFAULT_INIT  = 0
     SHIP_OUT_STREAMS  = 1
     TAU               = 2 * PI
-    TRUE              = 1
     TYPE_ANY          = "*"
     TYPE_CMD          = "C"     # cmdtab
     TYPE_FUNCTION     = "F"     # functab
@@ -3017,7 +3021,6 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i)
     close(get_date_cmd)
 
     sym_store("__DATE__",               d[1] d[2] d[3])
-    sym_store("__DEBUG__",              FALSE)
     sym_store("__DIVNUM__",             0)
     sym_store("__EPOCH__",              d[8])
     sym_store("__EXPR__",               0)

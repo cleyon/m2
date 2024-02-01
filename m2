@@ -317,12 +317,15 @@ BEGIN { version = "3.3.4" }
 #           atan2(y,x)             Arctangent of y/x, -pi <= atan2 <= pi
 #           ceil(x)                Ceiling of x, small integer >= x
 #           cos(x)                 Cosine of x, in radians
+#           defined(sym)           1 if sym is defined, else 0
 #           deg(x)                 Convert radians to degrees
 #           exp(x)                 Exponential (anti-logarithm) of x, e^x
 #           floor(x)               Floor of x, largest integer <= x
 #           int(x)                 Integer part of x
 #           log(x)                 Natural logarithm of x, base e
 #           log10(x)               Common logarithm of x, base 10
+#           max(a,b)               The larger of a and b
+#           min(a,b)               The smaller of a and b
 #           rad(x)                 Convert degrees to radians
 #           rand()                 Random float, 0 <= rand < 1
 #           randint(x)             Random integer, 1 <= randint <= x
@@ -568,8 +571,8 @@ function flush_stdout()
 {
     fflush("/dev/stdout")
     # Reputed to be more portable:
-    # system("")
-    # Also read that fflush("") will flush ALL files and pipes.
+    #    system("")
+    # Also, fflush("") will flush ALL files and pipes.
 }
 
 
@@ -577,7 +580,7 @@ function print_stderr(text)
 {
     print text > "/dev/stderr"
     # Definitely more portable:
-    # print text | "cat 1>&2"
+    #    print text | "cat 1>&2"
 }
 
 
@@ -1480,14 +1483,18 @@ function _c3_factor3(    e, fun, e2)
         if (fun ~ /^(ceil|cos|deg|exp|floor|int|log(10)?|rad|randint|round|sin|sqrt|srand|tan)?\(/) {
             e = _c3_expr()
             e = _c3_calculate_function(fun, e)
-        } else if (fun ~ /^atan2\(/) {
+        } else if (fun ~ /^defined\(/) {
+            e2 = substr(e, 9, length(e)-9)
+            #print_stderr(sprintf("defined(): e2='%s'", e2))
+            _f += length(e2)
+            e = sym_defined_p(e2) ? 1 : 0
+        } else if (fun ~ /^(atan2|max|min)\(/) {
             e = _c3_expr()
-            if (substr(_S_expr, _f, 1) != ",") {
+            if (substr(_S_expr, _f, 1) != ",")
                 error(sprintf("Missing ',' at '%s'", substr(_S_expr, _f)))
-            }
             _f++
             e2 = _c3_expr()
-            e = atan2(e, e2)
+            e = _c3_calculate_function2(fun, e, e2)
         } else
             error(sprintf("Unknown function '%s'", fun))
 
@@ -1535,6 +1542,15 @@ function _c3_calculate_function(fun, e,    c)
     if (fun == "tan(")     { c = cos(e)
                              if (c == 0) error("Division by zero:" $0)
                              return sin(e) / c }
+    error(sprintf("Unknown function '%s'", fun))
+}
+
+# Functions of two variables
+function _c3_calculate_function2(fun, e, e2)
+{
+    if (fun == "atan2(")   return atan2(e, e2)
+    if (fun == "max(")     return e > e2 ? e : e2
+    if (fun == "min(")     return e < e2 ? e : e2
     error(sprintf("Unknown function '%s'", fun))
 }
 

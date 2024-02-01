@@ -139,6 +139,7 @@ BEGIN { version = "3.3.4" }
 #
 #           @basename SYM@         Base (file) name of SYM
 #           @boolval [SYM]@        Output "1" if SYM is true, else "0"
+#           @chr SYM@              Output character with ASCII code SYM
 #           @date@           [***] Current date (format as __FMT__[date])
 #           @dirname SYM@          Directory name of SYM
 #           @epoch@          [***] Number of seconds since the Epoch, UTC
@@ -2565,6 +2566,23 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
                     # It's not a symbol, so use its value interpreted as a boolean
                     r = sym2_fetch("__FMT__", !!p) r
             }
+
+        # chr SYM : Output character with ASCII code SYM
+        #   @chr 65@ => A
+        } else if (fn == "chr") {
+            if (nparam != 1) error("Bad parameters in '" m "':" $0)
+            p = param[1 + _fencepost]
+            if (sym_valid_p(p)) {
+                if (sym_defined_p(p)) {
+                    x = sprintf("%c", sym_fetch(p) + 0)
+                    r = x r
+                } else if (strictp())
+                    error("Name '" p "' not defined [chr]:" $0)
+            } else if (integerp(p)) {
+                x = sprintf("%c", p+0)
+                r = x r
+            } else
+                error("Bad parameters in '" m "':" $0)
 
         # date  : Current date as YYYY-MM-DD
         # epoch : Number of seconds since Epoch

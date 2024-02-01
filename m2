@@ -273,7 +273,7 @@ BEGIN { version = "3.3.4" }
 #           ID create              Create a new sequence named ID
 #           ID delete              Destroy sequence named ID
 #           ID format PRINTFSTR    Format string used to print value (%d)
-#           ID inc    N            Set increment to N (1)
+#           ID incr   N            Set increment to N (1)
 #           ID init   N            Set initial value to N (0)
 #           ID next                Increment value (no output)
 #           ID prev                Decrement value (no output)
@@ -991,8 +991,8 @@ function seq_definition_pp(id,    buf)
         buf = buf "@sequence " id "\tset " seqtab[id, "value"] "\n"
     if (seqtab[id, "init"] != SEQ_DEFAULT_INIT)
         buf = buf "@sequence " id "\tinit " seqtab[id, "init"] "\n"
-    if (seqtab[id, "inc"] != SEQ_DEFAULT_INC)
-        buf = buf "@sequence " id "\tinc " seqtab[id, "inc"] "\n"
+    if (seqtab[id, "incr"] != SEQ_DEFAULT_INCR)
+        buf = buf "@sequence " id "\tincr " seqtab[id, "incr"] "\n"
     if (seqtab[id, "fmt"] != sym2_fetch("__FMT__", "seq"))
         buf = buf "@sequence " id "\tformat " seqtab[id, "fmt"] "\n"
     return buf
@@ -1002,7 +1002,7 @@ function seq_definition_pp(id,    buf)
 function seq_destroy(id)
 {
     delete seqtab[id, "defined"]
-    delete seqtab[id, "inc"]
+    delete seqtab[id, "incr"]
     delete seqtab[id, "init"]
     delete seqtab[id, "fmt"]
     delete seqtab[id, "value"]
@@ -2051,16 +2051,16 @@ function m2_sequence(    id, action, arg, saveline)
         if (action == "create") {
             assert_seq_okay_to_define(id)
             seqtab[id, "defined"] = TRUE
-            seqtab[id, "inc"]     = SEQ_DEFAULT_INC
+            seqtab[id, "incr"]    = SEQ_DEFAULT_INCR
             seqtab[id, "init"]    = SEQ_DEFAULT_INIT
             seqtab[id, "fmt"]     = sym2_fetch("__FMT__", "seq")
             seqtab[id, "value"]   = SEQ_DEFAULT_INIT
         } else if (action == "delete") {
             seq_destroy(id)
         } else if (action == "next") { # Increment counter only, no output
-            seqtab[id, "value"] += seqtab[id, "inc"]
+            seqtab[id, "value"] += seqtab[id, "incr"]
         } else if (action == "prev") { # Decrement counter only, no output
-            seqtab[id, "value"] -= seqtab[id, "inc"]
+            seqtab[id, "value"] -= seqtab[id, "incr"]
         } else if (action == "restart") { # Set current counter value to initial value
             seqtab[id, "value"] = seqtab[id, "init"]
         } else
@@ -2078,13 +2078,13 @@ function m2_sequence(    id, action, arg, saveline)
             # m2 can't police your format string and a bad value might
             # cause a crash if printf() fails.
             seqtab[id, "fmt"] = arg
-        } else if (action == "inc") {
-            # inc N :: Set increment value to N.
+        } else if (action == "incr") {
+            # incr N :: Set increment value to N.
             if (! integerp(arg))
                 error(sprintf("Value '%s' must be numeric:%s", arg, saveline))
             if (arg+0 == 0)
-                error(sprintf("Bad parameters in 'inc':%s", saveline))
-            seqtab[id, "inc"] = int(arg)
+                error(sprintf("Bad parameters in 'incr':%s", saveline))
+            seqtab[id, "incr"] = int(arg)
         } else if (action == "init") {
             # init N :: Set initial  value to N.  If current
             # value == old init value (i.e., never been used), then set
@@ -2822,7 +2822,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
                     } else if (subcmd == "nextval") {
                         # - nextval :: Increment and return new value of
                         # counter.  No prefix/suffix.
-                        seqtab[fn, "value"] += seqtab[fn, "inc"]
+                        seqtab[fn, "value"] += seqtab[fn, "incr"]
                         r = seqtab[fn, "value"] r
                     } else
                         error("Bad parameters in '" m "':" $0)
@@ -3052,7 +3052,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i)
     READLINE_ERROR    = -1
     READLINE_EOF      = 0
     READLINE_OK       = 1
-    SEQ_DEFAULT_INC   = 1
+    SEQ_DEFAULT_INCR  = 1
     SEQ_DEFAULT_INIT  = 0
     SHIP_OUT_STREAMS  = 1
     TAU               = 2 * PI

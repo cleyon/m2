@@ -177,6 +177,7 @@ BEGIN { version = "3.3.4" }
 #           __FMT__[0]        [**] Text output when @boolval@ is false (0)
 #           __FMT__[1]        [**] Text output when @boolval@ is true (1)
 #           __FMT__[date]     [**] Date format for @date@ (%Y-%m-%d)
+#           __FMT__[number]   [**] Format for printing numbers, sync w/ CONVFMT
 #           __FMT__[seq]      [**] Format for printing sequence values (%d)
 #           __FMT__[time]     [**] Time format for @time@ (%H:%M:%S)
 #           __FMT__[tz]       [**] Time format for @tz@   (%Z)
@@ -568,6 +569,7 @@ function flush_stdout()
     fflush("/dev/stdout")
     # Reputed to be more portable:
     # system("")
+    # Also read that fflush("") will flush ALL files and pipes.
 }
 
 
@@ -815,6 +817,14 @@ function sym_root(sym,    s)
 function sym_store(sym, val)
 {
     dbg_print("m2", 5, ("sym_store(" sym "," val ")"))
+    if (sym == "__FMT__[number]") {
+        #warn("[0] Setting CONVFMT to " val)
+        CONVFMT = val
+    }
+    if (sym == build_subsep("__FMT__", "number")) {
+        #warn("[1] Setting CONVFMT to " val)
+        CONVFMT = val
+    }
     # __DEBUG__ and __STRICT__ can only store boolean values
     if (sym == "__DEBUG__" || sym == "__STRICT__")
         val = !!val
@@ -826,6 +836,11 @@ function sym_store(sym, val)
 function sym2_store(arr, key, val)
 {
     dbg_print("m2", 5, ("sym2_store(" arr "," key "," val ")"))
+    # Maintain equivalence:  __FMT__[number] === CONVFMT
+    if (arr == "__FMT__" && key == "number") {
+        #warn("[2] Setting CONVFMT to " val)
+        CONVFMT = val
+    }
     return symtab[arr, key] = val
 }
 
@@ -3058,6 +3073,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i)
     sym2_store("__FMT__", FALSE,        "0")
     sym2_store("__FMT__", "date",       "%Y-%m-%d")
     sym2_store("__FMT__", "epoch",      "%s")
+    sym2_store("__FMT__", "number",     CONVFMT)
     sym2_store("__FMT__", "seq",        "%d")
     sym2_store("__FMT__", "time",       "%H:%M:%S")
     sym2_store("__FMT__", "tz",         "%Z")
@@ -3092,7 +3108,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i)
         unprotected_syms[array[elem]] = TRUE
 
     # Functions cannot be used as symbol or sequence names.
-    split("basename boolval date dirname epoch expr getenv lc left len" \
+    split("basename boolval chr date dirname epoch expr getenv lc left len" \
           " mid rem right spaces time trim tz uc uuid", array, " ")
     for (elem in array)
         functab[array[elem]] = TRUE
@@ -3126,7 +3142,7 @@ function initialize_deferred_symbols(    gid, host, hostname, osname, pid, uid, 
     sym_store("__UID__",      uid)
     sym_store("__USER__",     user)
 
-    split("Darwin FreeBSD Linux OpenBSD SunOS", array, " ")
+    split("Darwin FreeBSD Linux NetBSD OpenBSD SunOS", array, " ")
     for (elem in array)
         if (osname == array[elem]) {
             sym_store("unix", TRUE)

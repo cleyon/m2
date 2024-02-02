@@ -327,6 +327,7 @@ BEGIN { version = "3.3.4" }
 #           log10(x)               Common logarithm of x, base 10
 #           max(a,b)               The larger of a and b
 #           min(a,b)               The smaller of a and b
+#           pow(x,y)               Raise x to the y power, x^y
 #           rad(x)                 Convert degrees to radians
 #           rand()                 Random float, 0 <= rand < 1
 #           randint(x)             Random integer, 1 <= randint <= x
@@ -1475,7 +1476,8 @@ function _c3_factor3(    e, fun, e2)
         fun = _c3_advance()
         if (fun ~ /^srand()/) return srand()
         if (fun ~ /^rand()/)  return rand()
-        error(sprintf("Unknown function '%s'", fun))
+        error(sprintf("Unknown function '%s':%s",
+                      (last(fun) == "(") ? chop(fun) : fun, $0))
     }
 
     # (expr) | function(expr) | function(expr,expr)
@@ -1489,7 +1491,7 @@ function _c3_factor3(    e, fun, e2)
             #print_stderr(sprintf("defined(): e2='%s'", e2))
             _f += length(e2)
             e = sym_defined_p(e2) ? 1 : 0
-        } else if (fun ~ /^(atan2|max|min)\(/) {
+        } else if (fun ~ /^(atan2|max|min|pow)\(/) {
             e = _c3_expr()
             if (substr(_S_expr, _f, 1) != ",")
                 error(sprintf("Missing ',' at '%s'", substr(_S_expr, _f)))
@@ -1497,7 +1499,8 @@ function _c3_factor3(    e, fun, e2)
             e2 = _c3_expr()
             e = _c3_calculate_function2(fun, e, e2)
         } else
-            error(sprintf("Unknown function '%s'", fun))
+            error(sprintf("Unknown function '%s':%s",
+                          (last(fun) == "(") ? chop(fun) : fun, $0))
 
         if (substr(_S_expr, _f++, 1) != ")")
             error(sprintf("Missing ')' at '%s'", substr(_S_expr, _f)))
@@ -1544,7 +1547,8 @@ function _c3_calculate_function(fun, e,    c)
     if (fun == "tan(")     { c = cos(e)
                              if (c == 0) error("Division by zero:" $0)
                              return sin(e) / c }
-    error(sprintf("Unknown function '%s'", fun))
+    error(sprintf("Unknown function '%s':%s",
+                  (last(fun) == "(") ? chop(fun) : fun, $0))
 }
 
 # Functions of two variables
@@ -1553,7 +1557,9 @@ function _c3_calculate_function2(fun, e, e2)
     if (fun == "atan2(")   return atan2(e, e2)
     if (fun == "max(")     return e > e2 ? e : e2
     if (fun == "min(")     return e < e2 ? e : e2
-    error(sprintf("Unknown function '%s'", fun))
+    if (fun == "pow(")     return e ^ e2
+    error(sprintf("Unknown function '%s':%s",
+                  (last(fun) == "(") ? chop(fun) : fun, $0))
 }
 
 function _c3_advance(    tmp)
@@ -2608,7 +2614,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
                     r = x r
                 } else if (strictp())
                     error("Name '" p "' not defined [chr]:" $0)
-            } else if (integerp(p)) {
+            } else if (integerp(p) && p >= 0 && p <= 255) {
                 x = sprintf("%c", p+0)
                 r = x r
             } else

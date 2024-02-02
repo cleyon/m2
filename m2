@@ -314,8 +314,9 @@ BEGIN { version = "3.3.4" }
 #
 #       @expr@ supports the following functions:
 #
+#           abs(x)                 Absolute value of x, |x|
 #           atan2(y,x)             Arctangent of y/x, -pi <= atan2 <= pi
-#           ceil(x)                Ceiling of x, small integer >= x
+#           ceil(x)                Ceiling of x, smallest integer >= x
 #           cos(x)                 Cosine of x, in radians
 #           defined(sym)           1 if sym is defined, else 0
 #           deg(x)                 Convert radians to degrees
@@ -545,7 +546,7 @@ BEGIN {
 #
 #*****************************************************************************
 
-# file ":" line  ":" text
+#  "m2:"  FILE  ":"  LINE  ":"  TEXT
 function format_message(text, file, line,    s)
 {
     if (file == "")
@@ -559,9 +560,10 @@ function format_message(text, file, line,    s)
     # guard still necessary?  Ah, because this function might get invoked
     # very early in m2 execution, before the symbol table is populated.
     # The defaults are therefore empty, resulting in superfluous ":"s.
-    if (file) { s = s file ":" }
-    if (line) { s = s line ":" }
-    if (text) { s = s text     }
+              s = "m2"   ":"
+    if (file) s = s file ":"
+    if (line) s = s line ":"
+    if (text) s = s text
     return s
 }
 
@@ -820,17 +822,15 @@ function sym_root(sym,    s)
 function sym_store(sym, val)
 {
     dbg_print("m2", 5, ("sym_store(" sym "," val ")"))
+    # Maintain equivalence:  __FMT__[number] === CONVFMT
+    # This is invoked from dodef(), and from @define xxx ...)
     if (sym == "__FMT__[number]") {
-        #warn("[0] Setting CONVFMT to " val)
-        CONVFMT = val
-    }
-    if (sym == build_subsep("__FMT__", "number")) {
-        #warn("[1] Setting CONVFMT to " val)
+        dbg_print("m2", 3, "Setting CONVFMT to " val)
         CONVFMT = val
     }
     # __DEBUG__ and __STRICT__ can only store boolean values
     if (sym == "__DEBUG__" || sym == "__STRICT__")
-        val = !!val
+        val = !! (0 + val)
     if (sym == "__DEBUG__" && sym_fetch(sym) == FALSE && val == TRUE)
         initialize_debugging()
     return symtab[sym_internal_form(sym)] = val
@@ -840,8 +840,9 @@ function sym2_store(arr, key, val)
 {
     dbg_print("m2", 5, ("sym2_store(" arr "," key "," val ")"))
     # Maintain equivalence:  __FMT__[number] === CONVFMT
+    # This is invoked from initialize(), and from sym2_store())
     if (arr == "__FMT__" && key == "number") {
-        #warn("[2] Setting CONVFMT to " val)
+        dbg_print("m2", 5, "Setting CONVFMT to " val)
         CONVFMT = val
     }
     return symtab[arr, key] = val
@@ -1480,7 +1481,7 @@ function _c3_factor3(    e, fun, e2)
     # (expr) | function(expr) | function(expr,expr)
     if (match(e, /^([A-Za-z#_][A-Za-z#_0-9]+)?\(/)) {
         fun = _c3_advance()
-        if (fun ~ /^(ceil|cos|deg|exp|floor|int|log(10)?|rad|randint|round|sin|sqrt|srand|tan)?\(/) {
+        if (fun ~ /^(abs|ceil|cos|deg|exp|floor|int|log(10)?|rad|randint|round|sin|sqrt|srand|tan)?\(/) {
             e = _c3_expr()
             e = _c3_calculate_function(fun, e)
         } else if (fun ~ /^defined\(/) {
@@ -1523,6 +1524,7 @@ function _c3_factor3(    e, fun, e2)
 function _c3_calculate_function(fun, e,    c)
 {
     if (fun == "(")        return e
+    if (fun == "abs(")     return e < 0 ? -e : e
     if (fun == "ceil(")    { c = int(e)
                              return e > c ? c+1 : c }
     if (fun == "cos(")     return cos(e)
@@ -2569,17 +2571,14 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
         #  - In non-strict mode, you get a 'false' output if not defined.
         #  - If it's not a symbol, use its value as a boolean state.
         } else if (fn == "boolval") {
-            if (nparam == 0) {
+            if (nparam == 0)
                 # In a bid to spread a bit more chaos in the universe,
                 # if you don't give an argument to boolval then you get
-                # True 50% of the time and False the other 50% (non-strict).
-                if (!strictp())
-                    r = sym2_fetch("__FMT__", rand() < 0.50) r
-                else
-                    error("Bad parameters in '" m "':" $0) # Boring!
-            } else {
+                # True 50% of the time and False the other 50%.
+                r = sym2_fetch("__FMT__", rand() < 0.50) r
+            else {
                 p = param[1 + _fencepost]
-                # Always accept your current representation of true or false
+                # Always accept your current representation of True or False
                 # to actually be true or false without further evaluation.
                 if (p == sym2_fetch("__FMT__", TRUE) ||
                     p == sym2_fetch("__FMT__", FALSE))
@@ -2791,16 +2790,16 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
                     # Handle prefix xor postfix increment/decrement
                     if (pre_post == -1)    # prefix
                         if (inc_dec == -1) # decrement
-                            seqtab[fn, "value"] -= seqtab[fn, "inc"]
+                            seqtab[fn, "value"] -= seqtab[fn, "incr"]
                         else
-                            seqtab[fn, "value"] += seqtab[fn, "inc"]
+                            seqtab[fn, "value"] += seqtab[fn, "incr"]
                     # Get current value with desired formatting
                     r = sprintf(seqtab[fn, "fmt"], seqtab[fn, "value"]) r
                     if (pre_post == +1)    # postfix
                         if (inc_dec == -1)
-                            seqtab[fn, "value"] -= seqtab[fn, "inc"]
+                            seqtab[fn, "value"] -= seqtab[fn, "incr"]
                         else
-                            seqtab[fn, "value"] += seqtab[fn, "inc"]
+                            seqtab[fn, "value"] += seqtab[fn, "incr"]
                 }
             } else {
                 if (pre_post != 0)
@@ -2900,6 +2899,7 @@ function expand_braces(s,    atbr, cb, ltext, mtext, rtext)
 #     nc        The next character past c, at position i+1.
 #                   nc = substr(s, start+i+1, 1)
 #     cb        Position of inner "}" found via recursion.
+#     slen      Length of s.  s is not modified so its length is constant.
 #
 # RETURN VALUE
 #     If successfully found a closing brace, return its position within s.
@@ -2913,7 +2913,7 @@ function find_closing_brace(s, start,    i, c, nc, cb, slen)
     dbg_print("braces", 3, (">> find_closing_brace(s='" s "', start=" start))
 
     # Check that we have at least two characters, and start points to "@{"
-    slen = length(s)            # s is not modified so its length is constant
+    slen = length(s)
     if (slen - start + 1 < 2 || substr(s, start, 2) != "@{")
         return -1               # error
 
@@ -3055,7 +3055,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i)
     SEQ_DEFAULT_INCR  = 1
     SEQ_DEFAULT_INIT  = 0
     SHIP_OUT_STREAMS  = 1
-    TAU               = 2 * PI
+    TAU               = 8 * atan2(1, 1)         # 2 * PI
     TYPE_ANY          = "*"
     TYPE_CMD          = "C"     # cmdtab
     TYPE_FUNCTION     = "F"     # functab
@@ -3204,11 +3204,10 @@ BEGIN {
                     error("Name '" name "' not valid:" arg, "ARGV", i)
                 if (sym_protected_p(name))
                     error("Symbol '" name "' protected:" arg, "ARGV", i)
-                if (name == "strict") {
-                    name = "__STRICT__"; val = 0 + val
-                } else if (name == "debug") {
-                    name = "__DEBUG__";  val = 0 + val
-                }
+                if (name == "strict")
+                    name = "__STRICT__"
+                else if (name == "debug")
+                    name = "__DEBUG__"
                 sym_store(name, val)
 
             # Otherwise load a file

@@ -58,7 +58,6 @@ BEGIN { version = "3.4.0" }
 #           @dump(all) [FILE]      Output symbol names & definitions to FILE (stderr)
 #           @error [TEXT]          Send TEXT to standard error; exit code 2
 #           @exit [CODE]           Immediately stop parsing; exit CODE (default 0)
-#           @flush                 Flush standard output
 #           @if NAME               Include subsequent text if NAME is true (!= 0)
 #           @if NAME <OP> TEXT     Test if NAME compares to TEXT (names or values)
 #           @if(_not)_defined NAME Test if NAME is defined
@@ -1889,15 +1888,6 @@ function m2_exit()
 }
 
 
-# @flush
-function m2_flush()
-{
-    if (! currently_active_p())
-        return
-    flush_stdout()
-}
-
-
 # @if[_not][_{defined|env|exists|in}], @if[n]def, @unless
 function m2_if(    sym, cond, op, val2, val4)
 {
@@ -2500,7 +2490,6 @@ function process_line(read_literally,    sp, lbrace, cut, newstring, user_cmd)
     else if (/^@endlong(def)?([ \t]|$)/)  { m2_endlongdef() }
     else if (/^@err(or|print)([ \t]|$)/)  { m2_error() }
     else if (/^@(m2)?exit([ \t]|$)/)      { m2_exit() }
-    else if (/^@flush([ \t]|$)/)          { m2_flush() }
     else if (/^@if(_not)?(_(defined|env|exists|in))?([ \t]|$)/)
                                           { m2_if() }
     else if (/^@ifn?def([ \t]|$)/)        { m2_if() }

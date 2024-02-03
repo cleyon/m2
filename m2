@@ -81,6 +81,7 @@ BEGIN { version = "3.4.0" }
 #           @nextfile              Ignore remainder of file, continue processing
 #           @paste FILE            Insert FILE contents literally, no macros
 #           @read NAME FILE        Read FILE contents to define NAME
+#           @readarray ARR FILE    Read each line from FILE into ARR[]
 #           @sequence ID ACT [N]   Create and manage sequences
 #           @shell DELIM [PROG]    Evaluate input until DELIM, send raw data to PROG
 #                                    Output from prog is captured in output stream
@@ -2176,6 +2177,35 @@ function m2_read(    sym, filename, line, val, getstat)
 }
 
 
+# @readarray            ARR FILE
+function m2_readarray(    arr, filename, line, getstat, line_cnt)
+{
+    if (! currently_active_p())
+        return
+    #dbg_print("read", 7, ("@readarray: $0='" $0 "'"))
+    if (NF < 3)
+        error("Bad parameters:" $0)
+    arr = $2
+    assert_sym_okay_to_define(arr)
+
+    $1 = $2 = ""
+    sub("^[ \t]*", "")
+    filename = rm_quotes(dosubs($0))
+    line_cnt = 0
+
+    while (TRUE) {
+        getstat = getline line < filename
+        if (getstat < 0)        # Error
+            warn("Error reading file '" filename "' [read]")
+        if (getstat <= 0)       # End of file
+            break
+        sym2_store(arr, ++line_cnt, line)
+    }
+    close(filename)
+    sym2_store(arr, 0, line_cnt)
+}
+
+
 # @sequence             ID SUBCMD [ARG...]
 function m2_sequence(    id, action, arg, saveline)
 {
@@ -2506,6 +2536,7 @@ function process_line(read_literally,    sp, lbrace, cut, newstring, user_cmd)
     else if (/^@otherwise([ \t]|$)/)      { m2_otherwise() }
     else if (/^@s?paste([ \t]|$)/)        { m2_include() }
     else if (/^@read([ \t]|$)/)           { m2_read() }
+    else if (/^@readarray([ \t]|$)/)      { m2_readarray() }
     else if (/^@sequence([ \t]|$)/)       { m2_sequence() }
     else if (/^@shell([ \t]|$)/)          { m2_shell() }
     else if (/^@stderr([ \t]|$)/)         { m2_error() }

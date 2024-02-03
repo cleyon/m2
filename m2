@@ -144,11 +144,11 @@ BEGIN { version = "3.4.0" }
 #           @basename SYM@         Base (file) name of SYM
 #           @boolval [SYM]@        Output "1" if SYM is true, else "0"
 #           @chr SYM@              Output character with ASCII code SYM
-#           @date@           [***] Current date (format as __FMT__[date])
+#           @date@             [1] Current date (format as __FMT__[date])
 #           @dirname SYM@          Directory name of SYM
-#           @epoch@          [***] Number of seconds since the Epoch, UTC
+#           @epoch@            [1] Number of seconds since the Epoch, UTC
 #           @expr MATH@            Evaluate mathematical expression
-#           @getenv VAR@       [*] Get environment variable
+#           @getenv VAR@       [2] Get environment variable
 #           @lc SYM@               Lower case
 #           @left SYM [N]@         Substring of SYM from 1 to Nth character
 #           @len SYM@              Number of characters in SYM's value
@@ -158,9 +158,9 @@ BEGIN { version = "3.4.0" }
 #           @right SYM [N]@        Substring of SYM from N to last character
 #           @rtrim SYM@            Remove trailing whitespace
 #           @spaces [N]@           Output N space characters  (default 1)
-#           @time@           [***] Current time (format as __FMT__[time])
-#           @trim SYM@             Remove leading and trailing whitespace
-#           @tz@             [***] Time zone name (format as __FMT__[tz])
+#           @time@             [1] Current time (format as __FMT__[time])
+#           @trim SYM@             Remove both leading and trailing whitespace
+#           @tz@               [1] Time zone name (format as __FMT__[tz])
 #           @uc SYM@               Upper case
 #           @uuid@                 Something that resembles a UUID:
 #                                    C3525388-E400-43A7-BC95-9DF5FA3C4A52
@@ -172,25 +172,25 @@ BEGIN { version = "3.4.0" }
 #       cannot be modified by the user.  The following are pre-defined;
 #       example values, defaults, or types are shown:
 #
-#           __DATE__         [***] m2 run start date as YYYYMMDD (eg 19450716)
+#           __DATE__           [1] m2 run start date as YYYYMMDD (eg 19450716)
 #           __DBG__[<id>]          Levels for internal debugging systems (integer)
-#           __DEBUG__         [**] Debugging enabled? (boolean, def FALSE)
+#           __DEBUG__          [3] Debugging enabled? (boolean, def FALSE)
 #           __DIVNUM__             Current stream number (0; 0-9 valid)
-#           __EPOCH__        [***] Seconds since Epoch at m2 run start time
+#           __EPOCH__          [1] Seconds since Epoch at m2 run start time
 #           __EXPR__               Value from most recent @expr ...@ result
 #           __FILE__               Current file name
 #           __FILE_UUID__          UUID unique to this file
-#           __FMT__[0]        [**] Text output when @boolval@ is false (0)
-#           __FMT__[1]        [**] Text output when @boolval@ is true (1)
-#           __FMT__[date]     [**] Date format for @date@ (%Y-%m-%d)
-#           __FMT__[number]   [**] Format for printing numbers, sync w/ CONVFMT
-#           __FMT__[seq]      [**] Format for printing sequence values (%d)
-#           __FMT__[time]     [**] Time format for @time@ (%H:%M:%S)
-#           __FMT__[tz]       [**] Time format for @tz@   (%Z)
+#           __FMT__[0]         [3] Text output when @boolval@ is false (0)
+#           __FMT__[1]         [3] Text output when @boolval@ is true (1)
+#           __FMT__[date]      [3] Date format for @date@ (%Y-%m-%d)
+#           __FMT__[number]    [3] Format for printing numbers, sync w/ CONVFMT
+#           __FMT__[seq]       [3] Format for printing sequence values (%d)
+#           __FMT__[time]      [3] Time format for @time@ (%H:%M:%S)
+#           __FMT__[tz]        [3] Time format for @tz@   (%Z)
 #           __GID__                Group id (effective gid)
 #           __HOST__               Short host name (eg myhost)
 #           __HOSTNAME__           FQDN host name (eg myhost.example.com)
-#           __INPUT__         [**] The data read by @input
+#           __INPUT__          [3] The data read by @input
 #           __LINE__               Current line number inside __FILE__
 #           __M2_UUID__            UUID unique to this m2 run
 #           __M2_VERSION__         m2 version
@@ -199,27 +199,27 @@ BEGIN { version = "3.4.0" }
 #           __OSNAME__             Operating system name
 #           __PID__                m2 process id
 #           __STATUS__             Exit status of most recent @shell command
-#           __STRICT__        [**] Strict mode? (boolean, def TRUE)
-#           __TIME__         [***] m2 run start time as HHMMSS (eg 053000)
-#           __TIMESTAMP__    [***] ISO 8601 timestamp (1945-07-16T05:30:00-0600)
-#           __TMPDIR__        [**] Location for temporary files (def /tmp)
-#           __TZ__           [***] Time zone numeric offset from UTC (-0400)
+#           __STRICT__         [3] Strict mode? (boolean, def TRUE)
+#           __TIME__           [1] m2 run start time as HHMMSS (eg 053000)
+#           __TIMESTAMP__      [1] ISO 8601 timestamp (1945-07-16T05:30:00-0600)
+#           __TMPDIR__         [3] Location for temporary files (def /tmp)
+#           __TZ__             [1] Time zone numeric offset from UTC (-0400)
 #           __UID__                User id (effective uid)
 #           __USER__               User name
 #
-#       [*] @getenv VAR@ will be replaced by the value of the environment
+#       [1] __DATE__, __EPOCH__, __TIME__, __TIMESTAMP__, and __TZ__ are
+#           fixed at program start and do not change.  @date@, @epoch@,
+#           @time@, and @tz@ do change, so:
+#               @date@T@time@@__TZ__@
+#           will generate an up-to-date timestamp.  Of course, time zones
+#           don't normally change; the point is that @__TZ__@ prints
+#           "-0800" while @tz@ prints "PST".
+#
+#       [2] @getenv VAR@ will be replaced by the value of the environment
 #           variable VAR.  An error is thrown if VAR is not defined.  To
 #           ignore error and continue with empty string, disable __STRICT__.
 #
-#       [**] denotes an "unprotected" system symbol.
-#
-#       [***] __DATE__, __EPOCH__, __TIME__, __TIMESTAMP__, and __TZ__
-#             are fixed at program start and do not change.  @date@,
-#             @epoch@, @time@, and @tz@ do change, so:
-#                 @date@T@time@@__TZ__@
-#             will generate an up-to-date timestamp.  Of course time
-#             zones don't normally change; the point is that @__TZ__@
-#             prints "-0800" while @tz@ prints "PST".
+#       [3] Denotes an "unprotected" system symbol.
 #
 # STREAMS & DIVERSIONS
 #       m2 attempts to follow m4 in its use of @divert and @undivert.
@@ -1679,20 +1679,19 @@ function m2_case(    save_line, save_lineno, target, branch, next_branch,
     # catch-all to act as a default case.  This is accomplished by
     # setting its label to be the target we seek.
     casetab[casenum, OTHERWISE, "label"] = target
-    i = 0
+    i = 0                       # remember if we've hit a match or not
     branch = max_branch
     while (branch >= 0) {
         dbg_print("case", 4, sprintf("casetab[%d,%d,label]='%s' =?= target='%s'",
                                      casenum, branch,
                                      casetab[casenum, branch, "label"], target))
-        if (casetab[casenum, branch, "label"] == target) {
-            if (i == 0) {
+        if (i == 0)             # not found (yet)
+            if (casetab[casenum, branch, "label"] == target) {
                 i = 1
-                text = casetab[casenum, branch, "definition"]
-                if (! emptyp(text))
+                if (! emptyp(casetab[casenum, branch, "definition"]))
                     docasebranch(casenum, branch, casetab[casenum, branch, "line"])
             }
-        }
+        # Clean up the case table entries for this branch
         delete casetab[casenum, branch, "label"]
         delete casetab[casenum, branch, "line"]
         delete casetab[casenum, branch, "definition"]

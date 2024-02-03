@@ -550,7 +550,8 @@ BEGIN {
     # Early initialize some variables.  This makes `gawk --lint' happy.
     exit_code           = EX_OK
     symtab["__DEBUG__"] = FALSE
-    split("braces case cmd divert dosubs expr m2 read symbol", dbg_key_array, " ")
+    split("braces case cmd divert dosubs dump expr m2 read symbol",
+          dbg_key_array, " ")
     for (dbg_elem in dbg_key_array)
         dbg_keys[dbg_key_array[dbg_elem]] = TRUE
 }
@@ -1154,9 +1155,9 @@ function debugging_enabled_p()
 
 function dbg(key, lev)
 {
-    if (! debugging_enabled_p()) return FALSE
     if (key == "")               key = "m2"
     if (! (key in dbg_keys))     error("Name '" key "' not available")
+    if (! debugging_enabled_p()) return FALSE
     if (lev == "")               lev = 1
     if (lev <= 0)                return TRUE
     if (lev > MAX_DBG_LEVEL)     lev = MAX_DBG_LEVEL
@@ -1333,15 +1334,22 @@ function swap(A, i, j,    t)
 }
 
 # Special comparison to sort leading underscores after all other values.
-function _less_than(s1, s2,    s1_un, s2_un)
+function _less_than(s1, s2,    s1f, s2f)
 {
-    # Determine if s1 and s2 have a leading underscore
-    s1_un = first(s1) == "_"
-    s2_un = first(s2) == "_"
+    dbg_print("dump", 7, sprintf("_less_than: s1='%s', s='%s'", s1, s2))
+    s1f = first(s1)
+    s2f = first(s2)
+    if (s1f == s2f)
+        return _less_than(substr(s1,2), substr(s2,2))
 
-    if      (  s1_un &&   s2_un) return _less_than(substr(s1,2), substr(s2,2))
-    else if (  s1_un && ! s2_un) return FALSE
-    else if (! s1_un &&   s2_un) return TRUE
+    # If we're looking at numbers, grab them and do a numeric comparison
+    # -- hopefully they're different.
+    if (s1f >= "0" && s1f <= "9" && s1f >= "0" && s1f <= "9")
+        return int(s1) < int(s2)
+
+    # Determine if s1 and s2 have a leading underscore
+    if      (s1f == "_" && s2f != "_") return FALSE
+    else if (s1f != "_" && s2f == "_") return TRUE
     else if (toupper(s1) != toupper(s2)) return toupper(s1) < toupper(s2)
     else return s1 < s2
 }

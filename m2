@@ -384,7 +384,7 @@ BEGIN { version = "3.4.0" }
 #           Environment variable 'XXX' not defined
 #               - Attempt to getenv an undefined environment variable
 #                 while __STRICT__ is in effect.
-#           Error reading 'FILE'
+#           Error reading file 'FILE'
 #               - Read error on file.
 #           Expected number or '(' at 'XXX'
 #               - @expr ...@ received unexpected input or bad syntax.
@@ -2061,7 +2061,7 @@ function m2_input(    getstat, input, sym)
     assert_sym_okay_to_define(sym)
     getstat = getline input < "/dev/tty"
     if (getstat < 0) {
-        warn("Error reading '/dev/tty' [input]:" $0)
+        warn("Error reading file '/dev/tty' [input]:" $0)
         input = ""
     }
     sym_store(sym, input)
@@ -2166,7 +2166,7 @@ function m2_read(    sym, filename, line, val, getstat)
     while (TRUE) {
         getstat = getline line < filename
         if (getstat < 0)        # Error
-            warn("Error reading '" filename "' [read]")
+            warn("Error reading file '" filename "' [read]")
         if (getstat <= 0)       # End of file
             break
         val = val line "\n"     # Read a line
@@ -2292,7 +2292,7 @@ function m2_shell(    delim, save_line, save_lineno, input_text, input_file,
     while (TRUE) {
         getstat = getline line < output_file
         if (getstat < 0)        # Error
-            warn("Error reading '" output_file "' [shell]")
+            warn("Error reading file '" output_file "' [shell]")
         if (getstat <= 0)       # End of file
             break
         output_text = output_text line "\n" # Read a line
@@ -2443,7 +2443,7 @@ function readline(    getstat, i, status)
         getstat = getline < sym_fetch("__FILE__")
         if (getstat < 0) {       # Error
             status = READLINE_ERROR
-            warn("Error reading '" sym_fetch("__FILE__") "' [readline]")
+            warn("Error reading file '" sym_fetch("__FILE__") "' [readline]")
         } else if (getstat == 0) # End of file
             status = READLINE_EOF
         else {                   # Read a line

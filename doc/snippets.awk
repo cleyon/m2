@@ -49,6 +49,11 @@ function floor(x,    t)
     return x < t ? t-1 : t
 }
 
+function sign(x)
+{
+    return (x > 0) - (x < 0)
+}
+
 function min(m, n)
 {
     return m < n ? m : n
@@ -59,6 +64,17 @@ function max(m, n)
     return m > n ? m : n
 }
 
+function asin(x)
+{
+    # untested
+    return atan2(x, (1-x^2)^0.5)
+}
+
+function acos(x)
+{
+    # untested
+    return atan2((1-x^2)^0.5, x)
+}
 
 
 # TRUE  if name is defined in at least one of the components (logical OR, not sure which)

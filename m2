@@ -79,6 +79,7 @@ BEGIN { version = "3.4.0" }
 #           @newcmd NAME           Create a user command NAME (lines until @endcmd)
 #             <...>
 #           @endcmd
+#           @nextfile              Ignore remainder of file, continue processing
 #           @paste FILE            Insert FILE contents literally, no macros
 #           @read NAME FILE        Read FILE contents to define NAME
 #           @sequence ID ACT [N]   Create and manage sequences
@@ -1991,7 +1992,7 @@ function m2_if(    sym, cond, op, val2, val4)
 }
 
 
-# @ignore               DELIM
+# @nextfile, @ignore    DELIM
 function m2_ignore(    buf, delim, save_line, save_lineno)
 {
     # Ignore input until line starts with $2.  This means
@@ -1999,16 +2000,21 @@ function m2_ignore(    buf, delim, save_line, save_lineno)
     #        <...>
     #     Theodore Roosevelt
     # ignores <...> text up to, and including, the president's name.
+
     if (! currently_active_p())
         return
-    if (NF != 2)
+    if (($1 == "@ignore" && NF != 2) || ($1 == "@nextfile" && NF != 1))
         error("Bad parameters:" $0)
-    save_line = $0
-    save_lineno = sym_fetch("__LINE__")
-    delim = $2
-    buf = read_lines_until(delim)
-    if (buf == EoF_marker)
-        error(sprintf("Delimiter '%s' not found:%s" delim, save_line), "", save_lineno)
+    if ($1 == "@nextfile")
+        read_lines_until("")
+    else {
+        save_line = $0
+        save_lineno = sym_fetch("__LINE__")
+        delim = $2
+        buf = read_lines_until(delim)
+        if (buf == EoF_marker)
+            error(sprintf("Delimiter '%s' not found:%s" delim, save_line), "", save_lineno)
+    }
 }
 
 
@@ -2505,6 +2511,7 @@ function process_line(read_literally,    sp, lbrace, cut, newstring, user_cmd)
     else if (/^@input([ \t]|$)/)          { m2_input() }
     else if (/^@longdef([ \t]|$)/)        { m2_longdef() }
     else if (/^@newcmd([ \t]|$)/)         { m2_newcmd() }
+    else if (/^@nextfile([ \t]|$)/)       { m2_ignore() }
     else if (/^@of([ \t]|$)/)             { m2_of() }
     else if (/^@otherwise([ \t]|$)/)      { m2_otherwise() }
     else if (/^@s?paste([ \t]|$)/)        { m2_include() }

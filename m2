@@ -369,6 +369,7 @@ BEGIN { version = "3.4.0" }
 #               - Attempt to nest @case commands
 #           Comparison operator 'XXX' invalid
 #               - An @if expression with an invalid comparison operator.
+#               - Invalid conditions while sorting symbol table
 #           Delimiter 'XXX' not found
 #               - A multi-line read (@ignore, @longdef, @shell) did not find
 #                 its terminating delimiter line.
@@ -1114,6 +1115,18 @@ function name_strict_symbol_p(name)
 #       Utility functions
 #
 #*****************************************************************************
+function isalpha(s)
+{
+    return ((s >= "A" && s <= "Z") ||
+            (s >= "a" && s <= "z"))
+}
+
+
+function isdigit(s)
+{
+    return (s >= "0" && s <= "9")
+}
+
 function integerp(pat)
 {
     return pat ~ /^[-+]?[0-9]+$/
@@ -1333,25 +1346,47 @@ function swap(A, i, j,    t)
     t = A[i];  A[i] = A[j];  A[j] = t
 }
 
-# Special comparison to sort leading underscores after all other values.
-function _less_than(s1, s2,    s1f, s2f)
+# Special comparison to sort leading underscores after all other values,
+# and numbers before other values.
+function _less_than(s1, s2,    fs1, fs2, d1, d2)
 {
     dbg_print("dump", 7, sprintf("_less_than: s1='%s', s='%s'", s1, s2))
-    s1f = first(s1)
-    s2f = first(s2)
-    if (s1f == s2f)
-        return _less_than(substr(s1,2), substr(s2,2))
+    fs1 = first(s1)
+    fs2 = first(s2)
+
+    if      (fs1 == "" && fs2 == "") error("Comparison operator invalid [_less_than]")
+    else if (fs1 == "" && fs2 != "") return TRUE
+    else if (fs1 != "" && fs2 == "") return FALSE
+
+    # Sort underscore vs other
+    else if (fs1 == "_" && fs2 != "_") return FALSE
+    else if (fs1 != "_" && fs2 == "_") return TRUE
+
+    # Sort digit vs non-digit
+    else if (  isdigit(fs1) && ! isdigit(fs2)) return FALSE
+    else if (! isdigit(fs1) &&   isdigit(fs2)) return TRUE
 
     # If we're looking at numbers, grab them and do a numeric comparison
     # -- hopefully they're different.
-    if (s1f >= "0" && s1f <= "9" && s1f >= "0" && s1f <= "9")
-        return int(s1) < int(s2)
+    # BUG: Can't sort foo123A vs foo123B properly
+    else if (isdigit(fs1) && isdigit(fs2)) {
+        d1 = int(s1);  d2 = int(s2)
+        if (d1 != d2)
+            return d1 < d2
+        else
+            # numbers are the same, so do a raw comparison
+            return s1 < s2
 
-    # Determine if s1 and s2 have a leading underscore
-    if      (s1f == "_" && s2f != "_") return FALSE
-    else if (s1f != "_" && s2f == "_") return TRUE
-    else if (toupper(s1) != toupper(s2)) return toupper(s1) < toupper(s2)
-    else return s1 < s2
+    # If we're looking at the same character, compare the following ones
+    } else if (toupper(fs1) == toupper(fs2))
+        return _less_than(substr(s1,2), substr(s2,2))
+
+    # Sort characters case-insensitively
+    else if (isalpha(fs1) && isalpha(fs2))
+        return toupper(s1) < toupper(s2)
+
+    else
+        return s1 < s2
 }
 
 
@@ -2489,11 +2524,6 @@ function readline(    getstat, i, status)
             sym_increment("__NLINE__", 1)
         }
     }
-    # Hack: allow @Mname at start of line without a closing @.
-    # This only applies if in non-strict mode.  Note, macro name must
-    # start with a capital letter and must not be passed any parameters.
-    if (! strictp() && ($0 ~ /^@[A-Z][A-Za-z#_0-9]*[ \t]*$/))
-        sub(/[ \t]*$/, "@")
     return status
 }
 
@@ -2604,12 +2634,6 @@ function docommand(    cmdname, narg, args, i, nparam, savebuffer, savefile, sav
             $0 = substr(buffer, 1, i-1)
             buffer = substr(buffer, i+1)
         }
-
-        # Hack: allow @Mname at start of line without a closing @.
-        # This only applies if in non-strict mode.  Note, macro name must
-        # start with a capital letter and must not be passed any parameters.
-        if (! strictp() && ($0 ~ /^@[A-Z][A-Za-z#_0-9]*[ \t]*$/))
-            sub(/[ \t]*$/, "@")
 
         # String we want is in $0, go evaluate it
         dbg_print("cmd", 5, "(docommand) About to call process line with $0 = '" $0 "'")

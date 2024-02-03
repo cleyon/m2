@@ -1,6 +1,6 @@
 #!/usr/bin/awk -f
 
-BEGIN { version = "3.3.4" }
+BEGIN { version = "3.4.0" }
 
 #*****************************************************************************
 #
@@ -45,7 +45,11 @@ BEGIN { version = "3.3.4" }
 #       evaluate, control, or define macros for subsequent processing:
 #
 #           @append NAME TEXT      Add TEXT to an already defined macro NAME
-#           @comment [TEXT]        Comment; ignore line.  Also @@, @c, @#
+#           @case NAME             Evaluate value of NAME, comparing it with
+#           @of TEXT                 each successive @of TEXT.  If none match,
+#           @otherwise               use text from @otherwise block if present.
+#           @endcase               End @case structure.  Also @esac
+#           @comment [TEXT]        Comment; ignore line.  Also @@, @c, @;, and @#
 #           @debug [TEXT]          If debugging, send TEXT to standard error
 #           @decr NAME [N]         Subtract N (1) from an already defined NAME
 #           @default NAME VAL      Like @define, but no-op if NAME already defined
@@ -167,7 +171,7 @@ BEGIN { version = "3.3.4" }
 #       example values, defaults, or types are shown:
 #
 #           __DATE__         [***] m2 run start date as YYYYMMDD (eg 19450716)
-#           __DBG__[<id>]          Debugging levels for m2 systems (integer)
+#           __DBG__[<id>]          Levels for internal debugging systems (integer)
 #           __DEBUG__         [**] Debugging enabled? (boolean, def FALSE)
 #           __DIVNUM__             Current stream number (0; 0-9 valid)
 #           __EPOCH__        [***] Seconds since Epoch at m2 run start time
@@ -359,17 +363,20 @@ BEGIN { version = "3.3.4" }
 #               - Error expanding @{...}, often caused by a missing "}"
 #           Cannot recursively read 'XXX'
 #               - Attempt to @include the same file multiple times.
+#               - Attempt to nest @case commands
 #           Comparison operator 'XXX' invalid
 #               - An @if expression with an invalid comparison operator.
 #           Delimiter 'XXX' not found
 #               - A multi-line read (@ignore, @longdef, @shell) did not find
 #                 its terminating delimiter line.
-#               - An @if block was not properly terminated before end of input.
-#               - Indicates an "starting" command did not find its finish.
+#               - An @if or @case block was not properly terminated with @endif
+#                 or @endcase, usually due to premature end of input.
+#               - Indicates a "starting" command did not find its finish.
 #           Division by zero
 #               - @expr@ attempted to divide by zero.
-#           Duplicate '@else' not allowed
+#           Duplicate 'XXX' not allowed
 #               - More than one @else found in a single @if block.
+#               - More than one @otherwise found in a single @case block.
 #           Empty symbol table
 #               - A @dump command found no definitions to display.
 #           Environment variable 'XXX' not defined
@@ -385,9 +392,11 @@ BEGIN { version = "3.3.4" }
 #               - An error occurred during @expr ...@ evaluation.
 #               - A math expression returned +/-Infinity or NaN.
 #           Missing 'X' at 'XXX'
-#               - @expr ...@ did not match syntax required for expression.
+#               - @expr ...@ did not match syntax required for expression
+#                 (missing a , or ( character in function calls).
 #           Name 'XXX' not available
 #               - Despite being valid, the name cannot be used/found here.
+#               - Attempt to access an unknown debugging key
 #           Name 'XXX' not defined
 #               - A symbol name without a value was passed to a function
 #               - An undefined macro was referenced and __STRICT__ is true.
@@ -401,6 +410,7 @@ BEGIN { version = "3.3.4" }
 #               - @if: An @else or @endif was seen without a matching @if.
 #               - @longdef: An @endlongdef was seen without a matching @longdef.
 #               - @newcmd: An @endcmd was seen without a matching @newcmd
+#               - @case: Normal text was found before an @of branch defined.
 #               - Indicates a "finishing" command was seen without a starter.
 #           Parameter N not supplied in 'XXX'
 #               - A macro referred to a parameter (such as $1) for which
@@ -537,6 +547,9 @@ BEGIN {
     # Early initialize some variables.  This makes `gawk --lint' happy.
     exit_code           = EX_OK
     symtab["__DEBUG__"] = FALSE
+    split("braces case cmd divert dosubs expr m2 read symbol", dbg_key_array, " ")
+    for (dbg_elem in dbg_key_array)
+        dbg_keys[dbg_key_array[dbg_elem]] = TRUE
 }
 
 
@@ -732,7 +745,7 @@ function sym_definition_pp(sym,    sym_name, definition)
 # Caller is responsible for ensuring user is allowed to delete symbol
 function sym_destroy(sym)
 {
-    dbg_print("m2", 5, ("sym_destroy(" sym ")"))
+    dbg_print("symbol", 5, ("sym_destroy(" sym ")"))
     # It is legal to delete an array key that does not exist
     delete symtab[sym_internal_form(sym)]
 }
@@ -822,11 +835,11 @@ function sym_root(sym,    s)
 
 function sym_store(sym, val)
 {
-    dbg_print("m2", 5, ("sym_store(" sym "," val ")"))
+    dbg_print("symbol", 5, ("sym_store(" sym "," val ")"))
     # Maintain equivalence:  __FMT__[number] === CONVFMT
     # This is invoked from dodef(), and from @define xxx ...)
     if (sym == "__FMT__[number]") {
-        dbg_print("m2", 3, "Setting CONVFMT to " val)
+        dbg_print("symbol", 3, "Setting CONVFMT to " val)
         CONVFMT = val
     }
     # __DEBUG__ and __STRICT__ can only store boolean values
@@ -839,11 +852,11 @@ function sym_store(sym, val)
 
 function sym2_store(arr, key, val)
 {
-    dbg_print("m2", 5, ("sym2_store(" arr "," key "," val ")"))
+    dbg_print("symbol", 5, ("sym2_store(" arr "," key "," val ")"))
     # Maintain equivalence:  __FMT__[number] === CONVFMT
     # This is invoked from initialize(), and from sym2_store())
     if (arr == "__FMT__" && key == "number") {
-        dbg_print("m2", 5, "Setting CONVFMT to " val)
+        dbg_print("symbol", 5, "Setting CONVFMT to " val)
         CONVFMT = val
     }
     return symtab[arr, key] = val
@@ -1032,7 +1045,7 @@ function assert_seq_okay_to_define(name)
     # redefinitions), or a symbol.  Furthermore, it can't be a
     # system-type name: __SEQ__ is not allowed.
     if (! name_available_in_all_p(name, TYPE_ANY))
-        error("Name '" id "' not available:" $0)
+        error("Name '" name "' not available:" $0)
     return TRUE
 }
 
@@ -1134,25 +1147,28 @@ function assert_cmd_name_okay_to_define(name)
 function debugging_enabled_p()
 {
     return sym_true_p("__DEBUG__")
-    #return sym_defined_p("__DEBUG__") && sym_fetch("__DEBUG__") > 0
 }
 
 function dbg(key, lev)
 {
-    if (lev == "") lev = 1
-    if (key == "") key = "m2"
-    if (lev <= 0)  return TRUE
-    return (debugging_enabled_p() && sym2_defined_p("__DBG__", key)) \
+    if (! debugging_enabled_p()) return FALSE
+    if (key == "")               key = "m2"
+    if (! (key in dbg_keys))     error("Name '" key "' not available")
+    if (lev == "")               lev = 1
+    if (lev <= 0)                return TRUE
+    if (lev > MAX_DBG_LEVEL)     lev = MAX_DBG_LEVEL
+    return (sym2_defined_p("__DBG__", key)) \
         ? sym2_fetch("__DBG__", key) >= lev \
         : FALSE
 }
 
 function dbg_set_level(key, lev)
 {
-    if (lev == "")
-        lev = 1
-    if (key == "")
-        key = "m2"
+    if (key == "")               key = "m2"
+    if (! (key in dbg_keys))     error("Name '" key "' not available")
+    if (lev == "")               lev = 1
+    if (lev < 0)                 lev = 0
+    if (lev > MAX_DBG_LEVEL)     lev = MAX_DBG_LEVEL
     sym2_store("__DBG__", key, lev)
 }
 
@@ -1222,6 +1238,11 @@ function path_exists_p(path)
     return exec_prog_cmdline("stat", path) == EX_OK
 }
 
+
+function max(m, n)
+{
+    return m > n ? m : n
+}
 
 # do normal rounding
 # https://www.gnu.org/software/gawk/manual/html_node/Round-Function.html
@@ -1584,6 +1605,100 @@ function _c3_advance(    tmp)
 #
 #*****************************************************************************
 
+# @case                 NAME | TEXT
+# @of ....
+# @otherwise
+# @endcase, @esac
+function m2_case(    save_line, save_lineno, target, branch, next_branch,
+                     max_branch, text, OTHERWISE, i)
+{
+    if (! currently_active_p())
+        return
+    OTHERWISE = 0
+    save_line = $0
+    save_lineno = sym_fetch("__LINE__")
+    assert_sym_defined($2)
+    target = sym_fetch($2)
+    casenum++                   # global
+    casetab[casenum, OTHERWISE, "label"] = ""
+    casetab[casenum, OTHERWISE, "line"] = 0
+    casetab[casenum, OTHERWISE, "definition"] = ""
+    max_branch = branch = -1;  next_branch = 1
+
+    while (TRUE) {
+        if (readline() != READLINE_OK)
+            # Whatever happened, the @case didn't finish properly
+            error("Delimiter '@endcase' not found:" save_line, "", save_lineno)
+        dbg_print("case", 5, "(m2_case) readline='" $0 "'")
+        if ($1 == "@endcase" || $1 == "@esac")
+            break               # proceed with branch evaluation
+        else if ($1 == "@case")
+            error("Cannot recursively read '@case'") # maybe someday
+        else if ($1 == "@of") {
+            sub(/^@of[ \t]+/, "")
+            text = $0
+            # Start a new branch
+            branch = next_branch++
+            max_branch = max(branch, max_branch)
+            dbg_print("case", 3, sprintf("(m2_case) Found @of '%s' branch %d at line %d",
+                                         text, branch, sym_fetch("__LINE__")))
+            # Check if label is duplicate
+            if (branch > 1)
+                for (i = 1; i < branch; i++)
+                    if (casetab[casenum, i, "label"] == text)
+                        error("Duplicate '@of' not allowed:@of " $0)
+            # Store it
+            casetab[casenum, branch, "label"] = text
+            casetab[casenum, branch, "line"] = sym_fetch("__LINE__")
+            casetab[casenum, branch, "definition"] = ""
+        } else if ($1 == "@otherwise") {
+            dbg_print("case", 3, "(m2_case) Found @otherwise at line " \
+                      sym_fetch("__LINE__"))
+            # Check if otherwise already seen (there can be only one!)
+            if (casetab[casenum, OTHERWISE, "label"] == "otherwise")
+                error("Duplicate '@otherwise' not allowed:" $0)
+            # Start a new branch at zero and remember it's been seen.
+            branch = OTHERWISE
+            max_branch = max(branch, max_branch)
+            casetab[casenum, branch, "label"] = "otherwise"
+            casetab[casenum, branch, "line"] = sym_fetch("__LINE__")
+        } else {
+            if (branch == -1)
+                error("No corresponding '@of':" $0)
+            # Append line to current buffer
+            dbg_print("case", 5, sprintf("(m2_case) Appending to '%s' branch %d",
+                                         casetab[casenum, branch, "label"], branch))
+            casetab[casenum, branch, "definition"] = \
+            casetab[casenum, branch, "definition"] $0 "\n"
+        }
+    }
+
+    # Figure out what block to execute, using any "otherwise" block as a
+    # catch-all to act as a default case.  This is accomplished by
+    # setting its label to be the target we seek.
+    casetab[casenum, OTHERWISE, "label"] = target
+    i = 0
+    branch = max_branch
+    while (branch >= 0) {
+        dbg_print("case", 4, sprintf("casetab[%d,%d,label]='%s' =?= target='%s'",
+                                     casenum, branch,
+                                     casetab[casenum, branch, "label"], target))
+        if (casetab[casenum, branch, "label"] == target) {
+            if (i == 0) {
+                i = 1
+                text = casetab[casenum, branch, "definition"]
+                if (! emptyp(text))
+                    docasebranch(casenum, branch, casetab[casenum, branch, "line"])
+            }
+        }
+        delete casetab[casenum, branch, "label"]
+        delete casetab[casenum, branch, "line"]
+        delete casetab[casenum, branch, "definition"]
+        branch--
+    }
+}
+
+
 # @default, @initialize NAME TEXT
 function m2_default(    sym)
 {
@@ -1704,6 +1819,13 @@ function m2_else()
         error("Duplicate '@else' not allowed:" $0)
     seen_else[ifdepth] = TRUE
     active[ifdepth] = active[ifdepth-1] ? ! currently_active_p() : FALSE
+}
+
+
+# @endcase, #esac
+function m2_endcase()
+{
+    error("No corresponding '@case':" $0)
 }
 
 
@@ -1990,7 +2112,7 @@ function m2_endlongdef()
 # Names declared with @newcmd are recognized and run in the procedure
 # that processes the control commands (@if, @define, etc).  These things
 # can only be on a line of their own and (mostly) do not produce output.
-function m2_newcmd(    buf, save_line, save_lineno, name, nparam, i)
+function m2_newcmd(    buf, save_line, save_lineno, name, nparam)
 {
     if (! currently_active_p())
         return
@@ -2008,6 +2130,20 @@ function m2_newcmd(    buf, save_line, save_lineno, name, nparam, i)
     cmdtab[name, "defined"]    = TRUE
     cmdtab[name, "definition"] = buf
     cmdtab[name, "nparam"]     = nparam
+}
+
+
+# @of
+function m2_of()
+{
+    error("No corresponding '@case':" $0)
+}
+
+
+# @otherwise
+function m2_otherwise()
+{
+    error("No corresponding '@case':" $0)
 }
 
 
@@ -2118,7 +2254,7 @@ function m2_sequence(    id, action, arg, saveline)
 # Set symbol "M2_SHELL" to override.
 function m2_shell(    delim, save_line, save_lineno, input_text, input_file,
                       output_text, output_file, sendto, path_fmt, getstat,
-                      cmdline)
+                      cmdline, line)
 {
     # The sendto program defaults to a reasonable shell but you can
     # specify where you want to send your data.  Possibly useful choices
@@ -2327,7 +2463,7 @@ function readline(    getstat, i, status)
 }
 
 
-function process_line(read_literally,    name, sp, lbrace, cut, newstring, user_cmd)
+function process_line(read_literally,    sp, lbrace, cut, newstring, user_cmd)
 {
     dbg_print("cmd", 1, "(process_line) Start; line " sym_fetch("__LINE__") ": $0='" $0 "'")
 
@@ -2342,6 +2478,7 @@ function process_line(read_literally,    name, sp, lbrace, cut, newstring, user_
     # overridden by @newcmd.  Note, they only match at beginning of line.
     if      (/^@(@|;|#)/)                 { } # Comments are ignored
     else if (/^@append([ \t]|$)/)         { m2_define() }
+    else if (/^@case([ \t]|$)/)           { m2_case() }
     else if (/^@c(omment)?([ \t]|$)/)     { } # Comments are ignored
     else if (/^@decr([ \t]|$)/)           { m2_incr() }
     else if (/^@default([ \t]|$)/)        { m2_default() }
@@ -2351,6 +2488,7 @@ function process_line(read_literally,    name, sp, lbrace, cut, newstring, user_
     else if (/^@dump(all|def)?([ \t]|$)/) { m2_dump() }
     else if (/^@echo([ \t]|$)/)           { m2_error() }
     else if (/^@else([ \t]|$)/)           { m2_else() }
+    else if (/^@(endcase|esac)([ \t]|$)/) { m2_endcase() }
     else if (/^@endcmd([ \t]|$)/)         { m2_endcmd() }
     else if (/^@(endif|fi)([ \t]|$)/)     { m2_endif() }
     else if (/^@endlong(def)?([ \t]|$)/)  { m2_endlongdef() }
@@ -2367,6 +2505,8 @@ function process_line(read_literally,    name, sp, lbrace, cut, newstring, user_
     else if (/^@input([ \t]|$)/)          { m2_input() }
     else if (/^@longdef([ \t]|$)/)        { m2_longdef() }
     else if (/^@newcmd([ \t]|$)/)         { m2_newcmd() }
+    else if (/^@of([ \t]|$)/)             { m2_of() }
+    else if (/^@otherwise([ \t]|$)/)      { m2_otherwise() }
     else if (/^@s?paste([ \t]|$)/)        { m2_include() }
     else if (/^@read([ \t]|$)/)           { m2_read() }
     else if (/^@sequence([ \t]|$)/)       { m2_sequence() }
@@ -2446,7 +2586,47 @@ function docommand(    cmdname, narg, args, i, nparam, savebuffer, savefile, sav
     buffer = savebuffer
     sym_store("__FILE__", savefile)
     sym_store("__LINE__", saveline)
+
     dbg_print("cmd", 1, "(docommand) End")
+    return TRUE
+}
+
+
+function docasebranch(case, branch, brline,    savebuffer, saveifdepth, saveline, i)
+{
+    # Save old context
+    savebuffer = buffer
+    saveifdepth = ifdepth
+    saveline = sym_fetch("__LINE__")
+
+    # Set up new context on branch "definition"
+    buffer = casetab[case, branch, "definition"]
+    sym_store("__LINE__", brline)
+
+    # Process each line in buffer
+    while (buffer != "") {
+        # Extract each line from buffer, one by one
+        sym_increment("__LINE__", 1) # __LINE__ is local, but not __NLINE__
+        if ((i = index(buffer, "\n")) == IDX_NOT_FOUND) {
+            $0 = buffer
+            buffer = ""
+        } else {
+            $0 = substr(buffer, 1, i-1)
+            buffer = substr(buffer, i+1)
+        }
+
+        # String we want is in $0, go evaluate it
+        dbg_print("case", 5, "(docasebranch) About to call process_line with $0 = '" $0 "'")
+        process_line()
+    }
+
+    # Restore context
+    if (ifdepth > saveifdepth)
+        error("Delimiter '@endif' not found")
+    buffer = savebuffer
+    sym_store("__LINE__", saveline)
+    dbg_print("case", 1, "(docasebranch) End")
+    return TRUE
 }
 
 
@@ -2898,23 +3078,23 @@ function expand_braces(s,    atbr, cb, ltext, mtext, rtext)
 #               for which we need to find the closing brace.
 #
 # LOCAL VARIABLES
-#     i         Counter of current offset into s from start.
-#               Initially i=0.  As we scan right, i will be incremented.
-#     c         The current character, at position i.
-#                   c = substr(s, start+i, 1)
-#     nc        The next character past c, at position i+1.
-#                   nc = substr(s, start+i+1, 1)
+#     offset    Counter of current offset into s from start.
+#               Initially offset=0.  As we scan right, offset is incremented.
+#     c         The current character, at position offset.
+#                   c = substr(s, start+offset, 1)
+#     nc        The next character past c, at position offset+1.
+#                   nc = substr(s, start+offset+1, 1)
 #     cb        Position of inner "}" found via recursion.
 #     slen      Length of s.  s is not modified so its length is constant.
 #
 # RETURN VALUE
 #     If successfully found a closing brace, return its position within s.
-# The actual value returned is start+i.
+# The actual value returned is start+offset.
 #     If no closing brace is found, or the search proceeds beyond the end
-# of the string (i.e., start+i > length(s)), return a "failure code" of 0.
+# of the string (i.e., start+offset > length(s)), return a "failure code" of 0.
 # If the initial conditions are bad, return an "error code" of -1.
 #
-function find_closing_brace(s, start,    i, c, nc, cb, slen)
+function find_closing_brace(s, start,    offset, c, nc, cb, slen)
 {
     dbg_print("braces", 3, (">> find_closing_brace(s='" s "', start=" start))
 
@@ -2927,25 +3107,25 @@ function find_closing_brace(s, start,    i, c, nc, cb, slen)
     # are at least two characters in the string.  Let's move along...
     # Look at the character (c) immediately following "@{", and also the
     # next character (nc) after that.  One or both might be empty string.
-    i  = 2
-    c  = substr(s, start+i,   1)
-    nc = substr(s, start+i+1, 1)
+    offset  = 2
+    c  = substr(s, start+offset,   1)
+    nc = substr(s, start+offset+1, 1)
 
-    while (start+i <= slen) {
-        dbg_print("braces", 7, ("   find_closing_brace: i=" i ", c=" c ", nc=" nc))
+    while (start+offset <= slen) {
+        dbg_print("braces", 7, ("   find_closing_brace: offset=" offset ", c=" c ", nc=" nc))
         if (c == "") {          # end of string/error
             break
         } else if (c == "}") {
-            dbg_print("braces", 3, ("<< find_closing_brace: returning " start+i))
-            return start+i
+            dbg_print("braces", 3, ("<< find_closing_brace: returning " start+offset))
+            return start+offset
         } else if (c == "\\" && nc == "}") {
             # "\}" in expansion text will result in a single close brace
             # without ending the expansion text scanner.  Skip over }
             # and do not return yet.  "\}" is fixed in expand_braces().
-            i++; nc = substr(s, start+i+1, 1)
+            offset++; nc = substr(s, start+offset+1, 1)
         } else if (c == "@" && nc == "{") {
             # "@{" in expansion text will invoke a recursive scan.
-            cb = find_closing_brace(s, start+i)
+            cb = find_closing_brace(s, start+offset)
             if (cb <= 0)
                 return cb       # propagate failure/error
 
@@ -2953,14 +3133,14 @@ function find_closing_brace(s, start,    i, c, nc, cb, slen)
             # "}" in string s, update i to be the value corresponding to
             # that location.  In fact, i, being an offset, is exactly
             # the distance from that closing brace back to "start".
-            i = cb - start
-            nc = substr(s, start+i+1, 1)
+            offset = cb - start
+            nc = substr(s, start+offset+1, 1)
             dbg_print("braces", 5, ("   find_closing_brace: (recursive) cb=" cb \
-                                    ".  Now, i=" i ", nc=" nc))
+                                    ".  Now, offset=" offset ", nc=" nc))
         }
 
         # Advance to next character
-        i++; c = nc; nc = substr(s, start+i+1, 1)
+        offset++; c = nc; nc = substr(s, start+offset+1, 1)
     }
 
     # If we fall out of the loop here, we never found a closing brace.
@@ -3052,6 +3232,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i)
     E                 = exp(1)
     IDX_NOT_FOUND     = 0
     LOG10             = log(10)
+    MAX_DBG_LEVEL     = 10
     MAX_PARAM         = 20
     MAX_STREAM        = 9
     PI                = atan2(0, -1)
@@ -3068,6 +3249,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i)
     TYPE_SEQUENCE     = "Q"     # seqtab
     TYPE_SYMBOL       = "S"     # symtab
 
+    casenum           = 0
     EoF_marker        = build_subsep("EoF1", "EoF2") # Unlikely to occur in normal text
     init_deferred     = TRUE    # Becomes FALSE in initialize_deferred_symbols()
     init_files_loaded = FALSE   # Becomes TRUE in load_init_files()
@@ -3177,8 +3359,7 @@ function initialize_deferred_symbols(    gid, host, hostname, osname, pid, uid, 
 # every time a non-zero value is stored into __DEBUG__.
 function initialize_debugging()
 {
-    # dbg_set_level("cmd", 5)
-    # dbg_set_level("dosubs", 7)
+    dbg_set_level("m2", 1)
 }
 
 
@@ -3196,31 +3377,31 @@ BEGIN {
         # Delay loading $HOME/.m2rc as long as possible.  This allows us
         # to set symbols on the command line which will have taken effect
         # by the time the init file loads.
-        for (i = 1; i < ARGC; i++) {
+        for (__i = 1; __i < ARGC; __i++) {
             # Show each arg as we process it
-            arg = ARGV[i]
-            dbg_print("m2", 3, ("BEGIN: ARGV[" i "]:" arg))
+            __arg = ARGV[__i]
+            dbg_print("m2", 3, ("BEGIN: ARGV[" __i "]:" __arg))
 
             # If it's a definition on the command line, define it
-            if (arg ~ /^([^= ][^= ]*)=(.*)/) {
-                eq = index(arg, "=")
-                name = substr(arg, 1, eq-1)
-                val = substr(arg, eq+1)
-                if (! sym_valid_p(name))
-                    error("Name '" name "' not valid:" arg, "ARGV", i)
-                if (sym_protected_p(name))
-                    error("Symbol '" name "' protected:" arg, "ARGV", i)
-                if (name == "strict")
-                    name = "__STRICT__"
-                else if (name == "debug")
-                    name = "__DEBUG__"
-                sym_store(name, val)
+            if (__arg ~ /^([^= ][^= ]*)=(.*)/) {
+                __eq = index(__arg, "=")
+                __name = substr(__arg, 1, __eq-1)
+                __val = substr(__arg, __eq+1)
+                if (! sym_valid_p(__name))
+                    error("Name '" __name "' not valid:" __arg, "ARGV", __i)
+                if (sym_protected_p(__name))
+                    error("Symbol '" __name "' protected:" __arg, "ARGV", __i)
+                if (__name == "strict")
+                    __name = "__STRICT__"
+                else if (__name == "debug")
+                    __name = "__DEBUG__"
+                sym_store(__name, __val)
 
             # Otherwise load a file
             } else {
                 load_init_files()
-                if (! dofile(rm_quotes(arg), FALSE)) {
-                    warn("File '" arg "' does not exist", "ARGV", i)
+                if (! dofile(rm_quotes(__arg), FALSE)) {
+                    warn("File '" __arg "' does not exist", "ARGV", __i)
                     exit_code = EX_NOINPUT
                 }
             }

@@ -18,6 +18,10 @@ nm2: m2
 	sed '1s,$(AWK),$(NAWK),' m2 > $@
 	chmod +x $@
 
+vars:
+	@rm -f awkvars.out
+	$(GAWK) -d -f m2 /dev/null >/dev/null
+
 lint:
 	$(GAWK) --lint -f m2 /dev/null
 

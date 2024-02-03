@@ -152,9 +152,11 @@ BEGIN { version = "3.4.0" }
 #           @lc SYM@               Lower case
 #           @left SYM [N]@         Substring of SYM from 1 to Nth character
 #           @len SYM@              Number of characters in SYM's value
+#           @ltrim SYM@            Remove leading whitespace
 #           @mid SYM BEG [LEN]@    Substring of SYM from BEG, LEN chars long
 #           @rem COMMENT@          Embedded comment text is ignored
 #           @right SYM [N]@        Substring of SYM from N to last character
+#           @rtrim SYM@            Remove trailing whitespace
 #           @spaces [N]@           Output N space characters  (default 1)
 #           @time@           [***] Current time (format as __FMT__[time])
 #           @trim SYM@             Remove leading and trailing whitespace
@@ -2917,15 +2919,19 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
                 expand = expand " "
             r = expand r
 
-        # trim SYM: Remove leading and trailing whitespace
-        } else if (fn == "trim") {
+        # trim  SYM: Remove both leading and trailing whitespace
+        # ltrim SYM: Remove leading whitespace
+        # rtrim SYM: Remove trailing whitespace
+        } else if (fn == "trim" || fn == "ltrim" || fn == "rtrim") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
             p = param[1 + _fencepost]
             assert_sym_valid_name(p)
             assert_sym_defined(p, "trim")
             expand = sym_fetch(p)
-            sub(/^[ \t]+/, "", expand)
-            sub(/[ \t]+$/, "", expand)
+            if (fn == "trim" || fn == "ltrim")
+                sub(/^[ \t]+/, "", expand)
+            if (fn == "trim" || fn == "rtrim")
+                sub(/[ \t]+$/, "", expand)
             r = expand r
 
         # uuid : Something that resembles but is not a UUID
@@ -3309,7 +3315,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i)
 
     # Functions cannot be used as symbol or sequence names.
     split("basename boolval chr date dirname epoch expr getenv lc left len" \
-          " mid rem right spaces time trim tz uc uuid", array, " ")
+          " ltrim mid rem right rtrim spaces time trim tz uc uuid", array, " ")
     for (elem in array)
         functab[array[elem]] = TRUE
 

@@ -151,7 +151,7 @@ BEGIN { version = "3.4.0" }
 #           @date@             [1] Current date (format as __FMT__[date])
 #           @dirname SYM@          Directory name of SYM
 #           @epoch@            [1] Number of seconds since the Epoch, UTC
-#           @expr MATH@            Evaluate mathematical expression
+#           @expr MATH@        [S] Evaluate mathematical expression
 #           @getenv VAR@       [2] Get environment variable
 #           @lc SYM@               Lower case
 #           @left SYM [N]@         Substring of SYM from 1 to Nth character
@@ -2688,7 +2688,7 @@ function docasebranch(case, branch, brline,    savebuffer, saveifdepth, saveline
 #             R = "@" R
 #     return L R
 function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
-                      at_brace, x, y, inc_dec, pre_post, subcmd)
+                      at_brace, x, y, inc_dec, pre_post, subcmd, silent)
 {
     l = ""                   # Left of current pos  - ready for output
     r = s                    # Right of current pos - as yet unexamined
@@ -2848,12 +2848,17 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
             r = expand r
 
         # expr ...: Evaluate mathematical epxression, store in __EXPR__
-        } else if (fn == "expr") {
-            sub(/^expr[ \t]*/, "", m) # clean up expression to evaluate
+        } else if (fn == "expr" || fn == "sexpr") {
+            # "silent" expr performs the same calculations but does not
+            # output the result.  However, assignments are still
+            # performed and in particular __EXPR__ is still set.
+            silent = first(fn) == "s"
+            sub(/^s?expr[ \t]*/, "", m) # clean up expression to evaluate
             x = calc3_eval(m)
             dbg_print("expr", 1, sprintf("expr{%s} = %s", m, x))
             sym_store("__EXPR__", x)
-            r = x r
+            if (!silent)
+                r = x r
 
         # getenv : Get environment variable
         #   @getenv HOME@ => /home/user

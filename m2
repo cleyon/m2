@@ -159,6 +159,7 @@ BEGIN { version = "3.4.0" }
 #           @right SYM [N]@        Substring of SYM from N to last character
 #           @rtrim SYM@            Remove trailing whitespace
 #           @spaces [N]@           Output N space characters  (default 1)
+#           @strftime FMT@         Current date/time in user-specified format
 #           @time@             [1] Current time (format as __FMT__[time])
 #           @trim SYM@             Remove both leading and trailing whitespace
 #           @tz@               [1] Time zone name (format as __FMT__[tz])
@@ -2860,15 +2861,20 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
             } else
                 error("Bad parameters in '" m "':" $0)
 
-        # date  : Current date as YYYY-MM-DD
-        # epoch : Number of seconds since Epoch
-        # time  : Current time as HH:MM:SS
-        # tz    : Current time zone name
+        # date     : Current date as YYYY-MM-DD
+        # epoch    : Number of seconds since Epoch
+        # strftime : User-specified date format, see strftime(3)
+        # time     : Current time as HH:MM:SS
+        # tz       : Current time zone name
         } else if (fn == "date" ||
                    fn == "epoch" ||
+                   fn == "strftime" ||
                    fn == "time" ||
                    fn == "tz") {
-            y = sym2_fetch("__FMT__", fn)
+            if (fn == "strftime" && nparam == 0)
+                error("Bad parameters in '" m "':" $0)
+            y = fn == "strftime" ? substr(m, length(fn)+2) \
+                : sym2_fetch("__FMT__", fn)
             gsub(/"/, "\\\"", y)
             cmdline = build_prog_cmdline("date", "+\"" y "\"", FALSE)
             cmdline | getline expand
@@ -3377,7 +3383,8 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i)
 
     # Functions cannot be used as symbol or sequence names.
     split("basename boolval chr date dirname epoch expr getenv lc left len" \
-          " ltrim mid rem right rtrim spaces time trim tz uc uuid", array, " ")
+          " ltrim mid rem right rtrim spaces strftime time trim tz uc uuid",
+          array, " ")
     for (elem in array)
         functab[array[elem]] = TRUE
 

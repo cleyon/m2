@@ -57,7 +57,7 @@ BEGIN { version = "3.4.0" }
 #           @divert [N]            Divert output to stream N (default 0 means stdout)
 #           @dump(all) [FILE]      Output symbol names & definitions to FILE (stderr)
 #           @error [TEXT]          Send TEXT to standard error; exit code 2
-#           @exit [CODE]           Immediately stop parsing; exit CODE (default 0)
+#           @exit [CODE]       [S] Immediately stop parsing; exit CODE (default 0)
 #           @if NAME               Include subsequent text if NAME is true (!= 0)
 #           @if NAME <OP> TEXT     Test if NAME compares to TEXT (names or values)
 #           @if(_not)_defined NAME Test if NAME is defined
@@ -68,7 +68,7 @@ BEGIN { version = "3.4.0" }
 #           @else                  Switch to the other branch of an @if statement
 #           @endif                 Terminate @if or @unless.  Also @fi
 #           @ignore DELIM          Ignore input until line that begins with DELIM
-#           @include FILE          Read and process contents of FILE
+#           @include FILE      [S] Read and process contents of FILE
 #           @incr NAME [N]         Add N (1) to an already defined NAME
 #           @initialize NAME VAL   Like @define, but abort if NAME already defined
 #           @input [NAME]          Read a single line from keyboard and define NAME
@@ -79,9 +79,9 @@ BEGIN { version = "3.4.0" }
 #             <...>
 #           @endcmd
 #           @nextfile              Ignore remainder of file, continue processing
-#           @paste FILE            Insert FILE contents literally, no macros
-#           @read NAME FILE        Read FILE contents to define NAME
-#           @readarray ARR FILE    Read each line from FILE into ARR[]
+#           @paste FILE        [S] Insert FILE contents literally, no macros
+#           @read NAME FILE    [S] Read FILE contents to define NAME
+#           @readarray F FILE  [S] Read each line from FILE into array F[]
 #           @sequence ID ACT [N]   Create and manage sequences
 #           @shell DELIM [PROG]    Evaluate input until DELIM, send raw data to PROG
 #                                    Output from prog is captured in output stream
@@ -91,6 +91,9 @@ BEGIN { version = "3.4.0" }
 #           @unless NAME           Include subsequent text if NAME == 0 (or undefined)
 #           @warn [TEXT]           Send TEXT to standard error; continue
 #                                    Also called @echo, @stderr
+#
+#       [S] When the command is prefixed with "s" (@sinclude), denotes a
+#          `silent' variant which prints fewer error messages .
 #
 #       A definition may extend across multiple lines by ending each
 #       line with a backslash, thus quoting the following newline.
@@ -1868,30 +1871,6 @@ function m2_else()
 }
 
 
-# @endcase, #esac
-function m2_endcase()
-{
-    error("No corresponding '@case':" $0)
-}
-
-
-# @endcmd
-function m2_endcmd()
-{
-    # @endcmd should never be encountered alone because m2_newcmd()
-    # consumes any matching @endcmd.
-    error("No corresponding '@newcmd':" $0)
-}
-
-
-# @endif, @fi
-function m2_endif()
-{
-    if (ifdepth-- == 0)
-        error("No corresponding '@if':" $0)
-}
-
-
 # @debug, @echo, @error, @stderr, @warn TEXT
 # debug, error and warn format the message with file & line, etc.
 # echo and stderr do no additional formatting.
@@ -1925,12 +1904,13 @@ function m2_error(    m2_will_exit, do_format, do_print, message)
 
 
 # @exit                 [CODE]
-function m2_exit()
+function m2_exit(    silent)
 {
     if (! currently_active_p())
         return
+    silent = (substr($1, 2, 1) == "s") # silent discards any pending streams
     exit_code = (NF > 1 && integerp($2)) ? $2 : EX_OK
-    end_program(SHIP_OUT_STREAMS)
+    end_program(silent ? DISCARD_STREAMS : SHIP_OUT_STREAMS)
 }
 
 
@@ -2131,15 +2111,6 @@ function m2_longdef(    buf, save_line, save_lineno, sym)
 }
 
 
-# @endlongdef
-function m2_endlongdef()
-{
-    # @endlongdef should never be encountered alone because m2_longdef()
-    # consumes any matching @endlongdef.
-    error("No corresponding '@longdef':" $0)
-}
-
-
 # @newcmd               NAME
 #
 # Q. What is the difference between @define and @newcmd?
@@ -2175,22 +2146,8 @@ function m2_newcmd(    buf, save_line, save_lineno, name, nparam)
 }
 
 
-# @of
-function m2_of()
-{
-    error("No corresponding '@case':" $0)
-}
-
-
-# @otherwise
-function m2_otherwise()
-{
-    error("No corresponding '@case':" $0)
-}
-
-
-# @read                 NAME FILE
-function m2_read(    sym, filename, line, val, getstat)
+# @{s,}read             NAME FILE
+function m2_read(    sym, filename, line, val, getstat, silent)
 {
     # This is not intended to be a full-blown file inputter but rather just
     # to read short snippets like a file path or username.  As usual, multi-
@@ -2200,6 +2157,7 @@ function m2_read(    sym, filename, line, val, getstat)
     #dbg_print("read", 7, ("@read: $0='" $0 "'"))
     if (NF < 3)
         error("Bad parameters:" $0)
+    silent = (substr($1, 2, 1) == "s") # silent mutes file errors, even in strict mode
     sym  = $2
     assert_sym_okay_to_define(sym)
 
@@ -2210,7 +2168,7 @@ function m2_read(    sym, filename, line, val, getstat)
     val = ""
     while (TRUE) {
         getstat = getline line < filename
-        if (getstat < 0)        # Error
+        if (getstat < 0 && !silent) # Error
             warn("Error reading file '" filename "' [read]")
         if (getstat <= 0)       # End of file
             break
@@ -2221,14 +2179,15 @@ function m2_read(    sym, filename, line, val, getstat)
 }
 
 
-# @readarray            ARR FILE
-function m2_readarray(    arr, filename, line, getstat, line_cnt)
+# @{s,}readarray        ARR FILE
+function m2_readarray(    arr, filename, line, getstat, line_cnt, silent)
 {
     if (! currently_active_p())
         return
     #dbg_print("read", 7, ("@readarray: $0='" $0 "'"))
     if (NF < 3)
         error("Bad parameters:" $0)
+    silent = (substr($1, 2, 1) == "s") # silent mutes file errors, even in strict mode
     arr = $2
     assert_sym_okay_to_define(arr)
 
@@ -2239,7 +2198,7 @@ function m2_readarray(    arr, filename, line, getstat, line_cnt)
 
     while (TRUE) {
         getstat = getline line < filename
-        if (getstat < 0)        # Error
+        if (getstat < 0 && !silent) # Error
             warn("Error reading file '" filename "' [read]")
         if (getstat <= 0)       # End of file
             break
@@ -2554,12 +2513,17 @@ function process_line(read_literally,    sp, lbrace, cut, newstring, user_cmd)
     else if (/^@dump(all|def)?([ \t]|$)/) { m2_dump() }
     else if (/^@echo([ \t]|$)/)           { m2_error() }
     else if (/^@else([ \t]|$)/)           { m2_else() }
-    else if (/^@(endcase|esac)([ \t]|$)/) { m2_endcase() }
-    else if (/^@endcmd([ \t]|$)/)         { m2_endcmd() }
-    else if (/^@(endif|fi)([ \t]|$)/)     { m2_endif() }
-    else if (/^@endlong(def)?([ \t]|$)/)  { m2_endlongdef() }
+    else if (/^@(endcase|esac)([ \t]|$)/) {
+             error("No corresponding '@case':" $0) }
+    else if (/^@endcmd([ \t]|$)/)         {
+             error("No corresponding '@newcmd':" $0) }
+    else if (/^@(endif|fi)([ \t]|$)/)     {
+             if (ifdepth-- == 0)
+                 error("No corresponding '@if':" $0) }
+    else if (/^@endlong(def)?([ \t]|$)/)  {
+             error("No corresponding '@longdef':" $0) }
     else if (/^@err(or|print)([ \t]|$)/)  { m2_error() }
-    else if (/^@(m2)?exit([ \t]|$)/)      { m2_exit() }
+    else if (/^@s?(m2)?exit([ \t]|$)/)    { m2_exit() }
     else if (/^@if(_not)?(_(defined|env|exists|in))?([ \t]|$)/)
                                           { m2_if() }
     else if (/^@ifn?def([ \t]|$)/)        { m2_if() }
@@ -2571,11 +2535,13 @@ function process_line(read_literally,    sp, lbrace, cut, newstring, user_cmd)
     else if (/^@longdef([ \t]|$)/)        { m2_longdef() }
     else if (/^@newcmd([ \t]|$)/)         { m2_newcmd() }
     else if (/^@nextfile([ \t]|$)/)       { m2_ignore() }
-    else if (/^@of([ \t]|$)/)             { m2_of() }
-    else if (/^@otherwise([ \t]|$)/)      { m2_otherwise() }
+    else if (/^@of([ \t]|$)/)             {
+             error("No corresponding '@case':" $0) }
+    else if (/^@otherwise([ \t]|$)/)      {
+             error("No corresponding '@case':" $0) }
     else if (/^@s?paste([ \t]|$)/)        { m2_include() }
-    else if (/^@read([ \t]|$)/)           { m2_read() }
-    else if (/^@readarray([ \t]|$)/)      { m2_readarray() }
+    else if (/^@s?read([ \t]|$)/)         { m2_read() }
+    else if (/^@s?readarray([ \t]|$)/)    { m2_readarray() }
     else if (/^@sequence([ \t]|$)/)       { m2_sequence() }
     else if (/^@shell([ \t]|$)/)          { m2_shell() }
     else if (/^@stderr([ \t]|$)/)         { m2_error() }

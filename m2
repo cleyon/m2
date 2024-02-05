@@ -1240,7 +1240,7 @@ function tmpdir(    t)
         t = sym_fetch("__TMPDIR__")
     while (last(t) == "\n")
         t = chop(t)
-    return t ((last(t) != "/") ? "/" : "")
+    return t ((last(t) == "/") ? "" : "/")
 }
 
 
@@ -2463,7 +2463,7 @@ function dofile(filename, read_literally,    savebuffer, savefile, saveifdepth, 
 function readline(    getstat, i, status)
 {
     status = READLINE_OK
-    if (buffer != "") {
+    if (!emptyp(buffer)) {
         # Return the buffer even if somehow it doesn't end with a newline
         if ((i = index(buffer, "\n")) == IDX_NOT_FOUND) {
             $0 = buffer
@@ -2591,7 +2591,7 @@ function docommand(    cmdname, narg, args, i, nparam, savebuffer, savefile, sav
     sym_store("__FILE__", $1)
     sym_store("__LINE__", 0)
 
-    while (buffer != "") {
+    while (!emptyp(buffer)) {
         # Extract each line from buffer, one by one
         sym_increment("__LINE__", 1) # __LINE__ is local, but not __NLINE__
         if ((i = index(buffer, "\n")) == IDX_NOT_FOUND) {
@@ -2631,7 +2631,7 @@ function docasebranch(case, branch, brline,    savebuffer, saveifdepth, saveline
     sym_store("__LINE__", brline)
 
     # Process each line in buffer
-    while (buffer != "") {
+    while (!emptyp(buffer)) {
         # Extract each line from buffer, one by one
         sym_increment("__LINE__", 1) # __LINE__ is local, but not __NLINE__
         if ((i = index(buffer, "\n")) == IDX_NOT_FOUND) {
@@ -3208,7 +3208,7 @@ function dodef(append_flag,    name, str, x)
     sub(/^[ \t]*[^ \t]+[ \t]+[^ \t]+[ \t]*/, "")  # old bug: last * was +
     str = $0
     while (str ~ /\\$/) {
-        if (readline() == READLINE_EOF)
+        if (readline() != READLINE_OK)
             error("Unexpected end of definition:" name)
         # old bug: sub(/\\$/, "\n" $0, str)
         x = $0
@@ -3352,8 +3352,8 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i)
 
     # Functions cannot be used as symbol or sequence names.
     split("basename boolval chr date dirname epoch expr getenv lc left len" \
-          " ltrim mid rem right rtrim spaces strftime time trim tz uc uuid",
-          array, " ")
+          " ltrim mid rem right rtrim sexpr spaces strftime substr time trim" \
+          " tz uc uuid", array, " ")
     for (elem in array)
         functab[array[elem]] = TRUE
 

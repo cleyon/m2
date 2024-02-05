@@ -603,7 +603,7 @@ function flush_stdout()
 
 function print_stderr(text)
 {
-    print text > "/dev/stderr"
+    printf "%s\n", text > "/dev/stderr"
     # Definitely more portable:
     #    print text | "cat 1>&2"
 }
@@ -898,7 +898,7 @@ function sym_valid_p(sym,    result, lbracket, root, key)
              break
 
         # Fake/hack out any "array name" by removing brackets
-        if ((lbracket = index(sym, "[")) != IDX_NOT_FOUND) {
+        if ((lbracket = index(sym, "[")) > 0) {
             # 2. Doesn't look exactly like "xx[yy]"
             if (sym !~ /^.+\[.+\]$/)
                 break
@@ -2696,19 +2696,17 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
 
     while (TRUE) {
         # Check entire string for recursive evaluation
-        if (index(r, "@{") != IDX_NOT_FOUND)
+        if (index(r, "@{") > 0)
             r = expand_braces(r)
 
-        i = index(r, "@")
-        if (i == IDX_NOT_FOUND)
+        if ((i = index(r, "@")) == IDX_NOT_FOUND)
             break
 
         dbg_print("dosubs", 7, (sprintf("(dosubs) Top of loop: l='%s', r='%s', expand='%s'", l, r, expand)))
         l = l substr(r, 1, i-1)
         r = substr(r, i+1)      # Currently scanning @
 
-        i = index(r, "@")
-        if (i == IDX_NOT_FOUND) {
+        if ((i = index(r, "@")) == IDX_NOT_FOUND) {
             l = l "@"
             break
         }
@@ -2985,12 +2983,12 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
             j = MAX_PARAM   # but don't go overboard with params
             # Count backwards to get around $10 problem.
             while (j-- >= 0) {
-                if (index(expand, "${" j "}") != IDX_NOT_FOUND) {
+                if (index(expand, "${" j "}") > 0) {
                     if (j > nparam)
                         error("Parameter " j " not supplied in '" m "':" $0)
                     gsub("\\$\\{" j "\\}", param[j + _fencepost], expand)
                  }
-                if (index(expand, "$" j) != IDX_NOT_FOUND) {
+                if (index(expand, "$" j) > 0) {
                     if (j > nparam)
                         error("Parameter " j " not supplied in '" m "':" $0)
                     gsub("\\$" j, param[j + _fencepost], expand)
@@ -3078,7 +3076,7 @@ function expand_braces(s,    atbr, cb, ltext, mtext, rtext)
 {
     dbg_print("braces", 3, (">> expand_braces(s='" s "'"))
 
-    while ((atbr = index(s, "@{")) != IDX_NOT_FOUND) {
+    while ((atbr = index(s, "@{")) > 0) {
         # There's a @{ somewhere in the string.  Find the matching
         # closing brace and expand the enclosed text.
         cb = find_closing_brace(s, atbr)
@@ -3483,5 +3481,6 @@ function end_program(flush_diverted_streams)
         undivert_all()
     }
     flush_stdout()
+    close("/dev/stderr")
     exit exit_code
 }

@@ -16,7 +16,6 @@ BEGIN { version = "3.4.0" }
 #       m4(1) macro processor found on Unix systems.  It is written in
 #       portable "standard" Awk and does not depend on Gawk or any other
 #       files.  Even later Awk additions such as systime() are avoided.
-#
 #       The program can perform several functions, including:
 #
 #       1. Define and expand macros.  Macros have two parts, a name and
@@ -84,7 +83,7 @@ BEGIN { version = "3.4.0" }
 #           @readarray F FILE  [S] Read each line from FILE into array F[]
 #           @sequence ID ACT [N]   Create and manage sequences
 #           @shell DELIM [PROG]    Evaluate input until DELIM, send raw data to PROG
-#                                    Output from prog is captured in output stream
+#                                    Prog output is captured; exit status in __SHELL__
 #           @typeout               Print remainder of input file literally, no macros
 #           @undefine NAME         Remove definition of NAME
 #           @undivert [N]          Inject stream N (def all) into current stream
@@ -115,7 +114,7 @@ BEGIN { version = "3.4.0" }
 #               => You are clearly underworked.
 #
 #       Specifying more than one word between @ signs, as in
-#           @xxxx AA BB CC@
+#           @xxxx AAA BBB CCC@
 #       is used as a crude form of function invocation.  Macros can
 #       expand positional parameters whose actual values will be
 #       supplied when the macro is called.  The definition should refer
@@ -142,7 +141,6 @@ BEGIN { version = "3.4.0" }
 #       uses the value in "my_key" to look up data from "data_list".
 #       The text between the braces is implicitly interpreted as if it
 #       were surrounded by "@" characters, so @{SYMBOL} is correct.
-#
 #       The following definitions are recognized:
 #
 #           @basename SYM@         Base (file) name of SYM
@@ -188,7 +186,7 @@ BEGIN { version = "3.4.0" }
 #           __FMT__[0]         [3] Text output when @boolval@ is false (0)
 #           __FMT__[1]         [3] Text output when @boolval@ is true (1)
 #           __FMT__[date]      [3] Date format for @date@ (%Y-%m-%d)
-#           __FMT__[number]    [3] Format for printing numbers, sync w/ CONVFMT
+#           __FMT__[number]    [3] Format for printing numbers (sync w/CONVFMT)
 #           __FMT__[seq]       [3] Format for printing sequence values (%d)
 #           __FMT__[time]      [3] Time format for @time@ (%H:%M:%S)
 #           __FMT__[tz]        [3] Time format for @tz@   (%Z)
@@ -203,7 +201,7 @@ BEGIN { version = "3.4.0" }
 #           __NLINE__              Number of lines read so far from all files
 #           __OSNAME__             Operating system name
 #           __PID__                m2 process id
-#           __STATUS__             Exit status of most recent @shell command
+#           __SHELL__              Exit status of most recent @shell command
 #           __STRICT__         [3] Strict mode? (boolean, def TRUE)
 #           __TIME__           [1] m2 run start time as HHMMSS (eg 053000)
 #           __TIMESTAMP__      [1] ISO 8601 timestamp (1945-07-16T05:30:00-0600)
@@ -318,10 +316,11 @@ BEGIN { version = "3.4.0" }
 #       inserts their results.  It is based on "calc3" from "The AWK
 #       Programming Language" p. 146, with enhancements by Kenny
 #       McCormack and Alan Linton.  @expr@ supports the standard
-#       arithmetic operators  +  -  *  /  %  ^  (  )
-#       Comparison operators  <  <=  ==  !=  >=  >  return 0 or 1,
-#       as per Awk.  Logical negation (!) is allowed, but no other
-#       boolean operators are permitted.  && and || are NOT supported!
+#       arithmetic operators:      +  -  *  /  %  ^  (  )
+#       The comparison operators:  <  <=  ==  !=  >=  >
+#       return 0 or 1, as per Awk.  Logical negation is available with !.
+#       No other boolean operators are supported.  Nota bene,
+#       && and || are NOT SUPPORTED!
 #
 #       @expr@ supports the following functions:
 #
@@ -370,10 +369,10 @@ BEGIN { version = "3.4.0" }
 #               - Error expanding @{...}, often caused by a missing "}"
 #           Cannot recursively read 'XXX'
 #               - Attempt to @include the same file multiple times.
-#               - Attempt to nest @case commands
+#               - Attempt to nest @case commands.
 #           Comparison operator 'XXX' invalid
 #               - An @if expression with an invalid comparison operator.
-#               - Invalid conditions while sorting symbol table
+#               - Invalid conditions while sorting symbol table.
 #           Delimiter 'XXX' not found
 #               - A multi-line read (@ignore, @longdef, @shell) did not find
 #                 its terminating delimiter line.
@@ -404,11 +403,11 @@ BEGIN { version = "3.4.0" }
 #                 (missing a , or ( character in function calls).
 #           Name 'XXX' not available
 #               - Despite being valid, the name cannot be used/found here.
-#               - Attempt to access an unknown debugging key
+#               - Attempt to access an unknown debugging key.
 #           Name 'XXX' not defined
-#               - A symbol name without a value was passed to a function
+#               - A symbol name without a value was passed to a function.
 #               - An undefined macro was referenced and __STRICT__ is true.
-#               - Attempt to use an undefined sequence ("create" is allowed)
+#               - Attempt to use an undefined sequence ("create" is allowed).
 #           Name 'XXX' not valid
 #               - A symbol name does not pass validity check.  In __STRICT__
 #                 mode (the default), a symbol name may only contain letters,
@@ -417,7 +416,7 @@ BEGIN { version = "3.4.0" }
 #           No corresponding 'XXX'
 #               - @if: An @else or @endif was seen without a matching @if.
 #               - @longdef: An @endlongdef was seen without a matching @longdef.
-#               - @newcmd: An @endcmd was seen without a matching @newcmd
+#               - @newcmd: An @endcmd was seen without a matching @newcmd.
 #               - @case: Normal text was found before an @of branch defined.
 #               - Indicates a "finishing" command was seen without a starter.
 #           Parameter N not supplied in 'XXX'
@@ -661,7 +660,8 @@ function undivert(stream)
 function undivert_all(    stream)
 {
     for (stream = 1; stream <= MAX_STREAM; stream++)
-        undivert(stream)
+        if (!emptyp(streambuf[stream]))
+            undivert(stream)
 }
 
 
@@ -839,7 +839,7 @@ function sym_root(sym,    s)
     if (index(s, SUBSEP) == IDX_NOT_FOUND)
         return sym
     else
-        return substr(s, 1, index(s, SUBSEP)-1)
+        return substr(s, 1, index(s, SUBSEP) - 1)
 }
 
 function sym_store(sym, val)
@@ -969,7 +969,7 @@ function assert_sym_valid_name(sym)
 #
 #*****************************************************************************
 
-function cmd_defined_p(id,    s)
+function cmd_defined_p(id)
 {
     return (id, "defined") in cmdtab
 }
@@ -1002,7 +1002,7 @@ function cmd_valid_p(id)
 #
 #*****************************************************************************
 
-function seq_defined_p(id,    s)
+function seq_defined_p(id)
 {
     return (id, "defined") in seqtab
 }
@@ -1799,7 +1799,9 @@ function m2_divert()
 
 
 # @dump[all]            [FILE]
-function m2_dump(    buf, cnt, definition, dumpfile, i, key, keys, fields, sym_name, all_flag)
+# Output format:
+#       @<command>  SPACE  <name>  TAB  <stuff includes spaces...>
+function m2_dump(    buf, cnt, definition, dumpfile, i, key, keys, nsym, sym_name, all_flag)
 {
     if (! currently_active_p())
         return
@@ -2350,7 +2352,7 @@ function m2_typeout(    buf)
 
 
 # @undef[ine]           NAME
-function m2_undefine(    name)
+function m2_undefine(    name, root)
 {
     if (! currently_active_p())
         return
@@ -2362,13 +2364,14 @@ function m2_undefine(    name)
     else if (cmd_valid_p(name) && cmd_defined_p(name)) {
         cmd_destroy(name)
     } else {
-        name = sym_root(name)
-        assert_sym_valid_name(name)
-        assert_sym_unprotected(name)
+        root = sym_root(name)
+        assert_sym_valid_name(root)
+        assert_sym_unprotected(root)
         # System symbols, even unprotected ones -- despite being subject
         # to user modification -- cannot be undefined.
-        if (sym_system_p(name))
-            error("Name '" name "' not available:" $0)
+        if (sym_system_p(root))
+            error("Name '" root "' not available:" $0)
+        dbg_print("symbol", 3, ("About to sym_destroy('" name "')"))
         sym_destroy(name)
     }
 }
@@ -2712,6 +2715,9 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
         }
         m = substr(r, 1, i-1)   # Middle
         r = substr(r, i+1)
+
+        # s == L  @  M  @  R
+        #               ^---i
 
         # In the code that follows:
         # - m :: Entire text between @'s.  Example: "mid foo 3".
@@ -3084,7 +3090,9 @@ function expand_braces(s,    atbr, cb, ltext, mtext, rtext)
             error("Bad @{...} expansion:" s)
         dbg_print("braces", 5, ("   expand_braces: in loop, atbr=" atbr ", cb=" cb))
 
-        # LTEXT  @{  MTEXT  }  RTEXT
+        #      atbr---v
+        # s == LTEXT  @{  MTEXT  }  RTEXT
+        #                        ^---cb
         ltext = substr(s, 1,      atbr-1)
         mtext = substr(s, atbr+2, cb-atbr-2)
                 gsub(/\\}/, "}", mtext)

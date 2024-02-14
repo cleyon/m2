@@ -156,7 +156,7 @@ BEGIN { version = "3.4.0" }
 #           @len SYM@              Number of characters in SYM's value
 #           @ltrim SYM@            Remove leading whitespace
 #           @mid SYM BEG [LEN]@    Substring of SYM from BEG, LEN chars long
-#           @rem COMMENT@          Embedded comment text is ignored
+#           @rem COMMENT@      [S] Embedded comment text is ignored
 #           @right SYM [N]@        Substring of SYM from N to last character
 #           @rtrim SYM@            Remove trailing whitespace
 #           @spaces [N]@           Output N space characters  (default 1)
@@ -266,11 +266,11 @@ BEGIN { version = "3.4.0" }
 #
 #       Example:
 #           @divert 1
-#           World!
+#           world!
 #           @divert
 #           Hello,
 #               => Hello,
-#               => World!
+#               => world!
 #
 # SEQUENCES
 #       m2 supports named sequences which are integer values.  By
@@ -2931,6 +2931,11 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
 
         # rem : Remark
         #   @rem STUFF@ is considered a comment and ignored
+        #   @srem STUFF@ like @rem, but preceding whitespace is also discarded
+        } else if (fn == "rem" || fn == "srem") {
+            if (first(fn) == "s")
+                sub(/[ \t]+$/, "", l)
+
         } else if (fn == "rem") {
             ;
 

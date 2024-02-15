@@ -115,7 +115,7 @@ BEGIN { version = "3.4.1" }
 #           100 dollars @ 5% annual interest
 #       is completely benign.  Also, there is no need to `quote'
 #       identifiers to protect against inadvertent/unwanted replacement.
-#       substitutions can occur multiple times in a single line.
+#       Substitutions can occur multiple times in a single line.
 #
 #       Specifying more than one word between @ signs, as in
 #           @xxxx AAA BBB CCC@
@@ -3128,7 +3128,10 @@ function expand_braces(s,    atbr, cb, ltext, mtext, rtext)
             print_stderr("   expand_braces: rtext='" rtext "'")
         }
 
-        s = ltext dosubs("@" mtext "@") rtext
+        while (length(mtext) >= 2 && first(mtext) == "@" && last(mtext) == "@")
+            mtext = substr(mtext, 2, length(mtext) - 2)
+        s = !emptyp(mtext) ? ltext dosubs("@" mtext "@") rtext \
+                           : ltext                       rtext
     }
 
     dbg_print("braces", 3, ("<< expand_braces: returning '" s "'"))
@@ -3516,6 +3519,5 @@ function end_program(flush_diverted_streams)
         undivert_all()
     }
     flush_stdout()
-    close("/dev/stderr")
     exit exit_code
 }

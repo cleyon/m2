@@ -1460,10 +1460,14 @@ function calc3_eval(s,    e)
 # rel | rel relop rel
 function _c3_expr(    var, e, op1, op2, m2)
 {
-    if (match(substr(_S_expr, _f), /^[A-Za-z#_][A-Za-z#_0-9]*=/)) {
-        var = _c3_advance()
-        sub(/=$/, "", var)
-        return sym_store(var, _c3_expr())
+    if (match(substr(_S_expr, _f), /^[A-Za-z#_][A-Za-z#_0-9]*=[^=]/)) {
+        var = _c3_advance();  sub(/=.*$/, "", var)
+        assert_sym_okay_to_define(var)
+        # match() sets RLENGTH which includes the match character [^=].
+        # But that's the start of the value -- I need to back up over it
+        # to read the value properly.
+        _f--
+        return sym_store(var, _c3_expr()+0)
     }
 
     e = _c3_rel()
@@ -3456,14 +3460,16 @@ BEGIN {
                 __eq = index(__arg, "=")
                 __name = substr(__arg, 1, __eq-1)
                 __val = substr(__arg, __eq+1)
-                if (! sym_valid_p(__name))
-                    error("Name '" __name "' not valid:" __arg, "ARGV", __i)
-                if (sym_protected_p(__name))
-                    error("Symbol '" __name "' protected:" __arg, "ARGV", __i)
                 if (__name == "strict")
                     __name = "__STRICT__"
                 else if (__name == "debug")
                     __name = "__DEBUG__"
+                if (! sym_valid_p(__name))
+                    error("Name '" __name "' not valid:" __arg, "ARGV", __i)
+                if (sym_protected_p(__name))
+                    error("Symbol '" __name "' protected:" __arg, "ARGV", __i)
+                if (! name_available_in_all_p(__name, TYPE_CMD TYPE_FUNCTION TYPE_SEQUENCE))
+                    error("Name '" __name "' not available:" __arg, "ARGV", __i)
                 sym_store(__name, __val)
 
             # Otherwise load a file

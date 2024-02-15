@@ -1,6 +1,6 @@
 #!/usr/bin/awk -f
 
-BEGIN { version = "3.4.0" }
+BEGIN { version = "3.4.1" }
 
 #*****************************************************************************
 #
@@ -103,15 +103,19 @@ BEGIN { version = "3.4.0" }
 #       m2 does not scan tokens or replace unadorned text: macro
 #       substitution must be explicitly requested by enclosing the macro
 #       name in "@" characters.  Thus, any occurrence of @name@ in the
-#       input is replaced in the output by the corresponding value.  On
-#       the other hand, there is no need to `quote' any identifiers to
-#       protect against inadvertent replacement.  Various substitutions
-#       can occur multiple times in a single line.
+#       input is replaced in the output by the corresponding value.
 #
 #       Example:
 #           @define Condition under
 #           You are clearly @Condition@worked.
 #               => You are clearly underworked.
+#
+#       No white space is allowed between "@" and the name, so a lone
+#       at-sign does not trigger m2 in any way.  Thus, a line like
+#           100 dollars @ 5% annual interest
+#       is completely benign.  Also, there is no need to `quote'
+#       identifiers to protect against inadvertent/unwanted replacement.
+#       substitutions can occur multiple times in a single line.
 #
 #       Specifying more than one word between @ signs, as in
 #           @xxxx AAA BBB CCC@
@@ -122,6 +126,10 @@ BEGIN { version = "3.4.0" }
 #       from $11.  $0 refers to the name of the macro itself.  You may
 #       supply more parameters than needed, but it is an error if a
 #       definition refers to a parameter which is not supplied.
+#       WARNING: Parameters are parsed by splitting on white space.
+#       This means that in:
+#           @foo "a b" c
+#       foo is given three arguments, not two: '"a', 'b"', and 'c'
 #
 #       Example:
 #           @define greet Hello, $1!  m2 sends you $0ings.
@@ -444,11 +452,6 @@ BEGIN { version = "3.4.0" }
 # BUGS
 #       m2 is two steps lower than m4.  You'll probably miss something
 #       you have learned to expect.
-#
-#       Positional parameters are parsed by splitting on white space.
-#       This means that in:
-#           @foo "a b" c
-#       foo has three arguments -- '"a', 'b"', 'c' -- not two.
 #
 #       Self-referential/recursive macros will hang the program.
 #
@@ -1125,10 +1128,16 @@ function isalpha(s)
             (s >= "a" && s <= "z"))
 }
 
-
 function isdigit(s)
 {
     return (s >= "0" && s <= "9")
+}
+
+# Space characters are: space, TAB, newline, carriage return, form feed,
+# and vertical tab
+function isspace(pat)
+{
+    return pat ~ /^[ \t\n\r\f\v]$/
 }
 
 function integerp(pat)
@@ -2709,10 +2718,20 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
         l = l substr(r, 1, i-1)
         r = substr(r, i+1)      # Currently scanning @
 
+        # Look for a second "@" beyond the first one.  If not found,
+        # this can't be a valid m2 substitution.  Ignore it, we're done.
         if ((i = index(r, "@")) == IDX_NOT_FOUND) {
             l = l "@"
             break
         }
+
+        # A lone "@" followed by whitespace is not valid syntax.  Ignore it,
+        # but keep processing the line.
+        if (isspace(first(r))) {
+            l = l "@"
+            continue
+        }
+
         m = substr(r, 1, i-1)   # Middle
         r = substr(r, i+1)
 
@@ -2935,9 +2954,6 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
         } else if (fn == "rem" || fn == "srem") {
             if (first(fn) == "s")
                 sub(/[ \t]+$/, "", l)
-
-        } else if (fn == "rem") {
-            ;
 
         # right : Right (substring)
         #   @right ALPHABET 20@ => TUVWXYZ

@@ -908,7 +908,7 @@ function sym_store(sym, val)
     }
     # __DEBUG__ and __STRICT__ can only store boolean values
     if (sym == "__DEBUG__" || sym == "__STRICT__")
-        val = !! (0 + val)
+        val = !! (val+0)
     if (sym == "__DEBUG__" && sym_fetch(sym) == FALSE && val == TRUE)
         initialize_debugging()
     return symtab[sym_internal_form(sym)] = val
@@ -1568,7 +1568,7 @@ function _c3_factor2(    e)
         _c3__f++
         if (e ~ /^\+/) return +_c3_factor3() # only one unary + allowed
         if (e ~ /^-/)  return -_c3_factor3() # only one unary - allowed
-        if (e ~ /^!/)  return !(_c3_factor2() + 0) # unary ! may repeat
+        if (e ~ /^!/)  return !(_c3_factor2()+0) # unary ! may repeat
     }
     return _c3_factor3()
 }
@@ -1777,15 +1777,15 @@ function m2_case(    save_line, save_lineno, target, branch, next_branch,
     # default case.  This is accomplished by setting its label to be the
     # target we seek.
     casetab[__casenum, OTHERWISE, "label"] = target
-    i = 0                       # remember if we've hit a match or not
+    i = FALSE                   # remember if we've hit a match or not
     branch = max_branch
     while (branch >= 0) {
         dbg_print("case", 4, sprintf("casetab[%d,%d,label]='%s' =?= target='%s'",
                                      __casenum, branch,
                                      casetab[__casenum, branch, "label"], target))
-        if (i == 0)             # not found (yet)
+        if (i == FALSE)         # not found (yet)
             if (casetab[__casenum, branch, "label"] == target) {
-                i = 1
+                i = TRUE
                 if (! emptyp(casetab[__casenum, branch, "definition"]))
                     docasebranch(__casenum, branch, casetab[__casenum, branch, "line"])
             }
@@ -2137,7 +2137,7 @@ function m2_input(    getstat, input, sym)
     sym = (NF < 2) ? "__INPUT__" : $2
     assert_sym_okay_to_define(sym)
     getstat = getline input < "/dev/tty"
-    if (getstat < 0) {
+    if (getstat == ERROR) {
         warn("Error reading file '/dev/tty' [input]:" $0)
         input = ""
     }
@@ -2220,9 +2220,9 @@ function m2_read(    sym, filename, line, val, getstat, silent)
     val = ""
     while (TRUE) {
         getstat = getline line < filename
-        if (getstat < 0 && !silent) # Error
+        if (getstat == ERROR && !silent)
             warn("Error reading file '" filename "' [read]")
-        if (getstat <= 0)       # End of file
+        if (getstat == EOF)
             break
         val = val line "\n"     # Read a line
     }
@@ -2250,9 +2250,9 @@ function m2_readarray(    arr, filename, line, getstat, line_cnt, silent)
 
     while (TRUE) {
         getstat = getline line < filename
-        if (getstat < 0 && !silent) # Error
+        if (getstat == ERROR && !silent)
             warn("Error reading file '" filename "' [read]")
-        if (getstat <= 0)       # End of file
+        if (getstat == EOF)
             break
         sym2_store(arr, ++line_cnt, line)
     }
@@ -2376,9 +2376,9 @@ function m2_shell(    delim, save_line, save_lineno, input_text, input_file,
     sym_store("__SHELL__", system(cmdline))
     while (TRUE) {
         getstat = getline line < output_file
-        if (getstat < 0)        # Error
+        if (getstat == ERROR)
             warn("Error reading file '" output_file "' [shell]")
-        if (getstat <= 0)       # End of file
+        if (getstat == EOF)
             break
         output_text = output_text line "\n" # Read a line
     }
@@ -2513,9 +2513,9 @@ function dofile(filename, read_literally,    savebuffer, savefile, saveifdepth, 
 # names.  Only after all expanded text has been processed and sent to
 # the output does the program get a fresh line of input.
 # Return OKAY, ERROR, or EOF.
-function readline(    getstat, i, status)
+function readline(    getstat, i)
 {
-    status = OKAY
+    getstat = OKAY
     if (!emptyp(__buffer)) {
         # Return the buffer even if somehow it doesn't end with a newline
         if ((i = index(__buffer, "\n")) == IDX_NOT_FOUND) {
@@ -2527,17 +2527,14 @@ function readline(    getstat, i, status)
         }
     } else {
         getstat = getline < sym_fetch("__FILE__")
-        if (getstat < 0) {       # Error
-            status = ERROR
+        if (getstat == ERROR) {
             warn("Error reading file '" sym_fetch("__FILE__") "' [readline]")
-        } else if (getstat == EOF)
-            status = EOF
-        else {                   # Read a line
+        } else if (getstat != EOF) {
             sym_increment("__LINE__", 1)
             sym_increment("__NLINE__", 1)
         }
     }
-    return status
+    return getstat
 }
 
 
@@ -2881,7 +2878,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
             p = param[1 + __off_by]
             if (sym_valid_p(p)) {
                 assert_sym_defined(p, "chr")
-                x = sprintf("%c", sym_fetch(p) + 0)
+                x = sprintf("%c", sym_fetch(p)+0)
                 r = x r
             } else if (integerp(p) && p >= 0 && p <= 255) {
                 x = sprintf("%c", p+0)

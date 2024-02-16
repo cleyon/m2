@@ -333,6 +333,8 @@ BEGIN { __version = "3.4.2" }
 #       @expr@ supports the following functions:
 #
 #           abs(x)                 Absolute value of x, |x|
+#           acos(x)                Arc-cosine of x (-1 <= x <= 1)
+#           asin(x)                Arc-sine of x (-1 <= x <= 1)
 #           atan2(y,x)             Arctangent of y/x, -pi <= atan2 <= pi
 #           ceil(x)                Ceiling of x, smallest integer >= x
 #           cos(x)                 Cosine of x, in radians
@@ -350,6 +352,7 @@ BEGIN { __version = "3.4.2" }
 #           rand()                 Random float, 0 <= rand < 1
 #           randint(x)             Random integer, 1 <= randint <= x
 #           round(x)               Normal rounding to nearest integer
+#           sgn(x)                 Signum (sign) of x [-1, 0, or +1]
 #           sin(x)                 Sine of x, in radians
 #           sqrt(x)                Square root of x
 #           tan(x)                 Tangent of x, in radians
@@ -662,7 +665,7 @@ function dbg_set_level(key, lev)
     if (lev == "")               lev = 1
     if (lev < 0)                 lev = 0
     if (lev > MAX_DBG_LEVEL)     lev = MAX_DBG_LEVEL
-    sym2_store("__DBG__", key, lev)
+    sym2_store("__DBG__", key, lev+0)
 }
 
 function dbg_print(key, lev, text)
@@ -896,6 +899,7 @@ function sym_root(sym,    s)
 function sym_store(sym, val)
 {
     dbg_print("symbol", 5, ("sym_store(" sym "," val ")"))
+
     # Maintain equivalence:  __FMT__[number] === CONVFMT
     # This is invoked from dodef(), and from @define xxx ...)
     if (sym == "__FMT__[number]") {
@@ -1591,7 +1595,7 @@ function _c3_factor3(    e, fun, e2)
     # (expr) | function(expr) | function(expr,expr)
     if (match(e, /^([A-Za-z#_][A-Za-z#_0-9]+)?\(/)) {
         fun = _c3_advance()
-        if (fun ~ /^(abs|ceil|cos|deg|exp|floor|int|log(10)?|rad|randint|round|sin|sqrt|srand|tan)?\(/) {
+        if (fun ~ /^(abs|acos|asin|ceil|cos|deg|exp|floor|int|log(10)?|rad|randint|round|sgn|sin|sqrt|srand|tan)?\(/) {
             e = _c3_expr()
             e = _c3_calculate_function(fun, e)
         } else if (fun ~ /^defined\(/) {
@@ -1636,6 +1640,12 @@ function _c3_calculate_function(fun, e,    c)
 {
     if (fun == "(")        return e
     if (fun == "abs(")     return e < 0 ? -e : e
+    if (fun == "acos(")    { if (e < -1 || e > 1)
+                                 error(sprintf("Math expression error [acos(%d)]:", e) $0)
+                             return atan2(sqrt(1 - e^2), e) }
+    if (fun == "asin(")    { if (e < -1 || e > 1)
+                                 error(sprintf("Math expression error [asin(%d)]:", e) $0)
+                             return atan2(e, sqrt(1 - e^2)) }
     if (fun == "ceil(")    { c = int(e)
                              return e > c ? c+1 : c }
     if (fun == "cos(")     return cos(e)
@@ -1649,6 +1659,7 @@ function _c3_calculate_function(fun, e,    c)
     if (fun == "rad(")     return e * (TAU / 360)
     if (fun == "randint(") return randint(e) + 1
     if (fun == "round(")   return round(e)
+    if (fun == "sgn(")     return (e > 0) - (e < 0)
     if (fun == "sin(")     return sin(e)
     if (fun == "sqrt(")    return sqrt(e)
     if (fun == "srand(")   return srand(e)
@@ -2907,7 +2918,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
             sub(/^s?expr[ \t]*/, "", m) # clean up expression to evaluate
             x = calc3_eval(m)
             dbg_print("expr", 1, sprintf("expr{%s} = %s", m, x))
-            sym_store("__EXPR__", x)
+            sym_store("__EXPR__", x+0)
             if (!silent)
                 r = x r
 
@@ -3330,7 +3341,6 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i)
     DISCARD_STREAMS      = 0
     E                    = exp(1)
     EOD_INDICATOR        = build_subsep("EoD1", "eOd2") # Unlikely to occur in normal text
-    GLOBAL_FRAME         = 0
     IDX_NOT_FOUND        = 0
     LOG10                = log(10)
     MAX_DBG_LEVEL        = 10

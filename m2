@@ -342,6 +342,7 @@ BEGIN { __version = "3.4.2" }
 #           deg(x)                 Convert radians to degrees
 #           exp(x)                 Exponential (anti-logarithm) of x, e^x
 #           floor(x)               Floor of x, largest integer <= x
+#           hypot(x,y)             Hypotenuse of a right-angled triangle
 #           int(x)                 Integer part of x
 #           log(x)                 Natural logarithm of x, base e
 #           log10(x)               Common logarithm of x, base 10
@@ -352,7 +353,7 @@ BEGIN { __version = "3.4.2" }
 #           rand()                 Random float, 0 <= rand < 1
 #           randint(x)             Random integer, 1 <= randint <= x
 #           round(x)               Normal rounding to nearest integer
-#           sgn(x)                 Signum (sign) of x [-1, 0, or +1]
+#           sign(x)                Signum of x [-1, 0, or +1]
 #           sin(x)                 Sine of x, in radians
 #           sqrt(x)                Square root of x
 #           tan(x)                 Tangent of x, in radians
@@ -529,10 +530,16 @@ BEGIN { __version = "3.4.2" }
 #           C, and other languages."  See: B. W. Kernighan and D. M. Ritchie,
 #           The M4 Macro Processor, AT&T Bell Laboratories, Computing Science
 #           Technical Report #59, July 1977.
-#       M5  Prof. A. Dain Samples described and implemented M5.
-#           See: User's Guide to the M5 Macro Language 2ed [in comp.compilers
-#           newsgroup, 1992].  May also refer to a multitronic computer designed
-#           and built by Dr Richard Daystrom, ~2268.  (Not entirely successful.)
+#       M5  Prof. A. Dain Samples described and implemented M5.  See: User's
+#           Guide to the M5 Macro Language 2ed [Usenet comp.compilers, 1992].
+#              "M5 is a powerful, easy to use, general purpose macro language.
+#               M5's syntax allows concise, formatted, and easy to read
+#               specifications of macros while still giving the user control
+#               over the appearance of the resulting text.  M5 macros can have
+#               named parameters, can have an unbounded number of parameters,
+#               and can manipulate parameters as a single unit. [...]"
+#           May also refer to a multitronic computer designed and built by
+#           Dr Richard Daystrom, ca. 2268.  (Not entirely successful.)
 #       M6  Andrew D. Hall - M6, "a general purpose macro processor used to port
 #           the Fortran source code of the Altran computer algebra system."
 #           See: A. D. Hall, M6 Reference Manual.  Computer Science Technical
@@ -1595,7 +1602,7 @@ function _c3_factor3(    e, fun, e2)
     # (expr) | function(expr) | function(expr,expr)
     if (match(e, /^([A-Za-z#_][A-Za-z#_0-9]+)?\(/)) {
         fun = _c3_advance()
-        if (fun ~ /^(abs|acos|asin|ceil|cos|deg|exp|floor|int|log(10)?|rad|randint|round|sgn|sin|sqrt|srand|tan)?\(/) {
+        if (fun ~ /^(abs|acos|asin|ceil|cos|deg|exp|floor|int|log(10)?|rad|randint|round|sign|sin|sqrt|srand|tan)?\(/) {
             e = _c3_expr()
             e = _c3_calculate_function(fun, e)
         } else if (fun ~ /^defined\(/) {
@@ -1603,7 +1610,7 @@ function _c3_factor3(    e, fun, e2)
             #print_stderr(sprintf("defined(): e2='%s'", e2))
             _c3__f += length(e2)
             e = sym_defined_p(e2) ? TRUE : FALSE
-        } else if (fun ~ /^(atan2|max|min|pow)\(/) {
+        } else if (fun ~ /^(atan2|hypot|max|min|pow)\(/) {
             e = _c3_expr()
             if (substr(_c3__Sexpr, _c3__f, 1) != ",")
                 error(sprintf("Missing ',' at '%s'", substr(_c3__Sexpr, _c3__f)))
@@ -1659,7 +1666,7 @@ function _c3_calculate_function(fun, e,    c)
     if (fun == "rad(")     return e * (TAU / 360)
     if (fun == "randint(") return randint(e) + 1
     if (fun == "round(")   return round(e)
-    if (fun == "sgn(")     return (e > 0) - (e < 0)
+    if (fun == "sign(")    return (e > 0) - (e < 0)
     if (fun == "sin(")     return sin(e)
     if (fun == "sqrt(")    return sqrt(e)
     if (fun == "srand(")   return srand(e)
@@ -1674,6 +1681,7 @@ function _c3_calculate_function(fun, e,    c)
 function _c3_calculate_function2(fun, e, e2)
 {
     if (fun == "atan2(")   return atan2(e, e2)
+    if (fun == "hypot(")   return sqrt(e^2 + e2^2)
     if (fun == "max(")     return e > e2 ? e : e2
     if (fun == "min(")     return e < e2 ? e : e2
     if (fun == "pow(")     return e ^ e2

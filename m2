@@ -1,6 +1,6 @@
 #!/usr/bin/awk -f
 
-BEGIN { version = "3.4.1" }
+BEGIN { __version = "3.4.2" }
 
 #*****************************************************************************
 #
@@ -300,7 +300,7 @@ BEGIN { version = "3.4.1" }
 #       To use a sequence, surround the sequence ID with @ characters
 #       just like a macro.  This injects the current value, formatted by
 #       calling sprintf with the specified format.  To get the current
-#       value printed in decimal wihthout any special formatting, say
+#       value printed in decimal without any special formatting, say
 #       "@ID currval@".
 #
 #       Sequence values can be modified in two ways:
@@ -367,7 +367,7 @@ BEGIN { version = "3.4.1" }
 #
 # ERROR MESSAGES
 #       Error messages are printed to standard error in the following format:
-#           <__FILE__>:<__LINE__>:<Error text>:<Offending input line>
+#           m2:<__FILE__>:<__LINE__>:<Error text>:<Offending input line>
 #
 #       All error texts and their meanings are as follows:
 #
@@ -544,23 +544,30 @@ BEGIN { version = "3.4.1" }
 #*****************************************************************************
 
 BEGIN {
-    TRUE                =  1
-    FALSE               =  0
+    TRUE = OKAY     =  1
+    FALSE = EOF     =  0
+    ERROR           = -1
 
     # Exit codes
-    EX_OK               =  0
-    EX_M2_ERROR         =  1
-    EX_USER_REQUEST     =  2
-    EX_USAGE            = 64
-    EX_NOINPUT          = 66
+    EX_OK           =  0
+    EX_M2_ERROR     =  1
+    EX_USER_REQUEST =  2
+    EX_USAGE        = 64
+    EX_NOINPUT      = 66
+
+    TYPE_ANY        = "*"
+    TYPE_CMD        = "C"
+    TYPE_FUNCTION   = "F"
+    TYPE_SEQUENCE   = "Q"
+    TYPE_SYMBOL     = "S"
 
     # Early initialize some variables.  This makes `gawk --lint' happy.
-    exit_code           = EX_OK
+    __exit_code = EX_OK
     symtab["__DEBUG__"] = FALSE
     split("braces case cmd divert dosubs dump expr m2 read symbol",
-          dbg_key_array, " ")
-    for (dbg_elem in dbg_key_array)
-        dbg_keys[dbg_key_array[dbg_elem]] = TRUE
+          _dbg_key_array, " ")
+    for (_elem in _dbg_key_array)
+        __dbg_keys[_dbg_key_array[_elem]] = TRUE
 }
 
 
@@ -619,8 +626,49 @@ function warn(text, file, line)
 function error(text, file, line)
 {
     warn(text, file, line)
-    exit_code = EX_M2_ERROR
+    __exit_code = EX_M2_ERROR
     end_program(DISCARD_STREAMS)
+}
+
+
+
+#*****************************************************************************
+#
+#       Debugging functions
+#
+#*****************************************************************************
+function debugging_enabled_p()
+{
+    return sym_true_p("__DEBUG__")
+}
+
+function dbg(key, lev)
+{
+    if (key == "")               key = "m2"
+    if (! (key in __dbg_keys))   error("Name '" key "' not available")
+    if (!debugging_enabled_p())  return FALSE
+    if (lev == "")               lev = 1
+    if (lev <= 0)                return TRUE
+    if (lev > MAX_DBG_LEVEL)     lev = MAX_DBG_LEVEL
+    if (!sym2_defined_p("__DBG__", key))
+        return FALSE
+    return sym2_fetch("__DBG__", key)+0 >= lev
+}
+
+function dbg_set_level(key, lev)
+{
+    if (key == "")               key = "m2"
+    if (! (key in __dbg_keys))   error("Name '" key "' not available")
+    if (lev == "")               lev = 1
+    if (lev < 0)                 lev = 0
+    if (lev > MAX_DBG_LEVEL)     lev = MAX_DBG_LEVEL
+    sym2_store("__DBG__", key, lev)
+}
+
+function dbg_print(key, lev, text)
+{
+    if (dbg(key, lev))
+        print_stderr(text)
 }
 
 
@@ -641,7 +689,7 @@ function ship_out(text,    divnum)
     if (divnum == 0)
         printf("%s", text)
     else if (divnum > 0)
-        streambuf[divnum] = streambuf[divnum] text
+        __streambuf[divnum] = __streambuf[divnum] text
 }
 
 
@@ -654,16 +702,16 @@ function undivert(stream)
     dbg_print("divert", 1, "undivert(" stream ")")
     if (stream <= 0 || stream == sym_fetch("__DIVNUM__"))
         return
-    if (! emptyp(streambuf[stream])) {
-        ship_out(streambuf[stream])
-        streambuf[stream] = ""
+    if (!emptyp(__streambuf[stream])) {
+        ship_out(__streambuf[stream])
+        __streambuf[stream] = ""
     }
 }
 
 function undivert_all(    stream)
 {
     for (stream = 1; stream <= MAX_STREAM; stream++)
-        if (!emptyp(streambuf[stream]))
+        if (!emptyp(__streambuf[stream]))
             undivert(stream)
 }
 
@@ -697,7 +745,7 @@ function last(s)
 # Return s but with last character (usually "\n") removed
 function chop(s)
 {
-    return substr(s, 1, length(s)-1)
+    return substr(s, 1, length(s) - 1)
 }
 
 # If last character is newline, chop() it off
@@ -730,14 +778,14 @@ function build_subsep(s, t)
 function sym_defined_p(sym,    s)
 {
     s = sym_internal_form(sym)
-    if (init_deferred && s in deferred_syms)
+    if (__init_deferred && s in deferred_syms)
         initialize_deferred_symbols()
     return s in symtab
 }
 
 function sym2_defined_p(arr, key)
 {
-    if (init_deferred && sym2_printable_form(arr, key) in deferred_syms)
+    if (__init_deferred && sym2_printable_form(arr, key) in deferred_syms)
         initialize_deferred_symbols()
     return (arr, key) in symtab
 }
@@ -765,14 +813,14 @@ function sym_destroy(sym)
 function sym_fetch(sym,    s)
 {
     s = sym_internal_form(sym)
-    if (init_deferred && s in deferred_syms)
+    if (__init_deferred && s in deferred_syms)
         initialize_deferred_symbols()
     return symtab[s]
 }
 
 function sym2_fetch(arr, key)
 {
-    if (init_deferred && sym2_printable_form(arr, key) in deferred_syms)
+    if (__init_deferred && sym2_printable_form(arr, key) in deferred_syms)
         initialize_deferred_symbols()
     return symtab[arr, key]
 }
@@ -915,7 +963,7 @@ function sym_valid_p(sym,    result, lbracket, root, key)
         }
 
         # 4. We're in strict mode and the name doesn't pass regexp check
-        if (strictp() && ! name_strict_symbol_p(sym))
+        if (strictp() && !name_strict_symbol_p(sym))
             break
 
         # We've passed all the tests
@@ -925,7 +973,13 @@ function sym_valid_p(sym,    result, lbracket, root, key)
     return result
 }
 
-####    Assertions on symbols
+
+
+#*****************************************************************************
+#
+#       A S S E R T I O N S   O N   S Y M B O L S
+#
+#*****************************************************************************
 
 # Throw an error if symbol is NOT defined
 function assert_sym_defined(sym, hint,    s)
@@ -933,8 +987,8 @@ function assert_sym_defined(sym, hint,    s)
     if (sym_defined_p(sym))
         return TRUE
     s = sprintf("Name '%s' not defined%s%s",  sym,
-                ((hint != "")   ? " [" hint "]" : ""),
-                ((! emptyp($0)) ? ":" $0        : "") )
+                ((hint != "")  ? " [" hint "]" : ""),
+                ((!emptyp($0)) ? ":" $0        : "") )
     error(s)
 }
 
@@ -943,7 +997,7 @@ function assert_sym_okay_to_define(name)
     assert_sym_valid_name(name)
     assert_sym_unprotected(name)
     # You can redefine a symbol, but not a cmd, function, or sequence
-    if (! name_available_in_all_p(name, TYPE_CMD TYPE_FUNCTION TYPE_SEQUENCE))
+    if (!name_available_in_all_p(name, TYPE_CMD TYPE_FUNCTION TYPE_SEQUENCE))
         error("Name '" name "' not available:" $0)
     return TRUE
 }
@@ -951,7 +1005,7 @@ function assert_sym_okay_to_define(name)
 # Throw an error if symbol IS protected
 function assert_sym_unprotected(sym)
 {
-    if (! sym_protected_p(sym))
+    if (!sym_protected_p(sym))
         return TRUE
     error("Symbol '" sym "' protected:" $0)
 }
@@ -1056,7 +1110,7 @@ function assert_seq_okay_to_define(name)
     # name cannot be a cmd, function, an existing sequence (no
     # redefinitions), or a symbol.  Furthermore, it can't be a
     # system-type name: __SEQ__ is not allowed.
-    if (! name_available_in_all_p(name, TYPE_ANY))
+    if (!name_available_in_all_p(name, TYPE_ANY))
         error("Name '" name "' not available:" $0)
     return TRUE
 }
@@ -1093,7 +1147,7 @@ function name_available_in_all_p(name, components,    avail)
         return FALSE
     avail = TRUE
     if (components == TYPE_ANY || index(components, TYPE_CMD))
-        avail = avail && ! ((name, "defined") in cmdtab)
+        avail = avail && ! cmd_defined_p(name)
     if (components == TYPE_ANY || index(components, TYPE_FUNCTION))
         avail = avail && ! (name in functab)
     if (components == TYPE_ANY || index(components, TYPE_SEQUENCE))
@@ -1104,6 +1158,10 @@ function name_available_in_all_p(name, components,    avail)
 }
 
 
+# Warning - Do not use this in the general case if you want to know if a
+# string is "system" or not.  This code only checks for underscores in
+# its argument, but there do exist system symbols which do not match
+# this naming pattern.
 function name_system_p(name)
 {
     return name ~ /^__.*__$/
@@ -1165,52 +1223,18 @@ function assert_valid_env_var_name(var)
 
 function assert_cmd_name_okay_to_define(name)
 {
-    if (! cmd_valid_p(name))
+    if (!cmd_valid_p(name))
         error("Name '" name "' not valid:" $0)
     # fail if symbol or sequence or function
-    if (! name_available_in_all_p(name, TYPE_FUNCTION TYPE_SEQUENCE TYPE_SYMBOL))
+    if (!name_available_in_all_p(name, TYPE_FUNCTION TYPE_SEQUENCE TYPE_SYMBOL))
         error("Name '" name "' not available:" $0)
     return TRUE                 # not really necessary
 }
 
 
-function debugging_enabled_p()
-{
-    return sym_true_p("__DEBUG__")
-}
-
-function dbg(key, lev)
-{
-    if (key == "")               key = "m2"
-    if (! (key in dbg_keys))     error("Name '" key "' not available")
-    if (! debugging_enabled_p()) return FALSE
-    if (lev == "")               lev = 1
-    if (lev <= 0)                return TRUE
-    if (lev > MAX_DBG_LEVEL)     lev = MAX_DBG_LEVEL
-    return (sym2_defined_p("__DBG__", key)) \
-        ? sym2_fetch("__DBG__", key) >= lev \
-        : FALSE
-}
-
-function dbg_set_level(key, lev)
-{
-    if (key == "")               key = "m2"
-    if (! (key in dbg_keys))     error("Name '" key "' not available")
-    if (lev == "")               lev = 1
-    if (lev < 0)                 lev = 0
-    if (lev > MAX_DBG_LEVEL)     lev = MAX_DBG_LEVEL
-    sym2_store("__DBG__", key, lev)
-}
-
-function dbg_print(key, lev, text)
-{
-    if (dbg(key, lev))
-        print_stderr(text)
-}
-
 function currently_active_p()
 {
-    return active[ifdepth]
+    return __active[__if_depth]
 }
 
 
@@ -1376,8 +1400,8 @@ function _less_than(s1, s2,    fs1, fs2, d1, d2)
     else if (fs1 != "_" && fs2 == "_") return TRUE
 
     # Sort digit vs non-digit
-    else if (  isdigit(fs1) && ! isdigit(fs2)) return FALSE
-    else if (! isdigit(fs1) &&   isdigit(fs2)) return TRUE
+    else if ( isdigit(fs1) && !isdigit(fs2)) return FALSE
+    else if (!isdigit(fs1) &&  isdigit(fs2)) return TRUE
 
     # If we're looking at numbers, grab them and do a numeric comparison
     # -- hopefully they're different.
@@ -1414,10 +1438,10 @@ function read_lines_until(delim,    buf, delim_len)
     buf = ""
     delim_len = length(delim)
     while (TRUE) {
-        if (readline() != READLINE_OK) {
+        if (readline() != OKAY) {
             # eof or error, it's time to stop
             if (delim_len > 0)
-                return EoF_marker
+                return EOD_INDICATOR
             else
                 break
         }
@@ -1440,17 +1464,16 @@ function read_lines_until(delim,    buf, delim_len)
 # for internal use and should not be called by the user.
 function calc3_eval(s,    e)
 {
-    _S_expr = s
-    gsub(/[ \t]+/, "", _S_expr)
+    _c3__Sexpr = s
+    gsub(/[ \t]+/, "", _c3__Sexpr)
 
     # Bare @expr@ returns most recent result
-    if (emptyp(_S_expr))
+    if (emptyp(_c3__Sexpr))
         return sym_fetch("__EXPR__")
-
-    _f = 1
+    _c3__f = 1
     e = _c3_expr()
-    if (_f <= length(_S_expr))
-        error(sprintf("Math expression error at '%s':", substr(_S_expr, _f)) $0)
+    if (_c3__f <= length(_c3__Sexpr))
+        error(sprintf("Math expression error at '%s':", substr(_c3__Sexpr, _c3__f)) $0)
     else if (match(e, /^[-+]?(nan|inf)/))
         error(sprintf("Math expression error:'%s' returned \"%s\":", s, e) $0)
     else
@@ -1460,28 +1483,29 @@ function calc3_eval(s,    e)
 # rel | rel relop rel
 function _c3_expr(    var, e, op1, op2, m2)
 {
-    if (match(substr(_S_expr, _f), /^[A-Za-z#_][A-Za-z#_0-9]*=[^=]/)) {
-        var = _c3_advance();  sub(/=.*$/, "", var)
+    if (match(substr(_c3__Sexpr, _c3__f), /^[A-Za-z#_][A-Za-z#_0-9]*=[^=]/)) {
+        var = _c3_advance()
+        sub(/=.*$/, "", var)
         assert_sym_okay_to_define(var)
         # match() sets RLENGTH which includes the match character [^=].
         # But that's the start of the value -- I need to back up over it
         # to read the value properly.
-        _f--
+        _c3__f--
         return sym_store(var, _c3_expr()+0)
     }
 
     e = _c3_rel()
     # Only one relational operator allowed: 1<2<3 is a syntax error
-    if ((m2 = ((op2 = substr(_S_expr, _f, 2)) ~ /<=|==|!=|>=/))  ||
-              ((op1 = substr(_S_expr, _f, 1)) ~ /<|>/)) {
+    if ((m2 = ((op2 = substr(_c3__Sexpr, _c3__f, 2)) ~ /<=|==|!=|>=/))  ||
+              ((op1 = substr(_c3__Sexpr, _c3__f, 1)) ~ /<|>/)) {
         if (m2) {
-            _f += 2             # Use +0 to force numeric comparison
+            _c3__f += 2             # Use +0 to force numeric comparison
             if (op2 == "<=") return e+0 <= _c3_rel()+0
             if (op2 == "==") return e+0 == _c3_rel()+0
             if (op2 == "!=") return e+0 != _c3_rel()+0
             if (op2 == ">=") return e+0 >= _c3_rel()+0
         } else {
-            _f += 1
+            _c3__f += 1
             if (op1 == "<")  return e+0 <  _c3_rel()+0
             if (op1 == ">")  return e+0 >  _c3_rel()+0
         }
@@ -1493,8 +1517,8 @@ function _c3_expr(    var, e, op1, op2, m2)
 function _c3_rel(    e, op)
 {
     e = _c3_term()
-    while ((op = substr(_S_expr, _f, 1)) ~ /[+-]/) {
-        _f++
+    while ((op = substr(_c3__Sexpr, _c3__f, 1)) ~ /[+-]/) {
+        _c3__f++
         e = op == "+" ? e + _c3_term() : e - _c3_term()
     }
     return e
@@ -1509,8 +1533,8 @@ function _c3_rel(    e, op)
 function _c3_term(    e, op, f)
 {
     e = _c3_factor()
-    while ((op = substr(_S_expr, _f, 1)) ~ /[*\/%]/) {
-        _f++
+    while ((op = substr(_c3__Sexpr, _c3__f, 1)) ~ /[*\/%]/) {
+        _c3__f++
         f = _c3_factor()
         if (op == "*")
             e = e * f
@@ -1527,17 +1551,17 @@ function _c3_term(    e, op, f)
 function _c3_factor(    e)
 {
     e = _c3_factor2()
-    if (substr(_S_expr, _f, 1) != "^") return e
-    _f++
+    if (substr(_c3__Sexpr, _c3__f, 1) != "^") return e
+    _c3__f++
     return e ^ _c3_factor()
 }
 
 # [+-]?factor3 | !*factor2
 function _c3_factor2(    e)
 {
-    e = substr(_S_expr, _f)
+    e = substr(_c3__Sexpr, _c3__f)
     if (e ~ /^[-+!]/) {      #unary operators [+-!]
-        _f++
+        _c3__f++
         if (e ~ /^\+/) return +_c3_factor3() # only one unary + allowed
         if (e ~ /^-/)  return -_c3_factor3() # only one unary - allowed
         if (e ~ /^!/)  return !(_c3_factor2() + 0) # unary ! may repeat
@@ -1548,7 +1572,7 @@ function _c3_factor2(    e)
 # number | varname | (expr) | function(...)
 function _c3_factor3(    e, fun, e2)
 {
-    e = substr(_S_expr, _f)
+    e = substr(_c3__Sexpr, _c3__f)
 
     # number
     if (match(e, /^([0-9]+[.]?[0-9]*|[.][0-9]+)([Ee][+-]?[0-9]+)?/)) {
@@ -1573,21 +1597,21 @@ function _c3_factor3(    e, fun, e2)
         } else if (fun ~ /^defined\(/) {
             e2 = substr(e, 9, length(e)-9)
             #print_stderr(sprintf("defined(): e2='%s'", e2))
-            _f += length(e2)
-            e = sym_defined_p(e2) ? 1 : 0
+            _c3__f += length(e2)
+            e = sym_defined_p(e2) ? TRUE : FALSE
         } else if (fun ~ /^(atan2|max|min|pow)\(/) {
             e = _c3_expr()
-            if (substr(_S_expr, _f, 1) != ",")
-                error(sprintf("Missing ',' at '%s'", substr(_S_expr, _f)))
-            _f++
+            if (substr(_c3__Sexpr, _c3__f, 1) != ",")
+                error(sprintf("Missing ',' at '%s'", substr(_c3__Sexpr, _c3__f)))
+            _c3__f++
             e2 = _c3_expr()
             e = _c3_calculate_function2(fun, e, e2)
         } else
             error(sprintf("Unknown function '%s':%s",
                           (last(fun) == "(") ? chop(fun) : fun, $0))
 
-        if (substr(_S_expr, _f++, 1) != ")")
-            error(sprintf("Missing ')' at '%s'", substr(_S_expr, _f)))
+        if (substr(_c3__Sexpr, _c3__f++, 1) != ")")
+            error(sprintf("Missing ')' at '%s'", substr(_c3__Sexpr, _c3__f)))
         return e
     }
 
@@ -1604,7 +1628,7 @@ function _c3_factor3(    e, fun, e2)
     }
 
     # error
-    error(sprintf("Expected number or '(' at '%s'", substr(_S_expr, _f)))
+    error(sprintf("Expected number or '(' at '%s'", substr(_c3__Sexpr, _c3__f)))
 }
 
 # Mathematical functions of one variable
@@ -1648,8 +1672,8 @@ function _c3_calculate_function2(fun, e, e2)
 
 function _c3_advance(    tmp)
 {
-    tmp = substr(_S_expr, _f, RLENGTH)
-    _f += RLENGTH
+    tmp = substr(_c3__Sexpr, _c3__f, RLENGTH)
+    _c3__f += RLENGTH
     return tmp
 }
 
@@ -1673,23 +1697,24 @@ function _c3_advance(    tmp)
 # @otherwise
 # @endcase, @esac
 function m2_case(    save_line, save_lineno, target, branch, next_branch,
-                     max_branch, text, OTHERWISE, i)
+                     max_branch, text, OTHERWISE, i, sym)
 {
-    if (! currently_active_p())
+    if (!currently_active_p())
         return
     OTHERWISE = 0
     save_line = $0
     save_lineno = sym_fetch("__LINE__")
-    assert_sym_defined($2)
-    target = sym_fetch($2)
-    casenum++                   # global
-    casetab[casenum, OTHERWISE, "label"] = ""
-    casetab[casenum, OTHERWISE, "line"] = 0
-    casetab[casenum, OTHERWISE, "definition"] = ""
-    max_branch = branch = -1;  next_branch = 1
+    sym = $2
+    assert_sym_defined(sym, "case")
+    target = sym_fetch(sym)
+    __casenum++
+    casetab[__casenum, OTHERWISE, "label"] = ""
+    casetab[__casenum, OTHERWISE, "line"] = 0
+    casetab[__casenum, OTHERWISE, "definition"] = ""
+    max_branch = branch = ERROR;  next_branch = 1
 
     while (TRUE) {
-        if (readline() != READLINE_OK)
+        if (readline() != OKAY)
             # Whatever happened, the @case didn't finish properly
             error("Delimiter '@endcase' not found:" save_line, "", save_lineno)
         dbg_print("case", 5, "(m2_case) readline='" $0 "'")
@@ -1708,54 +1733,55 @@ function m2_case(    save_line, save_lineno, target, branch, next_branch,
             # Check if label is duplicate
             if (branch > 1)
                 for (i = 1; i < branch; i++)
-                    if (casetab[casenum, i, "label"] == text)
+                    if (casetab[__casenum, i, "label"] == text)
                         error("Duplicate '@of' not allowed:@of " $0)
             # Store it
-            casetab[casenum, branch, "label"] = text
-            casetab[casenum, branch, "line"] = sym_fetch("__LINE__")
-            casetab[casenum, branch, "definition"] = ""
+            casetab[__casenum, branch, "label"] = text
+            casetab[__casenum, branch, "line"] = sym_fetch("__LINE__")
+            casetab[__casenum, branch, "definition"] = ""
         } else if ($1 == "@otherwise") {
             dbg_print("case", 3, "(m2_case) Found @otherwise at line " \
                       sym_fetch("__LINE__"))
             # Check if otherwise already seen (there can be only one!)
-            if (casetab[casenum, OTHERWISE, "label"] == "otherwise")
+            if (casetab[__casenum, OTHERWISE, "label"] == "otherwise")
                 error("Duplicate '@otherwise' not allowed:" $0)
             # Start a new branch at zero and remember it's been seen.
             branch = OTHERWISE
             max_branch = max(branch, max_branch)
-            casetab[casenum, branch, "label"] = "otherwise"
-            casetab[casenum, branch, "line"] = sym_fetch("__LINE__")
+            casetab[__casenum, branch, "label"] = "otherwise"
+            casetab[__casenum, branch, "line"] = sym_fetch("__LINE__")
         } else {
-            if (branch == -1)
+            if (branch == ERROR)
                 error("No corresponding '@of':" $0)
             # Append line to current buffer
             dbg_print("case", 5, sprintf("(m2_case) Appending to '%s' branch %d",
-                                         casetab[casenum, branch, "label"], branch))
-            casetab[casenum, branch, "definition"] = \
-            casetab[casenum, branch, "definition"] $0 "\n"
+                                         casetab[__casenum, branch, "label"], branch))
+            casetab[__casenum, branch, "definition"] = \
+            casetab[__casenum, branch, "definition"] $0 "\n"
         }
     }
 
-    # Figure out what block to execute, using any "otherwise" block as a
-    # catch-all to act as a default case.  This is accomplished by
-    # setting its label to be the target we seek.
-    casetab[casenum, OTHERWISE, "label"] = target
+    # Entire @case structure read okay -- now figure out what block to
+    # execute, using any "otherwise" block as a catch-all to act as a
+    # default case.  This is accomplished by setting its label to be the
+    # target we seek.
+    casetab[__casenum, OTHERWISE, "label"] = target
     i = 0                       # remember if we've hit a match or not
     branch = max_branch
     while (branch >= 0) {
         dbg_print("case", 4, sprintf("casetab[%d,%d,label]='%s' =?= target='%s'",
-                                     casenum, branch,
-                                     casetab[casenum, branch, "label"], target))
+                                     __casenum, branch,
+                                     casetab[__casenum, branch, "label"], target))
         if (i == 0)             # not found (yet)
-            if (casetab[casenum, branch, "label"] == target) {
+            if (casetab[__casenum, branch, "label"] == target) {
                 i = 1
-                if (! emptyp(casetab[casenum, branch, "definition"]))
-                    docasebranch(casenum, branch, casetab[casenum, branch, "line"])
+                if (! emptyp(casetab[__casenum, branch, "definition"]))
+                    docasebranch(__casenum, branch, casetab[__casenum, branch, "line"])
             }
         # Clean up the case table entries for this branch
-        delete casetab[casenum, branch, "label"]
-        delete casetab[casenum, branch, "line"]
-        delete casetab[casenum, branch, "definition"]
+        delete casetab[__casenum, branch, "label"]
+        delete casetab[__casenum, branch, "line"]
+        delete casetab[__casenum, branch, "definition"]
         branch--
     }
 }
@@ -1764,7 +1790,7 @@ function m2_case(    save_line, save_lineno, target, branch, next_branch,
 # @default, @initialize NAME TEXT
 function m2_default(    sym)
 {
-    if (! currently_active_p())
+    if (!currently_active_p())
         return
     if (NF < 2)
         error("Bad parameters:" $0)
@@ -1782,7 +1808,7 @@ function m2_default(    sym)
 # @append, @define      NAME TEXT
 function m2_define(    append_flag)
 {
-    if (! currently_active_p())
+    if (!currently_active_p())
         return
     if (NF < 2)
         error("Bad parameters:" $0)
@@ -1796,12 +1822,12 @@ function m2_define(    append_flag)
 # @divert               [N]
 function m2_divert()
 {
-    if (! currently_active_p())
+    if (!currently_active_p())
         return
     if (NF > 2)
         error("Bad parameters:" $0)
     $2 = (NF == 1) ? "0" : dosubs($2)
-    if (! integerp($2))
+    if (!integerp($2))
         error(sprintf("Value '%s' must be numeric:", $2) $0)
     if ($2 > MAX_STREAM)
         error("Bad parameters:" $0)
@@ -1814,11 +1840,11 @@ function m2_divert()
 # @dump[all]            [FILE]
 # Output format:
 #       @<command>  SPACE  <name>  TAB  <stuff includes spaces...>
-function m2_dump(    buf, cnt, definition, dumpfile, i, key, keys, nsym, sym_name, all_flag)
+function m2_dump(    buf, cnt, definition, dumpfile, i, key, keys, sym_name, all_flag)
 {
-    if (! currently_active_p())
+    if (!currently_active_p())
         return
-    if ((all_flag = $1 == "@dumpall") && init_deferred)
+    if ((all_flag = $1 == "@dumpall") && __init_deferred)
         initialize_deferred_symbols() # Show all system symbols
 
     if (NF > 1) {
@@ -1877,12 +1903,12 @@ function m2_dump(    buf, cnt, definition, dumpfile, i, key, keys, nsym, sym_nam
 # @else
 function m2_else()
 {
-    if (ifdepth == 0)
+    if (__if_depth == 0)
         error("No corresponding '@if':" $0)
-    if (seen_else[ifdepth])
+    if (__seen_else[__if_depth])
         error("Duplicate '@else' not allowed:" $0)
-    seen_else[ifdepth] = TRUE
-    active[ifdepth] = active[ifdepth-1] ? ! currently_active_p() : FALSE
+    __seen_else[__if_depth] = TRUE
+    __active[__if_depth] = __active[__if_depth - 1] ? !currently_active_p() : FALSE
 }
 
 
@@ -1895,7 +1921,7 @@ function m2_else()
 # purposefully not given access to the various dbg() keys and levels.
 function m2_error(    m2_will_exit, do_format, do_print, message)
 {
-    if (! currently_active_p())
+    if (!currently_active_p())
         return
     m2_will_exit = ($1 == "@error")
     do_format = ($1 == "@debug" || $1 == "@error" || $1 == "@warn")
@@ -1912,7 +1938,7 @@ function m2_error(    m2_will_exit, do_format, do_print, message)
     if (do_print)
         print_stderr(message)
     if (m2_will_exit) {
-        exit_code = EX_USER_REQUEST
+        __exit_code = EX_USER_REQUEST
         end_program(DISCARD_STREAMS)
     }
 }
@@ -1921,10 +1947,10 @@ function m2_error(    m2_will_exit, do_format, do_print, message)
 # @exit                 [CODE]
 function m2_exit(    silent)
 {
-    if (! currently_active_p())
+    if (!currently_active_p())
         return
     silent = (substr($1, 2, 1) == "s") # silent discards any pending streams
-    exit_code = (NF > 1 && integerp($2)) ? $2 : EX_OK
+    __exit_code = (NF > 1 && integerp($2)) ? $2 : EX_OK
     end_program(silent ? DISCARD_STREAMS : SHIP_OUT_STREAMS)
 }
 
@@ -1941,7 +1967,7 @@ function m2_if(    sym, cond, op, val2, val4)
             if (first($2) == "!") {
                 sym = substr($2, 2)
                 assert_sym_valid_name(sym)
-                cond = ! sym_true_p(sym)
+                cond = !sym_true_p(sym)
             } else {
                 assert_sym_valid_name($2)
                 cond = sym_true_p($2)
@@ -1949,7 +1975,7 @@ function m2_if(    sym, cond, op, val2, val4)
         } else if (NF == 3 && $2 == "!") {
             # @if ! FOO
             assert_sym_valid_name($3)
-            cond = ! sym_true_p($3)
+            cond = !sym_true_p($3)
         } else if (NF == 4) {
             # @if FOO <op> BAR
             val2 = (sym_valid_p($2) && sym_defined_p($2)) ? sym_fetch($2) : $2
@@ -1970,7 +1996,7 @@ function m2_if(    sym, cond, op, val2, val4)
     } else if ($1 == "if_not" || $1 == "unless") {
         if (NF < 2) error("Bad parameters:" $0)
         assert_sym_valid_name($2)
-        cond = ! sym_true_p($2)
+        cond = !sym_true_p($2)
 
     } else if ($1 == "if_defined" || $1 == "ifdef") {
         if (NF < 2) error("Bad parameters:" $0)
@@ -1980,7 +2006,7 @@ function m2_if(    sym, cond, op, val2, val4)
     } else if ($1 == "if_not_defined" || $1 == "ifndef") {
         if (NF < 2) error("Bad parameters:" $0)
         assert_sym_valid_name($2)
-        cond = ! sym_defined_p($2)
+        cond = !sym_defined_p($2)
 
     } else if ($1 == "if_env") {
         if (NF < 2) error("Bad parameters:" $0)
@@ -1998,7 +2024,7 @@ function m2_if(    sym, cond, op, val2, val4)
 
     } else if ($1 == "if_not_exists") {
         if (NF < 2) error("Bad parameters:" $0)
-        cond = ! path_exists_p(rm_quotes($2))
+        cond = !path_exists_p(rm_quotes($2))
 
     # @if(_not)_in KEY ARR
     # Test if symbol ARR[KEY] is defined.  Key comes first, because in
@@ -2012,14 +2038,14 @@ function m2_if(    sym, cond, op, val2, val4)
     } else if ($1 == "if_not_in") {
         if (NF < 3) error("Bad parameters:" $0)
         assert_sym_valid_name($3)
-        cond = ! sym2_defined_p($3, $2)
+        cond = !sym2_defined_p($3, $2)
 
     } else
         # Should not happen
         error("m2_if(): '" $1 "' not matched:" $0)
 
-    active[++ifdepth] = currently_active_p() ? cond : FALSE
-    seen_else[ifdepth] = FALSE
+    __active[++__if_depth] = currently_active_p() ? cond : FALSE
+    __seen_else[__if_depth] = FALSE
 }
 
 
@@ -2032,7 +2058,7 @@ function m2_ignore(    buf, delim, save_line, save_lineno)
     #     Theodore Roosevelt
     # ignores <...> text up to, and including, the president's name.
 
-    if (! currently_active_p())
+    if (!currently_active_p())
         return
     if (($1 == "@ignore" && NF != 2) || ($1 == "@nextfile" && NF != 1))
         error("Bad parameters:" $0)
@@ -2043,7 +2069,7 @@ function m2_ignore(    buf, delim, save_line, save_lineno)
         save_lineno = sym_fetch("__LINE__")
         delim = $2
         buf = read_lines_until(delim)
-        if (buf == EoF_marker)
+        if (buf == EOD_INDICATOR)
             error(sprintf("Delimiter '%s' not found:%s" delim, save_line), "", save_lineno)
     }
 }
@@ -2052,7 +2078,7 @@ function m2_ignore(    buf, delim, save_line, save_lineno)
 # @{s,}{include,paste}  FILE
 function m2_include(    error_text, filename, read_literally, silent)
 {
-    if (! currently_active_p())
+    if (!currently_active_p())
         return
     if (NF < 2)
         error("Bad parameters:" $0)
@@ -2061,7 +2087,7 @@ function m2_include(    error_text, filename, read_literally, silent)
     $1 = ""
     sub("^[ \t]*", "")
     filename = rm_quotes(dosubs($0))
-    if (! dofile(filename, read_literally)) {
+    if (!dofile(filename, read_literally)) {
         if (silent) return
         error_text = "File '" filename "' does not exist:" $0
         if (strictp())
@@ -2075,7 +2101,7 @@ function m2_include(    error_text, filename, read_literally, silent)
 # @decr, @incr          NAME [N]
 function m2_incr(    sym, incr)
 {
-    if (! currently_active_p())
+    if (!currently_active_p())
         return
     if (NF < 2)
         error("Bad parameters:" $0)
@@ -2095,7 +2121,7 @@ function m2_input(    getstat, input, sym)
     # Read a single line from /dev/tty.  No prompt is issued; if you
     # want one, use @echo.  Specify the symbol you want to receive the
     # data.  If no symbol is specified, __INPUT__ is used by default.
-    if (! currently_active_p())
+    if (!currently_active_p())
         return
     sym = (NF < 2) ? "__INPUT__" : $2
     assert_sym_okay_to_define(sym)
@@ -2111,7 +2137,7 @@ function m2_input(    getstat, input, sym)
 # @longdef              NAME
 function m2_longdef(    buf, save_line, save_lineno, sym)
 {
-    if (! currently_active_p())
+    if (!currently_active_p())
         return
     if (NF != 2)
         error("Bad parameters:" $0)
@@ -2120,7 +2146,7 @@ function m2_longdef(    buf, save_line, save_lineno, sym)
     sym = $2
     assert_sym_okay_to_define(sym)
     buf = read_lines_until("@endlong")
-    if (buf == EoF_marker)
+    if (buf == EOD_INDICATOR)
         error("Delimiter '@endlongdef' not found:" save_line, "", save_lineno)
     sym_store(sym, buf)
 }
@@ -2142,7 +2168,7 @@ function m2_longdef(    buf, save_line, save_lineno, sym)
 # can only be on a line of their own and (mostly) do not produce output.
 function m2_newcmd(    buf, save_line, save_lineno, name, nparam)
 {
-    if (! currently_active_p())
+    if (!currently_active_p())
         return
     if (NF < 2)
         error("Bad parameters:" $0)
@@ -2152,7 +2178,7 @@ function m2_newcmd(    buf, save_line, save_lineno, name, nparam)
     save_lineno = sym_fetch("__LINE__")
 
     buf = read_lines_until("@endcmd")
-    if (buf == EoF_marker)
+    if (buf == EOD_INDICATOR)
         error("Delimiter '@endcmd' not found:" save_line, "", save_lineno)
 
     cmdtab[name, "defined"]    = TRUE
@@ -2167,7 +2193,7 @@ function m2_read(    sym, filename, line, val, getstat, silent)
     # This is not intended to be a full-blown file inputter but rather just
     # to read short snippets like a file path or username.  As usual, multi-
     # line values are accepted but the final trailing \n (if any) is stripped.
-    if (! currently_active_p())
+    if (!currently_active_p())
         return
     #dbg_print("read", 7, ("@read: $0='" $0 "'"))
     if (NF < 3)
@@ -2197,7 +2223,7 @@ function m2_read(    sym, filename, line, val, getstat, silent)
 # @{s,}readarray        ARR FILE
 function m2_readarray(    arr, filename, line, getstat, line_cnt, silent)
 {
-    if (! currently_active_p())
+    if (!currently_active_p())
         return
     #dbg_print("read", 7, ("@readarray: $0='" $0 "'"))
     if (NF < 3)
@@ -2227,14 +2253,14 @@ function m2_readarray(    arr, filename, line, getstat, line_cnt, silent)
 # @sequence             ID SUBCMD [ARG...]
 function m2_sequence(    id, action, arg, saveline)
 {
-    if (! currently_active_p())
+    if (!currently_active_p())
         return
     if (NF < 3)
         error("Bad parameters:" $0)
     id = $2
     assert_seq_valid_name(id)
     action = $3
-    if (action != "create" && ! seq_defined_p(id))
+    if (action != "create" && !seq_defined_p(id))
         error("Name '" id "' not defined [sequence]:" $0)
     if (NF == 3) {
         if (action == "create") {
@@ -2269,7 +2295,7 @@ function m2_sequence(    id, action, arg, saveline)
             seqtab[id, "fmt"] = arg
         } else if (action == "incr") {
             # incr N :: Set increment value to N.
-            if (! integerp(arg))
+            if (!integerp(arg))
                 error(sprintf("Value '%s' must be numeric:%s", arg, saveline))
             if (arg+0 == 0)
                 error(sprintf("Bad parameters in 'incr':%s", saveline))
@@ -2279,14 +2305,14 @@ function m2_sequence(    id, action, arg, saveline)
             # value == old init value (i.e., never been used), then set
             # the current value to the new init value also.  Otherwise
             # current value remains unchanged.
-            if (! integerp(arg))
+            if (!integerp(arg))
                 error(sprintf("Value '%s' must be numeric:%s", arg, saveline))
             if (seqtab[id, "value"] == seqtab[id, "init"])
                 seqtab[id, "value"] = int(arg)
             seqtab[id, "init"] = int(arg)
         } else if (action == "set") {
             # set N :: Set counter value directly to N.
-            if (! integerp(arg))
+            if (!integerp(arg))
                 error(sprintf("Value '%s' must be numeric:%s", arg, saveline))
             seqtab[id, "value"] = int(arg)
         } else
@@ -2308,7 +2334,7 @@ function m2_shell(    delim, save_line, save_lineno, input_text, input_file,
     # the Unix sense, i.e., reading from standard input and writing to
     # standard output).  Standard error is not redirected, so any errors
     # will appear on the user's terminal.
-    if (! currently_active_p())
+    if (!currently_active_p())
         return
     if (NF < 2)
         error("Bad parameters:" $0)
@@ -2324,7 +2350,7 @@ function m2_shell(    delim, save_line, save_lineno, input_text, input_file,
     }
 
     input_text = read_lines_until(delim)
-    if (input_text == EoF_marker)
+    if (input_text == EOD_INDICATOR)
         error("Delimiter '" delim "' not found:" save_line, "", save_lineno)
 
     path_fmt    = sprintf("%sm2-%d.shell-%%s", tmpdir(), sym_fetch("__PID__"))
@@ -2336,7 +2362,7 @@ function m2_shell(    delim, save_line, save_lineno, input_text, input_file,
     # Don't tell me how fragile this is, we're whistling past the
     # graveyard here.  But it suffices to run /bin/sh, which is enough.
     cmdline = sprintf("%s < %s > %s", sendto, input_file, output_file)
-    sym_store("__STATUS__", system(cmdline))
+    sym_store("__SHELL__", system(cmdline))
     while (TRUE) {
         getstat = getline line < output_file
         if (getstat < 0)        # Error
@@ -2356,10 +2382,10 @@ function m2_shell(    delim, save_line, save_lineno, input_text, input_file,
 # @typeout
 function m2_typeout(    buf)
 {
-    if (! currently_active_p())
+    if (!currently_active_p())
         return
     buf = read_lines_until("")
-    if (! emptyp(buf))
+    if (!emptyp(buf))
         ship_out(buf "\n")
 }
 
@@ -2367,7 +2393,7 @@ function m2_typeout(    buf)
 # @undef[ine]           NAME
 function m2_undefine(    name, root)
 {
-    if (! currently_active_p())
+    if (!currently_active_p())
         return
     if (NF != 2)
         error("Bad parameters:" $0)
@@ -2393,7 +2419,7 @@ function m2_undefine(    name, root)
 # @undivert             [N]
 function m2_undivert(    stream, i)
 {
-    if (! currently_active_p())
+    if (!currently_active_p())
         return
     if (NF == 1)
         undivert_all()
@@ -2401,7 +2427,7 @@ function m2_undivert(    stream, i)
         i = 1
         while (++i <= NF) {
             stream = dosubs($i)
-            if (! integerp(stream))
+            if (!integerp(stream))
                 error(sprintf("Value '%s' must be numeric:", stream) $0)
             if (stream > MAX_STREAM)
                 error("Bad parameters:" $0)
@@ -2413,7 +2439,7 @@ function m2_undivert(    stream, i)
 
 # The high-level processing happens in the dofile() function, which
 # reads one line at a time, and decides what to do with each line.  The
-# activefiles array keeps track of open files.  The symbol __FILE__
+# __active_files array keeps track of open files.  The symbol __FILE__
 # stores the current file to read data from.  When an "@include"
 # directive is seen, dofile() is called recursively on the new file.
 # Interestingly, the included filename is first processed for macros.
@@ -2424,31 +2450,31 @@ function dofile(filename, read_literally,    savebuffer, savefile, saveifdepth, 
 {
     if (filename == "-")
         filename = "/dev/stdin"
-    if (! path_exists_p(filename))
+    if (!path_exists_p(filename))
         return FALSE
     dbg_print("m2", 1, ("(dofile) filename='" filename "'" \
                         (read_literally ? ", read_literally=TRUE" : "") \
                         ")"))
-    if (filename in activefiles)
+    if (filename in __active_files)
         error("Cannot recursively read '" filename "':" $0)
 
     # Save old file context
-    savebuffer  = buffer
+    savebuffer  = __buffer
     savefile    = sym_fetch("__FILE__")
-    saveifdepth = ifdepth
+    saveifdepth = __if_depth
     saveline    = sym_fetch("__LINE__")
     saveuuid    = sym_fetch("__FILE_UUID__")
 
     # Set up new file context
-    activefiles[filename] = TRUE
-    buffer = ""
+    __active_files[filename] = TRUE
+    __buffer = ""
     sym_increment("__NFILE__", 1)
     sym_store("__FILE__", filename)
     sym_store("__LINE__", 0)
     sym_store("__FILE_UUID__", uuid())
 
     # Read the file and process each line
-    while (readline() == READLINE_OK)
+    while (readline() == OKAY)
         process_line(read_literally)
 
     # Reached end of file
@@ -2456,12 +2482,12 @@ function dofile(filename, read_literally,    savebuffer, savefile, saveifdepth, 
     # Avoid I/O errors (on BSD at least) on attempt to close stdin
     if (filename != "-" && filename != "/dev/stdin")
         close(filename)
-    delete activefiles[filename]
+    delete __active_files[filename]
 
     # Restore previous file context
-    if (ifdepth > saveifdepth)
+    if (__if_depth > saveifdepth)
         error("Delimiter '@endif' not found")
-    buffer = savebuffer
+    __buffer = savebuffer
     sym_store("__FILE__", savefile)
     sym_store("__LINE__", saveline)
     sym_store("__FILE_UUID__", saveuuid)
@@ -2470,31 +2496,31 @@ function dofile(filename, read_literally,    savebuffer, savefile, saveifdepth, 
 }
 
 
-# Put next input line into global string "buffer".  The readline()
+# Put next input line into global string "__buffer".  The readline()
 # function manages the "pushback."  After expanding a macro, macro
 # processors examine the newly created text for any additional macro
 # names.  Only after all expanded text has been processed and sent to
 # the output does the program get a fresh line of input.
-# Return EoF_marker or "" (null string)
+# Return OKAY, ERROR, or EOF.
 function readline(    getstat, i, status)
 {
-    status = READLINE_OK
-    if (!emptyp(buffer)) {
+    status = OKAY
+    if (!emptyp(__buffer)) {
         # Return the buffer even if somehow it doesn't end with a newline
-        if ((i = index(buffer, "\n")) == IDX_NOT_FOUND) {
-            $0 = buffer
-            buffer = ""
+        if ((i = index(__buffer, "\n")) == IDX_NOT_FOUND) {
+            $0 = __buffer
+            __buffer = ""
         } else {
-            $0 = substr(buffer, 1, i-1)
-            buffer = substr(buffer, i+1)
+            $0 = substr(__buffer, 1, i-1)
+            __buffer = substr(__buffer, i+1)
         }
     } else {
         getstat = getline < sym_fetch("__FILE__")
         if (getstat < 0) {       # Error
-            status = READLINE_ERROR
+            status = ERROR
             warn("Error reading file '" sym_fetch("__FILE__") "' [readline]")
-        } else if (getstat == 0) # End of file
-            status = READLINE_EOF
+        } else if (getstat == EOF)
+            status = EOF
         else {                   # Read a line
             sym_increment("__LINE__", 1)
             sym_increment("__NLINE__", 1)
@@ -2534,7 +2560,7 @@ function process_line(read_literally,    sp, lbrace, cut, newstring, user_cmd)
     else if (/^@endcmd([ \t]|$)/)         {
              error("No corresponding '@newcmd':" $0) }
     else if (/^@(endif|fi)([ \t]|$)/)     {
-             if (ifdepth-- == 0)
+             if (__if_depth-- == 0)
                  error("No corresponding '@if':" $0) }
     else if (/^@endlong(def)?([ \t]|$)/)  {
              error("No corresponding '@longdef':" $0) }
@@ -2580,7 +2606,7 @@ function process_line(read_literally,    sp, lbrace, cut, newstring, user_cmd)
             if (currently_active_p())
                 ship_out(newstring "\n")
         } else {
-            buffer = newstring "\n" buffer
+            __buffer = newstring "\n" __buffer
         }
     }
     dbg_print("cmd", 1, "(process_line) End")
@@ -2590,32 +2616,32 @@ function process_line(read_literally,    sp, lbrace, cut, newstring, user_cmd)
 # unchanged, and that $1 is "@<CMD>".  This is important because we have
 # to get the command name from there (i.e., $1).  It's *not* passed in
 # as a parameter as you might expect.  Also, process_line checks to make
-# sure cmdtab[NAME] is defined; we trust that and just blindly grab the
-# definition.  Arguments/parameters are WIP.
+# sure the command name is defined; we trust that and just blindly grab
+# the definition.  Arguments/parameters are WIP.
 function docommand(    cmdname, narg, args, i, nparam, savebuffer, savefile, saveifdepth, saveline)
 {
     dbg_print("cmd", 1, "(docommand) Start; line " sym_fetch("__LINE__") ": $0='" $0 "'")
     narg = NF - 1
 
-    savebuffer  = buffer
+    savebuffer  = __buffer
     savefile    = sym_fetch("__FILE__")
-    saveifdepth = ifdepth
+    saveifdepth = __if_depth
     saveline    = sym_fetch("__LINE__")
 
     cmdname = substr($1, 2)
-    buffer = cmdtab[cmdname, "definition"]
+    __buffer = cmdtab[cmdname, "definition"]
     sym_store("__FILE__", $1)
     sym_store("__LINE__", 0)
 
-    while (!emptyp(buffer)) {
-        # Extract each line from buffer, one by one
+    while (!emptyp(__buffer)) {
+        # Extract each line from __buffer, one by one
         sym_increment("__LINE__", 1) # __LINE__ is local, but not __NLINE__
-        if ((i = index(buffer, "\n")) == IDX_NOT_FOUND) {
-            $0 = buffer
-            buffer = ""
+        if ((i = index(__buffer, "\n")) == IDX_NOT_FOUND) {
+            $0 = __buffer
+            __buffer = ""
         } else {
-            $0 = substr(buffer, 1, i-1)
-            buffer = substr(buffer, i+1)
+            $0 = substr(__buffer, 1, i-1)
+            __buffer = substr(__buffer, i+1)
         }
 
         # String we want is in $0, go evaluate it
@@ -2624,9 +2650,9 @@ function docommand(    cmdname, narg, args, i, nparam, savebuffer, savefile, sav
     }
 
     # Restore to before command ran
-    if (ifdepth > saveifdepth)
+    if (__if_depth > saveifdepth)
         error("Delimiter '@endif' not found")
-    buffer = savebuffer
+    __buffer = savebuffer
     sym_store("__FILE__", savefile)
     sym_store("__LINE__", saveline)
 
@@ -2638,24 +2664,24 @@ function docommand(    cmdname, narg, args, i, nparam, savebuffer, savefile, sav
 function docasebranch(case, branch, brline,    savebuffer, saveifdepth, saveline, i)
 {
     # Save old context
-    savebuffer = buffer
-    saveifdepth = ifdepth
+    savebuffer = __buffer
+    saveifdepth = __if_depth
     saveline = sym_fetch("__LINE__")
 
     # Set up new context on branch "definition"
-    buffer = casetab[case, branch, "definition"]
+    __buffer = casetab[case, branch, "definition"]
     sym_store("__LINE__", brline)
 
-    # Process each line in buffer
-    while (!emptyp(buffer)) {
-        # Extract each line from buffer, one by one
+    # Process each line in __buffer
+    while (!emptyp(__buffer)) {
+        # Extract each line from __buffer, one by one
         sym_increment("__LINE__", 1) # __LINE__ is local, but not __NLINE__
-        if ((i = index(buffer, "\n")) == IDX_NOT_FOUND) {
-            $0 = buffer
-            buffer = ""
+        if ((i = index(__buffer, "\n")) == IDX_NOT_FOUND) {
+            $0 = __buffer
+            __buffer = ""
         } else {
-            $0 = substr(buffer, 1, i-1)
-            buffer = substr(buffer, i+1)
+            $0 = substr(__buffer, 1, i-1)
+            __buffer = substr(__buffer, i+1)
         }
 
         # String we want is in $0, go evaluate it
@@ -2664,9 +2690,9 @@ function docasebranch(case, branch, brline,    savebuffer, saveifdepth, saveline
     }
 
     # Restore context
-    if (ifdepth > saveifdepth)
+    if (__if_depth > saveifdepth)
         error("Delimiter '@endif' not found")
-    buffer = savebuffer
+    __buffer = savebuffer
     sym_store("__LINE__", saveline)
     dbg_print("case", 1, "(docasebranch) End")
     return TRUE
@@ -2754,7 +2780,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
         #   param[N+1].  Consider "mid foo 3".  nparam is 2.
         #   The fn is found in the first position, at param [0+1].
         #   The new prefix is at param[1+1] and new count is at param[2+1].
-        #   This offset of one is referred to as `_fencepost' below.
+        #   This offset of one is referred to as `__off_by' below.
         # Each function condition eventually executes
         #     r = <SOMETHING> r
         #   which injects <SOMETHING> just before the current value of
@@ -2765,8 +2791,8 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
         #   words, this injects the result of "invoking" fn.
         # Eventually this big while loop exits and we return "l r".
 
-        nparam = split(m, param) - _fencepost
-        fn = param[0 + _fencepost]
+        nparam = split(m, param) - __off_by
+        fn = param[0 + __off_by]
         dbg_print("dosubs", 7, sprintf("(dosubs) fn=%s, nparam=%d; l='%s', m='%s', r='%s', expand='%s'", fn, nparam, l, m, r, expand))
 
         # Check for sequence modifiers.  First one wins, and
@@ -2793,7 +2819,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
         # dirname SYM: Directory name of path
         if (fn == "basename" || fn == "dirname") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[1 + _fencepost]
+            p = param[1 + __off_by]
             assert_sym_valid_name(p)
             assert_sym_defined(p, fn)
             cmdline = build_prog_cmdline(fn, rm_quotes(sym_fetch(p)), FALSE)
@@ -2817,7 +2843,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
                 # True 50% of the time and False the other 50%.
                 r = sym2_fetch("__FMT__", rand() < 0.50) r
             else {
-                p = param[1 + _fencepost]
+                p = param[1 + __off_by]
                 # Always accept your current representation of True or False
                 # to actually be true or false without further evaluation.
                 if (p == sym2_fetch("__FMT__", TRUE) ||
@@ -2841,13 +2867,11 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
         #   @chr 65@ => A
         } else if (fn == "chr") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[1 + _fencepost]
+            p = param[1 + __off_by]
             if (sym_valid_p(p)) {
-                if (sym_defined_p(p)) {
-                    x = sprintf("%c", sym_fetch(p) + 0)
-                    r = x r
-                } else if (strictp())
-                    error("Name '" p "' not defined [chr]:" $0)
+                assert_sym_defined(p, "chr")
+                x = sprintf("%c", sym_fetch(p) + 0)
+                r = x r
             } else if (integerp(p) && p >= 0 && p <= 255) {
                 x = sprintf("%c", p+0)
                 r = x r
@@ -2891,7 +2915,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
         #   @getenv HOME@ => /home/user
         } else if (fn == "getenv") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[1 + _fencepost]
+            p = param[1 + __off_by]
             assert_valid_env_var_name(p)
             if (p in ENVIRON)
                 r = ENVIRON[p] r
@@ -2905,7 +2929,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
                    fn == "len" ||
                    fn == "uc") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[1 + _fencepost]
+            p = param[1 + __off_by]
             assert_sym_valid_name(p)
             assert_sym_defined(p, fn)
             r = ((fn == "lc")  ? tolower(sym_fetch(p)) : \
@@ -2919,13 +2943,13 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
         #   @left ALPHABET 7@ => ABCDEFG
         } else if (fn == "left") {
             if (nparam < 1 || nparam > 2) error("Bad parameters in '" m "':" $0)
-            p = param[1 + _fencepost]
+            p = param[1 + __off_by]
             assert_sym_valid_name(p)
-            assert_sym_defined(p, "left")
+            assert_sym_defined(p, fn)
             x = 1
             if (nparam == 2) {
-                x = param[2 + _fencepost]
-                if (! integerp(x))
+                x = param[2 + __off_by]
+                if (!integerp(x))
                     error("Value '" x "' must be numeric:" $0)
             }
             r = substr(sym_fetch(p), 1, x) r
@@ -2937,17 +2961,17 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
         } else if (fn == "mid" || fn == "substr") {
             if (nparam < 2 || nparam > 3)
                 error("Bad parameters in '" m "':" $0)
-            p = param[1 + _fencepost]
+            p = param[1 + __off_by]
             assert_sym_valid_name(p)
-            assert_sym_defined(p, "mid")
-            x = param[2 + _fencepost]
-            if (! integerp(x))
+            assert_sym_defined(p, fn)
+            x = param[2 + __off_by]
+            if (!integerp(x))
                 error("Value '" x "' must be numeric:" $0)
             if (nparam == 2) {
                 r = substr(sym_fetch(p), x) r
             } else if (nparam == 3) {
-                y = param[3 + _fencepost]
-                if (! integerp(y))
+                y = param[3 + __off_by]
+                if (!integerp(y))
                     error("Value '" y "' must be numeric:" $0)
                 r = substr(sym_fetch(p), x, y) r
             }
@@ -2963,13 +2987,13 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
         #   @right ALPHABET 20@ => TUVWXYZ
         } else if (fn == "right") {
             if (nparam < 1 || nparam > 2) error("Bad parameters in '" m "':" $0)
-            p = param[1 + _fencepost]
+            p = param[1 + __off_by]
             assert_sym_valid_name(p)
-            assert_sym_defined(p, "left")
+            assert_sym_defined(p, fn)
             x = length(sym_fetch(p))
             if (nparam == 2) {
-                x = param[2 + _fencepost]
-                if (! integerp(x))
+                x = param[2 + __off_by]
+                if (!integerp(x))
                     error("Value '" x "' must be numeric:" $0)
             }
             r = substr(sym_fetch(p), x) r
@@ -2979,8 +3003,8 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
             if (nparam > 1) error("Bad parameters in '" m "':" $0)
             x = 1
             if (nparam == 1) {
-                x = param[1 + _fencepost]
-                if (! integerp(x))
+                x = param[1 + __off_by]
+                if (!integerp(x))
                     error("Value '" x "' must be numeric:" $0)
             }
             while (x-- > 0)
@@ -2992,9 +3016,9 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
         # rtrim SYM: Remove trailing whitespace
         } else if (fn == "trim" || fn == "ltrim" || fn == "rtrim") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[1 + _fencepost]
+            p = param[1 + __off_by]
             assert_sym_valid_name(p)
-            assert_sym_defined(p, "trim")
+            assert_sym_defined(p, fn)
             expand = sym_fetch(p)
             if (fn == "trim" || fn == "ltrim")
                 sub(/^[ \t]+/, "", expand)
@@ -3017,12 +3041,12 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
                 if (index(expand, "${" j "}") > 0) {
                     if (j > nparam)
                         error("Parameter " j " not supplied in '" m "':" $0)
-                    gsub("\\$\\{" j "\\}", param[j + _fencepost], expand)
+                    gsub("\\$\\{" j "\\}", param[j + __off_by], expand)
                  }
                 if (index(expand, "$" j) > 0) {
                     if (j > nparam)
                         error("Parameter " j " not supplied in '" m "':" $0)
-                    gsub("\\$" j, param[j + _fencepost], expand)
+                    gsub("\\$" j, param[j + __off_by], expand)
                 }
             }
             r = expand r
@@ -3060,7 +3084,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
             } else {
                 if (pre_post != 0)
                     error("Bad parameters in '" m "':" $0)
-                subcmd = param[1 + _fencepost]
+                subcmd = param[1 + __off_by]
                 # @ID currval@ and @ID nextval@ are similar to @ID@ and
                 # @++ID@ but {curr,next}val eschew any formatting.
                 if (nparam == 1) {
@@ -3144,8 +3168,8 @@ function expand_braces(s,    atbr, cb, ltext, mtext, rtext)
 #
 # DESCRIPTION
 #     Given a starting point (position of @{ in string), move forward
-# and return position of closing }.  Nested @{...} are accounted for.
-# If closing } is not found, return 0.  On other error, return -1.
+#     and return position of closing }.  Nested @{...} are accounted for.
+#     If closing } is not found, return EOF.  On other error, return ERROR.
 #
 # PARAMETERS
 #     s         String to examine.
@@ -3164,10 +3188,10 @@ function expand_braces(s,    atbr, cb, ltext, mtext, rtext)
 #
 # RETURN VALUE
 #     If successfully found a closing brace, return its position within s.
-# The actual value returned is start+offset.
-#     If no closing brace is found, or the search proceeds beyond the end
-# of the string (i.e., start+offset > length(s)), return a "failure code" of 0.
-# If the initial conditions are bad, return an "error code" of -1.
+#     The actual value returned is start+offset.  If no closing brace is
+#     found, or the search proceeds beyond the end of the string (i.e.,
+#     start+offset > length(s)), return EOF as a "failure code".  If the
+#     initial conditions are bad, return ERROR.
 #
 function find_closing_brace(s, start,    offset, c, nc, cb, slen)
 {
@@ -3176,13 +3200,13 @@ function find_closing_brace(s, start,    offset, c, nc, cb, slen)
     # Check that we have at least two characters, and start points to "@{"
     slen = length(s)
     if (slen - start + 1 < 2 || substr(s, start, 2) != "@{")
-        return -1               # error
+        return ERROR
 
     # At this point, we've verified that we're looking at @{, so there
     # are at least two characters in the string.  Let's move along...
     # Look at the character (c) immediately following "@{", and also the
     # next character (nc) after that.  One or both might be empty string.
-    offset  = 2
+    offset = 2
     c  = substr(s, start+offset,   1)
     nc = substr(s, start+offset+1, 1)
 
@@ -3219,7 +3243,7 @@ function find_closing_brace(s, start,    offset, c, nc, cb, slen)
     }
 
     # If we fall out of the loop here, we never found a closing brace.
-    return 0                    # failure
+    return EOF
 }
 
 
@@ -3236,22 +3260,22 @@ function find_closing_brace(s, start,    offset, c, nc, cb, slen)
 # bodies can be more than one line long.
 #
 # Caller is responsible for checking NF, so we don't check here.
-# Caller is responsible for ensuring name is valid.
-# Caller is responsible for ensuring name is not protected.
-function dodef(append_flag,    name, str, x)
+# Caller is responsible for ensuring sym name is valid.
+# Caller is responsible for ensuring sym is not protected.
+function dodef(append_flag,    sym, str, x)
 {
-    name = $2
+    sym = $2
     sub(/^[ \t]*[^ \t]+[ \t]+[^ \t]+[ \t]*/, "")  # old bug: last * was +
     str = $0
     while (str ~ /\\$/) {
-        if (readline() != READLINE_OK)
-            error("Unexpected end of definition:" name)
+        if (readline() != OKAY)
+            error("Unexpected end of definition:" sym)
         # old bug: sub(/\\$/, "\n" $0, str)
         x = $0
         sub(/^[ \t]+/, "", x)
         str = chop(str) "\n" x
     }
-    sym_store(name, append_flag ? sym_fetch(name) str : str)
+    sym_store(sym, append_flag ? sym_fetch(sym) str : str)
 }
 
 
@@ -3263,7 +3287,7 @@ function dodef(append_flag,    name, str, x)
 function load_init_files()
 {
     # Don't load the init files more than once
-    if (init_files_loaded == TRUE)
+    if (__init_files_loaded == TRUE)
         return
 
     if ("M2RC" in ENVIRON && path_exists_p(ENVIRON["M2RC"]))
@@ -3276,7 +3300,7 @@ function load_init_files()
     # keep them in sync with the files from the command line.
     sym_store("__NFILE__", 0)
     sym_store("__NLINE__", 0)
-    init_files_loaded = TRUE
+    __init_files_loaded = TRUE
 }
 
 
@@ -3303,35 +3327,28 @@ function setup_prog_paths()
 # Nothing here is user-customizable
 function initialize(    get_date_cmd, d, dateout, array, elem, i)
 {
-    DISCARD_STREAMS   = 0
-    E                 = exp(1)
-    IDX_NOT_FOUND     = 0
-    LOG10             = log(10)
-    MAX_DBG_LEVEL     = 10
-    MAX_PARAM         = 20
-    MAX_STREAM        = 9
-    PI                = atan2(0, -1)
-    READLINE_ERROR    = -1
-    READLINE_EOF      = 0
-    READLINE_OK       = 1
-    SEQ_DEFAULT_INCR  = 1
-    SEQ_DEFAULT_INIT  = 0
-    SHIP_OUT_STREAMS  = 1
-    TAU               = 8 * atan2(1, 1)         # 2 * PI
-    TYPE_ANY          = "*"
-    TYPE_CMD          = "C"     # cmdtab
-    TYPE_FUNCTION     = "F"     # functab
-    TYPE_SEQUENCE     = "Q"     # seqtab
-    TYPE_SYMBOL       = "S"     # symtab
+    DISCARD_STREAMS      = 0
+    E                    = exp(1)
+    EOD_INDICATOR        = build_subsep("EoD1", "eOd2") # Unlikely to occur in normal text
+    GLOBAL_FRAME         = 0
+    IDX_NOT_FOUND        = 0
+    LOG10                = log(10)
+    MAX_DBG_LEVEL        = 10
+    MAX_PARAM            = 20
+    MAX_STREAM           = 9
+    PI                   = atan2(0, -1)
+    SEQ_DEFAULT_INCR     = 1
+    SEQ_DEFAULT_INIT     = 0
+    SHIP_OUT_STREAMS     = 1
+    TAU                  = 8 * atan2(1, 1)         # 2 * PI
 
-    casenum           = 0
-    EoF_marker        = build_subsep("EoF1", "EoF2") # Unlikely to occur in normal text
-    init_deferred     = TRUE    # Becomes FALSE in initialize_deferred_symbols()
-    init_files_loaded = FALSE   # Becomes TRUE in load_init_files()
-    ifdepth           = 0
-    active[ifdepth]   = TRUE
-    _fencepost        = 1
-    buffer            = ""
+    __buffer             = ""
+    __casenum            = 0
+    __init_deferred      = TRUE  # Becomes FALSE in initialize_deferred_symbols()
+    __init_files_loaded  = FALSE # Becomes TRUE in load_init_files()
+    __if_depth           = 0
+    __active[__if_depth] = TRUE
+    __off_by             = 1
 
     srand()                     # Seed random number generator
     setup_prog_paths()
@@ -3359,7 +3376,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i)
     sym_store("__INPUT__",              "")
     sym_store("__LINE__",               0)
     sym_store("__M2_UUID__",            uuid())
-    sym_store("__M2_VERSION__",         version)
+    sym_store("__M2_VERSION__",         __version)
     sym_store("__NFILE__",              0)
     sym_store("__NLINE__",              0)
     sym_store("__STRICT__",             TRUE)
@@ -3395,7 +3412,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i)
 
     # Zero stream buffers
     for (i = 1; i <= MAX_STREAM; i++)
-        streambuf[i] = ""
+        __streambuf[i] = ""
 }
 
 
@@ -3404,8 +3421,6 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i)
 # only on-demand in order to speed up general usage.
 function initialize_deferred_symbols(    gid, host, hostname, osname, pid, uid, user, elem, array)
 {
-    init_deferred = FALSE
-
     build_prog_cmdline("id", "-g", FALSE)              | getline gid
     build_prog_cmdline("hostname", "-s", FALSE)        | getline host
     build_prog_cmdline("hostname", "-f", FALSE)        | getline hostname
@@ -3428,6 +3443,8 @@ function initialize_deferred_symbols(    gid, host, hostname, osname, pid, uid, 
             sym_store("unix", TRUE)
             break
         }
+
+    __init_deferred = FALSE
 }
 
 
@@ -3446,58 +3463,58 @@ BEGIN {
     # No command line arguments: process standard input.
     if (ARGC == 1) {
         load_init_files()
-        exit_code = dofile("-", FALSE) ? EX_OK : EX_NOINPUT
+        __exit_code = dofile("-", FALSE) ? EX_OK : EX_NOINPUT
 
     # Else, process all command line files/macro definitions.
     } else if (ARGC > 1) {
         # Delay loading $HOME/.m2rc as long as possible.  This allows us
         # to set symbols on the command line which will have taken effect
         # by the time the init file loads.
-        for (__i = 1; __i < ARGC; __i++) {
+        for (_i = 1; _i < ARGC; _i++) {
             # Show each arg as we process it
-            __arg = ARGV[__i]
-            dbg_print("m2", 3, ("BEGIN: ARGV[" __i "]:" __arg))
+            _arg = ARGV[_i]
+            dbg_print("m2", 3, ("BEGIN: ARGV[" _i "]:" _arg))
 
             # If it's a definition on the command line, define it
-            if (__arg ~ /^([^= ][^= ]*)=(.*)/) {
-                __eq = index(__arg, "=")
-                __name = substr(__arg, 1, __eq-1)
-                __val = substr(__arg, __eq+1)
-                if (__name == "strict")
-                    __name = "__STRICT__"
-                else if (__name == "debug")
-                    __name = "__DEBUG__"
-                if (! sym_valid_p(__name))
-                    error("Name '" __name "' not valid:" __arg, "ARGV", __i)
-                if (sym_protected_p(__name))
-                    error("Symbol '" __name "' protected:" __arg, "ARGV", __i)
+            if (_arg ~ /^([^= ][^= ]*)=(.*)/) {
+                _eq = index(_arg, "=")
+                _name = substr(_arg, 1, _eq-1)
+                _val = substr(_arg, _eq+1)
+                if (_name == "strict")
+                    _name = "__STRICT__"
+                else if (_name == "debug")
+                    _name = "__DEBUG__"
+                if (!sym_valid_p(_name))
+                    error("Name '" _name "' not valid:" _arg, "ARGV", _i)
+                if (sym_protected_p(_name))
+                    error("Symbol '" _name "' protected:" _arg, "ARGV", _i)
                 if (! name_available_in_all_p(__name, TYPE_CMD TYPE_FUNCTION TYPE_SEQUENCE))
-                    error("Name '" __name "' not available:" __arg, "ARGV", __i)
-                sym_store(__name, __val)
+                    error("Name '" _name "' not available:" _arg, "ARGV", _i)
+                sym_store(_name, _val)
 
             # Otherwise load a file
             } else {
                 load_init_files()
-                if (! dofile(rm_quotes(__arg), FALSE)) {
-                    warn("File '" __arg "' does not exist", "ARGV", __i)
-                    exit_code = EX_NOINPUT
+                if (!dofile(rm_quotes(_arg), FALSE)) {
+                    warn("File '" _arg "' does not exist", "ARGV", _i)
+                    __exit_code = EX_NOINPUT
                 }
             }
         }
 
-        # If we get here with init_files_loaded still false, that means
+        # If we get here with __init_files_loaded still false, that means
         # we used up every ARGV defining symbols and didn't specify any
         # files.  Not specifying any input files, like ARGC==1, means to
         # read standard input, so that is what we must now do.
-        if (! init_files_loaded) {
+        if (!__init_files_loaded) {
             load_init_files()
-            exit_code = dofile("-", FALSE) ? EX_OK : EX_NOINPUT
+            __exit_code = dofile("-", FALSE) ? EX_OK : EX_NOINPUT
         }
 
     # ARGC < 1, can't happen...
     } else {
         print_stderr("Usage: m2 [NAME=VAL ...] [file ...]")
-        exit_code = EX_USAGE
+        __exit_code = EX_USAGE
     }
 
     end_program(SHIP_OUT_STREAMS)
@@ -3508,7 +3525,7 @@ BEGIN {
 # viz. SHIP_OUT_STREAMS, so we usually undivert all pending streams.
 # When flush_diverted_streams is false (DISCARD_STREAMS), any diverted
 # data is dropped.  Standard output is always flushed, and program exits
-# with value from global variable exit_code.
+# with value from global variable __exit_code.
 function end_program(flush_diverted_streams)
 {
     # If requested (the normal case), ship out any remaining diverted
@@ -3519,5 +3536,5 @@ function end_program(flush_diverted_streams)
         undivert_all()
     }
     flush_stdout()
-    exit exit_code
+    exit __exit_code
 }

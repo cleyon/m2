@@ -1,6 +1,6 @@
 #!/usr/bin/awk -f
 
-BEGIN { __version = "3.4.2" }
+BEGIN { __version = "3.4.90_nsym" }
 
 #*****************************************************************************
 #
@@ -554,22 +554,29 @@ BEGIN { __version = "3.4.2" }
 #*****************************************************************************
 
 BEGIN {
-    TRUE = OKAY     =  1
-    FALSE = EOF     =  0
-    ERROR           = -1
+    TRUE = OKAY      =  1
+    FALSE = EOF      =  0
+    ERROR            = -1
+    GLOBAL_NAMESPACE =  0
 
     # Exit codes
-    EX_OK           =  0
-    EX_M2_ERROR     =  1
-    EX_USER_REQUEST =  2
-    EX_USAGE        = 64
-    EX_NOINPUT      = 66
+    EX_OK            =  0
+    EX_M2_ERROR      =  1
+    EX_USER_REQUEST  =  2
+    EX_USAGE         = 64
+    EX_NOINPUT       = 66
 
-    TYPE_ANY        = "*"
-    TYPE_CMD        = "C"
-    TYPE_FUNCTION   = "F"
-    TYPE_SEQUENCE   = "Q"
-    TYPE_SYMBOL     = "S"
+    TYPE_ANY         = "*"
+    TYPE_CMD         = "C"
+    TYPE_FUNCTION    = "F"
+    TYPE_SEQUENCE    = "Q"
+    TYPE_SYMBOL      = "S"
+
+    FLAG_DEFINED     = "D"
+    FLAG_DEFERRED    = "R"
+    FLAG_PROTECTED   = "P"
+    FLAG_SYSTEM      = "Y"
+    FLAG_EMPTY       = ""
 
     # Early initialize some variables.  This makes `gawk --lint' happy.
     __exit_code = EX_OK
@@ -1136,9 +1143,6 @@ function assert_seq_okay_to_define(name)
 #           cmdtab[NAME, "defined"] ::= TRUE | FALSE
 #           cmdtab[NAME, "definition"] ::= <definition>
 #
-#       TYPE_FUNCTION:          functab
-#           functab[NAME] ::= TRUE | FALSE
-#
 #       TYPE_SEQUENCE:          seqtab
 #           seqtab[NAME, KEY] // various types for different KEYs
 #
@@ -1160,7 +1164,7 @@ function name_available_in_all_p(name, components,    avail)
     if (components == TYPE_ANY || index(components, TYPE_CMD))
         avail = avail && ! cmd_defined_p(name)
     if (components == TYPE_ANY || index(components, TYPE_FUNCTION))
-        avail = avail && ! (name in functab)
+        avail = avail && ! ((name, GLOBAL_NAMESPACE) in nnamtab)
     if (components == TYPE_ANY || index(components, TYPE_SEQUENCE))
         avail = avail && ! seq_defined_p(name)
     if (components == TYPE_ANY || index(components, TYPE_SYMBOL))
@@ -3423,7 +3427,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i)
           " ltrim mid rem right rtrim sexpr spaces strftime substr time trim" \
           " tz uc uuid", array, " ")
     for (elem in array)
-        functab[array[elem]] = TRUE
+        nnamtab[array[elem], GLOBAL_NAMESPACE] = TYPE_FUNCTION
 
     # Zero stream buffers
     for (i = 1; i <= MAX_STREAM; i++)

@@ -1,10 +1,10 @@
 # Parse a string str as a possible symbol name and return number of matches.
-# 0. If string is invalid, return 0 to indicate an error.
-# 1. If string looks like a plain symbol name (e.g., "foo"):
+# 1. If string is invalid, return -1 to indicate an error.
+# 2. If string looks like a plain symbol name (e.g., "foo"):
 #      part[1] := symbol name (root)
 #      part[2] := ""
 #      Return 1
-# 2. If string looks like a symbol with an index (e.g., "foo[bar]"):
+# 3. If string looks like a symbol with an index (e.g., "foo[bar]"):
 #      part[1] := symbol root
 #      part[2] := index
 #      Return 2
@@ -12,7 +12,7 @@ function name_S_parse(str, part,    cnt, i)
 {
     if (str !~ /^[^[\]]+(\[[^[\]]+\])?$/) {
         # print("Name '" str "' not valid")
-        return 0
+        return ERROR            # -1
     }
     cnt = split(str, part, "(\\[|\\])")
     # print("'" str "' ==> " cnt " fields:")

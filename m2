@@ -557,6 +557,7 @@ BEGIN {
     TRUE = OKAY      =  1
     FALSE = EOF      =  0
     ERROR            = -1
+    EMPTY            = ""
     GLOBAL_NAMESPACE =  0
 
     # Exit codes
@@ -598,11 +599,11 @@ BEGIN {
 #  "m2:"  FILE  ":"  LINE  ":"  TEXT
 function format_message(text, file, line,    s)
 {
-    if (file == "")
+    if (file == EMPTY)
         file = sym_fetch("__FILE__")
     if (file == "/dev/stdin" || file == "-")
         file = "<STDIN>"
-    if (line == "")
+    if (line == EMPTY)
         line = sym_fetch("__LINE__")
 
     # If file and line are provided with default values, why is the if()
@@ -661,10 +662,10 @@ function debugging_enabled_p()
 
 function dbg(key, lev)
 {
-    if (key == "")               key = "m2"
+    if (key == EMPTY)            key = "m2"
     if (! (key in __dbg_keys))   error("Name '" key "' not available")
     if (!debugging_enabled_p())  return FALSE
-    if (lev == "")               lev = 1
+    if (lev == EMPTY)            lev = 1
     if (lev <= 0)                return TRUE
     if (lev > MAX_DBG_LEVEL)     lev = MAX_DBG_LEVEL
     if (!sym2_defined_p("__DBG__", key))
@@ -674,9 +675,9 @@ function dbg(key, lev)
 
 function dbg_set_level(key, lev)
 {
-    if (key == "")               key = "m2"
+    if (key == EMPTY)            key = "m2"
     if (! (key in __dbg_keys))   error("Name '" key "' not available")
-    if (lev == "")               lev = 1
+    if (lev == EMPTY)            lev = 1
     if (lev < 0)                 lev = 0
     if (lev > MAX_DBG_LEVEL)     lev = MAX_DBG_LEVEL
     sym2_store("__DBG__", key, lev+0)
@@ -721,7 +722,7 @@ function undivert(stream)
         return
     if (!emptyp(__streambuf[stream])) {
         ship_out(__streambuf[stream])
-        __streambuf[stream] = ""
+        __streambuf[stream] = EMPTY
     }
 }
 
@@ -844,7 +845,7 @@ function sym2_fetch(arr, key)
 
 function sym_increment(sym, incr)
 {
-    if (incr == "")
+    if (incr == EMPTY)
         incr = 1
     symtab[sym_internal_form(sym)] += incr
 }
@@ -1005,8 +1006,8 @@ function assert_sym_defined(sym, hint,    s)
     if (sym_defined_p(sym))
         return TRUE
     s = sprintf("Name '%s' not defined%s%s",  sym,
-                ((hint != "")  ? " [" hint "]" : ""),
-                ((!emptyp($0)) ? ":" $0        : "") )
+                ((hint != EMPTY) ? " [" hint "]" : ""),
+                ((!emptyp($0)) ? ":" $0 : "") )
     error(s)
 }
 
@@ -1265,7 +1266,7 @@ function build_prog_cmdline(prog, arg, silent)
     return sprintf("%s %s%s", \
                    sym2_fetch("__PROG__", prog), \
                    arg, \
-                   (silent ? " >/dev/null 2>/dev/null" : ""))
+                   (silent ? " >/dev/null 2>/dev/null" : EMPTY))
 }
 
 
@@ -1288,7 +1289,7 @@ function tmpdir(    t)
         t = sym_fetch("__TMPDIR__")
     while (last(t) == "\n")
         t = chop(t)
-    return t ((last(t) == "/") ? "" : "/")
+    return t ((last(t) == "/") ? EMPTY : "/")
 }
 
 
@@ -1353,7 +1354,7 @@ function randint(n)
 # Return a string of N random hex digits [0-9A-F].
 function hex_digits(n,    s)
 {
-    s = ""
+    s = EMPTY
     while (n-- > 0)
         s = s sprintf("%X", randint(16))
     return s
@@ -1450,7 +1451,7 @@ function _less_than(s1, s2,    fs1, fs2, d1, d2)
 # read until end of file and return whatever is found, without error.
 function read_lines_until(delim,    buf, delim_len)
 {
-    buf = ""
+    buf = EMPTY
     delim_len = length(delim)
     while (TRUE) {
         if (readline() != OKAY) {
@@ -1731,9 +1732,9 @@ function m2_case(    save_line, save_lineno, target, branch, next_branch,
     assert_sym_defined(sym, "case")
     target = sym_fetch(sym)
     __casenum++
-    casetab[__casenum, OTHERWISE, "label"] = ""
+    casetab[__casenum, OTHERWISE, "label"] = EMPTY
     casetab[__casenum, OTHERWISE, "line"] = 0
-    casetab[__casenum, OTHERWISE, "definition"] = ""
+    casetab[__casenum, OTHERWISE, "definition"] = EMPTY
     max_branch = branch = ERROR;  next_branch = 1
 
     while (TRUE) {
@@ -1761,7 +1762,7 @@ function m2_case(    save_line, save_lineno, target, branch, next_branch,
             # Store it
             casetab[__casenum, branch, "label"] = text
             casetab[__casenum, branch, "line"] = sym_fetch("__LINE__")
-            casetab[__casenum, branch, "definition"] = ""
+            casetab[__casenum, branch, "definition"] = EMPTY
         } else if ($1 == "@otherwise") {
             dbg_print("case", 3, "(m2_case) Found @otherwise at line " \
                       sym_fetch("__LINE__"))
@@ -1894,7 +1895,7 @@ function m2_dump(    buf, cnt, definition, dumpfile, i, key, keys, sym_name, all
     qsort(keys, 1, cnt)
 
     # Format definitions
-    buf = ""
+    buf = EMPTY
     for (i = 1; i <= cnt; i++) {
         key = keys[i]
         if (sym_defined_p(key))
@@ -1914,7 +1915,7 @@ function m2_dump(    buf, cnt, definition, dumpfile, i, key, keys, sym_name, all
         # was not read properly...  Still, we only warn in strict mode.
         if (strictp())
             warn("Empty symbol table:" $0)
-    } else if (dumpfile == "")  # No FILE arg provided to @dump command
+    } else if (dumpfile == EMPTY)  # No FILE arg provided to @dump command
         print_stderr(buf)
     else {
         print buf > dumpfile
@@ -2151,7 +2152,7 @@ function m2_input(    getstat, input, sym)
     getstat = getline input < "/dev/tty"
     if (getstat == ERROR) {
         warn("Error reading file '/dev/tty' [input]:" $0)
-        input = ""
+        input = EMPTY
     }
     sym_store(sym, input)
 }
@@ -2229,7 +2230,7 @@ function m2_read(    sym, filename, line, val, getstat, silent)
     sub("^[ \t]*", "")
     filename = rm_quotes(dosubs($0))
 
-    val = ""
+    val = EMPTY
     while (TRUE) {
         getstat = getline line < filename
         if (getstat == ERROR && !silent)
@@ -2476,7 +2477,7 @@ function dofile(filename, read_literally,    savebuffer, savefile, saveifdepth, 
     if (!path_exists_p(filename))
         return FALSE
     dbg_print("m2", 1, ("(dofile) filename='" filename "'" \
-                        (read_literally ? ", read_literally=TRUE" : "") \
+                        (read_literally ? ", read_literally=TRUE" : EMPTY) \
                         ")"))
     if (filename in __active_files)
         error("Cannot recursively read '" filename "':" $0)
@@ -2490,7 +2491,7 @@ function dofile(filename, read_literally,    savebuffer, savefile, saveifdepth, 
 
     # Set up new file context
     __active_files[filename] = TRUE
-    __buffer = ""
+    __buffer = EMPTY
     sym_increment("__NFILE__", 1)
     sym_store("__FILE__", filename)
     sym_store("__LINE__", 0)
@@ -2532,7 +2533,7 @@ function readline(    getstat, i)
         # Return the buffer even if somehow it doesn't end with a newline
         if ((i = index(__buffer, "\n")) == IDX_NOT_FOUND) {
             $0 = __buffer
-            __buffer = ""
+            __buffer = EMPTY
         } else {
             $0 = substr(__buffer, 1, i-1)
             __buffer = substr(__buffer, i+1)
@@ -2658,7 +2659,7 @@ function docommand(    cmdname, narg, args, i, nparam, savebuffer, savefile, sav
         sym_increment("__LINE__", 1) # __LINE__ is local, but not __NLINE__
         if ((i = index(__buffer, "\n")) == IDX_NOT_FOUND) {
             $0 = __buffer
-            __buffer = ""
+            __buffer = EMPTY
         } else {
             $0 = substr(__buffer, 1, i-1)
             __buffer = substr(__buffer, i+1)
@@ -2698,7 +2699,7 @@ function docasebranch(case, branch, brline,    savebuffer, saveifdepth, saveline
         sym_increment("__LINE__", 1) # __LINE__ is local, but not __NLINE__
         if ((i = index(__buffer, "\n")) == IDX_NOT_FOUND) {
             $0 = __buffer
-            __buffer = ""
+            __buffer = EMPTY
         } else {
             $0 = substr(__buffer, 1, i-1)
             __buffer = substr(__buffer, i+1)
@@ -3361,7 +3362,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i)
     SHIP_OUT_STREAMS     = 1
     TAU                  = 8 * atan2(1, 1)         # 2 * PI
 
-    __buffer             = ""
+    __buffer             = EMPTY
     __casenum            = 0
     __init_deferred      = TRUE  # Becomes FALSE in initialize_deferred_symbols()
     __init_files_loaded  = FALSE # Becomes TRUE in load_init_files()
@@ -3392,7 +3393,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i)
     sym2_store("__FMT__", "seq",        "%d")
     sym2_store("__FMT__", "time",       "%H:%M:%S")
     sym2_store("__FMT__", "tz",         "%Z")
-    sym_store("__INPUT__",              "")
+    sym_store("__INPUT__",              EMPTY)
     sym_store("__LINE__",               0)
     sym_store("__M2_UUID__",            uuid())
     sym_store("__M2_VERSION__",         __version)
@@ -3431,7 +3432,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i)
 
     # Zero stream buffers
     for (i = 1; i <= MAX_STREAM; i++)
-        __streambuf[i] = ""
+        __streambuf[i] = EMPTY
 }
 
 

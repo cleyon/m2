@@ -71,6 +71,7 @@ BEGIN { __version = "3.4.2" }
 #           @incr NAME [N]         Add N (1) to an already defined NAME
 #           @initialize NAME VAL   Like @define, but abort if NAME already defined
 #           @input [NAME]          Read a single line from keyboard and define NAME
+#           @literal DELIM         Copy input literally until line begins with DELIM
 #           @longdef NAME          Set NAME to <...> (all lines until @endlongdef)
 #             <...>                  Don't use other @ commands inside definition
 #           @endlongdef              But simple @NAME@ references should be okay
@@ -2068,10 +2069,13 @@ function m2_if(    sym, cond, op, val2, val4)
 }
 
 
+# @typeout, @literal    DELIM
 # @nextfile, @ignore    DELIM
 function m2_ignore(    buf, delim, save_line, save_lineno)
 {
-    # Ignore input until line starts with $2.  This means
+    # For @typeout/@nextfile, read remainder of input file.
+    # For @ignore/@literal, read input until line starts with $2.
+    # This means
     #     @ignore The
     #        <...>
     #     Theodore Roosevelt
@@ -2079,10 +2083,11 @@ function m2_ignore(    buf, delim, save_line, save_lineno)
 
     if (!currently_active_p())
         return
-    if (($1 == "@ignore" && NF != 2) || ($1 == "@nextfile" && NF != 1))
+    if ((($1 == "@literal"  || $1 == "@ignore")  && NF != 2) || \
+        (($1 == "@nextfile" || $1 == "@typeout") && NF != 1))
         error("Bad parameters:" $0)
-    if ($1 == "@nextfile")
-        read_lines_until("")
+    if ($1 == "@nextfile" || $1 == "@typeout")
+        buf = read_lines_until("")
     else {
         save_line = $0
         save_lineno = sym_fetch("__LINE__")
@@ -2091,6 +2096,8 @@ function m2_ignore(    buf, delim, save_line, save_lineno)
         if (buf == EOD_INDICATOR)
             error(sprintf("Delimiter '%s' not found:%s" delim, save_line), "", save_lineno)
     }
+    if (($1 == "@literal" || $1 == "@typeout") && !emptyp(buf))
+        ship_out(buf "\n")
 }
 
 
@@ -2398,17 +2405,6 @@ function m2_shell(    delim, save_line, save_lineno, input_text, input_file,
 }
 
 
-# @typeout
-function m2_typeout(    buf)
-{
-    if (!currently_active_p())
-        return
-    buf = read_lines_until("")
-    if (!emptyp(buf))
-        ship_out(buf "\n")
-}
-
-
 # @undef[ine]           NAME
 function m2_undefine(    name, root)
 {
@@ -2590,6 +2586,7 @@ function process_line(read_literally,    sp, lbrace, cut, newstring, user_cmd)
     else if (/^@incr([ \t]|$)/)           { m2_incr() }
     else if (/^@init(ialize)?([ \t]|$)/)  { m2_default() }
     else if (/^@input([ \t]|$)/)          { m2_input() }
+    else if (/^@literal([ \t]|$)/)        { m2_ignore() }
     else if (/^@longdef([ \t]|$)/)        { m2_longdef() }
     else if (/^@newcmd([ \t]|$)/)         { m2_newcmd() }
     else if (/^@nextfile([ \t]|$)/)       { m2_ignore() }
@@ -2603,7 +2600,7 @@ function process_line(read_literally,    sp, lbrace, cut, newstring, user_cmd)
     else if (/^@sequence([ \t]|$)/)       { m2_sequence() }
     else if (/^@shell([ \t]|$)/)          { m2_shell() }
     else if (/^@stderr([ \t]|$)/)         { m2_error() }
-    else if (/^@typeout([ \t]|$)/)        { m2_typeout() }
+    else if (/^@typeout([ \t]|$)/)        { m2_ignore() }
     else if (/^@undef(ine)?([ \t]|$)/)    { m2_undefine() }
     else if (/^@undivert([ \t]|$)/)       { m2_undivert() }
     else if (/^@unless([ \t]|$)/)         { m2_if() }

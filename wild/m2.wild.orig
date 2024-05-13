@@ -1,7 +1,6 @@
-#!/usr/local/bin/gawk -f
 #!/usr/bin/awk -f
 
-BEGIN { __version = "3.4.93_nsym" }
+BEGIN { __version = "3.4.0" }
 
 #*****************************************************************************
 #
@@ -45,10 +44,9 @@ BEGIN { __version = "3.4.93_nsym" }
 #       evaluate, control, or define macros for subsequent processing:
 #
 #           @append NAME TEXT      Add TEXT to an already defined macro NAME
-#           @array ARR             Declare ARR as an array
 #           @case NAME             Evaluate value of NAME, comparing it with
-#             @of TEXT               each successive @of TEXT.  If none match,
-#             @otherwise             use text from @otherwise block if present.
+#           @of TEXT                 each successive @of TEXT.  If none match,
+#           @otherwise               use text from @otherwise block if present.
 #           @endcase               End @case structure.  Also @esac
 #           @comment [TEXT]        Comment; ignore line.  Also @@, @c, @;, and @#
 #           @debug [TEXT]          If debugging, send TEXT to standard error
@@ -73,7 +71,6 @@ BEGIN { __version = "3.4.93_nsym" }
 #           @incr NAME [N]         Add N (1) to an already defined NAME
 #           @initialize NAME VAL   Like @define, but abort if NAME already defined
 #           @input [NAME]          Read a single line from keyboard and define NAME
-#           @local NAME            Declare NAME as a symbol local to the current frame
 #           @longdef NAME          Set NAME to <...> (all lines until @endlongdef)
 #             <...>                  Don't use other @ commands inside definition
 #           @endlongdef              But simple @NAME@ references should be okay
@@ -84,10 +81,9 @@ BEGIN { __version = "3.4.93_nsym" }
 #           @paste FILE        [S] Insert FILE contents literally, no macros
 #           @read NAME FILE    [S] Read FILE contents to define NAME
 #           @readarray F FILE  [S] Read each line from FILE into array F[]
-#           @readonly NAME         Make NAME unchangeable -- cannot be undone
 #           @sequence ID ACT [N]   Create and manage sequences
 #           @shell DELIM [PROG]    Evaluate input until DELIM, send raw data to PROG
-#             <...>                  Prog output is captured; exit status in __SHELL__
+#                                    Prog output is captured; exit status in __SHELL__
 #           @typeout               Print remainder of input file literally, no macros
 #           @undefine NAME         Remove definition of NAME
 #           @undivert [N]          Inject stream N (def all) into current stream
@@ -96,7 +92,7 @@ BEGIN { __version = "3.4.93_nsym" }
 #                                    Also called @echo, @stderr
 #
 #       [S] When the command is prefixed with "s" (@sinclude), denotes a
-#           `silent' variant which prints fewer error messages .
+#          `silent' variant which prints fewer error messages .
 #
 #       A definition may extend across multiple lines by ending each
 #       line with a backslash, thus quoting the following newline.
@@ -183,11 +179,10 @@ BEGIN { __version = "3.4.93_nsym" }
 #       Symbols can be suffixed with "[<key>]" to form simple arrays.
 #
 #       Symbols that start and end with "__" (like __FOO__) are called
-#       "system" symbols.  Except for certain writable symbols, they
+#       "system" symbols.  Except for certain unprotected symbols, they
 #       cannot be modified by the user.  The following are pre-defined;
 #       example values, defaults, or types are shown:
 #
-#           __CWD__                Current working directory, trailing slash
 #           __DATE__           [1] m2 run start date as YYYYMMDD (eg 19450716)
 #           __DBG__[<id>]          Levels for internal debugging systems (integer)
 #           __DEBUG__          [3] Debugging enabled? (boolean, def FALSE)
@@ -202,9 +197,8 @@ BEGIN { __version = "3.4.93_nsym" }
 #           __FMT__[number]    [3] Format for printing numbers (sync w/CONVFMT)
 #           __FMT__[seq]       [3] Format for printing sequence values (%d)
 #           __FMT__[time]      [3] Time format for @time@ (%H:%M:%S)
-#           __FMT__[tz]        [3] Time format for @tz@ (%Z)
+#           __FMT__[tz]        [3] Time format for @tz@   (%Z)
 #           __GID__                Group id (effective gid)
-#           __HOME__               User's home directory, with trailing /
 #           __HOST__               Short host name (eg myhost)
 #           __HOSTNAME__           FQDN host name (eg myhost.example.com)
 #           __INPUT__          [3] The data read by @input
@@ -219,16 +213,16 @@ BEGIN { __version = "3.4.93_nsym" }
 #           __STRICT__         [3] Strict mode? (boolean, def TRUE)
 #           __TIME__           [1] m2 run start time as HHMMSS (eg 053000)
 #           __TIMESTAMP__      [1] ISO 8601 timestamp (1945-07-16T05:30:00-0600)
-#           __TMPDIR__         [3] Location for temporary files (def /tmp/)
+#           __TMPDIR__         [3] Location for temporary files (def /tmp)
 #           __TZ__             [1] Time zone numeric offset from UTC (-0400)
 #           __UID__                User id (effective uid)
 #           __USER__               User name
 #
 #       [1] __DATE__, __EPOCH__, __TIME__, __TIMESTAMP__, and __TZ__ are
 #           fixed at program start and do not change.  @date@, @epoch@,
-#           @time@, and @tz@ do change, so you could define timestamp as:
-#               @define timestamp @date@T@time@@__TZ__@
-#           to generate up-to-date timestamps.  Of course, time zones
+#           @time@, and @tz@ do change, so:
+#               @date@T@time@@__TZ__@
+#           will generate an up-to-date timestamp.  Of course, time zones
 #           don't normally change; the point is that @__TZ__@ prints
 #           "-0800" while @tz@ prints "PST".
 #
@@ -236,7 +230,7 @@ BEGIN { __version = "3.4.93_nsym" }
 #           variable VAR.  An error is thrown if VAR is not defined.  To
 #           ignore error and continue with empty string, disable __STRICT__.
 #
-#       [3] Denotes a user-modifiable system symbol.
+#       [3] Denotes an "unprotected" system symbol.
 #
 # STREAMS & DIVERSIONS
 #       m2 attempts to follow m4 in its use of @divert and @undivert.
@@ -271,7 +265,7 @@ BEGIN { __version = "3.4.93_nsym" }
 #                 not numerical order), if legal, into current stream.
 #
 #       End-of-Data Processing:
-#           There is an implicit @divert 0 and @undivert performed
+#           There is an implicit "@divert 0" and "@undivert" performed
 #           when m2 reaches the end of its input.  If you want to avoid
 #           this and discard any diverted data that hasn't shipped out yet,
 #           add the following to the end of your input data:
@@ -291,24 +285,23 @@ BEGIN { __version = "3.4.93_nsym" }
 #       default, sequences begin at zero and increment by one as
 #       appropriate.  These defaults can be changed, and the value
 #       updated or restarted.  You create and manage sequences with the
-#       @sequence <ID> <ACTION> [<ARG>] command.  Valid actions are:
+#       @sequence command.  The following actions are valid:
 #
-#           ID [create]            Create a new sequence named ID
+#           ID create              Create a new sequence named ID
 #           ID delete              Destroy sequence named ID
-#           ID format STR          Format string used to print value (%d)
-#           ID incr N              Set increment to N (1)
-#           ID init N              Set initial value to N (0)
+#           ID format PRINTFSTR    Format string used to print value (%d)
+#           ID incr   N            Set increment to N (1)
+#           ID init   N            Set initial value to N (0)
 #           ID next                Increment value (no output)
 #           ID prev                Decrement value (no output)
 #           ID restart             Set current value to initial value
-#           ID set N               Set value directly to N
+#           ID set    N            Set value directly to N
 #
 #       To use a sequence, surround the sequence ID with @ characters
 #       just like a macro.  This injects the current value, formatted by
-#       calling sprintf with the specified format.  The form @++ID is
-#       used to generate an increasing sequence of values printed in a
-#       user-customizable format.  To get the current value printed in
-#       decimal without modification or formatting, say @ID currval@.
+#       calling sprintf with the specified format.  To get the current
+#       value printed in decimal without any special formatting, say
+#       "@ID currval@".
 #
 #       Sequence values can be modified in two ways:
 #
@@ -328,18 +321,18 @@ BEGIN { __version = "3.4.93_nsym" }
 #
 # MATHEMATICAL EXPRESSIONS
 #       The @expr ...@ function evaluates mathematical expressions and
-#       inserts their results.  @expr@ supports the standard
-#       arithmetic operators:               (  )  +  -  *  /  %  ^
-#       and the comparison operators:       <  <=  ==  !=  >=  >
-#       and return 0 or 1 as per Awk.  Logical negation is available with !.
-#       NO OTHER boolean operators are supported.  Nota Bene,
+#       inserts their results.  It is based on "calc3" from "The AWK
+#       Programming Language" p. 146, with enhancements by Kenny
+#       McCormack and Alan Linton.  @expr@ supports the standard
+#       arithmetic operators:      +  -  *  /  %  ^  (  )
+#       The comparison operators:  <  <=  ==  !=  >=  >
+#       return 0 or 1, as per Awk.  Logical negation is available with !.
+#       No other boolean operators are supported.  Nota bene,
 #       && and || are NOT SUPPORTED!
 #
 #       @expr@ supports the following functions:
 #
 #           abs(x)                 Absolute value of x, |x|
-#           acos(x)                Arc-cosine of x (-1 <= x <= 1)
-#           asin(x)                Arc-sine of x (-1 <= x <= 1)
 #           atan2(y,x)             Arctangent of y/x, -pi <= atan2 <= pi
 #           ceil(x)                Ceiling of x, smallest integer >= x
 #           cos(x)                 Cosine of x, in radians
@@ -347,7 +340,6 @@ BEGIN { __version = "3.4.93_nsym" }
 #           deg(x)                 Convert radians to degrees
 #           exp(x)                 Exponential (anti-logarithm) of x, e^x
 #           floor(x)               Floor of x, largest integer <= x
-#           hypot(x,y)             Hypotenuse of a right-angled triangle
 #           int(x)                 Integer part of x
 #           log(x)                 Natural logarithm of x, base e
 #           log10(x)               Common logarithm of x, base 10
@@ -358,7 +350,6 @@ BEGIN { __version = "3.4.93_nsym" }
 #           rand()                 Random float, 0 <= rand < 1
 #           randint(x)             Random integer, 1 <= randint <= x
 #           round(x)               Normal rounding to nearest integer
-#           sign(x)                Signum of x [-1, 0, or +1]
 #           sin(x)                 Sine of x, in radians
 #           sqrt(x)                Square root of x
 #           tan(x)                 Tangent of x, in radians
@@ -441,8 +432,8 @@ BEGIN { __version = "3.4.93_nsym" }
 #                 no value was supplied.
 #           Symbol 'XXX' already defined
 #               - @initialize attempted to define a previously defined symbol.
-#           Symbol 'XXX' read-only
-#               - Attempt to modify a protected (read-only) symbol (__FOO__).
+#           Symbol 'XXX' protected
+#               - Attempt to modify a protected symbol (__EXAMPLE__).
 #                 (__STRICT__ is an exception and can be modified.)
 #           Unexpected end of definition
 #               - Input ended before macro definition was complete.
@@ -453,39 +444,15 @@ BEGIN { __version = "3.4.93_nsym" }
 #
 # FLAGS
 #       A flag is a single character boolean-valued piece of information
-#       about a "name", an entry in nnamtab.  The flag is True if the
+#       about an entry in the symbol table.  The flag is True if the
 #       character is present in the flags string and False if it is absent.
+#
 #       The following flag characters are recognized:
 #
-#       Type is mutually exclusive; exactly one must be present:
-#           TYPE_ARRAY          1 : Array refs must use subscripts
-#           TYPE_BUILTIN        2 : Global namespace (hard-wired @ commands)
-#           TYPE_COMMAND        3 : Global namespace (user-defined commands)
-#           TYPE_FUNCTION       4 : Global namespace
-#           TYPE_SEQUENCE       5 : Global namespace
-#           TYPE_SYMBOL         6
-#
-#       Read-Only/Writable is mutually exclusive; both are optional:
-#           FLAG_READONLY       R : Read-only; immune from user modification
-#           FLAG_WRITABLE       W : User is able to modify symbol's value
-#
-#       Flags indicating value "type" are mutually exclusive; all are optional:
-#           FLAG_BOOLEAN        B : Value forced to be a Boolean (0 or 1)
-#           FLAG_INTEGER        I : Value must be an integer
-#           FLAG_NUMERIC        N : Value must be a number
-#
-#       Other flags, all optional:
-#           FLAG_DELAYED        D : Delayed means value will be defined leter
-#           FLAG_SYSTEM         Y : Internal variable, level 0, usually
-#                                   (but not always) read-only.  Also,
-#                                   system symbols cannot be shadowed.
-#       When TYPE_ARRAY is set:
-#           no flags            User can add/delete/whatever to array & elements
-#           FLAG_SYSTEM         User cannot add or delete elements.  Existing
-#                               elements may be updated.  As usual, level=0 and
-#                               name cannot be shadowed.
-#           FLAG_READONLY       User cannot change, add, or delete any element.
-#           FLAG_WRITABLE       User can add, delete, change elements
+#           D                      Defined?  Promises a "value" element
+#           F                      Deferred?  initialize_deferred_symbols()
+#           P                      Protected?  Immune from modification
+#           S                      System?  ``Internal'' variable, frame 0
 #
 # EXIT CODES
 #       0       Normal process completion, or @exit command
@@ -499,8 +466,6 @@ BEGIN { __version = "3.4.93_nsym" }
 #       you have learned to expect.
 #
 #       Self-referential/recursive macros will hang the program.
-#
-#       m2 is not UTF-8 safe.
 #
 #       Left-to-right order of evaluation is not necessarily guaranteed.
 #           @++N@ - We are now on step @N@
@@ -521,7 +486,6 @@ BEGIN { __version = "3.4.93_nsym" }
 #           @error You must provide a value for 'region' on the command line
 #           @endif
 #           @#              Validate region
-#           @array valid_regions
 #           @define valid_regions[us-east-1]
 #           @define valid_regions[us-east-2]
 #           @define valid_regions[us-west-1]
@@ -530,7 +494,6 @@ BEGIN { __version = "3.4.93_nsym" }
 #           @error Region '@region@' is not valid: choose us-{east,west}-{1,2}
 #           @endif
 #           @#              Configure image name according to region
-#           @array images
 #           @define images[us-east-1]   my-east1-image-name
 #           @define images[us-east-2]   my-east2-image-name
 #           @define images[us-west-1]   my-west1-image-name
@@ -575,16 +538,10 @@ BEGIN { __version = "3.4.93_nsym" }
 #           C, and other languages."  See: B. W. Kernighan and D. M. Ritchie,
 #           The M4 Macro Processor, AT&T Bell Laboratories, Computing Science
 #           Technical Report #59, July 1977.
-#       M5  Prof. A. Dain Samples described and implemented M5.  See: User's
-#           Guide to the M5 Macro Language 2ed [Usenet comp.compilers, 1992].
-#              "M5 is a powerful, easy to use, general purpose macro language.
-#               M5's syntax allows concise, formatted, and easy to read
-#               specifications of macros while still giving the user control
-#               over the appearance of the resulting text.  M5 macros can have
-#               named parameters, can have an unbounded number of parameters,
-#               and can manipulate parameters as a single unit. [...]"
-#           May also refer to a multitronic computer designed and built by
-#           Dr Richard Daystrom, ca. 2268.  (Not entirely successful.)
+#       M5  Prof. A. Dain Samples described and implemented M5.
+#           See: User's Guide to the M5 Macro Language 2ed [in comp.compilers
+#           newsgroup, 1992].  May also refer to a multitronic computer designed
+#           and built by Dr Richard Daystrom, ~2268.  (Not entirely successful.)
 #       M6  Andrew D. Hall - M6, "a general purpose macro processor used to port
 #           the Fortran source code of the Altran computer algebra system."
 #           See: A. D. Hall, M6 Reference Manual.  Computer Science Technical
@@ -597,47 +554,47 @@ BEGIN { __version = "3.4.93_nsym" }
 #       - https://docstore.mik.ua/orelly/unix3/sedawk/ch13_10.htm
 #
 #*****************************************************************************
+
 BEGIN {
-    TRUE = OKAY      =  1
-    FALSE = EOF      =  0
-    ERROR            = -1
-    EMPTY            = ""
-    GLOBAL_NAMESPACE =  0
+    TRUE = OKAY     =  1
+    FALSE = EOF     =  0
+    ERROR           = -1
 
     # Exit codes
-    EX_OK            =  0;              __exit_code = EX_OK
-    EX_M2_ERROR      =  1
-    EX_USER_REQUEST  =  2
-    EX_USAGE         = 64
-    EX_NOINPUT       = 66
+    EX_OK           =  0
+    EX_M2_ERROR     =  1
+    EX_USER_REQUEST =  2
+    EX_USAGE        = 64
+    EX_NOINPUT      = 66
 
-    # Flags
-    TYPE_ANY         = "*";             FLAG_BOOLEAN     = "B"
-    TYPE_ARRAY       = "1";             FLAG_DELAYED     = "D"
-    TYPE_BUILTIN     = "2";             FLAG_INTEGER     = "I"
-    TYPE_COMMAND     = "3";             FLAG_NUMERIC     = "N"
-    TYPE_FUNCTION    = "4";             FLAG_READONLY    = "R"
-    TYPE_SEQUENCE    = "5";             FLAG_WRITABLE    = "W"
-    TYPE_SYMBOL      = "6";             FLAG_SYSTEM      = "Y"
+    TYPE_ANY        = "*"
+    TYPE_CMD        = "C"
+    TYPE_FUNCTION   = "F"
+    TYPE_SEQUENCE   = "Q"
+    TYPE_SYMBOL     = "S"
 
-    FLAGS_READONLY_INTEGER = TYPE_SYMBOL FLAG_INTEGER FLAG_READONLY FLAG_SYSTEM
-    FLAGS_READONLY_NUMERIC = TYPE_SYMBOL FLAG_NUMERIC FLAG_READONLY FLAG_SYSTEM
-    FLAGS_READONLY_SYMBOL  = TYPE_SYMBOL              FLAG_READONLY FLAG_SYSTEM
-    FLAGS_WRITABLE_SYMBOL  = TYPE_SYMBOL              FLAG_WRITABLE FLAG_SYSTEM
-    FLAGS_WRITABLE_BOOLEAN = TYPE_SYMBOL FLAG_BOOLEAN FLAG_WRITABLE FLAG_SYSTEM
+    FLAG_DEFINED    = "D"
+    FLAG_DEFERRED   = "F"
+    FLAG_PROTECTED  = "P"
+    FLAG_SYSTEM     = "S"
+    FLAGS_EMPTY     = ""
 
-    # Early initialize debug configuration.  This makes `gawk --lint' happy.
-    nnamtab["__DEBUG__",     GLOBAL_NAMESPACE] = FLAGS_WRITABLE_BOOLEAN
-    nsymtab["__DEBUG__", "", GLOBAL_NAMESPACE, "symval"] = FALSE
+    # Early initialize some variables.  This makes `gawk --lint' happy.
+    __exit_code = EX_OK
+    __ptxt[1] = ""; __ptxt[2] = ""
 
-    nnamtab["__DBG__", GLOBAL_NAMESPACE] = TYPE_ARRAY FLAG_WRITABLE FLAG_SYSTEM
-    split("braces case divert dosubs dump expr io m2 read symbol" \
-          " ncmd nnam nseq nsym namespace" \
-          " for",\
-          _dbg_sys_array, " ")
-    for (_dsys in _dbg_sys_array) {
-        __dbg_sysnames[_dbg_sys_array[_dsys]] = TRUE
-    }
+    # Set up debugging
+    __debug_sym_flags = FLAGS_EMPTY
+    __debug_sym_flags = flag_nowset(FLAG_DEFINED,   __debug_sym_flags)
+    __debug_sym_flags = flag_nowset(FLAG_PROTECTED, __debug_sym_flags)
+    __debug_sym_flags = flag_nowset(FLAG_SYSTEM,    __debug_sym_flags)
+    nsymtab[TYPE_SYMBOL, "__DEBUG__", "", GLOBAL_FRAME, "flags"] = __debug_sym_flags
+    nsymtab[TYPE_SYMBOL, "__DEBUG__", "", GLOBAL_FRAME, "value"] = 0
+
+    split("braces case cmd divert dosubs dump expr m2 read symbol",
+          _dbg_key_array, " ")
+    for (_elem in _dbg_key_array)
+        __dbg_keys[_dbg_key_array[_elem]] = TRUE
 }
 
 
@@ -651,18 +608,18 @@ BEGIN {
 #  "m2:"  FILE  ":"  LINE  ":"  TEXT
 function format_message(text, file, line,    s)
 {
-    if (file == EMPTY)
-        file = nsym_ll_read("__FILE__", "", GLOBAL_NAMESPACE)
+    if (file == "")
+        file = nsym_fetch("__FILE__", "")
     if (file == "/dev/stdin" || file == "-")
         file = "<STDIN>"
-    if (line == EMPTY)
-        line = nsym_ll_read("__LINE__", "", GLOBAL_NAMESPACE)
+    if (line == "")
+        line = nsym_fetch("__LINE__", "")
 
     # If file and line are provided with default values, why is the if()
     # guard still necessary?  Ah, because this function might get invoked
     # very early in m2 execution, before the symbol table is populated.
     # The defaults are therefore empty, resulting in superfluous ":"s.
-              s =   "m2" ":"
+              s = "m2"   ":"
     if (file) s = s file ":"
     if (line) s = s line ":"
     if (text) s = s text
@@ -693,7 +650,6 @@ function warn(text, file, line)
     print_stderr(format_message(text, file, line))
 }
 
-
 function error(text, file, line)
 {
     warn(text, file, line)
@@ -707,73 +663,54 @@ function error(text, file, line)
 #
 #       Debugging functions
 #
-#       dsys : Debug system name : key to __DBG__ hash
-#
 #*****************************************************************************
-function debugp()
+function debugging_enabled_p()
 {
-    return nsym_ll_read("__DEBUG__", "", GLOBAL_NAMESPACE)
+    return sym_true_p("__DEBUG__")
 }
 
-# Predicate: TRUE if debug system level >= provided level (lev).
-# Example:
-#     if (dbg("nsym", 3))
-#         warn("Debugging nsym at level 3 or higher")
-# NB - do NOT call nsym_defined_p() here, you will get infinite recursion
-function dbg(dsys, lev)
+function dbg(key, lev,    flags)
 {
-    if (lev == EMPTY)           lev = 1
-    if (dsys == EMPTY)          error("Dsys is empty")
-    if (! (dsys in __dbg_sysnames)) error("Name '" dsys "' not available")
-    if (!debugp())              return FALSE
-    if (lev <= 0)               return TRUE
-    if (lev > MAX_DBG_LEVEL)    lev = MAX_DBG_LEVEL
-    if (!nsym_ll_in("__DBG__", dsys, GLOBAL_NAMESPACE))
+    if (key == "")               key = "m2"
+    if (! (key in __dbg_keys))   error("Name '" key "' not available")
+    if (!debugging_enabled_p())  return FALSE
+    if (lev == "")               lev = 1
+    if (lev <= 0)                return TRUE
+    if (lev > MAX_DBG_LEVEL)     lev = MAX_DBG_LEVEL
+    # Don't call nsym_fetch() here!  Leads to infinite recursion.
+    # Rather, access nsymtab[] directly not only for speed, but also to
+    # allow nsym_defined_p() or nsym_fetch() to call dbg() and dbg_print().
+    # RC = (nsym_defined_p("__DBG__", key)) \
+    #     ? nsym_fetch("__DBG__", key) >= lev \
+    #     : FALSE
+    if (! ((TYPE_SYMBOL, "__DBG__", key, 0, "flags") in nsymtab))
         return FALSE
-    return dbg_get_level(dsys) >= lev
+    if (flag_false(FLAG_DEFINED,
+           nsymtab[TYPE_SYMBOL, "__DBG__", key, GLOBAL_FRAME, "flags"]))
+        return FALSE
+    return nsymtab[TYPE_SYMBOL, "__DBG__", key, GLOBAL_FRAME, "value"]+0 >= lev
 }
 
-# Return the debug level for a given dsys.  If debugging is not enabled,
-# return its negative value (i.e., multiply by -1) to indicate this.
-#
-# Caller can easily call abs() to get the correct value.  Currently,
-# dbg() is the only caller of this, and negative values are always
-# going to be  less than any LEV.
-function dbg_get_level(dsys)
+function dbg_set_level(key, lev,    flags)
 {
-    if (dsys == EMPTY)          dsys = "m2"
-    if (! (dsys in __dbg_sysnames)) error("Name '" dsys "' not available")
-    # return (nsym_fetch(sprintf("%s[%s]", "__DBG__", dsys))+0) \
-    if (!nsym_ll_in("__DBG__", dsys, GLOBAL_NAMESPACE))
-        return 0
-    return (nsym_ll_read("__DBG__", dsys, GLOBAL_NAMESPACE)+0) \
-         * (debugp() ? 1 : -1)
+    if (key == "")               key = "m2"
+    if (! (key in __dbg_keys))   error("Name '" key "' not available")
+    if (lev == "")               lev = 1
+    if (lev < 0)                 lev = 0
+    if (lev > MAX_DBG_LEVEL)     lev = MAX_DBG_LEVEL
+    # Can't use dbg_print() here...
+    #print_stderr("about to nsym store __DBG__ " key "," lev)
+    # Create flags if needed
+    if (! ((TYPE_SYMBOL, "__DBG__", key, GLOBAL_FRAME, "flags") in nsymtab))
+        nsymtab[TYPE_SYMBOL, "__DBG__", key, GLOBAL_FRAME, "flags"] = \
+            flag_nowset(FLAG_DEFINED, FLAGS_EMPTY)
+    return nsymtab[TYPE_SYMBOL, "__DBG__", key, GLOBAL_FRAME, "value"] = lev
 }
 
-# Set the level (lev) for the debug dsys
-function dbg_set_level(dsys, lev)
+function dbg_print(key, lev, text)
 {
-    if (dsys == EMPTY)           dsys = "m2"
-    if (! (dsys in __dbg_sysnames)) error("Name '" dsys "' not available")
-    if (lev == EMPTY)           lev = 1
-    if (lev < 0)                lev = 0
-    if (lev > MAX_DBG_LEVEL)    lev = MAX_DBG_LEVEL
-    nsym_ll_write("__DBG__", dsys, GLOBAL_NAMESPACE, lev+0)
-}
-
-function dbg_print(dsys, lev, text,
-                   retval)
-{
-    retval = dbg(dsys, lev)
-    #if (dbg(dsys, lev))
-    if (dsys == "cmd" || dsys == "nnam" || dsys == "nsym")
-        return
-    if (retval) {
-        #print_stderr(sprintf("dbg_print(%s,%d)=>%d : %s", dsys, lev, retval, text))
+    if (dbg(key, lev))
         print_stderr(text)
-    } else {
-        #print_stderr(sprintf("dbg_print(%s,%d)=>%d", dsys, lev, retval))
-    }
 }
 
 
@@ -790,7 +727,7 @@ function dbg_print(dsys, lev, text,
 #   > 0         Stream # N
 function ship_out(text,    divnum)
 {
-    divnum = nsym_ll_read("__DIVNUM__", "", GLOBAL_NAMESPACE)
+    divnum = nsym_fetch("__DIVNUM__", "")
     if (divnum == 0)
         printf("%s", text)
     else if (divnum > 0)
@@ -805,11 +742,11 @@ function ship_out(text,    divnum)
 function undivert(stream)
 {
     dbg_print("divert", 1, "undivert(" stream ")")
-    if (stream <= 0 || stream == nsym_ll_read("__DIVNUM__", "", GLOBAL_NAMESPACE))
+    if (stream <= 0 || stream == nsym_fetch("__DIVNUM__", ""))
         return
     if (!emptyp(__streambuf[stream])) {
         ship_out(__streambuf[stream])
-        __streambuf[stream] = EMPTY
+        __streambuf[stream] = ""
     }
 }
 
@@ -819,6 +756,9 @@ function undivert_all(    stream)
         if (!emptyp(__streambuf[stream]))
             undivert(stream)
 }
+
+
+
 #*****************************************************************************
 #
 #       String functions
@@ -865,637 +805,9 @@ function rm_quotes(s)
 }
 
 
-
-#*****************************************************************************
-#
-#       Flags API
-#
-#*****************************************************************************
-# TRUE if the one lone flag single_f is absent from code,
-# else FALSE indicating its presence.
-function flag_1false_p(code, single_f)
+function build_subsep(s, t)
 {
-    if (single_f == TYPE_ANY) return FALSE
-    return index(code, single_f) == IDX_NOT_FOUND
-}
-
-
-# TRUE if the one lone flag single_f is present in code,
-# else FALSE indicating its absence.
-function flag_1true_p(code, single_f)
-{
-    if (single_f == TYPE_ANY) return TRUE
-    return index(code, single_f) > 0
-}
-
-
-# TRUE iff all flags in multi_fs are True (set in code).
-function flag_alltrue_p(code, multi_fs,
-                        l, f_arr)
-{
-    # If multi_fs is empty, we treat that as False.
-    if ((l = split(multi_fs, f_arr, "")) == 0)
-        return FALSE
-    # Loop through all the flag characters in multi_fs.
-    # If any of them are false, the whole thing is false.
-    # If you reach the end, it's true.
-    while (l > 0)
-        if (flag_1false_p(code, f_arr[l--]))
-            return FALSE
-    return TRUE
-}
-
-
-# TRUE iff any flag in multi_fs are True (set in code).
-function flag_anytrue_p(code, multi_fs,
-                        l, f_arr)
-{
-    # If multi_fs is empty, we treat that as False.
-    if ((l = split(multi_fs, f_arr, "")) == 0)
-        return FALSE
-    # True if any flag is True, else False
-    while (l > 0)
-        if (flag_1true_p(code, f_arr[l--]))
-            return TRUE
-    return FALSE
-}
-
-function flag_allfalse_p(code, multi_fs)
-{
-    return !flag_anytrue_p(code, multi_fs)
-}
-
-function flag_anyfalse_p(code, multi_fs)
-{
-    return !flag_alltrue_p(code, multi_fs)
-}
-
-# Return a new code string (NB - old one is NOT updated in place!)
-# with corresponding flags either set or cleared.
-function flag_set_clear(code, set_fs, clear_fs,
-                        l, sf_arr, cf_arr, flag, _idx)
-{
-    # First, clear flags listed in clear_fs
-    for (l = split(clear_fs, cf_arr, ""); l > 0; l--) {
-        flag = cf_arr[l]
-        if (flag_1true_p(code, flag)) {
-            _idx = index(code, flag)
-            code = substr(code, 1, _idx-1) \
-                   substr(code, _idx+1)
-        }
-    }
-
-    # Now set the ones in set_fs
-    for (l = split(set_fs, sf_arr, ""); l > 0; l--) {
-        flag = sf_arr[l]
-        if (flag_1false_p(code, flag))
-            code = code flag
-    }
-
-    return code
-}
-
-
-
-#*****************************************************************************
-#
-#       NEW Symbol API
-#
-#*****************************************************************************
-
-# In strict mode, a symbol must match the following regexp:
-#       /^[A-Za-z#_][A-Za-z#_0-9]*$/
-# see function nnam_valid_strict_regexp_p()
-# In non-strict mode, any non-empty string is valid.
-function nsym_valid_p(sym,
-                      nparts, info)
-{
-    dbg_print("nsym", 4, sprintf("nsym_valid_p: START (sym=%s)", sym))
-    # Parse sym => name, key
-    if ((nparts = nnam_parse(sym, info)) == ERROR) {
-        error("ERROR because nnam_parse failed")
-    }
-    # nparts must be either 1 or 2
-    return nparts == 1 ? info["namevalid"] \
-                       : (info["namevalid"] && info["keyvalid"])
-}
-
-function nsym_create(sym, code,
-                     nparts, name, key, info, level)
-{
-    dbg_print("nsym", 4, sprintf("nsym_create: START (sym=%s, code=%s)", sym, code))
-
-    # Parse sym => name, key
-    if ((nparts = nnam_parse(sym, info)) == ERROR) {
-        error("ERROR because nnam_parse failed")
-    }
-    name = info["name"]
-    key  = info["key"]
-
-    # I believe this code can never create system symbols, therefore
-    # there's no need to look it up.  This is because m2 internally
-    # wouldn't call this function (it would be done more directly in
-    # code, with the level specified directly), and the user certainly
-    # can't do it.
-    #level = nsym_system_p(name) ? GLOBAL_NAMESPACE : __namespace
-    level = __namespace
-
-    # Error if name exists at that level
-    if (nsym_info_defined_lev_p(info, level))
-        error("nsym_create name already exists at that level")
-
-    # Error if first(code) != valid TYPE
-    if (!flag_1true_p(code, TYPE_SYMBOL))
-        error("nsym_create asked to create a non-symbol")
-
-    # Add entry:        nnamtab[name,level] = code
-    # Create an entry in the name table
-    #dbg_print("nsym", 2, sprintf("...
-    # print_stderr(sprintf("nsym_create: nnamtab += [\"%s\",%d]=%s", name, level, code))
-    if (! nnam_ll_in(name, level)) {
-        nnam_ll_write(name, level, code)
-    }
-    # What if things aren't compatible?
-
-    # MORE
-}
-
-
-# This is only for internal use, to easily create and define symbols at
-# program start.  code must be correctly formatted.  No error checking is done.
-# This function only creates symbols in the global namespace.
-function nsym_ll_fiat(name, key, code, new_val,
-                      level)
-{
-    level = GLOBAL_NAMESPACE
-
-    # Create an entry in the name table
-    if (! nnam_ll_in(name, level))
-        nnam_ll_write(name, level, code)
-
-    # Set its value in the symbol table
-    nsym_ll_write(name, key, level, new_val)
-}
-
-# Delayed symbols cannot have keys, so don't even pass anything
-function nsym_delayed_symbol(name, code, delayed_prog, delayed_arg,
-                             level)
-{
-    level = GLOBAL_NAMESPACE
-
-    # Create an entry in the name table
-    if (nnam_ll_in(name, level))
-        error("Cannot create delayed symbol when it already exists")
-
-    nnam_ll_write(name, level, code FLAG_DELAYED)
-    # It has no symbol value (yet), but we do store the two args in the
-    # symbol table
-    nsymtab[name, "", level, "delayed_prog"] = delayed_prog
-    nsymtab[name, "", level, "delayed_arg"]  = delayed_arg
-}
-
-function nsym_destroy(sym, level,
-                      name, key)
-{
-    # Parse sym => name, key
-    # if nsym_system_p(name)          level = 0
-    # Error if name does not exist at that level
-    # Error if nsym_system_p(name)
-    # A ::= Cond: name is array T/F
-    # B ::= Cond: sym has name[key] syntax T/F
-    # if A & B          delete nsymtab[name, key, level, "symval"]
-    # if A & !B         delete every nsymtab entry for key; delete nnamtab entry
-    # if !A & B         syntax error: NAME is not an array and cannot be deindexed
-    # if !A & !B        (normal symbol) delete nsymtab[name, "", level, "symval"];
-    #                                   delete nnamtab[name]
-}
-
-# DO NOT require CODE parameter.  Instead, look up NAME and
-# find its code as normally.  NAME might not even be defined!
-function nsym_system_p(name)
-{
-    if (name == "")
-        error("nsym_system_p: NAME missing")
-    return nnam_ll_in(name, GLOBAL_NAMESPACE) &&
-           flag_alltrue_p(nnam_ll_read(name, GLOBAL_NAMESPACE), TYPE_SYMBOL FLAG_SYSTEM)
-}
-
-function nsym_dump_nsymtab(flagset,    \
-                           x, k, code)
-{
-    print("Begin nsymtab:")
-    for (k in nsymtab) {
-        split(k, x, SUBSEP)
-        # print "name  =", x[1]
-        # print "key   =", x[2]
-        # print "level =", x[3]
-        # print "elem  =", x[4]
-        print sprintf("[\"%s\",\"%s\",%s,\"%s\"] = '%s'",
-                      x[1], x[2], x[3], x[4],
-                      nsymtab[x[1], x[2], x[3], x[4]])
-        # print "----------------"
-    }
-    print("End nsymtab")
-}
-
-# Remove any symbol at level "level" or greater
-function nsym_purge(level,
-                    x, k, del_list)
-{
-    for (k in nsymtab) {
-        split(k, x, SUBSEP)
-        if (x[3]+0 >= level)
-            del_list[x[1], x[2], x[3], x[4]] = TRUE
-    }
-
-    for (k in del_list) {
-        split(k, x, SUBSEP)
-        delete nsymtab[x[1], x[2], x[3], x[4]]
-    }
-}
-
-# Delayed symbols have an entry in nnamtab of TYPE_SYMBOL
-# and FLAG_DELAYED.  Only system symbols in global namespace
-# are delayed, so we don't need to be super careful
-function nsym_delayed_p(sym,
-                        code, level)
-{
-    level = GLOBAL_NAMESPACE
-    if (!nnam_ll_in(sym, level))
-        return FALSE
-    code = nnam_ll_read(sym, level)
-    if (flag_anyfalse_p(code, TYPE_SYMBOL FLAG_DELAYED))
-        return FALSE
-    return ((sym, "", level, "delayed_prog") in nsymtab &&
-            (sym, "", level, "delayed_arg")  in nsymtab &&
-          !((sym, "", level, "symval")       in nsymtab))
-}
-
-# User should have checked to make sure, so let's do it
-function nsym_delayed_define_now(sym,
-                                 code, delayed_prog, delayed_arg, output)
-{
-    code = nnam_ll_read(sym, GLOBAL_NAMESPACE)
-    delayed_prog = nsymtab[sym, "", GLOBAL_NAMESPACE, "delayed_prog"]
-    delayed_arg  = nsymtab[sym, "", GLOBAL_NAMESPACE, "delayed_arg"]
-
-    # Build the command to generate the output value, then store it in the symbol table
-    build_prog_cmdline(delayed_prog, delayed_arg, FALSE) | getline output
-    # Kluge to add trailing slash to pwd(1) output
-    if (sym == "__CWD__")
-        output = with_trailing_slash(output)
-    nsym_ll_write(sym, "", GLOBAL_NAMESPACE, output)
-
-    # Get rid of any trace of FLAG_DELAYED
-    nnam_ll_write(sym, GLOBAL_NAMESPACE, flag_set_clear(code, EMPTY, FLAG_DELAYED))
-    delete nsymtab[sym, "", GLOBAL_NAMESPACE, "delayed_prog"]
-    delete nsymtab[sym, "", GLOBAL_NAMESPACE, "delayed_arg"]
-}
-
-function nsym_defined_p(sym,
-                        nparts, info, name, key, code, level)
-{
-    dbg_print("nsym", 4, sprintf("nsym_defined_p: START (sym=%s)", sym))
-
-    # Parse sym => name, key
-    if ((nparts = nnam_parse(sym, info)) == ERROR)
-        return FALSE
-    name = info["name"]
-    key  = info["key"]
-
-    # Now call nnam_lookup(info)
-    level = nnam_lookup(info)
-    # if (level == ERROR)
-    #     warn("nsym_defined_p: nnam_lookup failed, maybe that's okay")
-
-    # for (level = nsym_system_p(name) ? GLOBAL_NAMESPACE : __namespace; \
-    #      level >= 0; level--) {
-    #     if (nsym_info_defined_lev_p(info, level)) {
-    #         print_stderr("Returning TRUE!")
-    #         return TRUE
-    #     }
-    # }
-    if (!nsym_system_p(name))
-        if (nsym_info_defined_lev_p(info, __namespace)) {
-            dbg_print("nsym", 2, sprintf("nsym_defined_p: END (sym=%s) level=%d => %d", sym, __namespace, TRUE))
-            return TRUE
-        }
-    if (nsym_info_defined_lev_p(info, GLOBAL_NAMESPACE)) {
-        dbg_print("nsym", 2, sprintf("nsym_defined_p: END (sym=%s) level=%d => %d", sym, GLOBAL_NAMESPACE, TRUE))
-        return TRUE
-    }
-
-    dbg_print("nsym", 2, sprintf("nsym_defined_p: END (sym=%s) => %d", sym, FALSE))
-    return FALSE
-}
-
-
-# Caller MUST have previously called nnam_parse().
-# It's the only way to get the `info' paramater value.
-#
-# The caller is responsible for inquiring about nsym_system_p(name),
-# and overriding level to zero if appropriate.  This code does
-# not make any assumptions about name/levels.
-function nsym_info_defined_lev_p(info, level,
-                                 name, key, code,
-                                 x, k)
-{
-    name = info["name"]
-    key  = info["key"]
-    # code = info["code"]
-
-    if (key == EMPTY) {
-        if ((name, "", 0 + level, "symval") in nsymtab) {
-            dbg_print("nsym", 5, sprintf("nsym_info_defined_lev_p TRUE for [\"%s\",\"%s\",%d,\"symval\"] FOUND in hash table", name, key, level))
-            return TRUE
-        }
-        #print_stderr(sprintf("nsym_info_defined_lev_p FALSE for [\"%s\",\"%s\",%d,\"symval\"] bc NOT in hash table", name, key, level))
-        return FALSE
-    } else {
-        # non-empty key means we have to sequential search through table
-        for (k in nsymtab) {
-            split(k, x, SUBSEP)
-            if (x[1]   != name  ||
-                x[2]   != key   ||
-                x[3]+0 != level ||
-                x[4]   != "symval")
-                continue;
-            # Everything matches
-            #print_stderr(sprintf("nsym_info_defined_lev_p TRUE for [\"%s\",\"%s\",%d,\"symval\"] FOUND in hash table", name, key, level))
-            return TRUE
-        }
-        #print_stderr(sprintf("nsym_info_defined_lev_p FALSE for [\"%s\",\"%s\",%d,\"symval\"] bc NOT in hash table", name, key, level))
-        return FALSE
-    }
-}
-
-function nsym_store(sym, new_val,
-                    nparts, info, name, key, level, code, good)
-{
-    dbg_print("nsym", 6, sprintf("nsym_store: START (sym=%s)", sym))
-
-    # Parse sym => name, key
-    if ((nparts = nnam_parse(sym, info)) == ERROR) {
-        error("nsym_store: nnam_parse failed")
-    }
-    name = info["name"]
-    key  = info["key"]
-
-    # Compute level
-    # Now call nnam_lookup(info)
-    level = nnam_lookup(info)
-    # It's okay if nnam_lookup "fails" (level == ERROR) because
-    # we might be attempting to store a new, non-existing symbol.
-
-    # At this point:
-    #   level == ERROR       -> no matching name of any kind
-    #   level == GLOBAL_NAMESPACE -> found in global
-    #   0 < level < ns-1     -> find in other non-global frame
-    #   level == __namespace -> found in current namespace
-    # Just because we found a nnamtab entry doesn't
-    # mean it's okay to just muck about with nsymtab.
-
-    good = FALSE
-    do {
-        if (level == ERROR) {   # name not found in nnam
-            # No nnamtab entry, no code : This means a normal
-            # @define in the global namespace
-            if (info["hasbracket"])
-                error(sprintf("nsym_store: %s is not an array; cannot use brackets here", name))
-            # Do scalar store
-            level = info["level"] = GLOBAL_NAMESPACE
-            code  = info["code"]  = TYPE_SYMBOL
-            nnam_ll_write(name, level, code)
-            good = TRUE
-            break # - - - - - - - - - - - - - - - - - - - - - - - - - -
-        }
-
-        # At this point we know nnam_lookup() found *something* because
-        # level != ERROR
-        code = info["code"]
-
-        # Error if we found an array without key,
-        # or a plain symbol with a subscript.
-        if (flag_1true_p(code, TYPE_ARRAY) && !info["hasbracket"])
-            error(sprintf("nsym_store: %s is an array, so brackets are required", name))
-        if (flag_1false_p(code, TYPE_ARRAY) && info["hasbracket"])
-            error(sprintf("nsym_store: %s is not an array; cannot use brackets here", name))
-
-        if (flag_1true_p(code, TYPE_SYMBOL) &&
-            !nsym_ll_protected(name, code) &&
-            !info["hasbracket"] &&
-            flag_1false_p(code, FLAG_READONLY)) {
-            good = TRUE
-            break # - - - - - - - - - - - - - - - - - - - - - - - - - -
-        }
-
-        if (flag_1true_p(code, TYPE_ARRAY) &&
-            !nsym_ll_protected(name, code) &&
-            info["hasbracket"] &&
-            flag_1false_p(code, FLAG_READONLY)) {
-            good = TRUE
-            break # - - - - - - - - - - - - - - - - - - - - - - - - - -
-        }
-
-        nnam_dump_nnamtab(TYPE_SYMBOL)
-        #nsym_dump_nsymtab()
-        print_stderr(sprintf("nsym_store: LOOP BOTTOM: name='%s', key='%s', level=%d, code='%s'",
-                             name, key, level, code))
-    } while (FALSE)
-
-    # if nsym_system_p(name)          level = 0
-    # Error if name does not exist at that level
-    # Error if symbol is an array but sym doesn't have array[key] syntax
-    # Error if symbol is not an array but sym has array[key] syntax
-    # Error if you don't have permission to write to the symbol
-    #   == Error ("read-only") if (flag_true(FLAG_READONLY))
-    # Error if new_val is not consistent with symbol type (haha)
-    #   or else coerce it to something acceptable (boolean)
-    # Special processing (CONVFMT, __DEBUG__)
-
-    # Add entry:        nsymtab[name, key, level, "symval"] = new_val
-    if (good) {
-        dbg_print("nsym", 1, sprintf("nsym_store: [\"%s\",\"%s\",%d,\"symval\"]=%s",
-                                     name, key, level, new_val))
-        nsym_ll_write(name, key, level, new_val)
-    } else {
-        warn(sprintf("nsym_store: !good sym='%s'", sym))
-    }
-    dbg_print("nsym", 6, sprintf("nsym_store: END;"))
-}
-
-function nsym_ll_read(name, key, level)
-{
-    if (level == "") level = GLOBAL_NAMESPACE
-    # if key == "" that's probaby just fine.
-    # if name == "" that's probably NOT fine.
-    return nsymtab[name, key, level, "symval"] # returns value
-}
-
-function nsym_ll_in(name, key, level)
-{
-    if (level == "") error("nsym_ll_in: LEVEL missing")
-    return (name, key, level, "symval") in nsymtab
-}
-
-function nsym_ll_write(name, key, level, val)
-{
-    if (level == "") error("nsym_ll_write: LEVEL missing")
-    if (nsym_ll_in("__DBG__", "nsym", GLOBAL_NAMESPACE) &&
-        nsym_ll_read("__DBG__", "nsym", GLOBAL_NAMESPACE) >= 5)
-        print_stderr(sprintf("nsym_ll_write: nsymtab[\"%s\", \"%s\", %d, \"symval\"] = %s", name, key, level, val))
-
-    # Trigger debugging setup
-    if (name == "__DEBUG__" && nsym_ll_read("__DEBUG__", "", GLOBAL_NAMESPACE) == FALSE &&
-        val != FALSE)
-        initialize_debugging()
-    # Maintain equivalence:  __FMT__[number] === CONVFMT
-    if (name == "__FMT__" && key == "number" && level == GLOBAL_NAMESPACE) {
-        if (nsym_ll_in("__DBG__", "nsym", GLOBAL_NAMESPACE) &&
-            nsym_ll_read("__DBG__", "nsym", GLOBAL_NAMESPACE) >= 6)
-            print_stderr(sprintf("nsym_ll_write: Setting CONVFMT to %s", val))
-        CONVFMT = val
-    }
-
-    return nsymtab[name, key, level, "symval"] = val
-}
-
-function nsym_fetch(sym,
-                    nparts, info, name, key, code, level, val, good)
-{
-    dbg_print("nsym", 6, sprintf("nsym_fetch: START (sym=%s)", sym))
-
-    # Parse sym => name, key
-    if ((nparts = nnam_parse(sym, info)) == ERROR) {
-        error("nsym_fetch: nnam_parse failed")
-    }
-    name = info["name"]
-    key  = info["key"]
-
-    # Now call nnam_lookup(info)
-    level = nnam_lookup(info)
-    if (level == ERROR)
-        error("nsym_fetch: nnam_lookup failed")
-
-    # Now we know it's a symbol, level & code.  Still need to look in
-    # nsymtab because NAME[KEY] might not be defined.
-    code = info["code"]
-    dbg_print("nsym", 5, sprintf("nsym_fetch: nnam_lookup ok; level=%d, code=%s", level, code))
-
-    # Sanity checks
-    good = FALSE
-
-    # 1. Fetching @ARRNAME@ w/o key return # elements in ARRNAME.
-    if (info["isarray"] == TRUE && info["hasbracket"] == FALSE)
-        error("nsym_fetch: Fetching @ARRNAME@ without a key is not supported yet")
-
-    # 2. Error if symbol is not an array but sym has array[key] syntax
-    if (info["isarray"] == FALSE && info["hasbracket"] == TRUE)
-        error("nsym_fetch: Symbol is not an array but sym has array[key] syntax")
-
-    # Now, either both isarray and hasbracket are TRUE
-    # or both are FALSE.
-    do {
-        # 3. Check code for TYPE_SYMBOL
-        if (info["isarray"] == FALSE &&
-            info["hasbracket"] == FALSE &&
-            flag_1true_p(code, TYPE_SYMBOL) &&
-            key == EMPTY) {
-            good = TRUE
-            break # - - - - - - - - - - - - - - - - - - - - - - - - - -
-        }
-        # 4. Check code for TYPE_ARRAY
-        if (info["isarray"] == TRUE &&
-            info["hasbracket"] == TRUE &&
-            flag_1true_p(code, TYPE_ARRAY) &&
-            key != EMPTY) {
-            good = TRUE
-            break # - - - - - - - - - - - - - - - - - - - - - - - - - -
-        }
-
-        print_stderr(sprintf("nsym_fetch: LOOP BOTTOM: sym='%s', name='%s', key='%s', level=%d, code='%s'",
-                             sym, name, key, level, code))
-
-    } while (FALSE)
-
-    if (flag_1true_p(code, FLAG_DELAYED))
-        nsym_delayed_define_now(sym)
-
-    if (! nsym_ll_in(name, key, level))
-        error("nsym_fetch: not in nsymtab: NAME='" name "', KEY='" key "'")
-
-    val = nsym_ll_read(name, key, level)
-    if (flag_1true_p(code, FLAG_INTEGER))
-        return 0 + val
-    else if (flag_1true_p(code, FLAG_NUMERIC))
-        return 0.0 + val
-    else if (flag_1true_p(code, FLAG_BOOLEAN))
-        return !! (0 + val)
-    else
-        return val
-}
-
-# XXX Bare bones, no checking yet
-function nsym_increment(sym, incr,
-                        name, key)
-{
-    if (incr == EMPTY)
-        incr = 1
-
-    # Parse sym => name, key
-    # Compute level
-    # if nsym_system_p(name)          level = 0
-    # Error if name does not exist at that level
-    # Error if incr is not numeric
-    # Error if symbol is an array but sym doesn't have array[key] syntax
-    # Error if symbol is not an array but sym has array[key] syntax
-    # Error if you don't have permission to write to the symbol
-    #   == Error ("read-only") if (flag_true(FLAG_READONLY))
-    # Error if value is not consistent with symbol type (haha)
-    #   or else coerce it to something acceptable (boolean)
-
-    # Add entry:        nsymtab[name, key, level, "symval"] += incr
-    nsymtab[sym, "", GLOBAL_NAMESPACE, "symval"] += incr
-}
-
-function nsym_protected_p(sym,
-                          nparts, info, name, key, code, level, retval)
-{
-    dbg_print("nsym", 4, sprintf("nsym_protected_p: START (sym=%s)", sym))
-
-    # Parse sym => name, key
-    if ((nparts = nnam_parse(sym, info)) == ERROR) {
-        error("nsym_protected_p: nnam_parse failed")
-    }
-    name = info["name"]
-    key  = info["key"]
-
-    # Now call nnam_lookup(info)
-    level = nnam_lookup(info)
-    if (level == ERROR)
-        return double_underscores_p(name)
-
-    # Error if (! name in nnamtab)
-    if (!nnam_ll_in(name, level))
-        error("not in nnamtab!?  name=" name ", level=" level)
-
-    # Check for intermediate level - endpoints are excluded
-    if (GLOBAL_NAMESPACE < level && level < __namespace)
-        error("nsym_protected_p: Cannot select random namespace")
-
-    # Error if name does not exist at that level
-    code = nnam_ll_read(name, level)
-    retval = nsym_ll_protected(name, code)
-    dbg_print("nsym", 4, sprintf("nsym_protected_p: END => %d", retval))
-    return retval
-    #return nsym_ll_protected(name, code)
-}
-function nsym_ll_protected(name, code)
-{
-    if (flag_1true_p(code, FLAG_READONLY)) return TRUE
-    if (flag_1true_p(code, FLAG_WRITABLE)) return FALSE
-    if (double_underscores_p(name)) return TRUE
-    return FALSE
+    return s SUBSEP t
 }
 
 
@@ -1505,10 +817,23 @@ function nsym_ll_protected(name, code)
 #
 #*****************************************************************************
 
+function sym_defined_p(sym,    s)
+{
+    s = sym_internal_form(sym)
+    if (__init_deferred && s in deferred_syms)
+        initialize_deferred_symbols()
+    if (name_parse(sym, __ptxt) == ERROR)
+        error("sym_defined_p: name_parse('" sym "') failed")
+    return (TYPE_SYMBOL, __ptxt[1], __ptxt[2], 0, "defined") in nsymtab
+}
+
 function sym_definition_pp(sym,    sym_name, definition)
 {
-    sym_name = sym
-    definition = nsym_fetch(sym)
+    if ((sep = index(sym, SUBSEP)) == IDX_NOT_FOUND)
+        sym_name = sym
+    else
+        sym_name = substr(sym, 1, sep-1) "[" substr(sym, sep+1) "]"
+    definition = sym_fetch(sym)
     return (index(definition, "\n") == IDX_NOT_FOUND) \
         ? "@define " sym_name "\t" definition "\n" \
         : "@longdef " sym_name "\n" \
@@ -1518,47 +843,151 @@ function sym_definition_pp(sym,    sym_name, definition)
 
 
 # Caller is responsible for ensuring user is allowed to delete symbol
-# function sym_destroy(sym)
-# {
-#     dbg_print("symbol", 5, ("sym_destroy(" sym ")"))
-#     # It is legal to delete an array key that does not exist
-#     delete symtab[sym_internal_form(sym)]
-# }
+function sym_destroy(sym)
+{
+    dbg_print("symbol", 5, ("sym_destroy(" sym ")"))
+    if (name_parse(sym, __ptxt) == ERROR)
+        error("sym_destroy: name_parse('" sym "') failed")
+    # It is legal to delete an array key that does not exist
+    delete nsymtab[TYPE_SYMBOL, __ptxt[1], __ptxt[2], 0, "defined"]
+    delete nsymtab[TYPE_SYMBOL, __ptxt[1], __ptxt[2], 0, "value"]
+}
 
-# function sym_increment(sym, incr)
-# {
-#     if (incr == EMPTY)
-#         incr = 1
-#     symtab[sym_internal_form(sym)] += incr
-# }
+function sym_fetch(sym,    s)
+{
+    s = sym_internal_form(sym)
+    if (__init_deferred && s in deferred_syms)
+        initialize_deferred_symbols()
+    if (name_parse(sym, __ptxt) == ERROR)
+        error("sym_fetch: name_parse('" sym "') failed")
+    return nsymtab[TYPE_SYMBOL, __ptxt[1], __ptxt[2], 0, "value"]
+}
+
+function sym_increment(sym, incr)
+{
+    if (incr == "")
+        incr = 1
+    if (name_parse(sym, __ptxt) == ERROR)
+        error("sym_increment: name_parse('" sym "') failed")
+    nsymtab[TYPE_SYMBOL, __ptxt[1], __ptxt[2], 0, "value"] += incr
+}
+
+# Convert a symbol name into its "internal" form (for table lookup
+# purposes) by removing and separating any array-referring brackets.
+#       "arr[key]"  =>  "arr <SUBSEP> key"
+# If there are no array-referring brackets, the symbol is returned
+# unchanged, without a <SUBSEB>.
+function sym_internal_form(sym,    lbracket, arr, key)
+{
+    if ((lbracket = index(sym, "[")) == IDX_NOT_FOUND)
+        return sym
+    if (sym !~ /^.+\[.+\]$/)
+        error("Name '" sym "' not valid:" $0)
+    arr = substr(sym, 1, lbracket-1)
+    key = substr(sym, lbracket+1, length(sym)-lbracket-1)
+    return build_subsep(arr, key)
+}
 
 # Protected symbols cannot be changed by the user.
-# function sym_protected_p(sym,    root)
-# {
-#     root = sym # sym_root(sym)
-#     # Names known to be protected
-#     if (root in protected_syms)
-#         return TRUE
-#     # Whitelist of known safe symbols
-#     if (root in unprotected_syms)
-#         return FALSE
-#     return double_underscores_p(root)
-# }
-
-# function sym_store(sym, val)
-# {
-#     # __DEBUG__ and __STRICT__ can only store boolean values
-#     if (sym == "__DEBUG__" || sym == "__STRICT__")
-#         val = !! (val+0)
-#     return symtab[sym_internal_form(sym)] = val
-# }
-
-function nsym_true_p(sym,
-                     val)
+function sym_protected_p(sym,    root)
 {
-    return (nsym_defined_p(sym) &&
-            ((val = nsym_fetch(sym)) != FALSE &&
-              val                    != ""))
+    root = sym_root(sym)
+    # Names known to be protected
+    if (root in protected_syms)
+        return TRUE
+    # Whitelist of known safe symbols
+    if (root in unprotected_syms)
+        return FALSE
+    return name_system_p(root)
+}
+
+function sym_root(sym,    s)
+{
+    s = sym_internal_form(sym)
+    if (index(s, SUBSEP) == IDX_NOT_FOUND)
+        return sym
+    else
+        return substr(s, 1, index(s, SUBSEP) - 1)
+}
+
+function sym_store(sym, val)
+{
+    dbg_print("symbol", 5, ("sym_store(" sym "," val ")"))
+    # Maintain equivalence:  __FMT__[number] === CONVFMT
+    # This is invoked from dodef(), and from @define xxx ...)
+    if (sym == "__FMT__[number]") {
+        dbg_print("symbol", 3, "Setting CONVFMT to " val)
+        CONVFMT = val
+    }
+    # __DEBUG__ and __STRICT__ can only store boolean values
+    if (sym == "__DEBUG__" || sym == "__STRICT__")
+        val = !! (0 + val)
+    if (sym == "__DEBUG__" && sym_fetch(sym) == FALSE && val == TRUE)
+        initialize_debugging()
+    return symtab[sym_internal_form(sym)] = val
+}
+
+function sym2_store(arr, key, val)
+{
+    dbg_print("symbol", 5, ("sym2_store(" arr "," key "," val ")"))
+    # Maintain equivalence:  __FMT__[number] === CONVFMT
+    # This is invoked from initialize(), and from sym2_store())
+    if (arr == "__FMT__" && key == "number") {
+        dbg_print("symbol", 5, "Setting CONVFMT to " val)
+        CONVFMT = val
+    }
+    return symtab[arr, key] = val
+}
+
+# System symbols start and end with double underscores
+function sym_system_p(sym)
+{
+    return name_system_p(sym_root(sym))
+}
+
+function sym_true_p(sym)
+{
+    return (sym_defined_p(sym)      && \
+            sym_fetch(sym) != FALSE && \
+            sym_fetch(sym) != "")
+}
+
+# In strict mode, a symbol must match the following regexp:
+#       /^[A-Za-z#_][A-Za-z#_0-9]*$/
+# In non-strict mode, any non-empty string is valid.
+function sym_valid_p(sym,    result, lbracket, root, key)
+{
+    # These are the ways a symbol is not valid:
+    result = FALSE
+
+    do {
+        # 1. Empty string is never a valid symbol name
+        if (emptyp(sym))
+             break
+
+        # Fake/hack out any "array name" by removing brackets
+        if ((lbracket = index(sym, "[")) > 0) {
+            # 2. Doesn't look exactly like "xx[yy]"
+            if (sym !~ /^.+\[.+\]$/)
+                break
+            root = substr(sym, 1, lbracket-1)
+            key  = substr(sym, lbracket+1, length(sym)-lbracket-1)
+
+            # 3. Empty parts are not valid
+            if (emptyp(root) || emptyp(key))
+                break
+            sym = root
+        }
+
+        # 4. We're in strict mode and the name doesn't pass regexp check
+        if (strictp() && !name_strict_symbol_p(sym))
+            break
+
+        # We've passed all the tests
+        result = TRUE
+    } while (FALSE)
+
+    return result
 }
 
 
@@ -1570,107 +999,204 @@ function nsym_true_p(sym,
 #*****************************************************************************
 
 # Throw an error if symbol is NOT defined
-function assert_nsym_defined(sym, hint,    s)
+# function assert_sym_defined(sym, hint,    s)
+# {
+#     if (sym_defined_p(sym))
+#         return TRUE
+#     s = sprintf("Name '%s' not defined%s%s",  sym,
+#                 ((hint != "")  ? " [" hint "]" : ""),
+#                 ((!emptyp($0)) ? ":" $0        : "") )
+#     error(s)
+# }
+
+# Throw an error if symbol is NOT defined
+function assert_nsym_defined(nn1, nn2, frame, hint,    s)
 {
-    if (nsym_defined_p(sym))
+    if (nsym_defined_p(nn1, nn2, frame))
         return TRUE
-    s = sprintf("Name '%s' not defined%s%s",  sym,
-                ((hint != EMPTY) ? " [" hint "]" : ""),
-                ((!emptyp($0)) ? ":" $0 : "") )
+    s = sprintf("Name '%s' not defined%s%s", nsym_quick_printable(nn1, n22),
+                ((hint != "")  ? " [" hint "]" : ""),
+                ((!emptyp($0)) ? ":" $0         : "") )
     error(s)
 }
 
-function assert_nsym_okay_to_define(name,
-                                    code)
+function assert_sym_okay_to_define(name)
 {
-    assert_nsym_valid_name(name)
-    assert_nsym_unprotected(name)
-
-    if (nnam_ll_in(name, __namespace) &&
-        flag_alltrue_p((code = nnam_ll_read(name, __namespace)), TYPE_SYMBOL) &&
-        flag_allfalse_p(code, FLAG_READONLY))
-        return TRUE
-    if (nnam_ll_in(name, __namespace)) return FALSE
-
-    if (nnam_ll_in(name, GLOBAL_NAMESPACE) &&
-        flag_alltrue_p((code = nnam_ll_read(name, GLOBAL_NAMESPACE)), TYPE_SYMBOL) &&
-        flag_allfalse_p(code, FLAG_READONLY))
-        return TRUE
-    if (nnam_ll_in(name, GLOBAL_NAMESPACE)) return FALSE
-
-    # Can't shadow a system symbol
-    if (nnam_ll_in(name, GLOBAL_NAMESPACE) &&
-        flag_alltrue_p((code = nnam_ll_read(name, GLOBAL_NAMESPACE)), TYPE_SYMBOL FLAG_SYSTEM))
-        return FALSE
-
-    if (double_underscores_p(name))
-        return FALSE
-
+    assert_sym_valid_name(name)
+    assert_sym_unprotected(name)
     # You can redefine a symbol, but not a cmd, function, or sequence
-    # if (!name_available_in_all_p(name, TYPE_COMMAND TYPE_FUNCTION TYPE_SEQUENCE))
-    #     error("Name '" name "' not available:" $0)
+    if (!name_available_in_all_p(name, TYPE_CMD TYPE_FUNCTION TYPE_SEQUENCE))
+        error("Name '" name "' not available:" $0)
     return TRUE
 }
 
 # Throw an error if symbol IS protected
-function assert_nsym_unprotected(sym)
+function assert_sym_unprotected(sym)
 {
-    if (!nsym_protected_p(sym))
+    if (!sym_protected_p(sym))
         return TRUE
     error("Symbol '" sym "' protected:" $0)
 }
 
 # Throw an error if the symbol name is NOT valid
-function assert_nsym_valid_name(sym)
+function assert_sym_valid_name(sym)
 {
-    if (nsym_valid_p(sym))
+    if (sym_valid_p(sym))
         return TRUE
     error("Name '" sym "' not valid:" $0)
 }
+
+
+
+#*****************************************************************************
+#
+#       N S Y M
+#
+#       FUNCTIONS:
+#       defined?
+#       definition_pp
+#       destroy
+#       fetch
+#       increment
+#       protected?
+#       root (??)
+#       store
+#       system?
+#       true?
+#       valid?
+#       strict_symbol (i.e., name is valid as if in strict mode)
+#
+#       ASSERTIONS:     assert_
+#       sym_defined
+#       sym_okay_to_define
+#       unprotected
+#       valid_name
+#
+#*****************************************************************************
+
+# Note order of parameter follows legacy code:
+#     function xxx_store(arr, key, val) {...}
+# frame can be defaulted (common) since it is last.
+function nsym_store(nn1, nn2, val, frame)
+{
+    dbg_print("symbol", 5, ("nsym_store(" nn1 "," nn2 "," val "," frame ")"))
+    if (emptyp(frame))
+        frame = __curr_frame
+
+    # __DEBUG__ and __STRICT__ can only store boolean values
+    if (nn1 == "__DEBUG__" || nn1 == "__STRICT__")
+        val = !! (0 + val)
+
+    # __DEBUG__ transitioning from FALSE -> TRUE triggers initializing
+    # the debugging configuration.
+    if (nn1 == "__DEBUG__" &&
+        nsymtab[TYPE_SYMBOL, nn1, "", GLOBAL_FRAME, "value"] == FALSE &&
+        val == TRUE) {
+        initialize_debugging()
+    }
+
+    # Maintain equivalence:  __FMT__[number] === CONVFMT
+    # This is invoked (1 arg) from dodef(), and @define xxx ...
+    # Also invoked (2 arg) from initialize()
+    if (nn1 == "__FMT__" && nn2 == "number") {
+        dbg_print("symbol", 3, "Setting CONVFMT to " val)
+        CONVFMT = val
+    }
+
+    dbg_print("symbol", 5, sprintf("Setting nsymtab[%s,%s,%s,%d,%s] to '%s'",
+                                   TYPE_SYMBOL, nn1, nn2, frame, "value", val))
+    nsymtab[TYPE_SYMBOL, nn1, nn2, frame, "defined"] = TRUE
+    return nsymtab[TYPE_SYMBOL, nn1, nn2, frame, "value"] = val
+}
+
+
+function nsym_fetch(nn1, nn2, frame)
+{
+    if (emptyp(frame))
+        frame = __curr_frame
+    dbg_print("symbol", 5, ("nsym_fetch(" nn1 "," nn2 "," frame ")"))
+    if (__init_deferred && nn1 in deferred_syms)
+        initialize_deferred_symbols()
+
+    return nsymtab[TYPE_SYMBOL, nn1, nn2, 0, "value"]
+}
+
+
+function nsym_quick_printable(nn1, nn2)
+{
+    if (emptyp(nn2))
+        return nn1
+    else
+        return (nn1 "[" nn2 "]")
+}
+
+function nsym_as_printable(nsym)
+{
+    if (nsym[1] == TYPE_SEQUENCE ||
+        nsym[1] == TYPE_CMD)
+        return nsym[2]
+    else if (nsym[1] == TYPE_SYMBOL)
+        if (emptyp(nsym[3]))
+            return nsym[2]
+        else
+            return (nsym[2] "[" nsym[3] "]")
+    else
+        error(sprintf("Bad parameters in 'nsym_as_printable':field[1]=%d", nsym[1]))
+}
+
+
+function nsym_defined_p(nn1, nn2, frame)
+{
+    if (emptyp(frame))
+        frame = __curr_frame
+    if (__init_deferred && nn1 in deferred_syms)
+        initialize_deferred_symbols()
+    return (TYPE_SYMBOL, nn1, nn2, frame, "defined") in nsymtab
+}
+
+# Find defining frame: return frame number (>= 0) or ERROR (-1) if not found.
+function nsym_find_defining_frame(nn1, nn2, frame)
+{
+    if (emptyp(frame))
+        frame = __curr_frame
+    do {
+        if (nsym_defined_p(nn1, nn2, frame))
+            return frame
+    } while (--frame >= 0)
+    return ERROR
+}
+
+
+
 #*****************************************************************************
 #
 #       Cmd API
 #
 #*****************************************************************************
 
-function ncmd_defined_p(name, code)
+function cmd_defined_p(id)
 {
-    if (!ncmd_valid_p(name))
-        return FALSE
-    if (! nnam_ll_in(name, GLOBAL_NAMESPACE))
-        return FALSE
-    code = nnam_ll_read(name, GLOBAL_NAMESPACE)
-    return flag_1true_p(code, TYPE_COMMAND)
+    return (TYPE_CMD, id, "", 0, "defined") in nsymtab
 }
 
-function ncmd_definition_pp(name)
+function cmd_definition_pp(id)
 {
     # XXX parameters
-    return "@newcmd " name    "\n" \
-           ncmd_ll_read(name) "\n" \
-           "@endcmd"          "\n"
+    return "@newcmd " id                              "\n" \
+           nsymtab[TYPE_CMD, id, "", 0, "definition"] "\n" \
+           "@endcmd"                                  "\n"
 }
 
-function ncmd_destroy(id)
+function cmd_destroy(id)
 {
-    delete nnamtab[id, GLOBAL_NAMESPACE]
-    delete ncmdtab[id, "definition"]
-    delete ncmdtab[id, "nparam"]
+    delete nsymtab[TYPE_CMD, id, "", 0, "defined"]
+    delete nsymtab[TYPE_CMD, id, "", 0, "definition"]
+    delete nsymtab[TYPE_CMD, id, "", 0, "nparam"]
 }
 
-function ncmd_valid_p(text)
+function cmd_valid_p(id)
 {
-    return nnam_valid_strict_regexp_p(text) &&
-           !double_underscores_p(text)
-}
-
-function ncmd_ll_read(name)
-{
-    return ncmdtab[name, "definition"]
-}
-function ncmd_ll_write(name, new_defn)
-{
-    return ncmdtab[name, "definition"] = new_defn
+    return name_strict_symbol_p(id) && !name_system_p(id)
 }
 
 
@@ -1681,302 +1207,173 @@ function ncmd_ll_write(name, new_defn)
 #
 #*****************************************************************************
 
-# Sequence names must always match strict symbol name syntax:
-#       /^[A-Za-z#_][A-Za-z#_0-9]*$/
-function nseq_valid_p(text)
+function seq_defined_p(id)
 {
-    return nnam_valid_strict_regexp_p(text) &&
-           !double_underscores_p(text)
-}
-
-# A Sequence is defined if its name exists in nnamtab with the correct type
-# and if it's Defined.
-function nseq_defined_p(name,
-                        code)
-{
-    if (!nseq_valid_p(name))
-        return FALSE
-    if (! nnam_ll_in(name, GLOBAL_NAMESPACE))
-        return FALSE
-    code = nnam_ll_read(name, GLOBAL_NAMESPACE)
-    return flag_1true_p(code, TYPE_SEQUENCE)
+    return (TYPE_SEQUENCE, id, "", 0, "defined") in nsymtab
 }
 
 
-function nseq_definition_pp(name,    buf, TAB)
+function seq_definition_pp(id,    buf)
 {
-    TAB = "\t"
-        buf =     "@sequence " name TAB "create\n"
-    if (nseq_ll_read(name) != SEQ_DEFAULT_INIT)
-        buf = buf "@sequence " name TAB "set " nseq_ll_read(name) "\n"
-    if (nseqtab[name, "init"] != SEQ_DEFAULT_INIT)
-        buf = buf "@sequence " name TAB "init " nseqtab[name, "init"] "\n"
-    if (nseqtab[name, "incr"] != SEQ_DEFAULT_INCR)
-        buf = buf "@sequence " name TAB "incr " nseqtab[name, "incr"] "\n"
-    if (nseqtab[name, "fmt"] != nsym_ll_read("__FMT__", "seq"))
-        buf = buf "@sequence " name TAB "format " nseqtab[name, "fmt"] "\n"
+    buf = "@sequence " id "\tcreate\n"
+    if (nsymtab[TYPE_SEQUENCE, id, "", 0, "value"] != SEQ_DEFAULT_INIT)
+        buf = buf "@sequence " id "\tset " nsymtab[TYPE_SEQUENCE, id, "", 0, "value"] "\n"
+    if (nsymtab[TYPE_SEQUENCE, id, "", 0, "init"] != SEQ_DEFAULT_INIT)
+        buf = buf "@sequence " id "\tinit " nsymtab[TYPE_SEQUENCE, id, "", 0, "init"] "\n"
+    if (nsymtab[TYPE_SEQUENCE, id, "", 0, "incr"] != SEQ_DEFAULT_INCR)
+        buf = buf "@sequence " id "\tincr " nsymtab[TYPE_SEQUENCE, id, "", 0, "incr"] "\n"
+    if (nsymtab[TYPE_SEQUENCE, id, "", 0, "fmt"] != nsym_fetch("__FMT__", "seq"))
+        buf = buf "@sequence " id "\tformat " nsymtab[TYPE_SEQUENCE, id, "", 0, "fmt"] "\n"
     return buf
 }
 
-function nsym_dump_nseqtab(flagset,    \
-                           x, k, code)
-{
-    print("Begin nseqtab:")
-    for (k in nseqtab) {
-        split(k, x, SUBSEP)
-        print sprintf("[\"%s\",\"%s\"] = '%s'",
-                      x[1], x[2],
-                      nseqtab[x[1], x[2]])
-        # print "----------------"
-    }
-    print("End nseqtab")
-}
 
-function nseq_destroy(name)
+function seq_destroy(id)
 {
-    delete nnamtab[name, GLOBAL_NAMESPACE]
-    delete nseqtab[name, "incr"]
-    delete nseqtab[name, "init"]
-    delete nseqtab[name, "fmt"]
-    delete nseqtab[name, "seqval"]
-}
-
-function nseq_ll_read(name)
-{
-    return nseqtab[name, "seqval"]
-}
-function nseq_ll_write(name, new_val)
-{
-    return nseqtab[name, "seqval"] = new_val
-}
-function nseq_ll_incr(name, incr)
-{
-    if (incr == "")
-        incr = nseqtab[name, "incr"]
-    nseqtab[name, "seqval"] += incr
+    delete nsymtab[TYPE_SEQUENCE, id, "", 0, "defined"]
+    delete nsymtab[TYPE_SEQUENCE, id, "", 0, "incr"]
+    delete nsymtab[TYPE_SEQUENCE, id, "", 0, "init"]
+    delete nsymtab[TYPE_SEQUENCE, id, "", 0, "fmt"]
+    delete nsymtab[TYPE_SEQUENCE, id, "", 0, "value"]
 }
 
 
-function assert_nseq_valid_name(name)
+# Sequence names must always match strict symbol name syntax:
+#       /^[A-Za-z#_][A-Za-z#_0-9]*$/
+function seq_valid_p(id)
 {
-    if (nseq_valid_p(name))
+    return name_strict_symbol_p(id) && !name_system_p(id)
+}
+
+function assert_seq_valid_name(name)
+{
+    if (seq_valid_p(name))
         return TRUE
     error("Name '" name "' not valid:" $0)
 }
 
-function assert_nseq_okay_to_define(name)
+function assert_seq_okay_to_define(name)
 {
-    assert_nseq_valid_name(name)
-    if (nnam_ll_in(name, GLOBAL_NAMESPACE))
+    assert_seq_valid_name(name)
+    # name cannot be a cmd, function, an existing sequence (no
+    # redefinitions), or a symbol.  Furthermore, it can't be a
+    # system-type name: __SEQ__ is not allowed.
+    if (!name_available_in_all_p(name, TYPE_ANY))
         error("Name '" name "' not available:" $0)
     return TRUE
 }
+
+
+
 #*****************************************************************************
 #
-#       Names API
-#
-#       TYPE_SYMBOL:            symtab
-#           symtab[NAME] = <definition>
-#           Check "foo in symtab" for defined
+#       N A M E S
 #
 #*****************************************************************************
+
+# TRUE if name is available in all components (logical AND)
+# FALSE if name is unavailable in at least one of the components, not sure which
+function name_available_in_all_p(name, components,    avail)
+{
+    if (first(name) == "@")
+        name = substr(name, 2)
+    if (emptyp(name))
+        return FALSE
+    avail = TRUE
+    if (components == TYPE_ANY || index(components, TYPE_CMD))
+        avail = avail && ! cmd_defined_p(name)
+    if (components == TYPE_ANY || index(components, TYPE_FUNCTION))
+        avail = avail && ! ((TYPE_FUNCTION, name, "", 0, "defined") in nsymtab)
+    if (components == TYPE_ANY || index(components, TYPE_SEQUENCE))
+        avail = avail && ! seq_defined_p(name)
+    if (components == TYPE_ANY || index(components, TYPE_SYMBOL))
+        avail = avail && ! sym_defined_p(name)
+    return avail
+}
+
+
+# Parse a string str as a possible symbol name and return number of matches.
+# 0. If string is invalid, return ERROR (-1)
+# 1. If string looks like a plain symbol name (e.g., "foo"):
+#      __ptxt[1] := symbol name (root)
+#      __ptxt[2] := ""
+#      Return 1
+# 2. If string looks like a symbol with an index (e.g., "foo[bar]"):
+#      __ptxt[1] := symbol root
+#      __ptxt[2] := index
+#      Return 2
+function name_parse(str, ptxt,    count, i)
+{
+    if (str !~ /^[^[\]]+(\[[^[\]]+\])?$/) {
+        warn("Name '" str "' not valid [name_parse]")
+        return ERROR
+    }
+    ptxt[0] = ""; ptxt[1] = ""
+    count = split(str, ptxt, "(\\[|\\])")
+    # print("'" str "' ==> " count " fields:")
+    # for (i = 1 ; i <= count; i++)
+    #     print(i " = '" ptxt[i] "'")
+    # print count
+    return (count == 1) ? 1 : 2
+}
+
 
 # Warning - Do not use this in the general case if you want to know if a
 # string is "system" or not.  This code only checks for underscores in
 # its argument, but there do exist system symbols which do not match
-# this naming pattern.
-function double_underscores_p(text)
+# this naming pattern.  Use "nsym_system_p(nn1,nn2,<..ETC..>)" instead.
+function name_system_p(name)
 {
-    return text ~ /^__.*__$/
+    return name ~ /^__.*__$/
+}
+
+
+function name_strict_symbol_p(name)
+{
+    return name ~ /^[A-Za-z#_][A-Za-z#_0-9]*$/
 }
 
 
 
-#############################################################################
+#*****************************************************************************
 #
-# This code parses random string "text" into either NAME or NAME[KEY].
-# Rudimentary error checking is done.
+#       Flags functions
 #
-# Return value:
-#    -1 (ERROR)
-#       Text does not pass simple parsing test.  Even so, it still be
-#       invalid depending strict, etc).
-#    1 or 2
-#       Text parsed.  1 is returned if it's a simple NAME,
-#       2 indicates a NAME[KEY] format.
+#       flag_false/true         Returns boolean value
+#       flag_nowset/nowclear    Returns new flags string
 #
-# Info is an array with following entries:
-#
-# Info[] :=
-#       hasbracket : TRUE if text matches CHARS[CHARS..]
-#                    It is normal for plain "NAME" to be FALSE here.
-#       key        : key part[2]  (may be empty)
-#       keyvalid   : TRUE if KEY is valid according to non-strict.
-#                    This restricts it to most printable characters.
-#       name       : name part[1]
-#       namevalid  : TRUE if NAME is valid according to current __STRICT__
-#       nparts     : 1 or 2 depending if text is NAME or NAME[KEY]
-#      #text       : original text string
-#############################################################################
-function nnam_parse(text, info,
-                    name, key, nparts, part, count, i)
+#*****************************************************************************
+function flag_false(fchar, flags)
 {
-    dbg_print("nnam", 6, sprintf("nnam_parse START (text=%s)", text))
-    #info["text"] = text
+    return index(flags, fchar) == IDX_NOT_FOUND
+}
 
-    # Simple test for CHARS or CHARS[CHARS]
-    #   CHARS ::= [-!-Z^-z~]+
-    # Match CHARS optionally followed by bracket CHARS bracket
-    #   /^ CHARS ( \[ CHARS \] )? $/
-    #if (text !~ /^[^[\]]+(\[[^[\]]+\])?$/) {   # too broad: matches non-printing characters
-    # We carefully construct CHARS with about regexp
-    # to exclude ! [ \ ] { | }
-    if (text !~ /^["-Z^-z~]+(\[["-Z^-z~]+\])?$/) {
-        warn("Name '" text "' not valid [nnam_parse]")
-        dbg_print("nnam", 2, sprintf("nnam_parse(%s) => %d", text, ERROR))
-        return ERROR
+
+function flag_true(fchar, flags)
+{
+    return !flag_false(fchar, flags)
+}
+
+
+function flag_nowset(fchar, flags)
+{
+    if (flag_false(fchar, flags))
+        flags = fchar flags
+    return flags
+}
+
+
+function flag_nowclear(fchar, flags,    __idx)
+{
+    if (flag_true(fchar, flags)) {
+        __idx = index(flags, fchar)
+        flags = substr(flags, 1, __idx - 1) \
+                substr(flags, __idx + 1)
     }
-
-    count = split(text, part, "(\\[|\\])")
-    if (dbg("nnam", 8)) {
-        print("'" text "' ==> " count " fields:")
-        for (i = 1 ; i <= count; i++)
-            print(i " = '" part[i] "'")
-    }
-    info["name"] = name = part[1]
-    info["key"]   = key = part[2]
-
-    # Since we passed the regexp in first if() statement, we can be
-    # assured that text is either ^CHARS$ or ^CHARS\[CHARS\]$.  Thus, a
-    # simple index() for an open bracket should suffice here.
-    info["hasbracket"] = index(text, "[") > 0
-    info["keyvalid"]   = nnam_valid_with_strict_as(key, FALSE)
-    info["namevalid"]  = nnam_valid_with_strict_as(name)
-    info["nparts"]     = nparts = (count == 1) ? 1 : 2
-    dbg_print("nnam", 2, sprintf("nnam_parse(%s) => %d", text, nparts))
-    return nparts
+    return flags
 }
 
-# Remove any name at level "level" or greater
-function nnam_purge(level,
-                    x, k, del_list)
-{
-    for (k in nnamtab) {
-        split(k, x, SUBSEP)
-        if (x[2]+0 >= level)
-            del_list[x[1], x[2]] = TRUE
-    }
 
-    for (k in del_list) {
-        split(k, x, SUBSEP)
-        delete nnamtab[x[1], x[2]]
-    }
-}
-
-function nnam_dump_nnamtab(filter_fs,
-                           x, k, code, s, desc, name, level, f_arr, l,
-                           include_system)
-{
-    include_system = flag_1true_p(filter_fs, FLAG_SYSTEM)
-    filter_fs = flag_set_clear(filter_fs, EMPTY, FLAG_SYSTEM)
-    print(sprintf("Begin nnamtab (%s%s):", filter_fs,
-                  include_system ? "+Y" : ""))
-
-    for (k in nnamtab) {
-        split(k, x, SUBSEP)
-        name  = x[1]
-        level = x[2] + 0
-
-        code = nnam_ll_read(name, level)
-        if (! flag_alltrue_p(code, filter_fs))
-            continue;
-        if (flag_1true_p(code, FLAG_SYSTEM) && !include_system)
-            continue;
-        s = name
-        if (level > GLOBAL_NAMESPACE)
-            s = s "{" level "}"
-        s = s "\t" __flag_label[first(code)]
-        code = substr(code, 2)
-        desc = "X"
-        if (length(code) > 0) {
-            desc = ""
-            l = split(code, f_arr, "")
-            while (l > 0)
-                desc = desc __flag_label[f_arr[l--]] ","
-        }
-        s = s " <" chop(desc) ">"
-        print s
-        # print "----------------"
-    }
-    print("End nnamtab")
-}
-
-function nnam_valid_strict_regexp_p(text)
-{
-    return text ~ /^[A-Za-z#_][A-Za-z#_0-9]*$/
-}
-
-function nnam_valid_with_strict_as(text, tmp_strict)
-{
-    if (emptyp(text))           return FALSE
-    if (emptyp(tmp_strict))     tmp_strict = strictp()
-    if (tmp_strict)
-        # In strict mode, only letters, #, and _ (and then digits)
-        return nnam_valid_strict_regexp_p(text) # text ~ /^[A-Za-z#_][A-Za-z#_0-9]*$/
-    else
-        # In non-strict mode, printable characters except ! [ \ ] { | }
-        return text ~ /^["-Z^-z~]+$/
-}
-
-function nnam_ll_read(name, level)
-{
-    if (level == "") level = GLOBAL_NAMESPACE
-    return nnamtab[name, level] # returns code
-}
-
-function nnam_ll_in(name, level)
-{
-    if (level == "") error("nnam_ll_in: LEVEL missing")
-    return (name, level) in nnamtab
-}
-
-function nnam_ll_write(name, level, code,
-                       retval)
-{
-    if (level == "") error("nnam_ll_write: LEVEL missing")
-    if (nsym_ll_in("__DBG__", "nnam", GLOBAL_NAMESPACE) &&
-        nsym_ll_read("__DBG__", "nnam", GLOBAL_NAMESPACE) >= 5)
-        print_stderr(sprintf("nnam_ll_write: nnamtab[\"%s\", %d] = %s", name, level, code))
-    return nnamtab[name, level] = code
-}
-
-#############################################################################
-# This will examine nnamtab from __current_namespace downto 0
-# seeing if name is a match.  If so, it populates info["code"]
-# with the corresponding code string and returns level (0..n)
-# If no matching name is found, return ERROR
-#
-# Info[] :=
-#       code    : Code string from nnamtab
-#       isarray : TRUE if NAME is TYPE_ARRAY
-#       level   : Level at which name was found
-#       type    : Character code for TYPE_xxx
-#############################################################################
-function nnam_lookup(info,
-                     name, level, code)
-{
-    name = info["name"]
-
-    for (level = __namespace; level >= 0; level--)
-        if (nnam_ll_in(name, level)) {
-            info["code"] = code = nnam_ll_read(name, level)
-            info["isarray"] = flag_1true_p(code, TYPE_ARRAY)
-            info["level"]   = level
-            info["type"]    = first(code)
-            return level;
-        }
-    return ERROR
-}
 
 #*****************************************************************************
 #
@@ -2006,10 +1403,6 @@ function integerp(pat)
     return pat ~ /^[-+]?[0-9]+$/
 }
 
-function with_trailing_slash(s)
-{
-    return s ((last(s) != "/") ? "/" : EMPTY)
-}
 
 # Environment variable names must match the following regexp:
 #       /^[A-Za-z_][A-Za-z_0-9]*$/
@@ -2028,13 +1421,14 @@ function assert_valid_env_var_name(var)
 }
 
 
-function assert_ncmd_okay_to_define(name)
+function assert_cmd_name_okay_to_define(name)
 {
-    if (!ncmd_valid_p(name))
+    if (!cmd_valid_p(name))
         error("Name '" name "' not valid:" $0)
-    if (nnam_ll_in(name, GLOBAL_NAMESPACE))
+    # fail if symbol or sequence or function
+    if (!name_available_in_all_p(name, TYPE_FUNCTION TYPE_SEQUENCE TYPE_SYMBOL))
         error("Name '" name "' not available:" $0)
-    return TRUE
+    return TRUE                 # not really necessary
 }
 
 
@@ -2046,28 +1440,23 @@ function currently_active_p()
 
 function strictp()
 {
-    # Use low-level function here, not nsym_true_p(), to prevent infinite loop
-    return nsym_ll_read("__STRICT__", "", GLOBAL_NAMESPACE)
+    return sym_true_p("__STRICT__")
 }
 
 
 function build_prog_cmdline(prog, arg, silent)
 {
-    if (! nsym_ll_in("__PROG__", prog, GLOBAL_NAMESPACE))
-        # This should be same as assert_[n]sym_defined()
-        error(sprintf("build_prog_cmdline: __PROG__[%s] not defined", prog))
+    assert_nsym_defined("__PROG__", prog, "", "build_prog_cmdline")
     return sprintf("%s %s%s", \
-                   nsym_ll_read("__PROG__", prog, GLOBAL_NAMESPACE),  \
+                   nsym_fetch("__PROG__", prog), \
                    arg, \
-                   (silent ? " >/dev/null 2>/dev/null" : EMPTY))
+                   (silent ? " >/dev/null 2>/dev/null" : ""))
 }
 
 
 function exec_prog_cmdline(prog, arg,    sym)
 {
-    if (! nsym_ll_in("__PROG__", prog, GLOBAL_NAMESPACE))
-        # This should be same as assert_[n]sym_defined()
-        error("exec_prog_cmdline: NOT DEFINED")
+    assert_nsym_defined("__PROG__", prog, "", "exec_prog_cmdline")
     return system(build_prog_cmdline(prog, arg, TRUE)) # always silent
 }
 
@@ -2081,20 +1470,20 @@ function tmpdir(    t)
     else if ("TMPDIR" in ENVIRON)
         t = ENVIRON["TMPDIR"]
     else
-        t = nsym_ll_read("__TMPDIR__", "", GLOBAL_NAMESPACE)
+        t = nsym_fetch("__TMPDIR__")
     while (last(t) == "\n")
         t = chop(t)
-    return with_trailing_slash(t)
+    return t ((last(t) == "/") ? "" : "/")
 }
 
 
 function default_shell()
 {
     if (nsym_defined_p("M2_SHELL"))
-        return nsym_fetch("M2_SHELL")
+        return nsym_fetch("M2_SHELL", "")
     if ("SHELL" in ENVIRON)
         return ENVIRON["SHELL"]
-    return nsym_ll_read("__PROG__", "sh", GLOBAL_NAMESPACE)
+    return nsym_fetch("__PROG__", "sh")
 }
 
 
@@ -2149,7 +1538,7 @@ function randint(n)
 # Return a string of N random hex digits [0-9A-F].
 function hex_digits(n,    s)
 {
-    s = EMPTY
+    s = ""
     while (n-- > 0)
         s = s sprintf("%X", randint(16))
     return s
@@ -2174,11 +1563,11 @@ function uuid()
 
 
 # Quicksort - from "The AWK Programming Language" p. 161.
-# Used in builtin_dump() to sort the symbol table.
+# Used in m2_dump() to sort the symbol table.
 function qsort(A, left, right,    i, lastpos)
 {
     if (left >= right)          # Do nothing if array contains
-        return                  #   less than two elements
+        return                  # less than two elements
     swap(A, left, left + int((right-left+1)*rand()))
     lastpos = left              # A[left] is now partition element
     for (i = left+1; i <= right; i++)
@@ -2246,7 +1635,7 @@ function _less_than(s1, s2,    fs1, fs2, d1, d2)
 # read until end of file and return whatever is found, without error.
 function read_lines_until(delim,    buf, delim_len)
 {
-    buf = EMPTY
+    buf = ""
     delim_len = length(delim)
     while (TRUE) {
         if (readline() != OKAY) {
@@ -2256,7 +1645,7 @@ function read_lines_until(delim,    buf, delim_len)
             else
                 break
         }
-        dbg_print("io", 3, "(read_lines_until) readline='" $0 "'")
+        dbg_print("cmd", 3, "(read_lines_until) readline='" $0 "'")
         if (delim_len > 0 && !emptyp($0) && substr($0, 1, delim_len) == delim)
             break
         buf = buf $0 "\n"
@@ -2264,58 +1653,15 @@ function read_lines_until(delim,    buf, delim_len)
     return chop(buf)
 }
 
-function save_context(ctx)
-{
-    ctx["buffer"]  = __buffer
-    ctx["file"]    = nsym_ll_read("__FILE__", "", GLOBAL_NAMESPACE)
-    ctx["ifdepth"] = __if_depth
-    ctx["line"]    = nsym_ll_read("__LINE__", "", GLOBAL_NAMESPACE)
-    ctx["uuid"]    = nsym_ll_read("__FILE_UUID__", "", GLOBAL_NAMESPACE)
-}
-
-function process_buffer(    i)
-{
-    while (!emptyp(__buffer)) {
-        # Extract each line from __buffer, one by one
-        nsym_increment("__LINE__", 1) # __LINE__ is local, but not __NLINE__
-        if ((i = index(__buffer, "\n")) == IDX_NOT_FOUND) {
-            $0 = __buffer
-            __buffer = EMPTY
-        } else {
-            $0 = substr(__buffer, 1, i-1)
-            __buffer = substr(__buffer, i+1)
-        }
-
-        # String we want is in $0, go evaluate it
-        #dbg_print("m2", 5, "(docommand) About to call process line with $0 = '" $0 "'")
-        process_line()
-    }
-}
-
-function restore_context(ctx)
-{
-    if (__if_depth > ctx["ifdepth"])
-        error("Delimiter '@endif' not found")
-    __buffer = ctx["buffer"]
-    nsym_ll_write("__FILE__",      "", GLOBAL_NAMESPACE, ctx["file"])
-    nsym_ll_write("__LINE__",      "", GLOBAL_NAMESPACE, ctx["line"])
-    nsym_ll_write("__FILE_UUID__", "", GLOBAL_NAMESPACE, ctx["uuid"])
-}
-
-
 
 #*****************************************************************************
 #
-#       C A L C  3
-#
-#       Based on `calc3' from "The AWK Programming Language" p. 146
-#       with enhancements by Kenny McCormack and Alan Linton.
-#
-#       calc3_eval is the main entry point.  All other _c3_* functions
-#       are for internal use and should not be called by the user.
+#       Calc3
 #
 #*****************************************************************************
 
+# calc3_eval is the main entry point.  All other _c3_* functions are
+# for internal use and should not be called by the user.
 function calc3_eval(s,    e)
 {
     _c3__Sexpr = s
@@ -2323,7 +1669,7 @@ function calc3_eval(s,    e)
 
     # Bare @expr@ returns most recent result
     if (emptyp(_c3__Sexpr))
-        return nsym_ll_read("__EXPR__", "", GLOBAL_NAMESPACE)
+        return nsym_fetch("__EXPR__")
     _c3__f = 1
     e = _c3_expr()
     if (_c3__f <= length(_c3__Sexpr))
@@ -2340,12 +1686,14 @@ function _c3_expr(    var, e, op1, op2, m2)
     if (match(substr(_c3__Sexpr, _c3__f), /^[A-Za-z#_][A-Za-z#_0-9]*=[^=]/)) {
         var = _c3_advance()
         sub(/=.*$/, "", var)
-        assert_nsym_okay_to_define(var)
+        assert_sym_okay_to_define(var)
         # match() sets RLENGTH which includes the match character [^=].
         # But that's the start of the value -- I need to back up over it
         # to read the value properly.
         _c3__f--
-        return nsym_store(var, _c3_expr()+0)
+        # The Calc3 parser has no concept of arrays, so second argument
+        # must be empty.
+        return nsym_store(var, "", _c3_expr())
     }
 
     e = _c3_rel()
@@ -2418,7 +1766,7 @@ function _c3_factor2(    e)
         _c3__f++
         if (e ~ /^\+/) return +_c3_factor3() # only one unary + allowed
         if (e ~ /^-/)  return -_c3_factor3() # only one unary - allowed
-        if (e ~ /^!/)  return !(_c3_factor2()+0) # unary ! may repeat
+        if (e ~ /^!/)  return !(_c3_factor2() + 0) # unary ! may repeat
     }
     return _c3_factor3()
 }
@@ -2445,15 +1793,15 @@ function _c3_factor3(    e, fun, e2)
     # (expr) | function(expr) | function(expr,expr)
     if (match(e, /^([A-Za-z#_][A-Za-z#_0-9]+)?\(/)) {
         fun = _c3_advance()
-        if (fun ~ /^(abs|acos|asin|ceil|cos|deg|exp|floor|int|log(10)?|rad|randint|round|sign|sin|sqrt|srand|tan)?\(/) {
+        if (fun ~ /^(abs|ceil|cos|deg|exp|floor|int|log(10)?|rad|randint|round|sin|sqrt|srand|tan)?\(/) {
             e = _c3_expr()
             e = _c3_calculate_function(fun, e)
         } else if (fun ~ /^defined\(/) {
             e2 = substr(e, 9, length(e)-9)
             #print_stderr(sprintf("defined(): e2='%s'", e2))
             _c3__f += length(e2)
-            e = nsym_defined_p(e2) ? TRUE : FALSE
-        } else if (fun ~ /^(atan2|hypot|max|min|pow)\(/) {
+            e = sym_defined_p(e2) ? 1 : 0
+        } else if (fun ~ /^(atan2|max|min|pow)\(/) {
             e = _c3_expr()
             if (substr(_c3__Sexpr, _c3__f, 1) != ",")
                 error(sprintf("Missing ',' at '%s'", substr(_c3__Sexpr, _c3__f)))
@@ -2475,10 +1823,10 @@ function _c3_factor3(    e, fun, e2)
         if      (e2 == "e")   return E
         else if (e2 == "pi")  return PI
         else if (e2 == "tau") return TAU
-        else if (nsym_valid_p(e2) && nsym_defined_p(e2))
-            return nsym_fetch(e2)
-        else if (nseq_valid_p(e2) && nseq_defined_p(e2))
-            return nseq_ll_read(e2)
+        else if (sym_valid_p(e2) && sym_defined_p(e2))
+            return nsym_fetch(e2, "")
+        else if (seq_valid_p(e2) && seq_defined_p(e2))
+            return nsymtab[TYPE_SEQUENCE, e2, "", GLOBAL_FRAME, "value"]
     }
 
     # error
@@ -2490,12 +1838,6 @@ function _c3_calculate_function(fun, e,    c)
 {
     if (fun == "(")        return e
     if (fun == "abs(")     return e < 0 ? -e : e
-    if (fun == "acos(")    { if (e < -1 || e > 1)
-                                 error(sprintf("Math expression error [acos(%d)]:", e) $0)
-                             return atan2(sqrt(1 - e^2), e) }
-    if (fun == "asin(")    { if (e < -1 || e > 1)
-                                 error(sprintf("Math expression error [asin(%d)]:", e) $0)
-                             return atan2(e, sqrt(1 - e^2)) }
     if (fun == "ceil(")    { c = int(e)
                              return e > c ? c+1 : c }
     if (fun == "cos(")     return cos(e)
@@ -2509,7 +1851,6 @@ function _c3_calculate_function(fun, e,    c)
     if (fun == "rad(")     return e * (TAU / 360)
     if (fun == "randint(") return randint(e) + 1
     if (fun == "round(")   return round(e)
-    if (fun == "sign(")    return (e > 0) - (e < 0)
     if (fun == "sin(")     return sin(e)
     if (fun == "sqrt(")    return sqrt(e)
     if (fun == "srand(")   return srand(e)
@@ -2524,7 +1865,6 @@ function _c3_calculate_function(fun, e,    c)
 function _c3_calculate_function2(fun, e, e2)
 {
     if (fun == "atan2(")   return atan2(e, e2)
-    if (fun == "hypot(")   return sqrt(e^2 + e2^2) # Beware overflow
     if (fun == "max(")     return e > e2 ? e : e2
     if (fun == "min(")     return e < e2 ? e : e2
     if (fun == "pow(")     return e ^ e2
@@ -2538,9 +1878,12 @@ function _c3_advance(    tmp)
     _c3__f += RLENGTH
     return tmp
 }
+
+
+
 #*****************************************************************************
 #
-#       The builtin_*() functions that follow can only be executed by
+#       The m2_*() functions that follow can only be executed by
 #       process_line().  That routine has already matched text at the
 #       beginning of line in $0 to invoke a `control command' such as
 #       @define, @if, etc.  Therefore, NF cannot be zero.
@@ -2551,48 +1894,35 @@ function _c3_advance(    tmp)
 #
 #*****************************************************************************
 
-# @array                ARR
-function builtin_array(    arr)
-{
-    if (!currently_active_p())
-        return
-    if (NF < 1)
-        error("Bad parameters:" $0)
-    arr = $2
-    # assert_nsym_okay_to_define(sym)
-    # assert_nsym_defined(sym, "incr")
-    if (nnam_ll_in(arr, __namespace))
-        error("@array already defined")
-    nnam_ll_write(arr, __namespace, TYPE_ARRAY)
-}
-
-
 # @case                 NAME | TEXT
 # @of ....
 # @otherwise
 # @endcase, @esac
-function builtin_case(    save_line, save_lineno, target, branch, next_branch,
+function m2_case(    save_line, save_lineno, target, branch, next_branch,
                      max_branch, text, OTHERWISE, i, sym)
 {
     if (!currently_active_p())
         return
     OTHERWISE = 0
     save_line = $0
-    save_lineno = nsym_ll_read("__LINE__", "", GLOBAL_NAMESPACE)
+    save_lineno = nsym_fetch("__LINE__", "")
     sym = $2
-    assert_nsym_defined(sym, "case")
-    target = nsym_fetch(sym)
+    if (name_parse(sym, __ptxt) == ERROR)
+        error("m2_case: name_parse('" sym "') failed")
+    #assert_sym_defined(sym)
+    assert_nsym_defined(__ptxt[1], __ptxt[2])
+    target = sym_fetch(sym)
     __casenum++
-    casetab[__casenum, OTHERWISE, "label"] = EMPTY
+    casetab[__casenum, OTHERWISE, "label"] = ""
     casetab[__casenum, OTHERWISE, "line"] = 0
-    casetab[__casenum, OTHERWISE, "definition"] = EMPTY
+    casetab[__casenum, OTHERWISE, "definition"] = ""
     max_branch = branch = ERROR;  next_branch = 1
 
     while (TRUE) {
         if (readline() != OKAY)
             # Whatever happened, the @case didn't finish properly
             error("Delimiter '@endcase' not found:" save_line, "", save_lineno)
-        dbg_print("case", 5, "(builtin_case) readline='" $0 "'")
+        dbg_print("case", 5, "(m2_case) readline='" $0 "'")
         if ($1 == "@endcase" || $1 == "@esac")
             break               # proceed with branch evaluation
         else if ($1 == "@case")
@@ -2603,8 +1933,8 @@ function builtin_case(    save_line, save_lineno, target, branch, next_branch,
             # Start a new branch
             branch = next_branch++
             max_branch = max(branch, max_branch)
-            dbg_print("case", 3, sprintf("(builtin_case) Found @of '%s' branch %d at line %d",
-                                         text, branch, nsym_ll_read("__LINE__", "", GLOBAL_NAMESPACE)))
+            dbg_print("case", 3, sprintf("(m2_case) Found @of '%s' branch %d at line %d",
+                                         text, branch, nsym_fetch("__LINE__", "")))
             # Check if label is duplicate
             if (branch > 1)
                 for (i = 1; i < branch; i++)
@@ -2612,11 +1942,11 @@ function builtin_case(    save_line, save_lineno, target, branch, next_branch,
                         error("Duplicate '@of' not allowed:@of " $0)
             # Store it
             casetab[__casenum, branch, "label"] = text
-            casetab[__casenum, branch, "line"] = nsym_ll_read("__LINE__", "", GLOBAL_NAMESPACE)
-            casetab[__casenum, branch, "definition"] = EMPTY
+            casetab[__casenum, branch, "line"] = nsym_fetch("__LINE__", "")
+            casetab[__casenum, branch, "definition"] = ""
         } else if ($1 == "@otherwise") {
-            dbg_print("case", 3, "(builtin_case) Found @otherwise at line " \
-                      nsym_ll_read("__LINE__", "", GLOBAL_NAMESPACE))
+            dbg_print("case", 3, "(m2_case) Found @otherwise at line " \
+                      nsym_fetch("__LINE__", ""))
             # Check if otherwise already seen (there can be only one!)
             if (casetab[__casenum, OTHERWISE, "label"] == "otherwise")
                 error("Duplicate '@otherwise' not allowed:" $0)
@@ -2624,12 +1954,12 @@ function builtin_case(    save_line, save_lineno, target, branch, next_branch,
             branch = OTHERWISE
             max_branch = max(branch, max_branch)
             casetab[__casenum, branch, "label"] = "otherwise"
-            casetab[__casenum, branch, "line"] = nsym_ll_read("__LINE__", "", GLOBAL_NAMESPACE)
+            casetab[__casenum, branch, "line"] = nsym_fetch("__LINE__", "")
         } else {
             if (branch == ERROR)
                 error("No corresponding '@of':" $0)
             # Append line to current buffer
-            dbg_print("case", 5, sprintf("(builtin_case) Appending to '%s' branch %d",
+            dbg_print("case", 5, sprintf("(m2_case) Appending to '%s' branch %d",
                                          casetab[__casenum, branch, "label"], branch))
             casetab[__casenum, branch, "definition"] = \
             casetab[__casenum, branch, "definition"] $0 "\n"
@@ -2641,15 +1971,15 @@ function builtin_case(    save_line, save_lineno, target, branch, next_branch,
     # default case.  This is accomplished by setting its label to be the
     # target we seek.
     casetab[__casenum, OTHERWISE, "label"] = target
-    i = FALSE                   # remember if we've hit a match or not
+    i = 0                       # remember if we've hit a match or not
     branch = max_branch
     while (branch >= 0) {
         dbg_print("case", 4, sprintf("casetab[%d,%d,label]='%s' =?= target='%s'",
                                      __casenum, branch,
                                      casetab[__casenum, branch, "label"], target))
-        if (i == FALSE)         # not found (yet)
+        if (i == 0)             # not found (yet)
             if (casetab[__casenum, branch, "label"] == target) {
-                i = TRUE
+                i = 1
                 if (! emptyp(casetab[__casenum, branch, "definition"]))
                     docasebranch(__casenum, branch, casetab[__casenum, branch, "line"])
             }
@@ -2663,16 +1993,16 @@ function builtin_case(    save_line, save_lineno, target, branch, next_branch,
 
 
 # @default, @initialize NAME TEXT
-function builtin_default(    sym)
+function m2_default(    sym)
 {
     if (!currently_active_p())
         return
     if (NF < 2)
         error("Bad parameters:" $0)
     sym = $2
-    assert_nsym_okay_to_define(sym)
+    assert_sym_okay_to_define(sym)
 
-    if (nsym_defined_p(sym)) {
+    if (sym_defined_p(sym)) {
         if ($1 == "@init" || $1 == "@initialize")
             error("Symbol '" sym "' already defined:" $0)
     } else
@@ -2681,21 +2011,21 @@ function builtin_default(    sym)
 
 
 # @append, @define      NAME TEXT
-function builtin_define(    append_flag)
+function m2_define(    append_flag)
 {
     if (!currently_active_p())
         return
     if (NF < 2)
         error("Bad parameters:" $0)
     append_flag = ($1 == "@append")
-    assert_nsym_okay_to_define($2)
+    assert_sym_okay_to_define($2)
 
     dodef(append_flag)
 }
 
 
 # @divert               [N]
-function builtin_divert()
+function m2_divert()
 {
     if (!currently_active_p())
         return
@@ -2708,19 +2038,19 @@ function builtin_divert()
         error("Bad parameters:" $0)
 
     dbg_print("divert", 1, "divert(" $2 ")")
-    nsym_ll_write("__DIVNUM__", "", GLOBAL_NAMESPACE, int($2))
+    nsym_store("__DIVNUM__", "", int($2))
 }
 
 
 # @dump[all]            [FILE]
 # Output format:
 #       @<command>  SPACE  <name>  TAB  <stuff includes spaces...>
-function builtin_dump(    buf, cnt, definition, dumpfile, i, key, keys, sym_name, all_flag)
+function m2_dump(    buf, cnt, definition, dumpfile, i, key, keys, nsym, sym_name, all_flag)
 {
-    return                      # OLD TABLES - BROKEN
     if (!currently_active_p())
         return
-    all_flag = $1 == "@dumpall"
+    if ((all_flag = $1 == "@dumpall") && __init_deferred)
+        initialize_deferred_symbols() # Show all system symbols
 
     if (NF > 1) {
         $1 = ""
@@ -2729,32 +2059,27 @@ function builtin_dump(    buf, cnt, definition, dumpfile, i, key, keys, sym_name
     }
     # Count and sort the keys from the symbol and sequence tables
     cnt = 0
-    # for (key in symtab) {
-    #     if (all_flag || ! nsym_system_p(key))
-    #         keys[++cnt] = key
-    # }
-    # for (key in seqtab) {
-    #     split(key, fields, SUBSEP)
-    #     if (fields[2] == "defined")
-    #         keys[++cnt] = fields[1]
-    # }
-    # for (key in cmdtab) {
-    #     split(key, fields, SUBSEP)
-    #     if (fields[2] == "defined")
-    #         keys[++cnt] = fields[1]
-    # }
+    for (key in nsymtab) {
+        split(key, nsym, SUBSEP)
+        if (((nsym[1] == TYPE_CMD) ||
+             (nsym[1] == TYPE_SEQUENCE) ||
+             (nsym[1] == TYPE_SYMBOL && (all_flag ||
+                                              !sym_system_p(nsym[2])))) \
+            && nsym[5] == "defined")
+            keys[++cnt] = nsym_as_printable(nsym)
+    }
     qsort(keys, 1, cnt)
 
     # Format definitions
-    buf = EMPTY
+    buf = ""
     for (i = 1; i <= cnt; i++) {
         key = keys[i]
-        if (nsym_defined_p(key))
+        if (sym_defined_p(key))
             buf = buf sym_definition_pp(key)
-        else if (nseq_defined_p(key))
-            buf = buf nseq_definition_pp(key)
-        else if (ncmd_defined_p(key))
-            buf = buf ncmd_definition_pp(key)
+        else if (seq_defined_p(key))
+            buf = buf seq_definition_pp(key)
+        else if (cmd_defined_p(key))
+            buf = buf cmd_definition_pp(key)
         else                    # Can't happen
             error("Name '" key "' not available:" $0)
     }
@@ -2766,7 +2091,7 @@ function builtin_dump(    buf, cnt, definition, dumpfile, i, key, keys, sym_name
         # was not read properly...  Still, we only warn in strict mode.
         if (strictp())
             warn("Empty symbol table:" $0)
-    } else if (dumpfile == EMPTY)  # No FILE arg provided to @dump command
+    } else if (dumpfile == "")  # No FILE arg provided to @dump command
         print_stderr(buf)
     else {
         print buf > dumpfile
@@ -2776,7 +2101,7 @@ function builtin_dump(    buf, cnt, definition, dumpfile, i, key, keys, sym_name
 
 
 # @else
-function builtin_else()
+function m2_else()
 {
     if (__if_depth == 0)
         error("No corresponding '@if':" $0)
@@ -2794,13 +2119,13 @@ function builtin_else()
 # @debug only prints its message if debugging is enabled.  The user can
 # control this since __DEBUG__ is an unprotected symbol.  @debug is
 # purposefully not given access to the various dbg() keys and levels.
-function builtin_error(    m2_will_exit, do_format, do_print, message)
+function m2_error(    m2_will_exit, do_format, do_print, message)
 {
     if (!currently_active_p())
         return
     m2_will_exit = ($1 == "@error")
     do_format = ($1 == "@debug" || $1 == "@error" || $1 == "@warn")
-    do_print  = ($1 != "@debug" || debugp())
+    do_print  = ($1 != "@debug" || debugging_enabled_p())
     if (NF == 1) {
         message = format_message($1)
     } else {
@@ -2820,7 +2145,7 @@ function builtin_error(    m2_will_exit, do_format, do_print, message)
 
 
 # @exit                 [CODE]
-function builtin_exit(    silent)
+function m2_exit(    silent)
 {
     if (!currently_active_p())
         return
@@ -2831,7 +2156,7 @@ function builtin_exit(    silent)
 
 
 # @if[_not][_{defined|env|exists|in}], @if[n]def, @unless
-function builtin_if(    sym, cond, op, val2, val4)
+function m2_if(    sym, cond, op, val2, val4)
 {
     sub(/^@/, "")          # Remove leading @, otherwise dosubs($0) loses
     $0 = dosubs($0)
@@ -2841,21 +2166,21 @@ function builtin_if(    sym, cond, op, val2, val4)
             # @if [!]FOO
             if (first($2) == "!") {
                 sym = substr($2, 2)
-                assert_nsym_valid_name(sym)
-                cond = !nsym_true_p(sym)
+                assert_sym_valid_name(sym)
+                cond = !sym_true_p(sym)
             } else {
-                assert_nsym_valid_name($2)
-                cond = nsym_true_p($2)
+                assert_sym_valid_name($2)
+                cond = sym_true_p($2)
             }
         } else if (NF == 3 && $2 == "!") {
             # @if ! FOO
-            assert_nsym_valid_name($3)
-            cond = !nsym_true_p($3)
+            assert_sym_valid_name($3)
+            cond = !sym_true_p($3)
         } else if (NF == 4) {
             # @if FOO <op> BAR
-            val2 = (nsym_valid_p($2) && nsym_defined_p($2)) ? nsym_fetch($2) : $2
+            val2 = (sym_valid_p($2) && sym_defined_p($2)) ? sym_fetch($2) : $2
             op   = $3
-            val4 = (nsym_valid_p($2) && nsym_defined_p($4)) ? nsym_fetch($4) : $4
+            val4 = (sym_valid_p($2) && sym_defined_p($4)) ? sym_fetch($4) : $4
 
             if      (op == "<")                 cond = val2 <  val4
             else if (op == "<=")                cond = val2 <= val4
@@ -2870,18 +2195,18 @@ function builtin_if(    sym, cond, op, val2, val4)
 
     } else if ($1 == "if_not" || $1 == "unless") {
         if (NF < 2) error("Bad parameters:" $0)
-        assert_nsym_valid_name($2)
-        cond = !nsym_true_p($2)
+        assert_sym_valid_name($2)
+        cond = !sym_true_p($2)
 
     } else if ($1 == "if_defined" || $1 == "ifdef") {
         if (NF < 2) error("Bad parameters:" $0)
-        assert_nsym_valid_name($2)
-        cond = nsym_defined_p($2)
+        assert_sym_valid_name($2)
+        cond = sym_defined_p($2)
 
     } else if ($1 == "if_not_defined" || $1 == "ifndef") {
         if (NF < 2) error("Bad parameters:" $0)
-        assert_nsym_valid_name($2)
-        cond = !nsym_defined_p($2)
+        assert_sym_valid_name($2)
+        cond = !sym_defined_p($2)
 
     } else if ($1 == "if_env") {
         if (NF < 2) error("Bad parameters:" $0)
@@ -2902,23 +2227,22 @@ function builtin_if(    sym, cond, op, val2, val4)
         cond = !path_exists_p(rm_quotes($2))
 
     # @if(_not)_in KEY ARR
-    # Test if symbol ARR[KEY] is defined.  Key comes first, because in Awk,
-    # one writes "key IN array" for the predicate.  This is just prefix...
+    # Test if symbol ARR[KEY] is defined.  Key comes first, because in
+    # Awk one says "key IN array" for the predicate.
     } else if ($1 == "if_in") {   # @if_in us-east-1 VALID_REGIONS
         # @if_in KEY ARR
         if (NF < 3) error("Bad parameters:" $0)
-        assert_nsym_valid_name($3)
-        cond = nsym_defined_p(sprintf("%s[%s]", $3, $2))
+        assert_sym_valid_name($3)
+        cond = nsym_defined_p($3, $2)
 
     } else if ($1 == "if_not_in") {
         if (NF < 3) error("Bad parameters:" $0)
-        assert_nsym_valid_name($3)
-        #print_stderr(sprintf("if_not_in: %s[%s]", $3, $2))
-        cond = !nsym_defined_p(sprintf("%s[%s]", $3, $2))
+        assert_sym_valid_name($3)
+        cond = !nsym_defined_p($3, $2)
 
     } else
         # Should not happen
-        error("builtin_if(): '" $1 "' not matched:" $0)
+        error("m2_if(): '" $1 "' not matched:" $0)
 
     __active[++__if_depth] = currently_active_p() ? cond : FALSE
     __seen_else[__if_depth] = FALSE
@@ -2926,7 +2250,7 @@ function builtin_if(    sym, cond, op, val2, val4)
 
 
 # @nextfile, @ignore    DELIM
-function builtin_ignore(    buf, delim, save_line, save_lineno)
+function m2_ignore(    buf, delim, save_line, save_lineno)
 {
     # Ignore input until line starts with $2.  This means
     #     @ignore The
@@ -2942,7 +2266,7 @@ function builtin_ignore(    buf, delim, save_line, save_lineno)
         read_lines_until("")
     else {
         save_line = $0
-        save_lineno = nsym_ll_read("__LINE__", "", GLOBAL_NAMESPACE)
+        save_lineno = nsym_fetch("__LINE__", "")
         delim = $2
         buf = read_lines_until(delim)
         if (buf == EOD_INDICATOR)
@@ -2952,7 +2276,7 @@ function builtin_ignore(    buf, delim, save_line, save_lineno)
 
 
 # @{s,}{include,paste}  FILE
-function builtin_include(    error_text, filename, read_literally, silent)
+function m2_include(    error_text, filename, read_literally, silent)
 {
     if (!currently_active_p())
         return
@@ -2975,24 +2299,26 @@ function builtin_include(    error_text, filename, read_literally, silent)
 
 
 # @decr, @incr          NAME [N]
-function builtin_incr(    sym, incr)
+function m2_incr(    sym, incr)
 {
     if (!currently_active_p())
         return
     if (NF < 2)
         error("Bad parameters:" $0)
     sym = $2
-    assert_nsym_okay_to_define(sym)
-    assert_nsym_defined(sym, "incr")
-    if (NF >= 3 && ! integerp($3))
+    assert_sym_okay_to_define(sym)
+    if (name_parse(sym, __ptxt) == ERROR)
+        error("m2_incr: name_parse('" sym "') failed")
+    assert_nsym_defined(__ptxt[1], __ptxt[2], "", "incr")
+    if (NF >= 3 && !integerp($3))
         error("Value '" $3 "' must be numeric:" $0)
     incr = (NF >= 3) ? $3 : 1
-    nsym_increment(sym, ($1 == "@incr") ? incr : -incr)
+    sym_increment(sym, ($1 == "@incr") ? incr : -incr)
 }
 
 
 # @input                [NAME]
-function builtin_input(    getstat, input, sym)
+function m2_input(    getstat, input, sym)
 {
     # Read a single line from /dev/tty.  No prompt is issued; if you
     # want one, use @echo.  Specify the symbol you want to receive the
@@ -3000,53 +2326,35 @@ function builtin_input(    getstat, input, sym)
     if (!currently_active_p())
         return
     sym = (NF < 2) ? "__INPUT__" : $2
-    assert_nsym_okay_to_define(sym)
+    if (name_parse(sym, __ptxt) == ERROR)
+        error("m2_input: name_parse('" sym "') failed")
+    assert_sym_okay_to_define(sym)
     getstat = getline input < "/dev/tty"
-    if (getstat == ERROR) {
+    if (getstat < 0) {
         warn("Error reading file '/dev/tty' [input]:" $0)
-        input = EMPTY
+        input = ""
     }
-    nsym_store(sym, input)
-}
-
-
-# @local                NAME
-# @local FOO adds to nnamtab (as a scalar) in the current namespace, does not define it
-function builtin_local(    name)
-{
-    if (!currently_active_p())
-        return
-    if (NF != 2)
-        error("Bad parameters:" $0)
-    if (__namespace == GLOBAL_NAMESPACE)
-        error("Cannot use @local in global namespace")
-    name = $2
-
-    # check for valid name
-    if (!nnam_valid_with_strict_as(name))
-        error("@local: Invalid name")
-    if (nnam_ll_in(name, __namespace))
-        error("@local: Name already exists in current namespace")
-
-    nsym_create(name, TYPE_SYMBOL)
+    nsym_store(__ptxt[1], __ptxt[2], input)
 }
 
 
 # @longdef              NAME
-function builtin_longdef(    buf, save_line, save_lineno, sym)
+function m2_longdef(    buf, save_line, save_lineno, sym)
 {
     if (!currently_active_p())
         return
     if (NF != 2)
         error("Bad parameters:" $0)
     save_line = $0
-    save_lineno = nsym_ll_read("__LINE__", "", GLOBAL_NAMESPACE)
+    save_lineno = nsym_fetch("__LINE__", "")
     sym = $2
-    assert_nsym_okay_to_define(sym)
+    if (name_parse(sym, __ptxt) == ERROR)
+        error("m2_longdef: name_parse('" sym "') failed")
+    assert_sym_okay_to_define(sym)
     buf = read_lines_until("@endlong")
     if (buf == EOD_INDICATOR)
         error("Delimiter '@endlongdef' not found:" save_line, "", save_lineno)
-    nsym_store(sym, buf)
+    nsym_store(__ptxt[1], __ptxt[2], buf)
 }
 
 
@@ -3064,29 +2372,29 @@ function builtin_longdef(    buf, save_line, save_lineno, sym)
 # Names declared with @newcmd are recognized and run in the procedure
 # that processes the control commands (@if, @define, etc).  These things
 # can only be on a line of their own and (mostly) do not produce output.
-function builtin_newcmd(    buf, save_line, save_lineno, name, nparam)
+function m2_newcmd(    buf, save_line, save_lineno, name, nparam)
 {
     if (!currently_active_p())
         return
     if (NF < 2)
         error("Bad parameters:" $0)
     name = $2
-    assert_ncmd_okay_to_define(name)
+    assert_cmd_name_okay_to_define(name)
     save_line = $0
-    save_lineno = nsym_ll_read("__LINE__", "", GLOBAL_NAMESPACE)
+    save_lineno = nsym_fetch("__LINE__", "")
 
     buf = read_lines_until("@endcmd")
     if (buf == EOD_INDICATOR)
         error("Delimiter '@endcmd' not found:" save_line, "", save_lineno)
 
-    nnam_ll_write(name, GLOBAL_NAMESPACE, TYPE_COMMAND)
-    ncmd_ll_write(name, buf)
-    ncmdtab[name, "nparam"] = nparam
+    nsymtab[TYPE_CMD, name, "", 0, "defined"]    = TRUE
+    nsymtab[TYPE_CMD, name, "", 0, "definition"] = buf
+    nsymtab[TYPE_CMD, name, "", 0, "nparam"]     = nparam
 }
 
 
 # @{s,}read             NAME FILE
-function builtin_read(    sym, filename, line, val, getstat, silent)
+function m2_read(    sym, filename, line, val, getstat, silent)
 {
     # This is not intended to be a full-blown file inputter but rather just
     # to read short snippets like a file path or username.  As usual, multi-
@@ -3098,28 +2406,30 @@ function builtin_read(    sym, filename, line, val, getstat, silent)
         error("Bad parameters:" $0)
     silent = (substr($1, 2, 1) == "s") # silent mutes file errors, even in strict mode
     sym  = $2
-    assert_nsym_okay_to_define(sym)
+    if (name_parse(sym, __ptxt) == ERROR)
+        error("m2_read: name_parse('" sym "') failed")
+    assert_sym_okay_to_define(sym)
 
     $1 = $2 = ""
     sub("^[ \t]*", "")
     filename = rm_quotes(dosubs($0))
 
-    val = EMPTY
+    val = ""
     while (TRUE) {
         getstat = getline line < filename
-        if (getstat == ERROR && !silent)
+        if (getstat < 0 && !silent) # Error
             warn("Error reading file '" filename "' [read]")
-        if (getstat == EOF)
+        if (getstat <= 0)       # End of file
             break
         val = val line "\n"     # Read a line
     }
     close(filename)
-    nsym_store(sym, chomp(val))
+    nsym_store(__ptxt[1], __ptxt[2], chomp(val))
 }
 
 
 # @{s,}readarray        ARR FILE
-function builtin_readarray(    arr, filename, line, getstat, line_cnt, silent, level)
+function m2_readarray(    arr, filename, line, getstat, line_cnt, silent)
 {
     if (!currently_active_p())
         return
@@ -3128,81 +2438,54 @@ function builtin_readarray(    arr, filename, line, getstat, line_cnt, silent, l
         error("Bad parameters:" $0)
     silent = (substr($1, 2, 1) == "s") # silent mutes file errors, even in strict mode
     arr = $2
-    # Check that arr is really an ARRAY and that it's writable
-    # What if it already has values?  Should they be erased?  I'm inclined to think so
-    assert_nsym_okay_to_define(arr)
+    assert_sym_okay_to_define(arr)
 
     $1 = $2 = ""
     sub("^[ \t]*", "")
     filename = rm_quotes(dosubs($0))
     line_cnt = 0
-    level = __namespace         # FIXME
 
     while (TRUE) {
         getstat = getline line < filename
-        if (getstat == ERROR && !silent)
+        if (getstat < 0 && !silent) # Error
             warn("Error reading file '" filename "' [read]")
-        if (getstat == EOF)
+        if (getstat <= 0)       # End of file
             break
-        nsym_ll_write(arr, ++line_cnt, level, line)
+        nsym_store(arr, ++line_cnt, line)
     }
     close(filename)
-    nsym_ll_write(arr, 0, level, line_cnt)
-}
-
-
-# @readonly             NAME
-#   @readonly VAR.  makes existing variable read-only.  No way to undo
-#   @readonly ARR also works, freezes array preventing adding new elements.
-#   @readonly cannot be performed on SYSTEM symbols or arrays
-function builtin_readonly(    name, code, silent)
-{
-    if (!currently_active_p())
-        return
-    if (NF < 1)
-        error("Bad parameters:" $0)
-    name = $2
-    if (!nnam_ll_in(name, __namespace))
-        error("@readonly: name not defined in current namespace")
-    code = nnam_ll_read(name, __namespace)
-    if (flag_allfalse_p(code, TYPE_ARRAY TYPE_SYMBOL))
-        error("@readonly: name must be symbol or array")
-    if (flag_1true_p(code, FLAG_SYSTEM))
-        error("@readonly: name protected")
-    nnam_ll_write(name, __namespace, flag_set_clear(code, FLAG_READONLY))
+    nsym_store(arr, 0, line_cnt)
 }
 
 
 # @sequence             ID SUBCMD [ARG...]
-function builtin_sequence(    id, action, arg, saveline)
+function m2_sequence(    id, action, arg, saveline)
 {
     if (!currently_active_p())
         return
-    if (NF < 2)
+    if (NF < 3)
         error("Bad parameters:" $0)
     id = $2
-    assert_nseq_valid_name(id)
-    if (NF == 2)
-        $3 = "create"
+    assert_seq_valid_name(id)
     action = $3
-    if (action != "create" && !nseq_defined_p(id))
+    if (action != "create" && !seq_defined_p(id))
         error("Name '" id "' not defined [sequence]:" $0)
     if (NF == 3) {
         if (action == "create") {
-            assert_nseq_okay_to_define(id)
-            nnam_ll_write(id, GLOBAL_NAMESPACE, TYPE_SEQUENCE FLAG_INTEGER)
-            nseqtab[id, "incr"]    = SEQ_DEFAULT_INCR
-            nseqtab[id, "init"]    = SEQ_DEFAULT_INIT
-            nseqtab[id, "fmt"]     = nsym_ll_read("__FMT__", "seq", GLOBAL_NAMESPACE)
-            nseq_ll_write(id, SEQ_DEFAULT_INIT)
+            assert_seq_okay_to_define(id)
+            nsymtab[TYPE_SEQUENCE, id, "", 0, "defined"] = TRUE
+            nsymtab[TYPE_SEQUENCE, id, "", 0, "incr"]    = SEQ_DEFAULT_INCR
+            nsymtab[TYPE_SEQUENCE, id, "", 0, "init"]    = SEQ_DEFAULT_INIT
+            nsymtab[TYPE_SEQUENCE, id, "", 0, "fmt"]     = nsym_fetch("__FMT__", "seq")
+            nsymtab[TYPE_SEQUENCE, id, "", 0, "value"]   = SEQ_DEFAULT_INIT
         } else if (action == "delete") {
-            nseq_destroy(id)
+            seq_destroy(id)
         } else if (action == "next") { # Increment counter only, no output
-            nseq_ll_incr(id, nseqtab[id, "incr"])
+            nsymtab[TYPE_SEQUENCE, id, "", 0, "value"] += nsymtab[TYPE_SEQUENCE, id, "", 0, "incr"]
         } else if (action == "prev") { # Decrement counter only, no output
-            nseq_ll_incr(id, -nseqtab[id, "incr"])
+            nsymtab[TYPE_SEQUENCE, id, "", 0, "value"] -= nsymtab[TYPE_SEQUENCE, id, "", 0, "incr"]
         } else if (action == "restart") { # Set current counter value to initial value
-            nseq_ll_write(id, nseqtab[id, "init"])
+            nsymtab[TYPE_SEQUENCE, id, "", 0, "value"] = nsymtab[TYPE_SEQUENCE, id, "", 0, "init"]
         } else
             error("Bad parameters:" $0)
     } else {    # NF >= 4
@@ -3217,14 +2500,14 @@ function builtin_sequence(    id, action, arg, saveline)
             # specify %x to print in hexadecimal instead.  The point is,
             # m2 can't police your format string and a bad value might
             # cause a crash if printf() fails.
-            nseqtab[id, "fmt"] = arg
+            nsymtab[TYPE_SEQUENCE, id, "", 0, "fmt"] = arg
         } else if (action == "incr") {
             # incr N :: Set increment value to N.
             if (!integerp(arg))
                 error(sprintf("Value '%s' must be numeric:%s", arg, saveline))
             if (arg+0 == 0)
                 error(sprintf("Bad parameters in 'incr':%s", saveline))
-            nseqtab[id, "incr"] = int(arg)
+            nsymtab[TYPE_SEQUENCE, id, "", 0, "incr"] = int(arg)
         } else if (action == "init") {
             # init N :: Set initial  value to N.  If current
             # value == old init value (i.e., never been used), then set
@@ -3232,14 +2515,14 @@ function builtin_sequence(    id, action, arg, saveline)
             # current value remains unchanged.
             if (!integerp(arg))
                 error(sprintf("Value '%s' must be numeric:%s", arg, saveline))
-            if (nseq_ll_read(id) == nseqtab[id, "init"])
-                nseq_ll_write(id, int(arg))
-            nseqtab[id, "init"] = int(arg)
+            if (nsymtab[TYPE_SEQUENCE, id, "", 0, "value"] == nsymtab[TYPE_SEQUENCE, id, "", 0, "init"])
+                nsymtab[TYPE_SEQUENCE, id, "", 0, "value"] = int(arg)
+            nsymtab[TYPE_SEQUENCE, id, "", 0, "init"] = int(arg)
         } else if (action == "set") {
             # set N :: Set counter value directly to N.
             if (!integerp(arg))
                 error(sprintf("Value '%s' must be numeric:%s", arg, saveline))
-            nseq_ll_write(id, int(arg))
+            nsymtab[TYPE_SEQUENCE, id, "", 0, "value"] = int(arg)
         } else
            error("Bad parameters:" saveline)
     }
@@ -3248,7 +2531,7 @@ function builtin_sequence(    id, action, arg, saveline)
 
 # @shell                DELIM [PROG]
 # Set symbol "M2_SHELL" to override.
-function builtin_shell(    delim, save_line, save_lineno, input_text, input_file,
+function m2_shell(    delim, save_line, save_lineno, input_text, input_file,
                       output_text, output_file, sendto, path_fmt, getstat,
                       cmdline, line)
 {
@@ -3264,7 +2547,7 @@ function builtin_shell(    delim, save_line, save_lineno, input_text, input_file
     if (NF < 2)
         error("Bad parameters:" $0)
     save_line = $0
-    save_lineno = nsym_ll_read("__LINE__", "", GLOBAL_NAMESPACE)
+    save_lineno = nsym_fetch("__LINE__", "")
     delim = $2
     if (NF == 2) {              # @shell DELIM
         sendto = default_shell()
@@ -3278,7 +2561,7 @@ function builtin_shell(    delim, save_line, save_lineno, input_text, input_file
     if (input_text == EOD_INDICATOR)
         error("Delimiter '" delim "' not found:" save_line, "", save_lineno)
 
-    path_fmt    = sprintf("%sm2-%d.shell-%%s", tmpdir(), nsym_fetch("__PID__"))
+    path_fmt    = sprintf("%sm2-%d.shell-%%s", tmpdir(), nsym_fetch("__PID__", ""))
     input_file  = sprintf(path_fmt, "in")
     output_file = sprintf(path_fmt, "out")
     print dosubs(input_text) > input_file
@@ -3287,12 +2570,12 @@ function builtin_shell(    delim, save_line, save_lineno, input_text, input_file
     # Don't tell me how fragile this is, we're whistling past the
     # graveyard here.  But it suffices to run /bin/sh, which is enough.
     cmdline = sprintf("%s < %s > %s", sendto, input_file, output_file)
-    nsym_ll_write("__SHELL__", "", GLOBAL_NAMESPACE, system(cmdline))
+    nsym_store("__SHELL__", "", system(cmdline))
     while (TRUE) {
         getstat = getline line < output_file
-        if (getstat == ERROR)
+        if (getstat < 0)        # Error
             warn("Error reading file '" output_file "' [shell]")
-        if (getstat == EOF)
+        if (getstat <= 0)       # End of file
             break
         output_text = output_text line "\n" # Read a line
     }
@@ -3305,7 +2588,7 @@ function builtin_shell(    delim, save_line, save_lineno, input_text, input_file
 
 
 # @typeout
-function builtin_typeout(    buf)
+function m2_typeout(    buf)
 {
     if (!currently_active_p())
         return
@@ -3316,33 +2599,33 @@ function builtin_typeout(    buf)
 
 
 # @undef[ine]           NAME
-function builtin_undefine(    name, root)
+function m2_undefine(    name, root)
 {
     if (!currently_active_p())
         return
     if (NF != 2)
         error("Bad parameters:" $0)
     name = $2
-    if (nseq_valid_p(name) && nseq_defined_p(name))
-        nseq_destroy(name)
-    else if (ncmd_valid_p(name) && ncmd_defined_p(name)) {
-        ncmd_destroy(name)
+    if (seq_valid_p(name) && seq_defined_p(name))
+        seq_destroy(name)
+    else if (cmd_valid_p(name) && cmd_defined_p(name)) {
+        cmd_destroy(name)
     } else {
-        root = name             # sym_root(name)
-        assert_nsym_valid_name(root)
-        assert_nsym_unprotected(root)
+        root = sym_root(name)
+        assert_sym_valid_name(root)
+        assert_sym_unprotected(root)
         # System symbols, even unprotected ones -- despite being subject
         # to user modification -- cannot be undefined.
-        if (nsym_system_p(root))
+        if (sym_system_p(root))
             error("Name '" root "' not available:" $0)
         dbg_print("symbol", 3, ("About to sym_destroy('" name "')"))
-        nsym_destroy(name)
+        sym_destroy(name)
     }
 }
 
 
 # @undivert             [N]
-function builtin_undivert(    stream, i)
+function m2_undivert(    stream, i)
 {
     if (!currently_active_p())
         return
@@ -3360,6 +2643,8 @@ function builtin_undivert(    stream, i)
         }
     }
 }
+
+
 # The high-level processing happens in the dofile() function, which
 # reads one line at a time, and decides what to do with each line.  The
 # __active_files array keeps track of open files.  The symbol __FILE__
@@ -3369,26 +2654,32 @@ function builtin_undivert(    stream, i)
 # Read this function carefully--there are some nice tricks here.
 #
 # Caller is responsible for removing potential quotes from filename.
-function dofile(filename, read_literally,
-                savebuffer, savefile, saveifdepth, saveline, saveuuid, ctx)
+function dofile(filename, read_literally,    savebuffer, savefile, saveifdepth, saveline, saveuuid)
 {
     if (filename == "-")
         filename = "/dev/stdin"
     if (!path_exists_p(filename))
         return FALSE
     dbg_print("m2", 1, ("(dofile) filename='" filename "'" \
-                        (read_literally ? ", read_literally=TRUE" : EMPTY)))
+                        (read_literally ? ", read_literally=TRUE" : "") \
+                        ")"))
     if (filename in __active_files)
         error("Cannot recursively read '" filename "':" $0)
-    save_context(ctx)
+
+    # Save old file context
+    savebuffer  = __buffer
+    savefile    = nsym_fetch("__FILE__", "")
+    saveifdepth = __if_depth
+    saveline    = nsym_fetch("__LINE__", "")
+    saveuuid    = nsym_fetch("__FILE_UUID__", "")
 
     # Set up new file context
     __active_files[filename] = TRUE
-    __buffer = EMPTY
-    nsym_increment("__NFILE__", 1)
-    nsym_ll_write("__FILE__",      "", GLOBAL_NAMESPACE, filename)
-    nsym_ll_write("__LINE__",      "", GLOBAL_NAMESPACE, 0)
-    nsym_ll_write("__FILE_UUID__", "", GLOBAL_NAMESPACE, uuid())
+    __buffer = ""
+    sym_increment("__NFILE__", 1)
+    nsym_store("__FILE__", "", filename)
+    nsym_store("__LINE__", "", 0)
+    nsym_store("__FILE_UUID__", "", uuid())
 
     # Read the file and process each line
     while (readline() == OKAY)
@@ -3400,7 +2691,15 @@ function dofile(filename, read_literally,
     if (filename != "-" && filename != "/dev/stdin")
         close(filename)
     delete __active_files[filename]
-    restore_context(ctx)
+
+    # Restore previous file context
+    if (__if_depth > saveifdepth)
+        error("Delimiter '@endif' not found")
+    __buffer = savebuffer
+    nsym_store("__FILE__", "", savefile)
+    nsym_store("__LINE__", "", saveline)
+    nsym_store("__FILE_UUID__", "", saveuuid)
+
     return TRUE
 }
 
@@ -3411,32 +2710,37 @@ function dofile(filename, read_literally,
 # names.  Only after all expanded text has been processed and sent to
 # the output does the program get a fresh line of input.
 # Return OKAY, ERROR, or EOF.
-function readline(    getstat, i)
+function readline(    getstat, i, status)
 {
-    getstat = OKAY
+    status = OKAY
     if (!emptyp(__buffer)) {
         # Return the buffer even if somehow it doesn't end with a newline
         if ((i = index(__buffer, "\n")) == IDX_NOT_FOUND) {
             $0 = __buffer
-            __buffer = EMPTY
+            __buffer = ""
         } else {
             $0 = substr(__buffer, 1, i-1)
             __buffer = substr(__buffer, i+1)
         }
     } else {
-        getstat = getline < nsym_ll_read("__FILE__", "", GLOBAL_NAMESPACE)
-        if (getstat == ERROR) {
-            warn("Error reading file '" nsym_ll_read("__FILE__", "", GLOBAL_NAMESPACE) "' [readline]")
-        } else if (getstat != EOF) {
-            nsym_increment("__LINE__", 1)
-            nsym_increment("__NLINE__", 1)
+        getstat = getline < nsym_fetch("__FILE__", "")
+        if (getstat < 0) {       # Error
+            status = ERROR
+            warn("Error reading file '" nsym_fetch("__FILE__", "") "' [readline]")
+        } else if (getstat == EOF)
+            status = EOF
+        else {                   # Read a line
+            sym_increment("__LINE__", 1)
+            sym_increment("__NLINE__", 1)
         }
     }
-    return getstat
+    return status
 }
+
+
 function process_line(read_literally,    sp, lbrace, cut, newstring, user_cmd)
 {
-    dbg_print("io", 1, "(process_line) Start; line " nsym_ll_read("__LINE__", "", GLOBAL_NAMESPACE) ": $0='" $0 "'")
+    dbg_print("cmd", 1, "(process_line) Start; line " nsym_fetch("__LINE__", "") ": $0='" $0 "'")
 
     # Short circuit if we're not processing macros, or no @ found
     if (read_literally ||
@@ -3448,18 +2752,17 @@ function process_line(read_literally,    sp, lbrace, cut, newstring, user_cmd)
     # Look for control commands.  These are hard-wired, and cannot be
     # overridden by @newcmd.  Note, they only match at beginning of line.
     if      (/^@(@|;|#)/)                 { } # Comments are ignored
-    else if (/^@append([ \t]|$)/)         { builtin_define() }
-    else if (/^@array([ \t]|$)/)          { builtin_array() }
-    else if (/^@case([ \t]|$)/)           { builtin_case() }
+    else if (/^@append([ \t]|$)/)         { m2_define() }
+    else if (/^@case([ \t]|$)/)           { m2_case() }
     else if (/^@c(omment)?([ \t]|$)/)     { } # Comments are ignored
-    else if (/^@decr([ \t]|$)/)           { builtin_incr() }
-    else if (/^@default([ \t]|$)/)        { builtin_default() }
-    else if (/^@define([ \t]|$)/)         { builtin_define() }
-    else if (/^@debug([ \t]|$)/)          { builtin_error() }
-    else if (/^@divert([ \t]|$)/)         { builtin_divert() }
-    else if (/^@dump(all|def)?([ \t]|$)/) { builtin_dump() }
-    else if (/^@echo([ \t]|$)/)           { builtin_error() }
-    else if (/^@else([ \t]|$)/)           { builtin_else() }
+    else if (/^@decr([ \t]|$)/)           { m2_incr() }
+    else if (/^@default([ \t]|$)/)        { m2_default() }
+    else if (/^@define([ \t]|$)/)         { m2_define() }
+    else if (/^@debug([ \t]|$)/)          { m2_error() }
+    else if (/^@divert([ \t]|$)/)         { m2_divert() }
+    else if (/^@dump(all|def)?([ \t]|$)/) { m2_dump() }
+    else if (/^@echo([ \t]|$)/)           { m2_error() }
+    else if (/^@else([ \t]|$)/)           { m2_else() }
     else if (/^@(endcase|esac)([ \t]|$)/) {
              error("No corresponding '@case':" $0) }
     else if (/^@endcmd([ \t]|$)/)         {
@@ -3469,55 +2772,41 @@ function process_line(read_literally,    sp, lbrace, cut, newstring, user_cmd)
                  error("No corresponding '@if':" $0) }
     else if (/^@endlong(def)?([ \t]|$)/)  {
              error("No corresponding '@longdef':" $0) }
-    else if (/^@err(or|print)([ \t]|$)/)  { builtin_error() }
-    else if (/^@s?(m2)?exit([ \t]|$)/)    { builtin_exit() }
+    else if (/^@err(or|print)([ \t]|$)/)  { m2_error() }
+    else if (/^@s?(m2)?exit([ \t]|$)/)    { m2_exit() }
     else if (/^@if(_not)?(_(defined|env|exists|in))?([ \t]|$)/)
-                                          { builtin_if() }
-    else if (/^@ifn?def([ \t]|$)/)        { builtin_if() }
-    else if (/^@ignore([ \t]|$)/)         { builtin_ignore() }
-    else if (/^@s?include([ \t]|$)/)      { builtin_include() }
-    else if (/^@incr([ \t]|$)/)           { builtin_incr() }
-    else if (/^@init(ialize)?([ \t]|$)/)  { builtin_default() }
-    else if (/^@input([ \t]|$)/)          { builtin_input() }
-    else if (/^@local([ \t]|$)/)          { builtin_local() }
-    else if (/^@longdef([ \t]|$)/)        { builtin_longdef() }
-    else if (/^@newcmd([ \t]|$)/)         { builtin_newcmd() }
-    else if (/^@nextfile([ \t]|$)/)       { builtin_ignore() }
+                                          { m2_if() }
+    else if (/^@ifn?def([ \t]|$)/)        { m2_if() }
+    else if (/^@ignore([ \t]|$)/)         { m2_ignore() }
+    else if (/^@s?include([ \t]|$)/)      { m2_include() }
+    else if (/^@incr([ \t]|$)/)           { m2_incr() }
+    else if (/^@init(ialize)?([ \t]|$)/)  { m2_default() }
+    else if (/^@input([ \t]|$)/)          { m2_input() }
+    else if (/^@longdef([ \t]|$)/)        { m2_longdef() }
+    else if (/^@newcmd([ \t]|$)/)         { m2_newcmd() }
+    else if (/^@nextfile([ \t]|$)/)       { m2_ignore() }
     else if (/^@of([ \t]|$)/)             {
              error("No corresponding '@case':" $0) }
     else if (/^@otherwise([ \t]|$)/)      {
              error("No corresponding '@case':" $0) }
-    else if (/^@s?paste([ \t]|$)/)        { builtin_include() }
-    else if (/^@s?read([ \t]|$)/)         { builtin_read() }
-    else if (/^@s?readarray([ \t]|$)/)    { builtin_readarray() }
-    else if (/^@s?readonly([ \t]|$)/)     { builtin_readonly() }
-    else if (/^@sequence([ \t]|$)/)       { builtin_sequence() }
-    else if (/^@shell([ \t]|$)/)          { builtin_shell() }
-    else if (/^@stderr([ \t]|$)/)         { builtin_error() }
-    else if (/^@typeout([ \t]|$)/)        { builtin_typeout() }
-    else if (/^@undef(ine)?([ \t]|$)/)    { builtin_undefine() }
-    else if (/^@undivert([ \t]|$)/)       { builtin_undivert() }
-    else if (/^@unless([ \t]|$)/)         { builtin_if() }
-    else if (/^@warn([ \t]|$)/)           { builtin_error() }
+    else if (/^@s?paste([ \t]|$)/)        { m2_include() }
+    else if (/^@s?read([ \t]|$)/)         { m2_read() }
+    else if (/^@s?readarray([ \t]|$)/)    { m2_readarray() }
+    else if (/^@sequence([ \t]|$)/)       { m2_sequence() }
+    else if (/^@shell([ \t]|$)/)          { m2_shell() }
+    else if (/^@stderr([ \t]|$)/)         { m2_error() }
+    else if (/^@typeout([ \t]|$)/)        { m2_typeout() }
+    else if (/^@undef(ine)?([ \t]|$)/)    { m2_undefine() }
+    else if (/^@undivert([ \t]|$)/)       { m2_undivert() }
+    else if (/^@unless([ \t]|$)/)         { m2_if() }
+    else if (/^@warn([ \t]|$)/)           { m2_error() }
 
-    # These are only for development
-    else if (/^@dump_nnamtab$/)           { nnam_dump_nnamtab(TYPE_ANY) }
-    else if (/^@dump_nseqtab$/)           { nnam_dump_nnamtab(TYPE_SEQUENCE)
-                                            nsym_dump_nseqtab() }
-    else if (/^@dump_nsymtab$/)           { nnam_dump_nnamtab(TYPE_ARRAY)
-                                            nnam_dump_nnamtab(TYPE_SYMBOL)
-                                            nsym_dump_nsymtab() }
-    else if (/^@for([ \t]|$)/)            { builtin_for() }
-    else if (/^@next([ \t]|$)/)           { builtin_next() }
-    else if (/^@raise_namespace/)         { raise_namespace() }
-    else if (/^@lower_namespace/)         { lower_namespace() }
-    else if (/^@qq([ \t]|$)/)             { do_qq() }
-    else if (/^@test([ \t]|$)/)           { run_latest_tests() }
+    else if (/^@celtest/)       { m2_celtest() }
 
     # Check for user commands
     else if (currently_active_p() &&
              first($1) == "@"     &&
-             ncmd_defined_p(substr($1, 2)))
+             cmd_defined_p(substr($1, 2)))
         docommand()
 
     # Process @
@@ -3530,10 +2819,8 @@ function process_line(read_literally,    sp, lbrace, cut, newstring, user_cmd)
             __buffer = newstring "\n" __buffer
         }
     }
-    dbg_print("io", 1, "(process_line) End")
+    dbg_print("cmd", 1, "(process_line) End")
 }
-
-
 
 # This is only called by process_line(), which guarantees that $0 is
 # unchanged, and that $1 is "@<CMD>".  This is important because we have
@@ -3541,67 +2828,86 @@ function process_line(read_literally,    sp, lbrace, cut, newstring, user_cmd)
 # as a parameter as you might expect.  Also, process_line checks to make
 # sure the command name is defined; we trust that and just blindly grab
 # the definition.  Arguments/parameters are WIP.
-function docommand(    cmdname, ctx, narg)
+function docommand(    cmdname, narg, args, i, nparam, savebuffer, savefile, saveifdepth, saveline)
 {
-    dbg_print("ncmd", 1, "(docommand) Start; line " nsym_ll_read("__LINE__", "", GLOBAL_NAMESPACE) ": $0='" $0 "'")
+    dbg_print("cmd", 1, "(docommand) Start; line " nsym_fetch("__LINE__", "") ": $0='" $0 "'")
     narg = NF - 1
-    save_context(ctx)
+
+    savebuffer  = __buffer
+    savefile    = nsym_fetch("__FILE__", "")
+    saveifdepth = __if_depth
+    saveline    = nsym_fetch("__LINE__", "")
 
     cmdname = substr($1, 2)
-    __buffer = ncmd_ll_read(cmdname)
-    nsym_ll_write("__FILE__", "", GLOBAL_NAMESPACE, $1)
-    nsym_ll_write("__LINE__", "", GLOBAL_NAMESPACE, 0)
+    __buffer = nsymtab[TYPE_CMD, cmdname, "", 0, "definition"]
+    nsym_store("__FILE__", "", $1)
+    nsym_store("__LINE__", "", 0)
 
-    raise_namespace()
-    process_buffer()
-    lower_namespace()
+    while (!emptyp(__buffer)) {
+        # Extract each line from __buffer, one by one
+        sym_increment("__LINE__", 1) # __LINE__ is local, but not __NLINE__
+        if ((i = index(__buffer, "\n")) == IDX_NOT_FOUND) {
+            $0 = __buffer
+            __buffer = ""
+        } else {
+            $0 = substr(__buffer, 1, i-1)
+            __buffer = substr(__buffer, i+1)
+        }
 
-    restore_context(ctx)
-    dbg_print("ncmd", 1, "(docommand) End")
+        # String we want is in $0, go evaluate it
+        dbg_print("cmd", 5, "(docommand) About to call process line with $0 = '" $0 "'")
+        process_line()
+    }
+
+    # Restore to before command ran
+    if (__if_depth > saveifdepth)
+        error("Delimiter '@endif' not found")
+    __buffer = savebuffer
+    nsym_store("__FILE__", "", savefile)
+    nsym_store("__LINE__", "", saveline)
+
+    dbg_print("cmd", 1, "(docommand) End")
     return TRUE
 }
 
 
-function docasebranch(casenum, branch, brline,
-                      ctx)
+function docasebranch(case, branch, brline,    savebuffer, saveifdepth, saveline, i)
 {
-    save_context(ctx)
+    # Save old context
+    savebuffer = __buffer
+    saveifdepth = __if_depth
+    saveline = nsym_fetch("__LINE__", "")
 
-    __buffer = casetab[casenum, branch, "definition"]
-    nsym_ll_write("__LINE__", "", GLOBAL_NAMESPACE, brline)
+    # Set up new context on branch "definition"
+    __buffer = casetab[case, branch, "definition"]
+    nsym_store("__LINE__", "", brline)
 
-    process_buffer()
+    # Process each line in __buffer
+    while (!emptyp(__buffer)) {
+        # Extract each line from __buffer, one by one
+        sym_increment("__LINE__", 1) # __LINE__ is local, but not __NLINE__
+        if ((i = index(__buffer, "\n")) == IDX_NOT_FOUND) {
+            $0 = __buffer
+            __buffer = ""
+        } else {
+            $0 = substr(__buffer, 1, i-1)
+            __buffer = substr(__buffer, i+1)
+        }
 
-    restore_context(ctx)
+        # String we want is in $0, go evaluate it
+        dbg_print("case", 5, "(docasebranch) About to call process_line with $0 = '" $0 "'")
+        process_line()
+    }
+
+    # Restore context
+    if (__if_depth > saveifdepth)
+        error("Delimiter '@endif' not found")
+    __buffer = savebuffer
+    nsym_store("__LINE__", "", saveline)
     dbg_print("case", 1, "(docasebranch) End")
     return TRUE
 }
 
-function doforloop(fornum,
-                   ctx, counter, done)
-{
-    save_context(ctx)
-    nsym_ll_write("__LINE__", "", GLOBAL_NAMESPACE, 0)
-    counter = 1
-
-    raise_namespace()
-    nnam_ll_write("I", __namespace, TYPE_SYMBOL FLAG_READONLY)
-    nsym_ll_write("I", "", __namespace, counter)
-    done = nsym_fetch("I") > 5
-    while (!done) {
-        __buffer = fortab[fornum, "definition"]
-        process_buffer()
-        # Must use ll function because loop index is read0-only,
-        # and nsym_increment() is "user mode".
-        nsym_ll_write("I", "", __namespace, ++counter)
-        done = nsym_fetch("I") > 5
-    }
-    lower_namespace()
-
-    restore_context(ctx)
-    dbg_print("for", 1, "(doforloop) End")
-    return TRUE
-}
 
 
 # The dosubs() function actually performs the macro substitution.  It
@@ -3720,20 +3026,17 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
         }
 
         # basename SYM: Base (i.e., file name) of path
-        if (fn == "basename") {
+        # dirname SYM: Directory name of path
+        if (fn == "basename" || fn == "dirname") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
             p = param[1 + __off_by]
-            assert_nsym_valid_name(p)
-            assert_nsym_defined(p, fn)
-            # basename in Awk, assuming Unix style path separator.
-            # return filename portion of path
-            expand = rm_quotes(nsym_fetch(p))
-            sub(/^.*\//, "", expand)
-            # This is the original, expensive version that uses /usr/bin/basename
-            # Retained for historical interest, or if above code doesn't work for you
-            # cmdline = build_prog_cmdline(fn, rm_quotes(nsym_fetch(p)), FALSE)
-            # cmdline | getline expand
-            # close(cmdline)
+            assert_sym_valid_name(p)
+            if (name_parse(p, __ptxt) == ERROR)
+                error("dosubs: name_parse('" p "') failed")
+            assert_nsym_defined(__ptxt[1], __ptxt[2], "", fn)
+            cmdline = build_prog_cmdline(fn, rm_quotes(sym_fetch(p)), FALSE)
+            cmdline | getline expand
+            close(cmdline)
             r = expand r
 
         # boolval SYM: Print __FMT__[0 or 1], depending on SYM truthiness.
@@ -3750,26 +3053,26 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
                 # In a bid to spread a bit more chaos in the universe,
                 # if you don't give an argument to boolval then you get
                 # True 50% of the time and False the other 50%.
-                r = nsym_ll_read("__FMT__", rand() < 0.50) r # XXXXXX
+                r = nsym_fetch("__FMT__", rand() < 0.50) r
             else {
                 p = param[1 + __off_by]
                 # Always accept your current representation of True or False
                 # to actually be true or false without further evaluation.
-                if (p == nsym_ll_read("__FMT__", TRUE) ||
-                    p == nsym_ll_read("__FMT__", FALSE))
+                if (p == nsym_fetch("__FMT__", TRUE) ||
+                    p == nsym_fetch("__FMT__", FALSE))
                     r = p r
-                else if (nsym_valid_p(p)) {
+                else if (sym_valid_p(p)) {
                     # It's a valid name -- now see if it's defined or not.
                     # If not, check if we're in strict mode (error) or not.
-                    if (nsym_defined_p(p))
-                        r = nsym_ll_read("__FMT__", nsym_true_p(p)) r
+                    if (sym_defined_p(p))
+                        r = nsym_fetch("__FMT__", sym_true_p(p)) r
                     else if (strictp())
                         error("Name '" p "' not defined [boolval]:" $0)
                     else
-                        r = nsym_ll_read("__FMT__", FALSE) r
+                        r = nsym_fetch("__FMT__", FALSE) r
                 } else
                     # It's not a symbol, so use its value interpreted as a boolean
-                    r = nsym_ll_read("__FMT__", !!p) r
+                    r = nsym_fetch("__FMT__", !!p) r
             }
 
         # chr SYM : Output character with ASCII code SYM
@@ -3777,10 +3080,12 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
         } else if (fn == "chr") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
             p = param[1 + __off_by]
-            if (nsym_valid_p(p)) {
-                assert_nsym_defined(p, "chr")
-                x = sprintf("%c", nsym_fetch(p)+0)
-                r = x r
+            if (sym_valid_p(p)) {
+                if (sym_defined_p(p)) {
+                    x = sprintf("%c", sym_fetch(p) + 0)
+                    r = x r
+                } else if (strictp())
+                    error("Name '" p "' not defined [chr]:" $0)
             } else if (integerp(p) && p >= 0 && p <= 255) {
                 x = sprintf("%c", p+0)
                 r = x r
@@ -3800,28 +3105,11 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
             if (fn == "strftime" && nparam == 0)
                 error("Bad parameters in '" m "':" $0)
             y = fn == "strftime" ? substr(m, length(fn)+2) \
-                : nsym_ll_read("__FMT__", fn)
+                : nsym_fetch("__FMT__", fn)
             gsub(/"/, "\\\"", y)
             cmdline = build_prog_cmdline("date", "+\"" y "\"", FALSE)
             cmdline | getline expand
             close(cmdline)
-            r = expand r
-
-        # dirname SYM: Directory name of path
-        } else if (fn == "dirname") {
-            if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[1 + __off_by]
-            assert_nsym_valid_name(p)
-            assert_nsym_defined(p, fn)
-            # dirname in Awk, assuming Unix style path separator.
-            # return directory portion of path
-            y = rm_quotes(nsym_fetch(p))
-            expand = (sub(/\/[^\/]*$/, "", y)) ? y : "."
-            # This is the original, expensive version that uses /usr/bin/basename
-            # Retained for historical interest, or if above code doesn't work for you
-            # cmdline = build_prog_cmdline(fn, rm_quotes(nsym_fetch(p)), FALSE)
-            # cmdline | getline expand
-            # close(cmdline)
             r = expand r
 
         # expr ...: Evaluate mathematical epxression, store in __EXPR__
@@ -3833,7 +3121,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
             sub(/^s?expr[ \t]*/, "", m) # clean up expression to evaluate
             x = calc3_eval(m)
             dbg_print("expr", 1, sprintf("expr{%s} = %s", m, x))
-            nsym_ll_write("__EXPR__", "", GLOBAL_NAMESPACE, x+0)
+            nsym_store("__EXPR__", "", x)
             if (!silent)
                 r = x r
 
@@ -3856,11 +3144,14 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
                    fn == "uc") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
             p = param[1 + __off_by]
-            assert_nsym_valid_name(p)
-            assert_nsym_defined(p, fn)
-            r = ((fn == "lc")  ? tolower(nsym_fetch(p)) : \
-                 (fn == "len") ?  length(nsym_fetch(p)) : \
-                 (fn == "uc")  ? toupper(nsym_fetch(p)) : \
+            assert_sym_valid_name(p)
+            if (name_parse(p, __ptxt) == ERROR)
+                error("dosubs: name_parse('" p "') failed")
+            assert_nsym_defined(__ptxt[1], __ptxt[2], "", fn)
+            #assert_sym_defined(p, fn)
+            r = ((fn == "lc")  ? tolower(sym_fetch(p)) : \
+                 (fn == "len") ?  length(sym_fetch(p)) : \
+                 (fn == "uc")  ? toupper(sym_fetch(p)) : \
                  error("Name '" m "' not defined [can't happen]:" $0)) \
                 r   # ^^^ This error() bit can't happen but I need something
                     # to the right of the :, and error() will abend.
@@ -3870,15 +3161,18 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
         } else if (fn == "left") {
             if (nparam < 1 || nparam > 2) error("Bad parameters in '" m "':" $0)
             p = param[1 + __off_by]
-            assert_nsym_valid_name(p)
-            assert_nsym_defined(p, fn)
+            assert_sym_valid_name(p)
+            if (name_parse(p, __ptxt) == ERROR)
+                error("dosubs: name_parse('" p "') failed")
+            assert_nsym_defined(__ptxt[1], __ptxt[2], "", fn)
+            #assert_sym_defined(p, "left")
             x = 1
             if (nparam == 2) {
                 x = param[2 + __off_by]
                 if (!integerp(x))
                     error("Value '" x "' must be numeric:" $0)
             }
-            r = substr(nsym_fetch(p), 1, x) r
+            r = substr(sym_fetch(p), 1, x) r
 
         # mid : Substring ...  SYMBOL, START[, LENGTH]
         #   @mid ALPHABET 15 5@ => OPQRS
@@ -3888,18 +3182,21 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
             if (nparam < 2 || nparam > 3)
                 error("Bad parameters in '" m "':" $0)
             p = param[1 + __off_by]
-            assert_nsym_valid_name(p)
-            assert_nsym_defined(p, fn)
+            assert_sym_valid_name(p)
+            if (name_parse(p, __ptxt) == ERROR)
+                error("dosubs: name_parse('" p "') failed")
+            assert_nsym_defined(__ptxt[1], __ptxt[2], "", fn)
+            #assert_sym_defined(p, "mid")
             x = param[2 + __off_by]
             if (!integerp(x))
                 error("Value '" x "' must be numeric:" $0)
             if (nparam == 2) {
-                r = substr(nsym_fetch(p), x) r
+                r = substr(sym_fetch(p), x) r
             } else if (nparam == 3) {
                 y = param[3 + __off_by]
                 if (!integerp(y))
                     error("Value '" y "' must be numeric:" $0)
-                r = substr(nsym_fetch(p), x, y) r
+                r = substr(sym_fetch(p), x, y) r
             }
 
         # rem : Remark
@@ -3914,15 +3211,18 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
         } else if (fn == "right") {
             if (nparam < 1 || nparam > 2) error("Bad parameters in '" m "':" $0)
             p = param[1 + __off_by]
-            assert_nsym_valid_name(p)
-            assert_nsym_defined(p, fn)
-            x = length(nsym_fetch(p))
+            assert_sym_valid_name(p)
+            if (name_parse(p, __ptxt) == ERROR)
+                error("dosubs: name_parse('" p "') failed")
+            assert_nsym_defined(__ptxt[1], __ptxt[2], "", fn)
+            #assert_sym_defined(p, "right")
+            x = length(sym_fetch(p))
             if (nparam == 2) {
                 x = param[2 + __off_by]
                 if (!integerp(x))
                     error("Value '" x "' must be numeric:" $0)
             }
-            r = substr(nsym_fetch(p), x) r
+            r = substr(sym_fetch(p), x) r
 
         # spaces [N]: N spaces
         } else if (fn == "spaces") {
@@ -3943,9 +3243,12 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
         } else if (fn == "trim" || fn == "ltrim" || fn == "rtrim") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
             p = param[1 + __off_by]
-            assert_nsym_valid_name(p)
-            assert_nsym_defined(p, fn)
-            expand = nsym_fetch(p)
+            assert_sym_valid_name(p)
+            if (name_parse(p, __ptxt) == ERROR)
+                error("dosubs: name_parse('" p "') failed")
+            assert_nsym_defined(__ptxt[1], __ptxt[2], "", fn)
+            #assert_sym_defined(p, "trim")
+            expand = sym_fetch(p)
             if (fn == "trim" || fn == "ltrim")
                 sub(/^[ \t]+/, "", expand)
             if (fn == "trim" || fn == "rtrim")
@@ -3958,8 +3261,8 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
             r = uuid() r
 
         # <SOMETHING ELSE> : Call a user-defined macro, handles arguments
-        } else if (nsym_valid_p(fn) && (nsym_defined_p(fn) || nsym_delayed_p(fn))) {
-            expand = nsym_fetch(fn)
+        } else if (sym_valid_p(fn) && sym_defined_p(fn)) {
+            expand = sym_fetch(fn)
             # Expand $N parameters (includes $0 for macro name)
             j = MAX_PARAM   # but don't go overboard with params
             # Count backwards to get around $10 problem.
@@ -3978,7 +3281,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
             r = expand r
 
         # Check if it's a sequence
-        } else if (nseq_valid_p(fn) && nseq_defined_p(fn)) {
+        } else if (seq_valid_p(fn) && seq_defined_p(fn)) {
             # Check for pre/post increment/decrement.
             # This is only performed on a bare reference.
             if (nparam == 0) {
@@ -3991,22 +3294,21 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
                 #   | foo++    |       +1 |      +1 |
                 if (pre_post == 0)
                     # normal call : insert current value with formatting
-                    r = sprintf(nseqtab[fn, "fmt"], nseq_ll_read(fn)) r
+                    r = sprintf(nsymtab[TYPE_SEQUENCE, fn, "", 0, "fmt"], nsymtab[TYPE_SEQUENCE, fn, "", 0, "value"]) r
                 else {
                     # Handle prefix xor postfix increment/decrement
                     if (pre_post == -1)    # prefix
                         if (inc_dec == -1) # decrement
-                            nseq_ll_incr(fn, -nseqtab[fn, "incr"])
+                            nsymtab[TYPE_SEQUENCE, fn, "", 0, "value"] -= nsymtab[TYPE_SEQUENCE, fn, "", 0, "incr"]
                         else
-                            nseq_ll_incr(fn, nseqtab[fn, "incr"])
+                            nsymtab[TYPE_SEQUENCE, fn, "", 0, "value"] += nsymtab[TYPE_SEQUENCE, fn, "", 0, "incr"]
                     # Get current value with desired formatting
-                    r = sprintf(nseqtab[fn, "fmt"], nseq_ll_read(fn)) r
+                    r = sprintf(nsymtab[TYPE_SEQUENCE, fn, "", 0, "fmt"], nsymtab[TYPE_SEQUENCE, fn, "", 0, "value"]) r
                     if (pre_post == +1)    # postfix
                         if (inc_dec == -1)
-                            nseq_ll_incr(fn, -nseqtab[fn, "incr"])
+                            nsymtab[TYPE_SEQUENCE, fn, "", 0, "value"] -= nsymtab[TYPE_SEQUENCE, fn, "", 0, "incr"]
                         else
-                            #nseq_ll_incr(fn, nseqtab[fn, "incr"])
-                            nseq_ll_incr(fn)
+                            nsymtab[TYPE_SEQUENCE, fn, "", 0, "value"] += nsymtab[TYPE_SEQUENCE, fn, "", 0, "incr"]
                 }
             } else {
                 if (pre_post != 0)
@@ -4024,12 +3326,12 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
                         # version of m2 which did not have full sequence
                         # value formatting.  Instead, you had two strings
                         # which printed before and after the value.)
-                        r = nseq_ll_read(fn) r
+                        r = nsymtab[TYPE_SEQUENCE, fn, "", 0, "value"] r
                     } else if (subcmd == "nextval") {
                         # - nextval :: Increment and return new value of
                         # counter.  No prefix/suffix.
-                        nseq_ll_incr(fn, nseqtab[fn, "incr"])
-                        r = nseq_ll_read(fn) r
+                        nsymtab[TYPE_SEQUENCE, fn, "", 0, "value"] += nsymtab[TYPE_SEQUENCE, fn, "", 0, "incr"]
+                        r = nsymtab[TYPE_SEQUENCE, fn, "", 0, "value"] r
                     } else
                         error("Bad parameters in '" m "':" $0)
                 } else {
@@ -4172,6 +3474,8 @@ function find_closing_brace(s, start,    offset, c, nc, cb, slen)
     # If we fall out of the loop here, we never found a closing brace.
     return EOF
 }
+
+
 # Finally, the dodef() function handles the defining of macros.  It
 # saves the macro name from $2, and then uses sub() to remove the first
 # two fields.  The new value of $0 now contains just (the first line of)
@@ -4190,6 +3494,8 @@ function find_closing_brace(s, start,    offset, c, nc, cb, slen)
 function dodef(append_flag,    sym, str, x)
 {
     sym = $2
+    if (name_parse(sym, __ptxt) == ERROR)
+        error("dodef: name_parse('" sym "') failed")
     sub(/^[ \t]*[^ \t]+[ \t]+[^ \t]+[ \t]*/, "")  # old bug: last * was +
     str = $0
     while (str ~ /\\$/) {
@@ -4200,14 +3506,16 @@ function dodef(append_flag,    sym, str, x)
         sub(/^[ \t]+/, "", x)
         str = chop(str) "\n" x
     }
-    nsym_store(sym, append_flag ? nsym_fetch(sym) str : str)
+    nsym_store(__ptxt[1], __ptxt[2], \
+               append_flag ? nsym_fetch(__ptxt[1], __ptxt[2]) str : str)
 }
+
+
 # Try to read init files: $M2RC, $HOME/.m2rc, and/or ./.m2rc
-# M2RC is intended to *override* $HOME (in case HOME is unavailable or
-# otherwise unsuitable), so if the variable is specified and the file
-# exists, then do that file; only otherwise do $HOME/.m2rc.  An init
-# file from the current directory is always attempted in any case.
-# No worries or errors if any of them don't exist.
+# M2RC is intended to *override* $HOME, so if the variable is specified
+# and the file exists, then do that file; only otherwise do $HOME/.m2rc.
+# An init file from the current directory is always attempted in any
+# case.  No worries or errors if any of them don't exist.
 function load_init_files()
 {
     # Don't load the init files more than once
@@ -4222,41 +3530,39 @@ function load_init_files()
 
     # Don't count init files in total line/file tally - it's better to
     # keep them in sync with the files from the command line.
-    nsym_ll_write("__NFILE__", "", GLOBAL_NAMESPACE, 0)
-    nsym_ll_write("__NLINE__", "", GLOBAL_NAMESPACE, 0)
+    nsym_store("__NFILE__", "", 0)
+    nsym_store("__NLINE__", "", 0)
     __init_files_loaded = TRUE
 }
 
 
-# Customize these paths as necessary for correct operation on your system.
-# It is important that __PROG__ remain a read-only symbol.  Otherwise,
+# Change these paths as necessary for correct operation on your system.
+# It is important that __PROG__ remain a protected symbol.  Otherwise,
 # some bad person could entice you to evaluate:
 #       @define __PROG__[stat]  /bin/rm
 #       @include my_precious_file
 function setup_prog_paths()
 {
-    nsym_ll_fiat("__TMPDIR__", "",       FLAGS_WRITABLE_SYMBOL,  "/tmp/")
-
-    nnam_ll_write("__PROG__", GLOBAL_NAMESPACE, TYPE_ARRAY FLAG_READONLY FLAG_SYSTEM)
-    nsym_ll_fiat("__PROG__", "basename", FLAGS_READONLY_SYMBOL, "/usr/bin/basename")
-    nsym_ll_fiat("__PROG__", "date",     FLAGS_READONLY_SYMBOL, "/bin/date")
-    nsym_ll_fiat("__PROG__", "dirname",  FLAGS_READONLY_SYMBOL, "/usr/bin/dirname")
-    nsym_ll_fiat("__PROG__", "hostname", FLAGS_READONLY_SYMBOL, "/bin/hostname")
-    nsym_ll_fiat("__PROG__", "id",       FLAGS_READONLY_SYMBOL, "/usr/bin/id")
-    nsym_ll_fiat("__PROG__", "pwd",      FLAGS_READONLY_SYMBOL, "/bin/pwd")
-    nsym_ll_fiat("__PROG__", "rm",       FLAGS_READONLY_SYMBOL, "/bin/rm")
-    nsym_ll_fiat("__PROG__", "sh",       FLAGS_READONLY_SYMBOL, "/bin/sh")
-    nsym_ll_fiat("__PROG__", "stat",     FLAGS_READONLY_SYMBOL, "/usr/bin/stat")
-    nsym_ll_fiat("__PROG__", "uname",    FLAGS_READONLY_SYMBOL, "/usr/bin/uname")
+    nsym_store("__PROG__", "basename", "/usr/bin/basename")
+    nsym_store("__PROG__", "date",     "/bin/date")
+    nsym_store("__PROG__", "dirname",  "/usr/bin/dirname")
+    nsym_store("__PROG__", "hostname", "/bin/hostname")
+    nsym_store("__PROG__", "id",       "/usr/bin/id")
+    nsym_store("__PROG__", "rm",       "/bin/rm")
+    nsym_store("__PROG__", "sh",       "/bin/sh")
+    nsym_store("__PROG__", "stat",     "/usr/bin/stat")
+    nsym_store("__PROG__", "uname",    "/usr/bin/uname")
+    nsym_store("__TMPDIR__", "",       "/tmp")
 }
 
 
-# Nothing in this function is user-customizable, so don't touch
+# Nothing here is user-customizable
 function initialize(    get_date_cmd, d, dateout, array, elem, i)
 {
     DISCARD_STREAMS      = 0
     E                    = exp(1)
-    EOD_INDICATOR        = "EoD1" SUBSEP "eOd2" # Unlikely to occur in normal text
+    EOD_INDICATOR        = build_subsep("EoD1", "eOd2") # Unlikely to occur in normal text
+    GLOBAL_FRAME         = 0
     IDX_NOT_FOUND        = 0
     LOG10                = log(10)
     MAX_DBG_LEVEL        = 10
@@ -4266,15 +3572,15 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i)
     SEQ_DEFAULT_INCR     = 1
     SEQ_DEFAULT_INIT     = 0
     SHIP_OUT_STREAMS     = 1
-    TAU                  = 8 * atan2(1, 1)      # 2 * PI
+    TAU                  = 8 * atan2(1, 1)         # 2 * PI
 
-    __buffer             = EMPTY
+    __buffer             = ""
     __casenum            = 0
-    __fornum             = 0
+    __curr_frame         = 0
+    __init_deferred      = TRUE  # Becomes FALSE in initialize_deferred_symbols()
     __init_files_loaded  = FALSE # Becomes TRUE in load_init_files()
     __if_depth           = 0
     __active[__if_depth] = TRUE
-    __namespace          = GLOBAL_NAMESPACE
     __off_by             = 1
 
     srand()                     # Seed random number generator
@@ -4286,73 +3592,93 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i)
     split(dateout, d)
     close(get_date_cmd)
 
-    nnam_ll_write("__FMT__",  GLOBAL_NAMESPACE, TYPE_ARRAY               FLAG_SYSTEM)
+    nsym_store("__DATE__", "",          d[1] d[2] d[3])
+    nsym_store("__DEBUG__", "",         FALSE)
+    nsym_store("__DIVNUM__", "",        0)
+    nsym_store("__EPOCH__", "",         d[8])
+    nsym_store("__EXPR__", "",          0)
+    nsym_store("__FILE__", "",          "")
+    nsym_store("__FILE_UUID__", "",     "")
+    nsym_store("__FMT__", TRUE,         "1")
+    nsym_store("__FMT__", FALSE,        "0")
+    nsym_store("__FMT__", "date",       "%Y-%m-%d")
+    nsym_store("__FMT__", "epoch",      "%s")
+    nsym_store("__FMT__", "number",     CONVFMT)
+    nsym_store("__FMT__", "seq",        "%d")
+    nsym_store("__FMT__", "time",       "%H:%M:%S")
+    nsym_store("__FMT__", "tz",         "%Z")
+    nsym_store("__INPUT__", "",         "")
+    nsym_store("__LINE__", "",          0)
+    nsym_store("__M2_UUID__", "",       uuid())
+    nsym_store("__M2_VERSION__", "",    __version)
+    nsym_store("__NFILE__", "",         0)
+    nsym_store("__NLINE__", "",         0)
+    nsym_store("__STRICT__", "",        TRUE)
+    nsym_store("__TIME__", "",          d[4] d[5] d[6])
+    nsym_store("__TIMESTAMP__", "",     d[1] "-" d[2] "-" d[3] "T" \
+                                        d[4] ":" d[5] ":" d[6] d[7])
+    nsym_store("__TZ__", "",            d[7])
 
-    if ("PWD" in ENVIRON)
-      nsym_ll_fiat("__CWD__",       "", FLAGS_READONLY_SYMBOL,  with_trailing_slash(ENVIRON["PWD"]))
-    else
-      nsym_delayed_symbol("__CWD__",    FLAGS_READONLY_SYMBOL,  "pwd", "")
-    nsym_ll_fiat("__DATE__",        "", FLAGS_READONLY_INTEGER, d[1] d[2] d[3])
-    nsym_ll_fiat("__DIVNUM__",      "", FLAGS_READONLY_INTEGER, 0)
-    nsym_ll_fiat("__EPOCH__",       "", FLAGS_READONLY_INTEGER, d[8])
-    nsym_ll_fiat("__EXPR__",        "", FLAGS_READONLY_NUMERIC, 0.0)
-    nsym_ll_fiat("__FILE__",        "", FLAGS_READONLY_SYMBOL,  "")
-    nsym_ll_fiat("__FILE_UUID__",   "", FLAGS_READONLY_SYMBOL,  "")
-    nsym_ll_fiat("__FMT__",       TRUE, FLAGS_WRITABLE_SYMBOL,  "1")
-    nsym_ll_fiat("__FMT__",      FALSE, FLAGS_WRITABLE_SYMBOL,  "0")
-    nsym_ll_fiat("__FMT__",     "date", FLAGS_WRITABLE_SYMBOL,  "%Y-%m-%d")
-    nsym_ll_fiat("__FMT__",    "epoch", FLAGS_READONLY_SYMBOL,  "%s")
-    nsym_ll_fiat("__FMT__",   "number", FLAGS_WRITABLE_SYMBOL,  CONVFMT)
-    nsym_ll_fiat("__FMT__",      "seq", FLAGS_WRITABLE_SYMBOL,  "%d")
-    nsym_ll_fiat("__FMT__",     "time", FLAGS_WRITABLE_SYMBOL,  "%H:%M:%S")
-    nsym_ll_fiat("__FMT__",       "tz", FLAGS_READONLY_SYMBOL,  "%Z")
-    nsym_delayed_symbol("__GID__",      FLAGS_READONLY_INTEGER, "id", "-g")
-    if ("HOME" in ENVIRON)
-      nsym_ll_fiat("__HOME__",      "", FLAGS_READONLY_SYMBOL,  with_trailing_slash(ENVIRON["HOME"]))
-    nsym_delayed_symbol("__HOST__",     FLAGS_READONLY_SYMBOL,  "hostname", "-s")
-    nsym_delayed_symbol("__HOSTNAME__", FLAGS_READONLY_SYMBOL,  "hostname", "-f")
-    nsym_ll_fiat("__INPUT__",       "", FLAGS_WRITABLE_SYMBOL,  EMPTY)
-    nsym_ll_fiat("__LINE__",        "", FLAGS_READONLY_INTEGER, 0)
-    nsym_ll_fiat("__M2_UUID__",     "", FLAGS_READONLY_SYMBOL,  uuid())
-    nsym_ll_fiat("__M2_VERSION__",  "", FLAGS_READONLY_SYMBOL,  __version)
-    nsym_ll_fiat("__NFILE__",       "", FLAGS_READONLY_INTEGER, 0)
-    nsym_ll_fiat("__NLINE__",       "", FLAGS_READONLY_INTEGER, 0)
-    nsym_delayed_symbol("__OSNAME__",   FLAGS_READONLY_SYMBOL,  "uname", "-s")
-    nsym_delayed_symbol("__PID__",      FLAGS_READONLY_INTEGER, "sh", "-c 'echo $PPID'")
-    nsym_ll_fiat("__STRICT__",      "", FLAGS_WRITABLE_BOOLEAN, TRUE)
-    nsym_ll_fiat("__TIME__",        "", FLAGS_READONLY_INTEGER, d[4] d[5] d[6])
-    nsym_ll_fiat("__TIMESTAMP__",   "", FLAGS_READONLY_SYMBOL,  d[1] "-" d[2] "-" d[3] \
-                                                            "T" d[4] ":" d[5] ":" d[6] d[7])
-    nsym_ll_fiat("__TZ__",          "", FLAGS_READONLY_SYMBOL,  d[7])
-    nsym_delayed_symbol("__UID__",      FLAGS_READONLY_INTEGER, "id", "-u")
-    nsym_delayed_symbol("__USER__",     FLAGS_READONLY_SYMBOL,  "id", "-un")
+    # These symbols' definitions are deferred until needed, because
+    # initialization requires several relatively expensive subprocesses.
+    split("__GID__ __HOST__ __HOSTNAME__ __OSNAME__ __PID__" \
+          " __UID__ __USER__ unix",                          \
+          array, " ")
+    for (elem in array)
+        deferred_syms[array[elem]] = TRUE
+
+    # These non-system symbol names are protected and cannot be modified
+    split("e pi tau unix", array, " ")
+    for (elem in array)
+        protected_syms[array[elem]] = TRUE
+
+    # These symbols can be modified by the user
+    split("__DEBUG__ __FMT__ __INPUT__ __STRICT__ __TMPDIR__", array, " ")
+    for (elem in array)
+        unprotected_syms[array[elem]] = TRUE
 
     # Functions cannot be used as symbol or sequence names.
     split("basename boolval chr date dirname epoch expr getenv lc left len" \
           " ltrim mid rem right rtrim sexpr spaces strftime substr time trim" \
           " tz uc uuid", array, " ")
     for (elem in array)
-        nnam_ll_write(array[elem], GLOBAL_NAMESPACE, TYPE_FUNCTION FLAG_SYSTEM)
-
-    __flag_label[TYPE_ANY]      = "ANY"
-    __flag_label[TYPE_ARRAY]    = "ARR"
-    __flag_label[TYPE_BUILTIN]  = "BLT"
-    __flag_label[TYPE_COMMAND]  = "CMD"
-    __flag_label[TYPE_FUNCTION] = "FUN"
-    __flag_label[TYPE_SEQUENCE] = "SEQ"
-    __flag_label[TYPE_SYMBOL]   = "SYM"
-
-    __flag_label[FLAG_BOOLEAN]  = "Boolean"
-    __flag_label[FLAG_DELAYED]  = "Delayed"
-    __flag_label[FLAG_INTEGER]  = "Integer"
-    __flag_label[FLAG_NUMERIC]  = "Numeric"
-    __flag_label[FLAG_READONLY] = "Read-only"
-    __flag_label[FLAG_WRITABLE] = "Writable"
-    __flag_label[FLAG_SYSTEM]   = "System"
+        nsymtab[TYPE_FUNCTION, array[elem], "", 0, "defined"] = TRUE
 
     # Zero stream buffers
     for (i = 1; i <= MAX_STREAM; i++)
-        __streambuf[i] = EMPTY
+        __streambuf[i] = ""
+}
+
+
+# The code here requires invoking several subprocesses, a somewhat slow
+# operation.  Since these features may not be used often, they are run
+# only on-demand in order to speed up general usage.
+function initialize_deferred_symbols(    gid, host, hostname, osname, pid, uid, user, elem, array)
+{
+    build_prog_cmdline("id", "-g", FALSE)              | getline gid
+    build_prog_cmdline("hostname", "-s", FALSE)        | getline host
+    build_prog_cmdline("hostname", "-f", FALSE)        | getline hostname
+    build_prog_cmdline("uname", "-s", FALSE)           | getline osname
+    build_prog_cmdline("sh", "-c 'echo $PPID'", FALSE) | getline pid
+    build_prog_cmdline("id", "-u", FALSE)              | getline uid
+    build_prog_cmdline("id", "-un", FALSE)             | getline user
+
+    nsym_store("__GID__", "",      gid)
+    nsym_store("__HOST__", "",     host)
+    nsym_store("__HOSTNAME__", "", hostname)
+    nsym_store("__OSNAME__", "",   osname)
+    nsym_store("__PID__", "",      pid)
+    nsym_store("__UID__", "",      uid)
+    nsym_store("__USER__", "",     user)
+
+    split("Darwin FreeBSD Linux NetBSD OpenBSD SunOS", array, " ")
+    for (elem in array)
+        if (osname == array[elem]) {
+            nsym_store("unix", "", TRUE)
+            break
+        }
+
+    __init_deferred = FALSE
 }
 
 
@@ -4361,9 +3687,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i)
 function initialize_debugging()
 {
     dbg_set_level("m2", 1)
-    dbg_set_level("for", 4)
 }
-
 
 
 # The main program occurs in the BEGIN procedure below.
@@ -4394,13 +3718,15 @@ BEGIN {
                     _name = "__STRICT__"
                 else if (_name == "debug")
                     _name = "__DEBUG__"
-                if (!nsym_valid_p(_name))
+                if (name_parse(_name, __ptxt) == ERROR)
+                    error("main: name_parse('" _name "') failed")
+                if (!sym_valid_p(_name))
                     error("Name '" _name "' not valid:" _arg, "ARGV", _i)
-                if (nsym_protected_p(_name))
+                if (sym_protected_p(_name))
                     error("Symbol '" _name "' protected:" _arg, "ARGV", _i)
-                if (!nnam_ll_in(_name, GLOBAL_NAMESPACE))
+                if (! name_available_in_all_p(__name, TYPE_CMD TYPE_FUNCTION TYPE_SEQUENCE))
                     error("Name '" _name "' not available:" _arg, "ARGV", _i)
-                nsym_store(_name, _val)
+                nsym_store(__ptxt[1], __ptxt[2], _val)
 
             # Otherwise load a file
             } else {
@@ -4442,91 +3768,25 @@ function end_program(flush_diverted_streams)
     # data.  See "STREAMS & DIVERSIONS" documentation above to see how
     # the user can prevent this if desired.
     if (flush_diverted_streams) {
-        nsym_ll_write("__DIVNUM__", "", GLOBAL_NAMESPACE, 0)
+        nsym_store("__DIVNUM__", "", 0)
         undivert_all()
     }
     flush_stdout()
     exit __exit_code
 }
 
-
-# Functions defined below are merely for testing !!!  Remove for production use.
-# @test
-function run_latest_tests(tmpval)
+function m2_celtest(x, k)
 {
-    # nsymtab["__DEBUG__", "", GLOBAL_NAMESPACE, "symval"] = TRUE
-    # dbg_set_level("nnam", 5)
-    # dbg_set_level("nsym", 5)
-}
-
-# @qq
-function do_qq(k, x)
-{
-    print_stderr("arr[0] method=" nsymtab[0])
-    print_stderr("length() method=" length(nsymtab))
-}
-
-function raise_namespace()
-{
-    __namespace++
-    dbg_print("namespace", 4, "@raise_namespace: namespace now " __namespace)
-}
-
-function lower_namespace()
-{
-    if (__namespace == GLOBAL_NAMESPACE)
-        error("Cannot @lower_namespace from global namespace")
-    nsym_purge(__namespace)
-    nnam_purge(__namespace)
-    __namespace--
-    dbg_print("namespace", 4, "@lower_namespace: namespace now " __namespace)
-}
-
-function builtin_for(    var, low, high, incr,
-                         save_line, save_lineno)
-{
-    if (!currently_active_p())
-        return
-    #dbg_print("for", 7, ("@for: $0='" $0 "'"))
-    if (NF < 4)
-        error("Bad parameters:" $0)
-    var = $2
-    low = $3
-    high = $4
-    incr = 1
-    dbg_print("for", 1, sprintf("@for: var=%s, low=%d, high=%d", var, low, high))
-    save_line = $0
-    save_lineno = nsym_ll_read("__LINE__", "", GLOBAL_NAMESPACE)
-    __fornum++
-    fortab[__fornum, "definition"] = EMPTY
-
-    while (TRUE) {
-        if (readline() != OKAY)
-            # Whatever happened, the @for didn't finish properly
-            error("Delimiter '@next' not found:" save_line, "", save_lineno)
-        dbg_print("for", 5, "(builtin_for) readline='" $0 "'")
-        if ($1 == "@next")
-            # XXX Make sure loop variables are nested properly
-            break
-        else if ($1 == "@for")
-            error("Cannot recursively read '@for'") # maybe someday
-        else {
-            # Append line to current buffer
-            fortab[__fornum, "definition"] = \
-            fortab[__fornum, "definition"] $0 "\n"
-        }
+    for (k in nsymtab) {
+        split(k, x, SUBSEP)
+        # print "type =", x[1]
+        # print "nn1  =", x[2]
+        # print "nn2  =", x[3]
+        # print "frame=", x[4]
+        # print "value=", x[5]
+        print sprintf("('%s','%s','%s',%d,'%s')=%s",
+                      x[1], x[2], x[3], x[4], x[5],
+                      nsymtab[x[1], x[2], x[3], x[4], x[5]])
+        # print "----------------"
     }
-
-    # Entire @for structure read okay -- now execute the loop
-    if (! emptyp(fortab[__fornum, "definition"]))
-        doforloop(__fornum)
-    delete fortab[__fornum, "definition"]
 }
-
-function builtin_next()
-{
-}
-
-
-# TODO
-# - ensure you can't shadow a system symbol

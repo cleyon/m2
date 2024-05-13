@@ -1,0 +1,15 @@
+System symbols are either those flagged as such ("unix") or those whose
+names begin and end with double underscores ("__FOO__").  There is only
+ever one version of a system symbol -- they are automatically placed in
+the global namespace.  User code cannot create *new* system-looking symbol
+names, and they are never valid names for user-defined sequences,
+functions, or commands.  System symbols cannot be @undefine'd even if
+the symbol is not protected.
+
+Protected means "read-only", but with a bit of reserved nameness thrown
+in.  Most system symbols are protected (read-only) and connot be
+modified (e.g., __DATE__), but some system symbols are NOT protected and
+can be modified at will by the user (e.g., __STRICT__).
+It is also possible to @protect SYMBOL.  This prevents the symbol from
+ever having its value changed, for there is no way to unset the
+protected flag.

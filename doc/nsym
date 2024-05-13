@@ -1,0 +1,125 @@
+================================================================
+Arrays
+------
+
+
+================================================================
+Name Info
+---------
+
+- nnam_inspect(TEXT, *info)
+        This examines and sets appropriate info values
+        based solely on examining the characters in TEXT
+        and a simple "NAME in nnamtab".  In particular,
+        this does not lookup or create any element in the
+        table (Awk's efficient [?] "in" operator at work here).
+        info[   0, 1, 2, 3, 4
+
+        Use this when you want to either:
+        a) Parse apart a random symbol into its NAME[KEY] parts
+        b) Determine if a NAME is defined or not.  You can't
+           tell what kind of definition it is, though.
+        Return value:
+        - ERROR : malformed text, fails test for CHARS or CHARS[CHARS]
+        - FALSE : name not found in nnamtab
+        - 1 or 2 : name exists in nnamtab, text has 1 or 2 components
+
+# - nname_lookup(TEXT, *info)
+#         Performs lookups similar to above, but also includes
+#         information only available by peering into nnamtab and
+#         looking at the FlagsVal.
+
+================================================================
+Flags
+-----
+
+Param names:
+flags_val       Original flags string stored in nnamtab
+tflags          One (zero?) or more flag characters to test
+
+- flg_all_true_p(flags_val, tflags) => Boolean
+        Return TRUE if all elements of tflags are present in flags_val
+        otherwise FALSE.
+
+- flg_any_true_p(flags_val, tflags) => Boolean
+        Return TRUE in any element of tflags are present in flags_val
+        otherwise FALSE.
+
+================================================================
+                            N A M E   A P I
+
+* nnamtab: 
+	[NAME] ::= <FlagsVal> # includes TYPE
+
+- nnam_lookup(SYM, TFLAGS):
+        Return the associated FlagsVal if SYM (as NAME) if present in
+        nnamtab, and all tflags match; otherwise return "".
+
+The nnamtab keeps track of all names: Commands, Functions, Sequences,
+and Symbols.  The names identifying each type of object are constrained
+to be unique.  (This is why the TYPE field can be be in Flags field.
+Earlier attempts at a name table had the TYPE as an index element, but
+there's no need for that if root names are unique.)  Functions and
+Sequences are always in the global namespace (0), but for Commands and
+Symbols, may have a namespace associated with them.  Initially all
+symbols are in the Global namespace, but running certain commands may
+introduce additional namespaces.  Loops (while, for, foreach) and
+command invocations produce namespaces > 0.  Mere inclusion of a file or
+retrieving a symbol does not create a namespace.  For symbols, NAME only
+refers to the "root" or "base" portion of a name.  If the symbol is
+treated as an array, (`FOO[1]'), only the FOO part is recorded here.
+The value stored is the Flag set assocated with the name (at that
+particular level).
+
+Every entry has exactly one TYPE flag set to indicate the name's type.
+Names must be unique across types.  Older m2 versions may have had some
+cases where the namespaces were distinct, but having a unified namespace
+makes everything much simpler.  For array symbols, nnamtab only has an
+entry for the identifier NAME, not every possible key combination.  You
+still need to grovel through the nsymtab to find if there's a value
+defined.  Fortunately, most symbols are not arrays.  Sequences,
+Functions, and Command are not indexable.
+
+
+================================================================
+* nsymtab: 
+	[NAME, KEY, LEVEL, "value"] ::= <BlobVal>
+
+When reading or writing symbols, the value of LEVEL is determined
+as follows:
+	- If NAME is a system symbol, level is forced to 0.
+	- Otherwise, the current namespace level is taken from
+	  __namespace
+
+- nsym_defined_p(NAME)
+	# Search proceeds from __namespace down to 0
+
+================================================================
+* ncmdtab[]: 
+	[NAME, LEVEL, "value"]  ::= <BlobVal>
+	[NAME, LEVEL, "nparam"] ::= <IntVal>
+
+- ncmd_defined_p(NAME):
+	# must look from current level down to 0
+
+- ncmd_definition_pp(NAME):
+        "@newcmd " NAME " \
+        ncmdtab[NAME, mylevel, "value"] \
+        "@endcmd"
+
+- ncmd_destroy(NAME):
+	# delete from ncmdtab[NAME,<level>,*]
+	# delete from nnamtab[NAME,<level>]
+
+
+================================================================
+* nseqtab:
+	[NAME, "value"] ::= <IntVal>
+	[NAME, "init"]  ::= <IntVal>
+	[NAME, "incr"]  ::= <IntVal>
+	[NAME, "fmt"]   ::= <StringVal>
+
+================================================================
+                            Q U I C K   N O T E S
+
+* XXX

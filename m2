@@ -583,6 +583,17 @@ BEGIN { __version = "3.4.93_nsym" }
 #               over the appearance of the resulting text.  M5 macros can have
 #               named parameters, can have an unbounded number of parameters,
 #               and can manipulate parameters as a single unit. [...]"
+#           William A. Ward, Jr., School  of  Computer  and  Information
+#           Sciences, University of South Alabama, Mobile, Alabama, also
+#           wrote a macro processor translator (in Awk!) named m5 dated
+#           July 23, 1999.
+#              "m5, unlike many macro processors, does not directly
+#              interpret its input.  Instead it uses a two-pass approach
+#              in which the first pass translates the input to an awk
+#              program, and the second pass executes the awk program to
+#              produce the final output.  Macros are defined using awk
+#              assignment statements and their values substituted using
+#              the substitution prefix character ($ by default)."
 #           May also refer to a multitronic computer designed and built by
 #           Dr Richard Daystrom, ca. 2268.  (Not entirely successful.)
 #       M6  Andrew D. Hall - M6, "a general purpose macro processor used to port
@@ -1951,7 +1962,7 @@ function nnam_ll_write(name, level, code,
 }
 
 #############################################################################
-# This will examine nnamtab from __current_namespace downto 0
+# This will examine nnamtab from __namespace downto 0
 # seeing if name is a match.  If so, it populates info["code"]
 # with the corresponding code string and returns level (0..n)
 # If no matching name is found, return ERROR
@@ -2010,6 +2021,31 @@ function with_trailing_slash(s)
 {
     return s ((last(s) != "/") ? "/" : EMPTY)
 }
+
+
+# Arnold Robbins, arnold@gnu.org, Public Domain
+# 16 January, 1992
+# 20 July, 1992, revised
+function _ord_init(    low, high, i, t)
+{
+    low = sprintf("%c", 7)      # BEL is ascii 7
+    if (low == "\a") {          # regular ascii
+        low = 0
+        high = 127
+    } else if (sprintf("%c", 128 + 7) == "\a") {
+        low = 128               # ascii, mark parity
+        high = 255
+    } else {                    # ebcdic(!)
+        low = 0
+        high = 255
+    }
+
+    for (i = low; i <= high; i++) {
+        t = sprintf("%c", i)
+        _ord_[t] = i
+    }
+}
+
 
 # Environment variable names must match the following regexp:
 #       /^[A-Za-z_][A-Za-z_0-9]*$/
@@ -3902,6 +3938,17 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
                 r = substr(nsym_fetch(p), x, y) r
             }
 
+        # ord SYM : Output character with ASCII code SYM
+        #   @define B *Nothing of interest*
+        #   @ord A@ => 65
+        #   @ord B@ => 42
+        } else if (fn == "ord") {
+            if (nparam != 1) error("Bad parameters in '" m "':" $0)
+            p = param[1 + __off_by]
+            if (nsym_valid_p(p) && nsym_defined_p(p))
+                p = nsym_fetch(p)
+            r = _ord_[first(p)] r
+
         # rem : Remark
         #   @rem STUFF@ is considered a comment and ignored
         #   @srem STUFF@ like @rem, but preceding whitespace is also discarded
@@ -4278,6 +4325,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i)
     __off_by             = 1
 
     srand()                     # Seed random number generator
+    _ord_init()
     setup_prog_paths()
 
     # Capture m2 run start time.                 1  2  3  4  5  6  7  8
@@ -4329,8 +4377,8 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i)
 
     # Functions cannot be used as symbol or sequence names.
     split("basename boolval chr date dirname epoch expr getenv lc left len" \
-          " ltrim mid rem right rtrim sexpr spaces strftime substr time trim" \
-          " tz uc uuid", array, " ")
+          " ltrim mid ord rem right rtrim sexpr spaces strftime substr time" \
+          " trim tz uc uuid", array, " ")
     for (elem in array)
         nnam_ll_write(array[elem], GLOBAL_NAMESPACE, TYPE_FUNCTION FLAG_SYSTEM)
 

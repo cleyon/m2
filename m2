@@ -168,6 +168,7 @@ BEGIN { __version = "3.4.93_nsym" }
 #           @len SYM@              Number of characters in SYM's value
 #           @ltrim SYM@            Remove leading whitespace
 #           @mid SYM BEG [LEN]@    Substring of SYM from BEG, LEN chars long
+#           @ord SYM@              Output ASCII code of first character in SYM
 #           @rem COMMENT@      [S] Embedded comment text is ignored
 #           @right SYM [N]@        Substring of SYM from N to last character
 #           @rtrim SYM@            Remove trailing whitespace
@@ -575,18 +576,19 @@ BEGIN { __version = "3.4.93_nsym" }
 #           C, and other languages."  See: B. W. Kernighan and D. M. Ritchie,
 #           The M4 Macro Processor, AT&T Bell Laboratories, Computing Science
 #           Technical Report #59, July 1977.
-#       M5  Prof. A. Dain Samples described and implemented M5.  See: User's
-#           Guide to the M5 Macro Language 2ed [Usenet comp.compilers, 1992].
+#       M5  Prof. A. Dain Samples, University of Cincinnati described and
+#           implemented M5.  See: User's Guide to the M5 Macro Language in
+#           comp.compilers posting "m5: macro processor" dated 20 Oct 1992.
 #              "M5 is a powerful, easy to use, general purpose macro language.
 #               M5's syntax allows concise, formatted, and easy to read
 #               specifications of macros while still giving the user control
 #               over the appearance of the resulting text.  M5 macros can have
 #               named parameters, can have an unbounded number of parameters,
 #               and can manipulate parameters as a single unit. [...]"
-#           William A. Ward, Jr., School  of  Computer  and  Information
-#           Sciences, University of South Alabama, Mobile, Alabama, also
-#           wrote a macro processor translator (in Awk!) named m5 dated
-#           July 23, 1999.
+#           - https://compilers.iecc.com/comparch/article/92-10-076
+#       M5  William A. Ward, Jr., School of Computer and Information Sciences,
+#           University of South Alabama, Mobile, Alabama, also wrote a macro
+#           processor translator (in Awk!) named m5 dated July 23, 1999.
 #              "m5, unlike many macro processors, does not directly
 #              interpret its input.  Instead it uses a two-pass approach
 #              in which the first pass translates the input to an awk
@@ -594,14 +596,40 @@ BEGIN { __version = "3.4.93_nsym" }
 #              produce the final output.  Macros are defined using awk
 #              assignment statements and their values substituted using
 #              the substitution prefix character ($ by default)."
-#           May also refer to a multitronic computer designed and built by
-#           Dr Richard Daystrom, ca. 2268.  (Not entirely successful.)
+#       M-5 Dr Richard Daystrom designed and built a multitronic computer
+#           designated M-5, circa 2268.  Not entirely successful.
 #       M6  Andrew D. Hall - M6, "a general purpose macro processor used to port
 #           the Fortran source code of the Altran computer algebra system."
 #           See: A. D. Hall, M6 Reference Manual.  Computer Science Technical
 #           Report #2, Bell Laboratories, 1972.
 #           - http://man.cat-v.org/unix-6th/6/m6
 #           - http://cm.bell-labs.com/cm/cs/cstr/2.pdf
+#       M7  G. H. Skillman, Sandra B. Salazar, et al - M7 is a general purpose
+#           matching filter designed and implemented at the National Bureau of
+#           Standards.  circa 1980
+#              "M7 is a pattern matching and replacement facility
+#               developed as a UNIX tool for translating and
+#               reformatting queries, languages, and data.  M7 operates
+#               by first preprocessing a set of user defined macros,
+#               then using these macros to match and replace the text in
+#               an input string.  The enabling of the rescan option
+#               directs M7 to match and rematch the macro patterns
+#               against the input string until all possible replacements
+#               have been made.  Three constructions--tags, stacks, and
+#               counters--allow communication between different macros
+#               and different input strings, to permit such functions as
+#               line numbering, labeling, and argument passing."
+#           - https://www.govinfo.gov/content/pkg/GOVPUB-C13-dd583e065aac7203f7521309ec41220b/pdf/GOVPUB-C13-dd583e065aac7203f7521309ec41220b.pdf
+#       M8  A general-purpose preprocessor for metaprogramming.
+#              "M8 is a command line tool for preprocessing text files.
+#               Its syntax is customizable, and easy to distinguish from
+#               its surrounding text.  Custom macros can be added,
+#               allowing it to be specialized for various uses.  M8
+#               executes macros that match a defined regex, running
+#               either a built-in macro, an external program, or a
+#               remote API, and replaces the call point with the
+#               response string."
+#           - https://github.com/octobanana/m8
 #
 # SEE ALSO
 #       - http://www.drdobbs.com/open-source/m1-a-mini-macro-processor/200001791

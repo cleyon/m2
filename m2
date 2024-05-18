@@ -895,6 +895,20 @@ function chomp(s)
     return (last(s) == "\n") ? chop(s) : s
 }
 
+# ltrim() - Remove whitespace on left
+function ltrim(s)
+{
+    sub(/^[ \t]+/, "", s)
+    return s
+}
+
+# rtrim() - Remove whitespace on right
+function rtrim(s)
+{
+    sub(/[ \t]+$/, "", s)
+    return s
+}
+
 # If s is surrounded by quotes, remove them.
 function rm_quotes(s)
 {
@@ -1172,14 +1186,16 @@ function nsym_delayed_p(sym,
 
 # User should have checked to make sure, so let's do it
 function nsym_delayed_define_now(sym,
-                                 code, delayed_prog, delayed_arg, output)
+                                 code, delayed_prog, delayed_arg, cmdline, output)
 {
     code = nnam_ll_read(sym, GLOBAL_NAMESPACE)
     delayed_prog = nsymtab[sym, "", GLOBAL_NAMESPACE, "delayed_prog"]
     delayed_arg  = nsymtab[sym, "", GLOBAL_NAMESPACE, "delayed_arg"]
 
     # Build the command to generate the output value, then store it in the symbol table
-    build_prog_cmdline(delayed_prog, delayed_arg, FALSE) | getline output
+    cmdline = build_prog_cmdline(delayed_prog, delayed_arg, FALSE)
+    cmdline | getline output
+    close(cmdline)
     # Kluge to add trailing slash to pwd(1) output
     if (sym == "__CWD__")
         output = with_trailing_slash(output)
@@ -1988,6 +2004,8 @@ function nnam_ll_write(name, level, code,
         print_stderr(sprintf("nnam_ll_write: nnamtab[\"%s\", %d] = %s", name, level, code))
     return nnamtab[name, level] = code
 }
+
+
 
 #############################################################################
 # This will examine nnamtab from __namespace downto 0
@@ -3498,6 +3516,8 @@ function readline(    getstat, i)
     }
     return getstat
 }
+
+
 function process_line(read_literally,    sp, lbrace, cut, newstring, user_cmd)
 {
     dbg_print("io", 1, "(process_line) Start; line " nsym_ll_read("__LINE__", "", GLOBAL_NAMESPACE) ": $0='" $0 "'")
@@ -3642,23 +3662,33 @@ function docasebranch(casenum, branch, brline,
 }
 
 function doforloop(fornum,
+                   loopvar, start, end, incr, definition,
                    ctx, counter, done)
 {
+    loopvar = fortab[fornum, "loopvar"]
+    start   = fortab[fornum, "start"] + 0
+    end     = fortab[fornum, "end"]   + 0
+    incr    = fortab[fornum, "incr"]  + 0
+    done    = FALSE
+    counter = start
+    defn    = fortab[fornum, "definition"]
+
+    dbg_print("for", 4, sprintf("(doforloop): loopvar='%s', start=%d, end=%d, incr=%d",
+                                loopvar, start, end, incr))
+
+    if (start > end) return
     save_context(ctx)
     nsym_ll_write("__LINE__", "", GLOBAL_NAMESPACE, 0)
-    counter = 1
 
     raise_namespace()
-    nnam_ll_write("I", __namespace, TYPE_SYMBOL FLAG_READONLY)
-    nsym_ll_write("I", "", __namespace, counter)
-    done = nsym_fetch("I") > 5
+    nnam_ll_write(loopvar, __namespace, TYPE_SYMBOL FLAG_READONLY)
     while (!done) {
-        __buffer = fortab[fornum, "definition"]
+        nsym_ll_write(loopvar, "", __namespace, counter)
+        __buffer = defn # No need to re-fetch every iteration # fortab[fornum, "definition"]
         process_buffer()
         # Must use ll function because loop index is read0-only,
         # and nsym_increment() is "user mode".
-        nsym_ll_write("I", "", __namespace, ++counter)
-        done = nsym_fetch("I") > 5
+        done = (counter += incr) > end
     }
     lower_namespace()
 
@@ -4022,9 +4052,10 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
             assert_nsym_defined(p, fn)
             expand = nsym_fetch(p)
             if (fn == "trim" || fn == "ltrim")
-                sub(/^[ \t]+/, "", expand)
+                #sub(/^[ \t]+/, "", expand)
+                expand = ltrim(expand)
             if (fn == "trim" || fn == "rtrim")
-                sub(/[ \t]+$/, "", expand)
+                expand = rtrim(expand)
             r = expand r
 
         # uuid : Something that resembles but is not a UUID
@@ -4359,8 +4390,8 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i)
     # Capture m2 run start time.                 1  2  3  4  5  6  7  8
     get_date_cmd = build_prog_cmdline("date", "+'%Y %m %d %H %M %S %z %s'", FALSE)
     get_date_cmd | getline dateout
-    split(dateout, d)
     close(get_date_cmd)
+    split(dateout, d)
 
     nnam_ll_write("__FMT__",  GLOBAL_NAMESPACE, TYPE_ARRAY               FLAG_SYSTEM)
 
@@ -4538,8 +4569,6 @@ function run_latest_tests(tmpval)
 # @qq
 function do_qq(k, x)
 {
-    print_stderr("arr[0] method=" nsymtab[0])
-    print_stderr("length() method=" length(nsymtab))
 }
 
 function raise_namespace()
@@ -4558,22 +4587,25 @@ function lower_namespace()
     dbg_print("namespace", 4, "@lower_namespace: namespace now " __namespace)
 }
 
-function builtin_for(    var, low, high, incr,
-                         save_line, save_lineno)
+function builtin_for(    save_line, save_lineno)
 {
     if (!currently_active_p())
         return
     #dbg_print("for", 7, ("@for: $0='" $0 "'"))
     if (NF < 4)
         error("Bad parameters:" $0)
-    var = $2
-    low = $3
-    high = $4
-    incr = 1
-    dbg_print("for", 1, sprintf("@for: var=%s, low=%d, high=%d", var, low, high))
+
+    __fornum++
+    fortab[__fornum, "loopvar"] = $2
+    fortab[__fornum, "start"]   = $3
+    fortab[__fornum, "end"]     = $4
+    fortab[__fornum, "incr"]    = NF >= 5 ? $5 : 1
+
+    dbg_print("for", 1, sprintf("@for: loopvar=%s, start=%d, end=%d, incr=%d",
+                                fortab[__fornum, "loopvar"], fortab[__fornum, "start"],
+                                fortab[__fornum, "end"],     fortab[__fornum, "incr"]))
     save_line = $0
     save_lineno = nsym_ll_read("__LINE__", "", GLOBAL_NAMESPACE)
-    __fornum++
     fortab[__fornum, "definition"] = EMPTY
 
     while (TRUE) {
@@ -4594,6 +4626,8 @@ function builtin_for(    var, low, high, incr,
     }
 
     # Entire @for structure read okay -- now execute the loop
+    dbg_print("for", 4, sprintf("(builtin_for) __fornum=%d, definition='%s'",
+                                __fornum, fortab[__fornum, "definition"]))
     if (! emptyp(fortab[__fornum, "definition"]))
         doforloop(__fornum)
     delete fortab[__fornum, "definition"]

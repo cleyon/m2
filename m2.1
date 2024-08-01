@@ -1,0 +1,1162 @@
+.Dd $Mdocdate$
+.Dt M2 1
+.Os
+.Sh NAME
+.Nm m2
+.Nd Line-oriented macro processor
+.Sh SYNOPSIS
+.Nm
+.Op Ar name=value ...
+.Op Ar file ...
+.Sh DESCRIPTION
+.Nm
+is a line-oriented macro processor, a
+.Qq little brother
+to the
+.Xr m4 1
+macro processor found on Unix systems.
+The program can perform several functions, including:
+.Bl -enum
+.It
+Define and expand macros.
+Macros have two parts, a name and a body.
+All occurrences of a macro's name are replaced with the macro's body.
+Macro expansion may include parameters.
+.It
+Include files.  Special include directives in a file are
+replaced with the contents of the named file.
+Includes can
+be nested, with one included file including another.
+Included files are processed for macros.
+.It
+Conditional text inclusion and exclusion.
+Different parts of the text can be included in the final output, often
+based upon whether a macro is or is not defined.
+.It
+Comments are removed from the output.
+.Ql @comment
+commands appear on a line of their own and are dropped from the output.
+.Ql @rem ...@
+macros are embedded in the input text and produce no output.
+Use
+.Ql @ignore
+for a multi-line comment.
+.It
+Manage multiple output data streams with diversions.
+.El
+.Pp
+Control commands
+.Po
+.Ql @if ,
+.Ql @define ,
+etc
+.Pc
+are distinguished by a
+.Qq @
+as the first character at the beginning of a line.
+They consume the entire line.
+The following table lists control commands to
+evaluate, control, or define macros for subsequent processing:
+.Pp
+.Bl -tag -width @if(_not)_defined -compact -offset indent
+.It @append NAME TEXT
+Add TEXT to an already defined macro NAME
+.It @array ARR
+Declare ARR as an array
+.It @case NAME
+Evaluate value of NAME, comparing it with
+.It \ \ @of TEXT
+each successive @of TEXT.  If none match,
+.It \ \ @otherwise
+use text from @otherwise block if present.
+.It @endcase
+End @case structure.  Also @esac
+.It @comment [TEXT]
+Comment; ignore line.  Also @@, @c, @;, and @#
+.It @debug [TEXT]
+If debugging, send TEXT to standard error
+.It @decr NAME [N]
+Subtract N (1) from an already defined NAME
+.It @default NAME VAL
+Like @define, but no-op if NAME already defined
+.It @define NAME TEXT
+Set NAME to TEXT
+.It @divert [N]
+Divert output to stream N (default 0 means stdout)
+.It @dump WHAT [FILE]
+Output symbol names & definitions to FILE (stderr)
+.It @error [TEXT]
+Send TEXT to standard error; exit code 2
+.It @exit [CODE]
+Immediately stop parsing; exit CODE (default 0)
+.Brq #S
+.It @if NAME
+Include subsequent text if NAME is True (!= 0)
+.It @if NAME <OP> TEXT
+Test if NAME compares to TEXT (names or values)
+.It @if(_not)_defined NAME
+Test if NAME is defined
+.It @if(_not)_env VAR
+Test if VAR is defined in the environment
+.It @if(_not)_exists FILE
+Test if FILE exists
+.It @if(_not)_in KEY ARR
+Test if symbol ARR[KEY] is defined (KEY in ARR)
+.It @if(n)def NAME
+Like @if_defined/@if_not_defined
+.It @else
+Switch to the other branch of an @if statement
+.It @endif
+Terminate @if or @unless.  Also @fi
+.It @ignore DELIM
+Ignore input until line that begins with DELIM
+.It @include FILE
+Read and process contents of FILE
+.Brq #S
+.It @incr NAME [N]
+Add N (1) to an already defined NAME
+.It @initialize NAME VAL
+Like @define, but abort if NAME already defined
+.It @input [NAME]
+Read a single line from keyboard and define NAME
+.It @local NAME
+Declare NAME as a symbol local to the current frame
+.It @longdef NAME
+Set NAME to <...> (all lines until @endlongdef)
+.It \ \ <...>
+.It @endlongdef
+.It @newcmd NAME
+Create a user command NAME (lines until @endcmd)
+.It \ \ <...>
+.It @endcmd
+.It @nextfile
+Ignore remainder of file, continue processing
+.It @paste FILE
+Insert FILE contents literally, no macros
+.Brq #S
+.It @read NAME FILE
+Read FILE contents to define NAME
+.Brq #S
+.It @readarray ARR FILE
+Read each line from FILE into array ARR
+.Brq #S
+.It @readonly NAME
+Make NAME unchangeable -- cannot be undone
+.It @sequence ID ACT [N]
+Create and manage sequences
+.It @shell DELIM [PROG]
+Evaluate input until DELIM, send raw data to PROG
+.It \ \ <...>
+Prog output is captured; exit status in __SHELL__
+.It @typeout
+Print remainder of input file literally, no macros
+.It @undefine NAME
+Remove definition of NAME
+.It @undivert [N]
+Inject stream N (def all) into current stream
+.It @unless NAME
+Include subsequent text if NAME == 0 (or undefined)
+.It @warn [TEXT]
+Send TEXT to standard error; continue.  Also called @echo, @stderr
+.El
+.Pp
+Short macros can be defined on the command line by using the form
+.Ql NAME=VAL ,
+or
+.Ql NAME=
+to define with empty value
+.Po
+.Va NAME
+will be defined but false
+.Pc .
+.Pp
+.Nm
+does not scan tokens or replace unadorned text: macro
+substitution must be explicitly requested by enclosing the macro
+name in
+.Qq @
+characters.
+Thus, any occurrence of
+.Ql @name@
+in the input is replaced in the output by the corresponding value.
+.Pp
+.Em Example :
+.Bd -literal -offset indent -compact
+@define Condition under
+You are clearly @Condition@worked.
+.Ed
+    => You are clearly underworked.
+.Pp
+No white space is allowed between
+.Qq @
+and the name, so a lone at-sign does not trigger macro processing in any way.
+Thus, a line like
+.Dl 100 dollars @ 5% annual interest
+is completely benign.
+Also, there is no need to
+.Qq quote
+identifiers to protect against inadvertent/unwanted replacement.
+Substitutions can occur multiple times in a single line.
+.Pp
+Specifying more than one word between
+.Qq @
+characters, as in
+.Dl @xxxx AAA BBB CCC@
+is used as a crude form of function invocation.
+Macros can expand positional parameters whose actual values will be
+supplied when the macro is called.
+The definition should refer to $1, $2, etc.
+${1} also works, so ${1}1 is distinguishable from $11.
+$0 refers to the name of the macro itself.
+You may supply more parameters than needed, but it is an error if a
+definition refers to a parameter which is not supplied.
+.Bd -ragged -offset indent -compact
+.Em WARNING :
+Parameters are parsed by splitting on white space.
+This means that in:
+.Dl @foo "a b" c
+.Va foo
+is given three arguments, not two: '"a', 'b"', and 'c'
+.Ed
+.Pp
+.Em Example :
+    @define greet Hello, $1!  m2 sends you $0ings.
+    @greet world@
+        => Hello, world!  m2 sends you greetings.
+.Pp
+.Nm
+can incorporate the contents of files into its data stream.
+.Ql @include
+scans and processes the file data for macros;
+.Ql @paste
+will retrieve the contents with no modifications.
+Attempting to
+.Ql @include
+or
+.Ql @paste
+a non-existent file results in an error.
+However, if the
+.Qq silent
+variants
+.Po
+.Ql @sinclude ,
+.Ql @spaste
+.Pc
+are used, no message is printed.
+.Pp
+To alleviate scanning ambiguities, any characters enclosed in
+at-sign braces will be recursively scanned and expanded.
+Thus
+.Dl @data_list[@{my_key}]@
+uses the value in
+.Va my_key
+to look up data from
+.Va data_list .
+The text between the braces is implicitly interpreted as if it
+were surrounded by
+.Qq @
+characters, so
+.Ql @{SYMBOL}
+is correct.
+The following definitions are recognized:
+.Pp
+.Bl -tag -width @right_SYM_[N]@ -compact -offset indent
+.It @basename SYM@
+Base (file) name of SYM
+.It @boolval [SYM]@
+Output "1" if SYM is True, else "0"
+.It @chr SYM@
+Output character with ASCII code SYM
+.It @date@
+Current date (format as __FMT__[date])
+.Brq #1
+.It @dirname SYM@
+Directory name of SYM
+.It @epoch@
+Number of seconds since the Epoch, UTC
+.Brq #1
+.It @expr MATH@
+Evaluate mathematical expression
+.Brq #S
+.It @getenv VAR@
+Get environment variable
+.Brq #2
+.It @lc SYM@
+Lower case
+.It @left SYM [N]@
+Substring of SYM from 1 to Nth character
+.It @len SYM@n
+Number of characters in SYM's value
+.It @ltrim SYM@
+Remove leading whitespace
+.It @mid SYM BEG [LEN]@
+Substring of SYM from BEG, LEN chars long
+.It @ord SYM@
+Output ASCII code of first character in SYM
+.It @rem COMMENT@
+Embedded comment text is ignored
+.Brq #S
+.It @right SYM [N]@
+Substring of SYM from N to last character
+.It @rtrim SYM@
+Remove trailing whitespace
+.It @spaces [N]@
+Output N space characters  (default 1)
+.It @strftime FMT@
+Current date/time in user-specified format
+.It @time@
+Current time (format as __FMT__[time])
+.Brq #1
+.It @trim SYM@
+Remove both leading and trailing whitespace
+.It @tz@
+Time zone name (format as __FMT__[tz])
+.Brq #1
+.It @uc SYM@
+Upper case
+.It @uuid@
+Something that resembles a UUID: C3525388-E400-43A7-BC95-9DF5FA3C4A52
+.El
+.Pp
+Symbols can be suffixed with "[<key>]" to form simple arrays.
+.Pp
+Symbols that start and end with
+.Qq __
+.Po
+like
+.Va __FOO__
+.Pc
+are called
+.Qq system
+symbols.
+Except for certain writable symbols, they cannot be modified by the user.
+The following are pre-defined; example values, defaults, or types are shown:
+.Pp
+.Bl -tag -width __FMT__[number]___ -compact -offset indent
+.It __CWD__
+Current working directory, trailing slash
+.It __DATE__
+m2 run start date as YYYYMMDD (eg 19450716)
+.Brq #1
+.It __DBG__[<id>]
+Levels for internal debugging systems (integer)
+.It __DEBUG__
+Debugging enabled? (boolean, def FALSE)
+.Brq #3
+.It __DIVNUM__
+Current stream number (0; 0-9 valid)
+.It __EPOCH__
+Seconds since Epoch at m2 run start time
+.Brq #1
+.It __EXPR__
+Value from most recent @expr ...@ result
+.It __FILE__
+Current file name
+.It __FILE_UUID__
+UUID unique to this file
+.It __FMT__[0]          \" bracket 0
+Text output when @boolval@ is False (0)
+.Brq #3
+.It __FMT__[1]          \" bracket 1
+Text output when @boolval@ is True (1)
+.Brq #3
+.It __FMT__[date]
+Date format for @date@ (%Y-%m-%d)
+.Brq #3
+.It __FMT__[number]
+Format for printing numbers (sync w/CONVFMT)
+.Brq #3
+.It __FMT__[seq]
+Format for printing sequence values (%d)
+.Brq #3
+.It __FMT__[time]
+Time format for @time@ (%H:%M:%S)
+.Brq #3
+.It __FMT__[tz]
+Time format for @tz@ (%Z)
+.Brq #3
+.It __GID__
+Group id (effective gid)
+.It __HOME__
+User's home directory, with trailing /
+.It __HOST__
+Short host name (eg myhost)
+.It __HOSTNAME__
+FQDN host name (eg myhost.example.com)
+.It __INPUT__
+The data read by @input
+.Brq #3
+.It __LINE__
+Current line number inside __FILE__
+.It __M2_UUID__
+UUID unique to this m2 run
+.It __M2_VERSION__
+m2 version
+.It __NFILE__
+Number of files processed so far (eg 2)
+.It __NLINE__
+Number of lines read so far from all files
+.It __OSNAME__
+Operating system name
+.It __PID__
+m2 process id
+.It __SHELL__
+Exit status of most recent @shell command
+.It __STRICT__[bool]
+True if variables must be defined (def True)
+.Brq #3
+.It __STRICT__[cmd]
+True if @ command must be known (def False)
+.Brq #3
+.It __STRICT__[env]
+True if environment variable must be defined (def True)
+.Brq #3
+.It __STRICT__[file]
+True if reading non-existent file causes error (def True)
+.Brq #3
+.It __STRICT__[func]
+True if functions must be defined (def True)
+.Brq #3
+.It __STRICT__[symbol]
+True if symbol names are limited (def True)
+.Brq #3
+.It __STRICT__[undef]
+True if symbols must be defind (def True)
+.Brq #3
+.It __SYNC__
+Frequency to flush output (0..2).
+0=end only, 1=every file (default), 2=every line.
+.Brq #3
+.It __TIME__
+m2 run start time as HHMMSS (eg 053000)
+.Brq #1
+.It __TIMESTAMP__
+ISO 8601 timestamp (1945-07-16T05:30:00-0600)
+.Brq #1
+.It __TMPDIR__
+Location for temporary files (def /tmp/)
+.Brq #3
+.It __TZ__
+Time zone numeric offset from UTC (-0400)
+.Brq #1
+.It __UID__
+User id (effective uid)
+.It __USER__
+User name
+.El
+.Bl -inset
+.It Em Note S :
+When the command is prefixed with
+.Qq s
+.Po
+e.g.,
+.Ql @sinclude
+.Pc ,
+denotes a
+.Qq silent
+variant which prints fewer error messages.
+.It Em Note #1 :
+.Va __DATE__ ,
+.Va __EPOCH__ ,
+.Va __TIME__ ,
+.Va __TIMESTAMP__ ,
+and
+.Va __TZ__
+are fixed at program start and do not change.
+.Ql @date@ ,
+.Ql @epoch@ ,
+.Ql @time@ ,
+and
+.Ql @tz@
+do change, so you could define timestamp as:
+.Dl @define timestamp @date@T@time@@__TZ__@
+to generate up-to-date timestamps.
+Of course, time zones don't normally change; the point is that
+.Ql @__TZ__@
+prints
+.Qq -0800
+while
+.Ql @tz@
+prints
+.Qq PST .
+.It Em Note #2 :
+.Ql @getenv VAR@
+will be replaced by the value of the environment variable
+.Va VAR .
+An error is thrown if
+.Va VAR
+is not defined.
+To ignore error and continue with empty string, disable
+.Va __STRICT__[env] .
+.It Em Note #3 :
+Denotes a user-modifiable system symbol.
+.El
+.Ss Streams and Diversions
+.Nm
+attempts to follow m4 in its use of
+.Ql @divert
+and
+.Ql @undivert .
+If argument is not an integer, no action is taken and no error is thrown.
+.Bl -inset
+.It Em Divert :
+.Bl -tag -width @undivert_-1____ -compact -offset indent
+.It @divert
+Same as
+.Ql @divert 0
+.It @divert -1
+All subsequent output in this diversion is discarded.
+.It @divert 0
+Resume normal output: all subsequent output is sent
+to standard output (aka stream # 0)
+.It @divert N
+All subsequent output is sent to stream N (1 \*(Le N \*(Le 9)
+.It @divert N1 N2...
+Error!  Multiple arguments are not allowed.
+.El
+.It Em Undivert :
+.Bl -tag -width @undivert_-1____ -compact -offset indent
+.It @undivert
+Inject all diversions, in numerical order, into current stream.
+.It @undivert -1
+No effect.
+.It @undivert 0
+No effect.
+.It @undivert N
+Inject only the numbered diversion into current stream.
+.It @undivert N1 N2...
+Inject all specified diversions (in argument order, not numerical
+order), if legal, into current stream.
+.El
+.It Em End-of-Data Processing :
+There is an implicit
+.Ql @divert 0
+and
+.Ql @undivert
+performed when
+.Nm
+reaches the end of its input.
+If you want to avoid this and discard any diverted data that hasn't
+shipped out yet, add the following to the end of your input data:
+.Bd -literal -offset indent -compact
+@divert -1
+@undivert
+.Ed
+.It Em Example :
+.br
+.Bd -literal -offset indent -compact
+@divert 1
+world!
+@divert
+Hello,
+.Ed
+        => Hello,
+        => world!
+.El
+.Ss Sequences
+.Nm
+supports named sequences, which are integer values.  By default,
+sequences begin at zero and increment by one as appropriate.  These
+defaults can be changed, and the value updated or restarted.  You create
+and manage sequences with the
+.Ql @sequence <ID> <ACTION> [<ARG>]
+command.  Valid actions are:
+.Pp
+.Bl -tag -width ID_format_STR____ -compact -offset indent
+.It ID [create]
+Create a new sequence named ID
+.It ID delete
+Destroy sequence named ID
+.It ID format STR
+Format string used to print value (%d)
+.It ID incr N
+Set increment to N (1)
+.It ID init N
+Set initial value to N (0)
+.It ID next
+Increment value (no output)
+.It ID prev
+Decrement value (no output)
+.It ID restart
+Set current value to initial value
+.It ID set N
+Set value directly to N
+.El
+.Pp
+To use a sequence, surround the sequence ID with
+.Qq @
+characters just like a macro.
+This injects the current value, formatted by calling
+.Fn sprintf
+with the specified format.
+The form
+.Ql @++ID
+is used to generate an increasing sequence of values printed in a
+user-customizable format.
+To get the current value printed in
+decimal without modification or formatting, say
+.Ql @ID currval@ .
+.Pp
+Sequence values can be modified in two ways:
+.Bl -enum
+.It
+The
+.Ql @sequence
+command actions
+.Ic next ,
+.Ic prev ,
+.Ic restart ,
+and
+.Ic set
+will change the value as specified without generating any output.
+.It
+Used inline,
+.Qq ++
+or
+.Qq --
+(prefix or postfix) will automatically
+modify the sequence while outputting the desired value.
+.El
+.Pp
+.Em Example :
+.Bd -literal -offset indent -compact
+@sequence counter create
+@sequence counter format # %d=
+@++counter@ First header
+@++counter@ Second header
+.Ed
+        => # 1=First header
+        => # 2=Second header
+.Ss Mathematical expressions
+The
+.Ql @expr ...@
+function evaluates mathematical expressions and
+inserts their results.
+.Ql @expr@
+supports the standard arithmetic operators:
+.Dl (\ \ )\ \ +\ \ -\ \ *\ \ /\ \ %\ \ ^
+and the comparison operators:
+.Dl <\ \ <=\ \ ==\ \ !=\ \ >=\ \ >
+and return 0 or 1 as per Awk.
+Logical negation is available with
+.Qq \&! .
+No other boolean operators are valid.
+.Qq &&
+and
+.Qq ||
+are
+.Em not supported !
+.Pp
+.Ql @expr@
+supports the following functions:
+.Pp
+.Bl -tag -width defined(sym)____ -compact -offset indent
+.It abs(x)
+Absolute value of x, |x|
+.It acos(x)
+Arc-cosine of x (-1 \*(Le x \*(Le 1)
+.It asin(x)
+Arc-sine of x (-1 \*(Le x \*(Le 1)
+.It atan2(y,x)
+Arctangent of y/x, -\*(Pi \*(Le atan2 \*(Le \*(Pi
+.It ceil(x)
+Ceiling of x, smallest integer \*(Ge x
+.It cos(x)
+Cosine of x, in radians
+.It defined(sym)
+1 if sym is defined, else 0
+.It deg(x)
+Convert radians to degrees
+.It exp(x)
+Exponential (anti-logarithm) of x, e^x
+.It floor(x)
+Floor of x, largest integer \*(Le x
+.It hypot(x,y)
+Hypotenuse of a right-angled triangle
+.It int(x)
+Integer part of x
+.It log(x)
+Natural logarithm of x, base e
+.It log10(x)
+Common logarithm of x, base 10
+.It max(a,b)
+The larger of a and b
+.It min(a,b)
+The smaller of a and b
+.It pow(x,y)
+Raise x to the y power, x^y
+.It rad(x)
+Convert degrees to radians
+.It rand()
+Random float, 0 \*(Le rand \*(Lt 1
+.It randint(x)
+Random integer, 1 \*(Le randint \*(Le x
+.It round(x)
+Normal rounding to nearest integer
+.It sign(x)
+Signum of x [-1, 0, or +1]
+.It sin(x)
+Sine of x, in radians
+.It sqrt(x)
+Square root of x
+.It tan(x)
+Tangent of x, in radians
+.El
+.Pp
+.Ql @expr@
+will automatically use symbols' values in expressions.
+Inside
+.Ql "@expr ...@" ,
+there is no need to surround symbol names
+with
+.Qq @
+characters to retrieve their values.
+.Ql @expr@
+also recognizes the predefined constants
+.Va e ,
+.Va pi ,
+and
+.Va tau .
+.Pp
+The most recent expression value is automatically stored in
+.Va __EXPR__ .
+.Ql @expr@
+can also assign values to symbols with the
+.Qq =
+assignment operator.
+Assignment is itself an expression, so
+.Ql @expr x=5@
+assigns the value 5 to
+.Va x
+and also outputs the result.
+To assign a value to a variable without printing, use
+.Ql @define .
+.Sh IMPLEMENTATION NOTES
+.Nm
+is written in portable
+.Qq standard
+Awk and does not require GNU Awk or any other files.
+Even later Awk additions such as
+.Fn systime
+are avoided.
+.Sh ENVIRONMENT
+.Bl -tag -width indent
+.It Ev HOME
+Used to access your
+.Pa $HOME/.m2rc
+file
+.It Ev M2RC
+If exists, overrides
+.Pa $HOME/.m2rc
+.It Ev SHELL
+Used as a possible default shell.
+.It Ev TMPDIR
+Used as a possible temporary directory.
+.El
+.Sh FILES
+.Bl -tag -width indent
+.It Xo
+.Pa $HOME/.m2rc ,
+.Pa ./.m2rc
+.Xc
+Init files automatically read if available.
+.It Xo
+.Pa /dev/stdin ,
+.Pa /dev/stdout ,
+.Pa /dev/stderr ,
+.Pa /dev/tty ,
+.Pa /dev/null
+.Xc
+I/O may be performed on these paths.
+.El
+.Sh EXIT STATUS
+.Bl -tag -width flag -compact
+.It Li 0
+Normal process completion, or
+.Ql @exit
+command.
+.It Li 1
+Internal error generated by error() function.
+.It Li 2
+User requested
+.Ql @error
+command in input.
+.It Li 66
+A file specified on command line could not be read.
+.El
+.Sh EXAMPLES
+The following example demonstrates arrays, conditionals, and
+.Ql @{...} :
+.Bd -literal -offset indent
+@#          Use default region if available
+@if_env AWS_DEFAULT_REGION
+@define region @getenv AWS_DEFAULT_REGION@
+@endif
+@#          If you want your own default region, uncomment
+@#                  @default region us-west-2
+@#          Otherwise, m2 will exit with error message
+@ifndef region
+@error You must provide a value for 'region' on the command line
+@endif
+@#          Validate region
+@array valid_regions
+@define valid_regions[us-east-1]
+@define valid_regions[us-east-2]
+@define valid_regions[us-west-1]
+@define valid_regions[us-west-2]
+@if_not_in @region@ valid_regions
+@error Region '@region@' is not valid: choose us-{east,west}-{1,2}
+@endif
+@#          Configure image name according to region
+@array images
+@define images[us-east-1]   my-east1-image-name
+@define images[us-east-2]   my-east2-image-name
+@define images[us-west-1]   my-west1-image-name
+@define images[us-west-2]   my-west2-image-name
+@define my_image @images[@{region}]@
+@#          Output begins here
+Region: @region@
+Image:  @my_image@
+.Ed
+.Sh DIAGNOSTICS
+Error messages are printed to standard error in the following format:
+.Dl m2:<__FILE__>:<__LINE__>:<Error text>:<Offending input line>
+.Pp
+All error texts and their meanings are as follows:
+.Pp
+.Bl -ohang
+.It Bad parameters [in 'XXX']
+.Bl -dash -offset indent -compact
+.It
+A command did not receive the expected/number of parameters.
+.El
+.It Bad @{...} expansion
+.Bl -dash -offset indent -compact
+.It
+Error expanding @{...}, often caused by a missing "}"
+.El
+.It Cannot recursively read 'XXX'
+.Bl -dash -offset indent -compact
+.It
+Attempt to @include the same file multiple times.
+.El
+.It Comparison operator 'XXX' invalid
+.Bl -dash -offset indent -compact
+.It
+An @if expression with an invalid comparison operator.
+.It
+Invalid conditions while sorting symbol table.
+.El
+.It Delimiter 'XXX' not found
+.Bl -dash -offset indent -compact
+.It
+A multi-line read (@ignore, @longdef, @shell) did not find its
+terminating delimiter line.
+.It
+An @if or @case block was not properly terminated with @endif or
+@endcase, usually due to premature end of input.
+.It
+Indicates a "starting" command did not find its finish.
+.El
+.It Division by zero
+.Bl -dash -offset indent -compact
+.It
+@expr@ attempted to divide by zero.
+.El
+.It Duplicate 'XXX' not allowed
+.Bl -dash -offset indent -compact
+.It
+More than one @else found in a single @if block.
+.It
+More than one @otherwise found in a single @case block.
+.El
+.It Empty symbol table
+.Bl -dash -offset indent -compact
+.It
+A @dump command found no definitions to display.
+.El
+.It Environment variable 'XXX' not defined
+.Bl -dash -offset indent -compact
+.It
+Attempt to getenv an undefined environment variable while
+__STRICT__[env] is in effect.
+.El
+.It Error reading file 'FILE'
+.Bl -dash -offset indent -compact
+.It
+Read error on file.
+.El
+.It Expected number or '(' at 'XXX'
+.Bl -dash -offset indent -compact
+.It
+@expr ...@ received unexpected input or bad syntax.
+.El
+.It File 'XXX' does not exist
+.Bl -dash -offset indent -compact
+.It
+Attempt to @include a non-existent file in strict file mode.
+.El
+.It Math expression error [hint]
+.Bl -dash -offset indent -compact
+.It
+An error occurred during @expr ...@ evaluation.
+.It
+A math expression returned +/-Infinity or NaN.
+.El
+.It Missing 'X' at 'XXX'
+.Bl -dash -offset indent -compact
+.It
+@expr ...@ did not match syntax required for expression (missing a , or
+( character in function calls).
+.El
+.It Name 'XXX' not available
+.Bl -dash -offset indent -compact
+.It
+Despite being valid, the name cannot be used/found here.
+.It
+Attempt to access an unknown debugging key.
+.El
+.It Name 'XXX' not defined
+.Bl -dash -offset indent -compact
+.It
+A symbol name without a value was passed to a function.
+.It
+An undefined macro was referenced and __STRICT__[func] is true.
+.It
+Attempt to use an undefined sequence ("create" is allowed).
+.El
+.It Name 'XXX' not valid
+.Bl -dash -offset indent -compact
+.It
+A symbol name does not pass validity check.
+In __STRICT__[symbol] mode (the default), a symbol name may only contain
+letters, digits, #, -, or _ characters.
+.It
+Environment variable name does not pass validity check.
+.El
+.It \&No corresponding 'XXX'
+.Bl -dash -offset indent -compact
+.It
+@if: An @else or @endif was seen without a matching @if.
+.It
+@longdef: An @endlongdef was seen without a matching @longdef.
+.It
+@newcmd: An @endcmd was seen without a matching @newcmd.
+.It
+Indicates a "finishing" command was seen without a starter.
+.El
+.It Parameter N not supplied in 'XXX'
+.Bl -dash -offset indent -compact
+.It
+A macro referred to a parameter (such as $1) for which no value was supplied.
+.El
+.It Symbol 'XXX' already defined
+.Bl -dash -offset indent -compact
+.It
+@initialize attempted to define a previously defined symbol.
+.El
+.It Symbol 'XXX' read-only
+.Bl -dash -offset indent -compact
+.It
+Attempt to modify a protected (read-only) symbol (__FOO__).
+.El
+.It Unexpected end of definition
+.Bl -dash -offset indent -compact
+.It
+Input ended before macro definition was complete.
+.El
+.It Unknown function 'FUNC'
+.Bl -dash -offset indent -compact
+.It
+@expr ...@ found an unrecognized mathematical function.
+.El
+.It Value 'XXX' must be numeric
+.Bl -dash -offset indent -compact
+.It
+Something expected to be a number was not.
+.El
+.El
+.Sh SEE ALSO
+.Xr cpp 1 ,
+.Xr m4 1
+.Bl -hang -compact
+.It Lk http://www.drdobbs.com/open-source/m1-a-mini-macro-processor/200001791
+.It Lk https://docstore.mik.ua/orelly/unix3/sedawk/ch13_10.htm
+.El
+.Ss "Other Ms"
+.Bl -tag -width M8___ -offset indent
+.It M
+Admiral Sir Miles Messervy.
+.It M1
+Jon Bentley's original macro processor, the progenitor of this program.
+.Rs
+.%A Jon Bentley
+.%T m1: A Mini Macro Processor
+.%J Computer Language
+.%V 7
+.%N 6
+.%D June 1990
+.%P pp. 47\(en61
+.Re
+.It M2
+This program.
+.It M3
+Kernighan & Plauger's book
+.Em Software Tools
+describes a macro-processor language which inspired D. M. Ritchie
+to write m3, a macro processor for the AP-3 minicomputer.
+Originally, the Kernighan and Plauger macro-processor, and
+then m3, formed the engine for the Rational FORTRAN
+preprocessor, although it was later replaced with m4.
+.Rs
+.%A B. W. Kernighan
+.%A P. J. Plauger
+.%B Software Tools
+.%I Addison-Wesley
+.%D 1976
+.Re
+.It M4
+From Unix V7, a macro processor
+.Dq "intended as a front end for Ratfor, C, and other languages" .
+.Rs
+.%A B. W. Kernighan
+.%A D. M. Ritchie
+.%R The M4 Macro Processor
+.%Q AT&T Bell Laboratories
+.%J Computing Science Technical Report
+.%N 59
+.%D July 1977
+.Re
+.It M5
+Prof. A. Dain Samples at the University of Cincinnati
+described and implemented M5.
+.Bd -ragged -offset indent -compact
+.Qo
+M5 is a powerful, easy to use, general purpose macro language.
+M5's syntax allows concise, formatted, and easy to read
+specifications of macros while still giving the user control
+over the appearance of the resulting text.  M5 macros can have
+named parameters, can have an unbounded number of parameters,
+and can manipulate parameters as a single unit.
+.Qc
+.Ed
+.Bl -hang -compact
+.It Lk https://compilers.iecc.com/comparch/article/92-10-076
+.El
+.Rs
+.%A A. Dain Samples
+.%T User's Guide to the M5 Macro Language
+.%J m5: macro processor
+.%O comp.compilers
+.%D October 20, 1992
+.Re
+.It M5
+William A. Ward, Jr., School of Computer and Information Sciences,
+University of South Alabama, Mobile, Alabama, also wrote a macro
+processor translator (in Awk!) named m5 dated July 23, 1999.
+.Bd -ragged -offset indent -compact
+.Qo
+m5, unlike many macro processors, does not directly
+interpret its input.  Instead it uses a two-pass approach
+in which the first pass translates the input to an awk
+program, and the second pass executes the awk program to
+produce the final output.  Macros are defined using awk
+assignment statements and their values substituted using
+the substitution prefix character ($ by default).
+.Qc
+.Ed
+.It M5
+Dr. Richard Daystrom designed and built a multitronic computer
+designated M-5, ca. 2268.
+.Qq Not entirely successful.
+.It M6
+Andrew D. Hall - M6,
+.Bd -ragged -offset indent -compact
+.Qo
+a general purpose macro processor used to port
+the Fortran source code of the Altran computer algebra system.
+.Qc
+.Ed
+.Bl -hang -compact
+.It Lk http://man.cat-v.org/unix-6th/6/m6
+.It Lk http://cm.bell-labs.com/cm/cs/cstr/2.pdf
+.El
+.Rs
+.%A A. D. Hall
+.%R M6 Reference Manual
+.%Q Bell Laboratories
+.%J Computer Science Technical Report
+.%N 2
+.%D 1972
+.Re
+.It M7
+G. H. Skillman, Sandra B. Salazar, et al - M7 is a general purpose
+matching filter designed and implemented at the National Bureau of
+Standards, ca. 1980.
+.Bd -ragged -offset indent -compact
+.Qo
+M7 is a pattern matching and replacement facility
+developed as a UNIX tool for translating and
+reformatting queries, languages, and data.  M7 operates
+by first preprocessing a set of user defined macros,
+then using these macros to match and replace the text in
+an input string.  The enabling of the rescan option
+directs M7 to match and rematch the macro patterns
+against the input string until all possible replacements
+have been made.  Three constructions--tags, stacks, and
+counters--allow communication between different macros
+and different input strings, to permit such functions as
+line numbering, labeling, and argument passing.
+.Qc
+.Ed
+.Bl -hang -compact
+.It Lk https://www.govinfo.gov/content/pkg/GOVPUB-C13-dd583e065aac7203f7521309ec41220b/pdf/GOVPUB-C13-dd583e065aac7203f7521309ec41220b.pdf
+.El
+.It M8
+A general-purpose preprocessor for metaprogramming
+written by Brett Robinson.
+.Bd -ragged -offset indent -compact
+.Qo
+M8 is a command line tool for preprocessing text files.
+Its syntax is customizable, and easy to distinguish from
+its surrounding text.  Custom macros can be added,
+allowing it to be specialized for various uses.  M8
+executes macros that match a defined regex, running
+either a built-in macro, an external program, or a
+remote API, and replaces the call point with the
+response string.
+.Qc
+.Ed
+.Bl -hang -compact
+.It Lk https://github.com/octobanana/m8
+.El
+.El
+.\" .Sh HISTORY
+.Sh AUTHORS
+.An Jon Bentley ,
+.Mt jlb@research.bell-labs.com
+.An Christopher Leyon ,
+.Mt cleyon@gmail.com
+.\" .Sh CAVEATS
+.Sh BUGS
+.Nm
+is two steps lower than m4.
+You'll probably miss something you have learned to expect.
+.Pp
+Self-referential/recursive macros may hang the program.
+.Pp
+.Nm
+is designed for line-oriented, ASCII text processing.
+It is not bullet-proof against all possible input.
+For example, some implementations of Awk may not handle data with embedded null
+('\\0') characters.
+Also, UTF-8 input has not been tested.
+.Pp
+Left-to-right order of evaluation is not necessarily guaranteed.
+.Dl @++N@ - We are now on step @N@
+may not produce exactly the output you expect.
+This is especially noticeable if
+.Ql @{...}
+is used in complex ways.
+.\" .Sh SECURITY CONSIDERATIONS
+.\" Not used in OpenBSD.

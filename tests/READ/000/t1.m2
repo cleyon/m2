@@ -1,0 +1,2 @@
+@readfile quote hamlet
+"@quote@"

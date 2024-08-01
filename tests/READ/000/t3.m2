@@ -1,0 +1,1 @@
+@readfile foo nonexistent-file

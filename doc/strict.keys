@@ -1,0 +1,19 @@
+bool
+        TRUE    Abend if symbol is not defined
+        FALSE   Non-existent symbol is always False
+
+env
+        TRUE    Error if environment variable is not defined
+        FALSE   Variable expansion is empty string
+
+file
+        TRUE    Attempt to include a non-existent file causes abend
+        FALSE   No op
+
+symbol
+        TRUE    Symbol name must match stringent regexp - nsym_valid_p()
+        FALSE   Very liberal regexp, but some chars still prohibited
+
+symfunc
+        TRUE    Error if symfunc is not defined
+        FALSE   Expansion is empty string

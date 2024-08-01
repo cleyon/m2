@@ -1,0 +1,5 @@
+Start: FOO=11 and BAR=22
+Inside IF with local, FOO=33 and BAR=44
+Middle: FOO=33 and BAR=22
+Inside IF without local, FOO=55 and BAR=66
+End: FOO=33 and BAR=66

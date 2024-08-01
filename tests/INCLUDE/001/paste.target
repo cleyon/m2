@@ -1,0 +1,4 @@
+Outer 1
+@define FOO 42
+FOO = @FOO@
+Outer 2

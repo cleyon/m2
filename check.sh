@@ -15,14 +15,16 @@
 # that is not the case (i.e., you expect the test to fail and exit with
 # a non-zero status), the expected code should be put in TESTNAME.exit
 
+debug="false"   # "true"
+
 LC_ALL=C
 export LC_ALL
 objdir=`pwd`
-#echo objdir  is $objdir
+[ $debug = "true" ] && echo "objdir  is $objdir"
 # test dir used to be parameter #1, but no longer
 #testdir=`cd "$1" ; pwd`
 testdir="`pwd`/tests"
-#echo testdir is $testdir
+[ $debug = "true" ] && echo "testdir is $testdir"
 new_M2="${objdir}"/m2
 
 framework_error()
@@ -44,7 +46,7 @@ if [ -d tmp ] ; then rm -rf tmp ; fi
 mkdir tmp
 cd "${objdir}"/tmp || framework_error "Could not change directory to ${objdir}/tmp"
 tmpdir=`pwd`
-#echo tmpdir  is $tmpdir
+[ $debug = "true" ] && echo "tmpdir  is $tmpdir"
 
 
 test_all_categories()
@@ -84,15 +86,15 @@ test_series()
         return
     fi
     for M2_FILE in *.m2 ; do
-        #echo cwd is `pwd`
-        #echo path is "$CATEGORY/$SERIES/$M2_FILE"
-        test_file "${CATEGORY}" "${SERIES}" "${M2_FILE}" "${test_id}"
+        [ $debug = "true" ] && echo "cwd is `pwd`"
+        [ $debug = "true" ] && echo "path is \"$CATEGORY/$SERIES/$M2_FILE\""
+        run_test "${CATEGORY}" "${SERIES}" "${M2_FILE}" "${test_id}"
     done
     cd ..
 }
 
 
-test_file()
+run_test()
 {
     local CATEGORY=$1
     local SERIES=$2
@@ -103,12 +105,12 @@ test_file()
     if [ ! -f $M2_FILE ]; then
         M2_FILE="${M2_FILE}.m2"
         if [ ! -f $M2_FILE ]; then
-            framework_error "test_file: $M2_FILE does not exist!"
+            framework_error "run_test: $M2_FILE does not exist!"
         fi
     fi
 
     TESTNAME=`echo "$M2_FILE" | sed 's,^.*/,,;s,\.m2$,,'`   # remove CATEGORY and ext
-    #echo TESTNAME is $TESTNAME
+    [ $debug = "true" ] && echo "TESTNAME is $TESTNAME"
     printf "*** $test_id/$TESTNAME ... "
 
     [ -f ${TESTNAME}.disabled ] && { echo "SKIP (test disabled)"; return; }
@@ -151,12 +153,12 @@ test_file()
 }
 
 
-test_this()
+test_something()
 {
     testwhat=$1
     local slashes
     slashes=`echo $testwhat | tr -dc / | wc -c | tr -dc [0-9]`
-    #echo "slashes=$slashes"
+    [ $debug = "true" ] && echo "slashes=$slashes"
 
     local category
     local series
@@ -177,7 +179,7 @@ test_this()
            series=`echo $testwhat | awk -F/ '{ print $2 }'`
            cd "$testdir/$category/$series"
            file=`echo $testwhat | awk -F/ '{ print $3 }'`
-           test_file $category $series $file
+           run_test $category $series $file
            cd ../../..
            ;;
         *) framework_error "Invocation error: Bad # slashes" ;;
@@ -185,10 +187,11 @@ test_this()
 }
 
  
-#echo cwd     is `pwd`
+[ $debug = "true" ] && echo "cwd     is `pwd`"
+[ $debug = "true" ] && echo "I see $# arguments"
 case $# in
     0) test_all_categories ;;
-    1) test_this $2 ;;
+    1) test_something $1 ;;
     *) framework_error "Invocation error: Bad # parameters" ;;
 esac
 

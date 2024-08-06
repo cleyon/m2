@@ -65,9 +65,9 @@ Add TEXT to an already defined macro NAME
 Declare ARR as an array
 .It @case NAME
 Evaluate value of NAME, comparing it with
-.It \ \ @of TEXT
+.It \ \ \ @of TEXT
 each successive @of TEXT.  If none match,
-.It \ \ @otherwise
+.It \ \ \ @otherwise
 use text from @otherwise block if present.
 .It @endcase
 End @case structure.  Also @esac
@@ -93,7 +93,7 @@ Immediately stop parsing; exit CODE (default 0)
 .It @for VAR START END [INCR]
 .It @foreach VAR ARRAY
 Execute a loop with VAR taking on successive
-.It \ \ <...>
+.It \ \ \ <...>
 values, or keys to an array.
 .It @next VAR
 Repeat next iteration of loop.
@@ -130,11 +130,11 @@ Read a single line from keyboard and define NAME
 Declare NAME as a symbol local to the current namespace
 .It @longdef NAME
 Set NAME to <...> (all lines until @endlongdef)
-.It \ \ <...>
+.It \ \ \ <...>
 .It @endlongdef
 .It @newcmd NAME
 Create a user command NAME (lines until @endcmd)
-.It \ \ <...>
+.It \ \ \ <...>
 .It @endcmd
 .It @nextfile
 Ignore remainder of file, continue processing
@@ -153,7 +153,7 @@ Make NAME unchangeable -- cannot be undone
 Create and manage sequences
 .It @shell DELIM [PROG]
 Evaluate input until DELIM, send raw data to PROG
-.It \ \ <...>
+.It \ \ \ <...>
 Prog output is captured; exit status in __SHELL__
 .It @typeout
 Print remainder of input file literally, no macros
@@ -191,7 +191,7 @@ in the input is replaced in the output by the corresponding value.
 .Bd -literal -offset indent -compact
 @define Condition under
 You are clearly @Condition@worked.
-\ \ => You are clearly underworked.
+\ \ \ => You are clearly underworked.
 .Ed
 .Pp
 No white space is allowed between
@@ -230,7 +230,7 @@ is given three arguments, not two: '"a', 'b"', and 'c'
 .Bd -literal -offset indent -compact
 @define greet Hello, $1!  m2 sends you $0ings.
 @greet world@
-\ \ => Hello, world!  m2 sends you greetings.
+\ \ \ => Hello, world!  m2 sends you greetings.
 .Ed
 .Pp
 .Nm
@@ -562,8 +562,8 @@ shipped out yet, add the following to the end of your input data:
 world!
 @divert
 Hello,
-\ \ => Hello,
-\ \ => world!
+\ \ \ => Hello,
+\ \ \ => world!
 .Ed
 .El
 .Ss Sequences
@@ -637,8 +637,8 @@ modify the sequence while outputting the desired value.
 @sequence counter format # %d=
 @++counter@ First header
 @++counter@ Second header
-\ \ => # 1=First header
-\ \ => # 2=Second header
+\ \ \ => # 1=First header
+\ \ \ => # 2=Second header
 .Ed
 .Ss Mathematical expressions
 The
@@ -801,33 +801,33 @@ A file specified on command line could not be read.
 The following example demonstrates arrays, conditionals, and
 .Ql @{...} :
 .Bd -literal -offset indent
-@#          Use default region if available
+@#              Use default region if available
 @if env(AWS_DEFAULT_REGION)
 @define region @getenv AWS_DEFAULT_REGION@
 @endif
-@#          If you want your own default region, uncomment
-@#                  @default region us-west-2
-@#          Otherwise, m2 will exit with error message
-@ifndef region
+@#              If you want your own default region, uncomment
+@default region us-west-2
+@#              Otherwise, m2 will exit with error message
+@if ! defined(region)
 @error You must provide a value for 'region' on the command line
 @endif
-@#          Validate region
+@#              Validate region
 @array valid_regions
 @define valid_regions[us-east-1]
 @define valid_regions[us-east-2]
 @define valid_regions[us-west-1]
 @define valid_regions[us-west-2]
-@if_not_in @region@ valid_regions
+@if ! @region@ IN valid_regions
 @error Region '@region@' is not valid: choose us-{east,west}-{1,2}
 @endif
-@#          Configure image name according to region
+@#              Configure image name according to region
 @array images
 @define images[us-east-1]   my-east1-image-name
 @define images[us-east-2]   my-east2-image-name
 @define images[us-west-1]   my-west1-image-name
 @define images[us-west-2]   my-west2-image-name
 @define my_image @images[@{region}]@
-@#          Output begins here
+@#              Output begins here
 Region: @region@
 Image:  @my_image@
 .Ed

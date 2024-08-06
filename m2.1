@@ -90,6 +90,13 @@ Send TEXT to standard error; exit code 2
 .It @exit [CODE]
 Immediately stop parsing; exit CODE (default 0)
 .Brq #S
+.It @for VAR START END [INCR]
+.It @foreach VAR ARRAY
+Execute a loop with VAR taking on successive
+.It \ \ <...>
+values, or keys to an array.
+.It @next VAR
+Repeat next iteration of loop.
 .It @if NAME
 Include subsequent text if NAME is True (!= 0)
 .It @if NAME <OP> TEXT
@@ -120,7 +127,7 @@ Like @define, but abort if NAME already defined
 .It @input [NAME]
 Read a single line from keyboard and define NAME
 .It @local NAME
-Declare NAME as a symbol local to the current frame
+Declare NAME as a symbol local to the current namespace
 .It @longdef NAME
 Set NAME to <...> (all lines until @endlongdef)
 .It \ \ <...>
@@ -184,8 +191,8 @@ in the input is replaced in the output by the corresponding value.
 .Bd -literal -offset indent -compact
 @define Condition under
 You are clearly @Condition@worked.
+\ \ => You are clearly underworked.
 .Ed
-    => You are clearly underworked.
 .Pp
 No white space is allowed between
 .Qq @
@@ -220,9 +227,11 @@ is given three arguments, not two: '"a', 'b"', and 'c'
 .Ed
 .Pp
 .Em Example :
-    @define greet Hello, $1!  m2 sends you $0ings.
-    @greet world@
-        => Hello, world!  m2 sends you greetings.
+.Bd -literal -offset indent -compact
+@define greet Hello, $1!  m2 sends you $0ings.
+@greet world@
+\ \ => Hello, world!  m2 sends you greetings.
+.Ed
 .Pp
 .Nm
 can incorporate the contents of files into its data stream.
@@ -400,6 +409,10 @@ Number of lines read so far from all files
 Operating system name
 .It __PID__
 m2 process id
+.It __SECURE__
+Security level (0, 1, or 2).  See
+.Sx SECURITY CONSIDERATIONS
+for further information.
 .It __SHELL__
 Exit status of most recent @shell command
 .It __STRICT__[bool]
@@ -549,9 +562,9 @@ shipped out yet, add the following to the end of your input data:
 world!
 @divert
 Hello,
+\ \ => Hello,
+\ \ => world!
 .Ed
-        => Hello,
-        => world!
 .El
 .Ss Sequences
 .Nm
@@ -624,9 +637,9 @@ modify the sequence while outputting the desired value.
 @sequence counter format # %d=
 @++counter@ First header
 @++counter@ Second header
+\ \ => # 1=First header
+\ \ => # 2=Second header
 .Ed
-        => # 1=First header
-        => # 2=Second header
 .Ss Mathematical expressions
 The
 .Ql @expr ...@
@@ -789,7 +802,7 @@ The following example demonstrates arrays, conditionals, and
 .Ql @{...} :
 .Bd -literal -offset indent
 @#          Use default region if available
-@if_env AWS_DEFAULT_REGION
+@if env(AWS_DEFAULT_REGION)
 @define region @getenv AWS_DEFAULT_REGION@
 @endif
 @#          If you want your own default region, uncomment
@@ -1158,5 +1171,31 @@ may not produce exactly the output you expect.
 This is especially noticeable if
 .Ql @{...}
 is used in complex ways.
-.\" .Sh SECURITY CONSIDERATIONS
-.\" Not used in OpenBSD.
+.Sh SECURITY CONSIDERATIONS
+The symbol
+.Ql __SECURE__
+contains an integer storing the security level, which controls how
+.Nm
+may invoke subprocesses.
+The default is zero which signifies no restrictions.
+In particular, this allows the
+.Ql @shell
+command to attempt execution of any program the user specifies.
+At secure level 1, the
+.Ql @shell
+command is disabled entirely.
+However, programs required for
+.Nm Ap s
+operation (as defined in the
+.Va PROG
+array) are still permitted, since the user cannot modify them.
+At level 2, all external programs are prohibited, including those
+normally considered safe, such as
+.Xr date 1
+or
+.Xr hostname 1 .
+This level will have a detrimental affect on
+.Nm Ap s
+capabilities, such as disabling
+.Ql @time@
+et al.

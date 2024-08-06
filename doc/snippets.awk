@@ -104,3 +104,36 @@ function dbg_message(key, lev, text, file, line)
     if (dbg(key, lev))
         print_stderr(format_message(text, file, line))
 }
+
+
+# OLD dodef()
+# Finally, the dodef() function handles the defining of macros.  It
+# saves the macro name from $2, and then uses sub() to remove the first
+# two fields.  The new value of $0 now contains just (the first line of)
+# the macro body.  The Computer Language article explains that sub() is
+# used on purpose, in order to preserve whitespace in the macro body.
+# Simply assigning the empty string to $1 and $2 would rebuild the
+# record, but with all occurrences of whitespace collapsed into single
+# occurrences of the value of OFS (a single blank).  The function then
+# proceeds to gather the rest of the macro body, indicated by lines that
+# end with a "\".  This is an additional improvement over m0: macro
+# bodies can be more than one line long.
+#
+# Caller is responsible for checking NF, so we don't check here.
+# Caller is responsible for ensuring sym name is valid.
+# Caller is responsible for ensuring sym is not protected.
+# function dodef(append_flag,    sym, str, x)
+# {
+#     sym = $2
+#     sub(/^[ \t]*[^ \t]+[ \t]+[^ \t]+[ \t]*/, "")  # old bug: last * was +
+#     str = $0
+#     while (str ~ /\\$/) {
+#         if (readline() != OKAY)
+#             error("Unexpected end of definition:" sym)
+#         # old bug: sub(/\\$/, "\n" $0, str)
+#         x = $0
+#         sub(/^[ \t]+/, "", x)
+#         str = chop(str) "\n" x
+#     }
+#     nsym_store(sym, append_flag ? nsym_fetch(sym) str : str)
+# }

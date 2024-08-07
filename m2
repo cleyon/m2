@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-08-06 19:30:57 cleyon>
+#  Time-stamp:  <2024-08-06 20:22:22 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -804,30 +804,33 @@ function initialize_debugging()
 }
 
 
-function clear_debugging()
+function clear_debugging(    dsys)
 {
-    dbg_set_level("args",       0)
-    dbg_set_level("block",      0)
-    dbg_set_level("braces",     0)
-    dbg_set_level("case",       0)
-    dbg_set_level("del",        0)
-    dbg_set_level("divert",     0)
-    dbg_set_level("dosubs",     0)
-    dbg_set_level("dump",       0)
-    dbg_set_level("expr",       0)
-    dbg_set_level("for",        0)
-    dbg_set_level("if",         0)
-    dbg_set_level("io",         0)
-    dbg_set_level("namespace",  0)
-    dbg_set_level("ncmd",       0)
-    dbg_set_level("nnam",       0)
-    dbg_set_level("nseq",       0)
-    dbg_set_level("nsym",       0)
-    dbg_set_level("read",       0)
-    dbg_set_level("scan",       0)
-    dbg_set_level("ship_out",   0)
-    dbg_set_level("symbol",     0)
-    dbg_set_level("xeq",        0)
+    for (dsys in _dbg_sys_array)
+        nsym_ll_write("__DBG__", dsys, GLOBAL_NAMESPACE, 0)
+
+    # dbg_set_level("args",       0)
+    # dbg_set_level("block",      0)
+    # dbg_set_level("braces",     0)
+    # dbg_set_level("case",       0)
+    # dbg_set_level("del",        0)
+    # dbg_set_level("divert",     0)
+    # dbg_set_level("dosubs",     0)
+    # dbg_set_level("dump",       0)
+    # dbg_set_level("expr",       0)
+    # dbg_set_level("for",        0)
+    # dbg_set_level("if",         0)
+    # dbg_set_level("io",         0)
+    # dbg_set_level("namespace",  0)
+    # dbg_set_level("ncmd",       0)
+    # dbg_set_level("nnam",       0)
+    # dbg_set_level("nseq",       0)
+    # dbg_set_level("nsym",       0)
+    # dbg_set_level("read",       0)
+    # dbg_set_level("scan",       0)
+    # dbg_set_level("ship_out",   0)
+    # dbg_set_level("symbol",     0)
+    # dbg_set_level("xeq",        0)
 }
 
 

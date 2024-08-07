@@ -63,6 +63,8 @@ evaluate, control, or define macros for subsequent processing:
 Add TEXT to an already defined macro NAME
 .It @array ARR
 Declare ARR as an array
+.It @break
+Interrupt enclosing @for or @while loop.
 .It @case NAME
 Evaluate value of NAME, comparing it with
 .It \ \ \ @of TEXT
@@ -73,6 +75,8 @@ use text from @otherwise block if present.
 End @case structure.  Also @esac
 .It @comment [TEXT]
 Comment; ignore line.  Also @@, @c, @;, and @#
+.It @continue
+Continue next iteration of @for or @while loop
 .It @debug [TEXT]
 If debugging, send TEXT to standard error
 .It @decr NAME [N]
@@ -165,6 +169,10 @@ Inject stream N (def all) into current stream
 Include subsequent text if NAME == 0 (or undefined)
 .It @warn [TEXT]
 Send TEXT to standard error; continue.  Also called @echo, @stderr
+.It @while [CONDITION]
+Repeatedly evaluate input lines while CONDITION is True.
+.It \ \ \ <...>
+.It @endwhile
 .El
 .Pp
 Short macros can be defined on the command line by using the form

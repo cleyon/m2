@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-08-06 20:22:22 cleyon>
+#  Time-stamp:  <2024-08-07 02:49:27 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -47,13 +47,13 @@ BEGIN {
     EX_NOINPUT       = 66
 
     # Flags
-    TYPE_ANY         = "*";             FLAG_BLKARRAY    = "a"
-    TYPE_ARRAY       = "1";             FLAG_BOOLEAN     = "B"
-    TYPE_COMMAND     = "2";             FLAG_DEFERRED    = "D"
-    TYPE_USER        = "3";             FLAG_IMMEDIATE   = "!"
-    TYPE_FUNCTION    = "4";             FLAG_INTEGER     = "I"
-    TYPE_SEQUENCE    = "5";             FLAG_NUMERIC     = "N"
-    TYPE_SYMBOL      = "6";             FLAG_READONLY    = "R"
+    TYPE_ANY         = "*";             FLAG_BLKARRAY    = "K"
+    TYPE_ARRAY       = "A";             FLAG_BOOLEAN     = "B"
+    TYPE_COMMAND     = "C";             FLAG_DEFERRED    = "D"
+    TYPE_USER        = "U";             FLAG_IMMEDIATE   = "!"
+    TYPE_FUNCTION    = "F";             FLAG_INTEGER     = "I"
+    TYPE_SEQUENCE    = "Q";             FLAG_NUMERIC     = "N"
+    TYPE_SYMBOL      = "S";             FLAG_READONLY    = "R"
                                         FLAG_WRITABLE    = "W"
                                         FLAG_SYSTEM      = "Y"
 
@@ -764,7 +764,7 @@ BEGIN {
 
     nnamtab["__DBG__", GLOBAL_NAMESPACE] = TYPE_ARRAY FLAG_SYSTEM
     split("args block braces case del divert dosubs dump expr for if io namespace" \
-          " ncmd nnam nseq nsym read scan ship_out symbol xeq",
+          " ncmd nnam nseq nsym read scan ship_out symbol while xeq",
           _dbg_sys_array, " ")
     for (_dsys in _dbg_sys_array) {
         __dbg_sysnames[_dbg_sys_array[_dsys]] = TRUE
@@ -786,7 +786,7 @@ function initialize_debugging()
     dbg_set_level("dump",       5)
    #dbg_set_level("expr",       0)
     dbg_set_level("for",        5)
-    dbg_set_level("if",         5)
+    dbg_set_level("if",         7)
     dbg_set_level("io",         3)
     dbg_set_level("namespace",  5)
     dbg_set_level("ncmd",       5)
@@ -797,6 +797,7 @@ function initialize_debugging()
     dbg_set_level("scan",       5)
     dbg_set_level("ship_out",   5)
    #dbg_set_level("symbol",     0)
+    dbg_set_level("while",      5)
     dbg_set_level("xeq",        5)
 
     nsym_ll_write("__STRICT__", "cmd", GLOBAL_NAMESPACE, TRUE)
@@ -830,6 +831,7 @@ function clear_debugging(    dsys)
     # dbg_set_level("scan",       0)
     # dbg_set_level("ship_out",   0)
     # dbg_set_level("symbol",     0)
+    # dbg_set_level("while",      0)
     # dbg_set_level("xeq",        0)
 }
 
@@ -1073,6 +1075,8 @@ function nblk_new(blk_type,
         nblktab[new_blknum, "terminator"] = "@endlong|@endlongdef"
     else if (blk_type == BLK_USER)
         nblktab[new_blknum, "terminator"] = "@endcmd"
+    else if (blk_type == BLK_WHILE)
+        nblktab[new_blknum, "terminator"] = "@endwhile"
     else
         error("(nblk_new) Uncaught blk_type '" blk_type "'")
 
@@ -1238,6 +1242,11 @@ function ship_out__block(blknum,
 function execute__block(blknum,
                         blk_type, old_level)
 {
+    if (__loop_ctl != LOOP_NORMAL) {
+        dbg_print("xeq", 3, "(execute__block) NOP due to loop_ctl=" __loop_ctl)
+        return
+    }
+
     blk_type = nblktab[blknum , "type"]
     dbg_print("xeq", 3, sprintf("(execute__block) START blknum=%d, type=%s",
                                 blknum, ppf_block_type(blk_type)))
@@ -1249,6 +1258,7 @@ function execute__block(blknum,
     else if (blk_type == BLK_IF)        xeq_blk__if(blknum)
     else if (blk_type == BLK_LONGDEF)   xeq_blk__longdef(blknum)
     else if (blk_type == BLK_USER)      xeq_blk__user(blknum)
+    else if (blk_type == BLK_WHILE)     xeq_blk__while(blknum)
     else {
         error(sprintf("(execute__block) Block # %d: type %s (%s) not handled",
                       blknum, blk_type, ppf_block_type(blk_type)))
@@ -1426,6 +1436,10 @@ function ship_out__command(cmdline,
 function execute__command(name, cmdline,
                           old_level)
 {
+    if (__loop_ctl != LOOP_NORMAL) {
+        dbg_print("xeq", 3, "(execute__command) NOP due to loop_ctl=" __loop_ctl)
+        return
+    }
     dbg_print("xeq", 3, sprintf("(execute__command) START name='%s', cmdline='%s'",
                                 name, cmdline))
 
@@ -1436,6 +1450,8 @@ function execute__command(name, cmdline,
     # NB - immediate commands are not listed here; instead, [search: IMMEDS]
     if      (name == "append")      xeq_cmd__define(name, cmdline)
     else if (name == "array")       xeq_cmd__array(name, cmdline)
+    else if (name == "break")       xeq_cmd__break(name, cmdline)
+    else if (name == "continue")    xeq_cmd__continue(name, cmdline)
     else if (name == "debug")       xeq_cmd__error(name, cmdline)
     else if (name == "decr")        xeq_cmd__incr(name, cmdline)
     else if (name == "default")     xeq_cmd__define(name, cmdline)
@@ -1736,6 +1752,16 @@ function scan(              code, terminator, readstat, name, retval, new_block,
                         }
                         error("(scan) [" scanner_label "] Found @endlongdef but expecting '" terminator "'")
 
+                    } else if (name == "endwhile") {
+                        dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__endwhile(dstblk=" curr_dstblk() ")"))
+                        scan__endwhile()
+                        dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__endwhile() : dstblk => " curr_dstblk()))
+                        if (match($1, terminator)) {
+                            dbg_print("scan", 5, "(scan) [" scanner_label "] END; @endwhile matched terminator => TRUE")
+                            return TRUE
+                        }
+                        error("(scan) [" scanner_label "] Found @endwhile but expecting '" terminator "'")
+
                     } else if (name == "for" || name == "foreach") {
                         dbg_print("scan", 5, sprintf("(scan) [%s] curr_dstblk()=%d CALLING scan__for()",
                                                      scanner_label, curr_dstblk()))
@@ -1789,6 +1815,14 @@ function scan(              code, terminator, readstat, name, retval, new_block,
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__otherwise(dstblk=" curr_dstblk() ")"))
                         scan__otherwise()
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__otherwise() : dstblk => " curr_dstblk()))
+
+                    } else if (name == "while") {
+                        dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__while(dstblk=" curr_dstblk() ")"))
+                        new_block = scan__while()
+                        dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__while() : new_block => " new_block))
+                        dbg_print("scan", 5, sprintf("(scan) [" scanner_label "] CALLING ship_out__block(%d)", new_block))
+                        ship_out__block(new_block)
+                        dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM ship_out__block()"))
 
                     } else
                         error("(scan) [" scanner_label "] Found immediate cmd " name " but no handler")
@@ -3221,6 +3255,10 @@ function ship_out__text(text,
 
 function execute__text(text)
 {
+    if (__loop_ctl != LOOP_NORMAL) {
+        dbg_print("xeq", 3, "(execute__text) NOP due to loop_ctl=" __loop_ctl)
+        return
+    }
     dbg_print("xeq", 3, sprintf("(execute__text) START; text='%s'", text))
 
     if (__print_mode == MODE_TEXT_PRINT) {
@@ -3237,7 +3275,7 @@ function execute__text(text)
 
 #*****************************************************************************
 #
-#       @ A R R A Y
+#       @  A R R A Y
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
@@ -3262,7 +3300,30 @@ function xeq_cmd__array(name, cmdline,
 
 #*****************************************************************************
 #
-#       @ C A S E
+#       @  B R E A K
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#*****************************************************************************
+# @break
+function xeq_cmd__break(name, cmdline)
+{
+    # Follow scan stack upwards to make sure there's a @for or @while
+    # loop to break out of
+
+    # Logical check
+    if (__loop_ctl != LOOP_NORMAL)
+        error("(xeq_cmd__break) __loop_ctl is not normal, how did that happen?")
+
+    __loop_ctl = LOOP_BREAK
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  C A S E
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
@@ -3414,7 +3475,30 @@ function xeq_blk__case(case_block,
 
 #*****************************************************************************
 #
-#       @ D E F I N E
+#       @  C O N T I N U E
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#*****************************************************************************
+# @continue
+function xeq_cmd__continue(name, cmdline)
+{
+    # Follow scan stack upwards to make sure there's a @for or @while
+    # loop to break out of
+
+    # Logical check
+    if (__loop_ctl != LOOP_NORMAL)
+        error("(xeq_cmd__continue) __loop_ctl is not normal, how did that happen?")
+
+    __loop_ctl = LOOP_CONTINUE
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  D E F I N E
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
@@ -3455,7 +3539,7 @@ function xeq_cmd__define(name, cmdline,
 
 #*****************************************************************************
 #
-#       @ D I V E R T
+#       @  D I V E R T
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
@@ -3482,7 +3566,7 @@ function xeq_cmd__divert(name, cmdline,
 
 #*****************************************************************************
 #
-#       @ D U M P
+#       @  D U M P
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
@@ -3649,7 +3733,7 @@ function _less_than(s1, s2,    fs1, fs2, d1, d2)
 
 #*****************************************************************************
 #
-#       @ E R R O R
+#       @  E R R O R
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
@@ -3699,7 +3783,7 @@ function xeq_cmd__error(name, cmdline,
 
 #*****************************************************************************
 #
-#       @ E X I T
+#       @  E X I T
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
@@ -3718,7 +3802,7 @@ function xeq_cmd__exit(name, cmdline,
 
 #*****************************************************************************
 #
-#       @ F O R
+#       @  F O R
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
@@ -3830,6 +3914,10 @@ function xeq_blk__for(for_block,
 function execute__for(for_block,
                       loopvar, start, end, incr, done, counter, body_block, new_level)
 {
+    # if (__loop_ctl != LOOP_NORMAL) {
+    #     dbg_print("xeq", 3, "(execute__for) NOP due to loop_ctl=" __loop_ctl)
+    #     return
+    # }
     # Evaluate loop
     loopvar    = nblktab[for_block, "loopvar"]
     start      = nblktab[for_block, "start"] + 0
@@ -3859,6 +3947,17 @@ function execute__for(for_block,
         lower_namespace()
         done = (incr > 0) ? (counter +=     incr ) > end \
                           : (counter -= abs(incr)) < end
+
+        # Check for break or continue
+        if (__loop_ctl == LOOP_BREAK) {
+            __loop_ctl = LOOP_NORMAL
+            break
+        }
+        if (__loop_ctl == LOOP_CONTINUE) {
+            __loop_ctl = LOOP_NORMAL
+            # Actual "continue" wouldn't do anything here since we're
+            # about to re-iterate the loop anyway
+        }
     }
     dbg_print("for", 1, "(execute__for) END")
 }
@@ -3867,6 +3966,10 @@ function execute__for(for_block,
 function execute__foreach(for_block,
                           loopvar, arrname, level, keys, x, k, body_block, new_level)
 {
+    # if (__loop_ctl != LOOP_NORMAL) {
+    #     dbg_print("xeq", 3, "(execute__foreach) NOP due to loop_ctl=" __loop_ctl)
+    #     return
+    # }
     loopvar = nblktab[for_block, "loopvar"]
     arrname = nblktab[for_block, "arrname"]
     body_block = nblktab[for_block, "body_block"]
@@ -3888,6 +3991,17 @@ function execute__foreach(for_block,
         execute__block(body_block)
         dbg_print("for", 5, sprintf("(execute__for) RETURNED FROM execute__block()"))
         lower_namespace()
+
+        # Check for break or continue
+        if (__loop_ctl == LOOP_BREAK) {
+            __loop_ctl = LOOP_NORMAL
+            break
+        }
+        if (__loop_ctl == LOOP_CONTINUE) {
+            __loop_ctl = LOOP_NORMAL
+            # Actual "continue" wouldn't do anything here since we're
+            # about to re-iterate the loop anyway
+        }
     }
     dbg_print("for", 1, "(execute__for) END")
 }
@@ -3897,7 +4011,7 @@ function execute__foreach(for_block,
 
 #*****************************************************************************
 #
-#       @ I F
+#       @  I F
 #   
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
@@ -3910,7 +4024,7 @@ function scan__if(                 name, if_block, true_block, scanstat)
     $1 = ""
     sub("^[ \t]*", "")
 
-    # Create two newblocks: one for if_block, other for true branch
+    # Create two new blocks: one for if_block, other for true branch
     if_block = nblk_new(BLK_IF)
     dbg_print("if", 5, "(scan__if) New block # " if_block " type " ppf_block_type(nblk_type(if_block)))
     true_block = nblk_new(BLK_AGG)
@@ -4001,8 +4115,8 @@ function xeq_blk__if(if_block,
     # Evaluate condition, determine if TRUE/FALSE and also
     # which block to follow.  For now, always take TRUE path
     condition = nblktab[if_block, "condition"]
-    condval = eval_if_cond(condition, nblktab[if_block, "init_negate"])
-    dbg_print("if", 1, sprintf("(xeq_blk__if) eval_if_cond('%s') => %s", condition, ppf_bool(condval)))
+    condval = evaluate_condition(condition, nblktab[if_block, "init_negate"])
+    dbg_print("if", 1, sprintf("(xeq_blk__if) evaluate_condition('%s') => %s", condition, ppf_bool(condval)))
     if (condval == ERROR)
         error("@if: Uncaught error")
 
@@ -4031,11 +4145,11 @@ function xeq_blk__if(if_block,
 #           @if env(VAR)
 #           @if exists(FILE)
 #           @if KEY in ARR
-function eval_if_cond(cond, negate,
+function evaluate_condition(cond, negate,
                       retval, name, sp, op, expr,
-                      nparts, arr, key, info, level)
+                        nparts, arr, key, info, level, lhs, rhs, lval, rval)
 {
-    dbg_print("if", 7, sprintf("(eval_if_cond) START cond='%s'", cond))
+    dbg_print("if", 7, sprintf("(evaluate_condition) START cond='%s'", cond))
     if (cond == EMPTY) {
         error("@if: Condition cannot be empty")
         return ERROR
@@ -4048,41 +4162,41 @@ function eval_if_cond(cond, negate,
     }
 
     cond = dosubs(cond)
-    dbg_print("if", 4, sprintf("(eval_if_cond) 111 After dosubs, cond='%s'", cond))
+    dbg_print("if", 4, sprintf("(evaluate_condition) After dosubs, cond='%s'", cond))
 
     if (cond ~ /^[0-9]+$/) {
-        dbg_print("if", 6, sprintf("@if: Found simple integer '%s'", cond))
+        dbg_print("if", 6, sprintf("(evaluate_condition) Found simple integer '%s'", cond))
         retval = (cond+0) != 0
 
     } else if (cond ~ /^[A-Za-z_][A-Za-z0-9_]*$/) {
-        dbg_print("if", 6, sprintf("@if: Found simple name '%s'", cond))
+        dbg_print("if", 6, sprintf("(evaluate_condition) Found simple name '%s'", cond))
         assert_nsym_valid_name(cond)
         retval = nsym_true_p(cond)
 
     } else if (match(cond, "^defined(.*)$")) {
         name = substr(cond, RSTART+8, RLENGTH-9)
-        dbg_print("if", 6, sprintf("@if: Found condition defined(%s)", name))
+        dbg_print("if", 6, sprintf("(evaluate_condition) Found condition defined(%s)", name))
         if (name == EMPTY) return ERROR
         assert_nsym_valid_name(name)
         retval = nsym_defined_p(name)
 
     } else if (match(cond, "^env(.*)$")) {
         name = substr(cond, RSTART+4, RLENGTH-5)
-        dbg_print("if", 6, sprintf("@if: Found condition env(%s)", name))
+        dbg_print("if", 6, sprintf("(evaluate_condition) Found condition env(%s)", name))
         if (name == EMPTY) return ERROR
         assert_valid_env_var_name(name)
         retval = name in ENVIRON
 
     } else if (match(cond, "^exists(.*)$")) {
         name = substr(cond, RSTART+7, RLENGTH-8)
-        dbg_print("if", 6, sprintf("@if: Found condition exists(%s)", name))
+        dbg_print("if", 6, sprintf("(evaluate_condition) Found condition exists(%s)", name))
         if (name == EMPTY) return ERROR
         retval = path_exists_p(name)
         #print_stderr(sprintf("File '%s' exists?  %s", name, ppf_bool(retval)))
 
     } else if (match(cond, ".* (in|IN) .*")) { # poor regexp, fragile
         # This whole section is pretty easy to confound....
-        dbg_print("if", 5, sprintf("@if: Found IN expression"))
+        dbg_print("if", 5, sprintf("(evaluate_condition) Found IN expression"))
         # Find name
         sp = index(cond, " ")
         key = substr(cond, 1, sp-1)
@@ -4104,34 +4218,45 @@ function eval_if_cond(cond, negate,
 
     } else if (match(cond, ".* (<|<=|==|!=|>=|>) .*")) { # poor regexp, fragile
         # This whole section is pretty easy to confound....
-        dbg_print("if", 6, sprintf("@if: Found expression"))
+        dbg_print("if", 6, sprintf("(evaluate_condition) Found expression"))
         # Find name
         sp = index(cond, " ")
-        name = substr(cond, 1, sp-1)
+        lhs = substr(cond, 1, sp-1)
         cond = substr(cond, sp+1)
         # Find the condition
         match(cond, "[<>=!]*")
         op = substr(cond, RSTART, RLENGTH)
-        expr = substr(cond, RLENGTH+2)
-        dbg_print("if", 6, sprintf("name='%s', op='%s', expr='%s'", name, op, expr))
-        assert_nsym_defined(name) # or, might be a sequence
+        rhs = substr(cond, RLENGTH+2)
 
-        if (nsym_valid_p(expr) && nsym_defined_p(expr))
-            expr = nsym_fetch(expr)
+        if (nsym_valid_p(lhs) && nsym_defined_p(lhs))
+            lval = nsym_fetch(lhs)
+        else if (nseq_defined_p(lhs))
+            lval = nseq_ll_read(lhs)
+        else
+            lval = lhs
 
-        if      (op == "<")                 retval = nsym_fetch(name) <  expr
-        else if (op == "<=")                retval = nsym_fetch(name) <= expr
-        else if (op == "="  || op == "==")  retval = nsym_fetch(name) == expr
-        else if (op == "!=" || op == "<>")  retval = nsym_fetch(name) != expr
-        else if (op == ">=")                retval = nsym_fetch(name) >= expr
-        else if (op == ">")                 retval = nsym_fetch(name) >  expr
+        if (nsym_valid_p(rhs) && nsym_defined_p(rhs))
+            rval = nsym_fetch(rhs)
+        else if (nseq_defined_p(rhs))
+            rval = nseq_ll_read(rhs)
+        else
+            rval = rhs
+
+        dbg_print("if", 6, sprintf("(evaluate_condition) lhs='%s'[%s], op='%s', rhs='%s'[%s]", lhs, lval, op, rhs, rval))
+
+        if      (op == "<")                 retval = lval <  rval
+        else if (op == "<=")                retval = lval <= rval
+        else if (op == "="  || op == "==")  retval = lval == rval
+        else if (op == "!=" || op == "<>")  retval = lval != rval
+        else if (op == ">=")                retval = lval >= rval
+        else if (op == ">")                 retval = lval >  rval
         else
             error("Comparison operator '" op "' invalid")
     }
 
     if (negate && retval != ERROR)
         retval = !retval
-    dbg_print("if", 3, sprintf("(eval_if_cond) END retval=%s", (retval == ERROR) ? "ERROR" \
+    dbg_print("if", 3, sprintf("(evaluate_condition) END retval=%s", (retval == ERROR) ? "ERROR" \
                                                                    : ppf_bool(retval)))
     return retval
 }
@@ -4141,7 +4266,7 @@ function eval_if_cond(cond, negate,
 
 #*****************************************************************************
 #
-#       @ I G N O R E
+#       @  I G N O R E
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
@@ -4170,7 +4295,7 @@ function xeq_cmd__ignore(name, cmdline,
 
 #*****************************************************************************
 #
-#       @ I N C L U D E
+#       @  I N C L U D E
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
@@ -4215,7 +4340,7 @@ function xeq_cmd__include(name, cmdline,
 
 #*****************************************************************************
 #
-#       @ I N C R
+#       @  I N C R
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
@@ -4241,7 +4366,7 @@ function xeq_cmd__incr(name, cmdline,
 
 #*****************************************************************************
 #
-#       @ I N P U T
+#       @  I N P U T
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
@@ -4271,7 +4396,7 @@ function xeq_cmd__input(name, cmdline,
 
 #*****************************************************************************
 #
-#       @ L O C A L
+#       @  L O C A L
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
@@ -4302,7 +4427,7 @@ function xeq_cmd__local(name, cmdline,
 
 #*****************************************************************************
 #
-#       @ L O N G D E F
+#       @  L O N G D E F
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
@@ -4312,7 +4437,7 @@ function scan__longdef(    sym, nsym_block, body_block, scanstat)
 {
     dbg_print("nsym", 5, "(scan__longdef) START dstblk=" curr_dstblk() ", mode=" ppf_mode(curr_atmode()) "; $0='" $0 "'")
 
-    # Create two newblocks: one for the "longdef" block, other for definition body
+    # Create two new blocks: one for the "longdef" block, other for definition body
     nsym_block = nblk_new(BLK_LONGDEF)
     dbg_print("nsym", 5, "(scan__longdef) New block # " nsym_block " type " ppf_block_type(nblk_type(nsym_block)))
     body_block = nblk_new(BLK_AGG)
@@ -4384,7 +4509,7 @@ function xeq_blk__longdef(longdef_block,
 
 #*****************************************************************************
 #
-#       @ M 2
+#       @  M 2
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
@@ -4420,7 +4545,7 @@ function xeq_cmd__m2(name, cmdline,
 
 #*****************************************************************************
 #
-#       @ N E W C M D
+#       @  N E W C M D
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
@@ -4430,7 +4555,7 @@ function scan__newcmd(                     name, newcmd_block, body_block, scans
     nparam = 0
     dbg_print("ncmd", 5, "(scan__newcmd) START dstblk=" curr_dstblk() ", mode=" ppf_mode(curr_atmode()) "; $0='" $0 "'")
 
-    # Create two newblocks: one for the "new command" block, other for command body
+    # Create two new blocks: one for the "new command" block, other for command body
     newcmd_block = nblk_new(BLK_USER)
     dbg_print("ncmd", 5, "(scan__newcmd) New block # " newcmd_block " type " ppf_block_type(nblk_type(newcmd_block)))
     body_block = nblk_new(BLK_AGG)
@@ -4559,6 +4684,10 @@ function execute__user(name, cmdline,
                        user_block,
                        args, arg, narg, argval)
 {
+    if (__loop_ctl != LOOP_NORMAL) {
+        dbg_print("xeq", 3, "(execute__user) NOP due to loop_ctl=" __loop_ctl)
+        return
+    }
     dbg_print("xeq", 3, sprintf("(execute__user) START name='%s', cmdline='%s'",
                                 name, cmdline))
 
@@ -4635,7 +4764,7 @@ function execute__user_body(user_block, args,
 
 #*****************************************************************************
 #
-#       @ N E X T F I L E
+#       @  N E X T F I L E
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
@@ -4660,7 +4789,7 @@ function xeq_cmd__nextfile(name, cmdline,
 
 #*****************************************************************************
 #
-#       @ R E A D A R R A Y
+#       @  R E A D A R R A Y
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
@@ -4749,7 +4878,7 @@ function xeq_cmd__readarray(name, cmdline,
 
 #*****************************************************************************
 #
-#       @ R E A D F I L E
+#       @  R E A D F I L E
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
@@ -4797,7 +4926,7 @@ function xeq_cmd__readfile(name, cmdline,
 
 #*****************************************************************************
 #
-#       @ R E A D O N L Y
+#       @  R E A D O N L Y
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
@@ -4849,7 +4978,7 @@ function xeq_cmd__readonly(cmd, cmdline,
 
 #*****************************************************************************
 #
-#       @ S E Q U E N C E
+#       @  S E Q U E N C E
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
@@ -4938,7 +5067,7 @@ function xeq_cmd__sequence(name, cmdline,
 
 #*****************************************************************************
 #
-#       @ S H E L L
+#       @  S H E L L
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
@@ -5016,7 +5145,7 @@ function xeq_cmd__shell(name, cmdline,
 
 #*****************************************************************************
 #
-#       @ T Y P E O U T
+#       @  T Y P E O U T
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
@@ -5047,7 +5176,7 @@ function xeq_cmd__typeout(name, cmdline,
 
 #*****************************************************************************
 #
-#       @ U N D E F I N E
+#       @  U N D E F I N E
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
@@ -5102,7 +5231,7 @@ function xeq_cmd__undefine(name, cmdline,
 
 #*****************************************************************************
 #
-#       @ U N D I V E R T
+#       @  U N D I V E R T
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
@@ -5128,6 +5257,123 @@ function xeq_cmd__undivert(name, cmdline,
             undivert(stream)
         }
     }
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  W H I L E
+#   
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#*****************************************************************************
+# @while CONDITION
+function scan__while(                 name, while_block, body_block, scanstat)
+{
+    dbg_print("while", 3, sprintf("(scan__while) START dstblk=%d, $0='%s'", curr_dstblk(), $0))
+    name = $1
+    $1 = ""
+    sub("^[ \t]*", "")
+
+    # Create two new blocks: one for while_block, other for true branch
+    while_block = nblk_new(BLK_WHILE)
+    dbg_print("while", 5, "(scan__while) New block # " while_block " type " ppf_block_type(nblk_type(while_block)))
+    body_block = nblk_new(BLK_AGG)
+    dbg_print("while", 5, "(scan__while) New block # " body_block " type " ppf_block_type(nblk_type(body_block)))
+
+    nblktab[while_block, "condition"] = $0
+    nblktab[while_block, "init_negate"] = FALSE
+    nblktab[while_block, "body_block"] = body_block
+    nblktab[while_block, "dstblk"] = body_block
+    nblktab[while_block, "valid"]      = FALSE
+    dbg_print_block("while", 7, while_block, "(scan__while) while_block")
+    nstk_push(__scan_stack, while_block) # Push it on to the scan_stack
+
+    dbg_print("while", 5, "(scan__while) CALLING scan()")
+    scanstat = scan() # scan() should return after it encounters @endif
+    dbg_print("while", 5, "(scan__while) RETURNED FROM scan() => " ppf_bool(scanstat))
+    if (!scanstat)
+        error("(scan__while) Scan failed")
+
+    dbg_print("while", 5, "(scan__while) END; => " while_block)
+    return while_block
+}
+
+
+# @endwhile
+function scan__endwhile(                    while_block)
+{
+    dbg_print("while", 3, sprintf("(scan__endwhile) START dstblk=%d, mode=%s",
+                               curr_dstblk(), ppf_mode(curr_atmode())))
+    # if (nstk_emptyp(__scan_stack))
+    #     error("(scan__endwhile) Scan stack is empty!")
+    # while_block = nstk_pop(__scan_stack)
+    # if ((nblktab[while_block, "type"] != BLK_WHILE) ||
+    #     (nblktab[while_block, "depth"] != nstk_depth(__scan_stack)))
+    #     error("(scan__endwhile) Corrupt scan stack")
+    assert_scan_stack_okay(BLK_WHILE)
+
+    while_block = nstk_pop(__scan_stack)
+    nblktab[while_block, "valid"] = TRUE
+
+    return while_block
+}
+
+
+function xeq_blk__while(while_block,
+                        blk_type, body_block, condition, condval)
+{
+    # if (__loop_ctl != LOOP_NORMAL) {
+    #     dbg_print("while", 3, "(xeq_blk__while) NOP due to loop_ctl=" __loop_ctl)
+    #     return
+    # }
+
+    blk_type = nblktab[while_block , "type"]
+    dbg_print("while", 3, sprintf("(xeq_blk__while) START dstblk=%d, while_block=%d, type=%s",
+                               curr_dstblk(), while_block, ppf_block_type(blk_type)))
+
+    dbg_print_block("while", 7, while_block, "(xeq_blk__while) while_block")
+    if ((nblktab[while_block, "type"] != BLK_WHILE) || \
+        (nblktab[while_block, "valid"] != TRUE))
+        error("(xeq_blk__while) Bad config")
+
+    # Evaluate condition, determine if TRUE/FALSE and also
+    # which block to follow.  For now, always take TRUE path
+    body_block = nblktab[while_block, "body_block"]
+    condition = nblktab[while_block, "condition"]
+    condval = evaluate_condition(condition, nblktab[while_block, "init_negate"])
+    dbg_print("while", 1, sprintf("(xeq_blk__while) Initial evaluate_condition('%s') => %s", condition, ppf_bool(condval)))
+    if (condval == ERROR)
+        error("@while: Uncaught error")
+
+    while (condval) {
+        raise_namespace()
+        dbg_print("while", 5, sprintf("(xeq_blk__while) CALLING execute__block(%d)",
+                                   body_block))
+        execute__block(body_block)
+        dbg_print("while", 5, sprintf("(xeq_blk__while) RETURNED FROM execute__block()"))
+        lower_namespace()
+
+        condval = evaluate_condition(condition, nblktab[while_block, "init_negate"])
+        dbg_print("while", 1, sprintf("(xeq_blk__while) Repeat evaluate_condition('%s') => %s", condition, ppf_bool(condval)))
+        if (condval == ERROR)
+            error("@while: Uncaught error")
+
+        # Check for break or continue
+        if (__loop_ctl == LOOP_BREAK) {
+            __loop_ctl = LOOP_NORMAL
+            break
+        }
+        if (__loop_ctl == LOOP_CONTINUE) {
+            __loop_ctl = LOOP_NORMAL
+            # Actual "continue" wouldn't do anything here since we're
+            # about to re-iterate the loop anyway
+        }
+    }
+
+    dbg_print("while", 3, sprintf("(xeq_blk__while) END"))
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -5941,10 +6187,16 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     BLK_LONGDEF   = "L";                __blk_label[BLK_LONGDEF] = "LONGDEF"
     BLK_REGEXP    = "R";                __blk_label[BLK_REGEXP]  = "REGEXP"
     BLK_USER      = "U";                __blk_label[BLK_USER]    = "USER"
+    BLK_WHILE     = "W";                __blk_label[BLK_WHILE]   = "WHILE"
+
+    LOOP_NORMAL   = 0
+    LOOP_BREAK    = 1
+    LOOP_CONTINUE = 2
 
     __block_cnt          = 0 # MAX_STREAM
     __buffer             = EMPTY
     __init_files_loaded  = FALSE # Becomes True in load_init_files()
+    __loop_ctl           = LOOP_NORMAL
     __ns_stack[0]        = GLOBAL_NAMESPACE
     __ord_initialized    = FALSE # Becomes True in initialize_ord()
     __print_mode         = MODE_TEXT_PRINT
@@ -6038,7 +6290,8 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     # CMDS
     # Built-in commands
     # Also need to add entry in execute__command()  [search: DISPATCH]
-    split("append array debug decr default define divert dump echo error exit ignore" \
+    split("append array break continue debug decr default define divert dump" \
+          " echo error exit ignore" \
           " include incr initialize input local m2 nextfile paste readfile" \
           " readarray readonly secho sequence sexit shell sinclude" \
           " spaste sreadfile sreadarray stderr typeout undefine undivert warn", array, " ")
@@ -6048,8 +6301,9 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
 
     # IMMEDS
     # These commands are Immediate
-    split("case dump! else endcase endcmd endif endlong endlongdef esac fi" \
-          " for foreach if ifdef ifndef longdef newcmd next of otherwise unless",
+    split("case dump! else endcase endcmd endif endlong endlongdef endwhile" \
+          " esac fi for foreach if ifdef ifndef longdef newcmd next of" \
+          " otherwise unless while",
           array, " ")
     for (elem in array)
         nnam_ll_write(array[elem], GLOBAL_NAMESPACE, TYPE_COMMAND FLAG_SYSTEM FLAG_IMMEDIATE)

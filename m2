@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-08-08 01:04:29 cleyon>
+#  Time-stamp:  <2024-08-08 10:27:28 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -21,7 +21,8 @@ BEGIN {
     M2_VERSION    = "4.0.0_pre2"
 
     # Customize these paths as needed for correct operation on your system.
-    __secure_level   = 0
+    # If a program is not available, it's okay to remove the entry entirely.
+    __secure_level   = 0        # secure_level 2 prevents invoking these programs
     PROG["basename"] = "/usr/bin/basename"
     PROG["date"]     = "/bin/date"
     PROG["dirname"]  = "/usr/bin/dirname"
@@ -3185,7 +3186,7 @@ function assert_nsym_okay_to_define(name,
 function assert_nsym_unprotected(sym)
 {
     if (nsym_protected_p(sym))
-        error("CCC Symbol '" sym "' protected:" $0)
+        error("Symbol '" sym "' protected:" $0)
 }
 
 
@@ -5015,11 +5016,8 @@ function xeq_cmd__readonly(cmd, cmdline,
     # nsymtab because NAME[KEY] might not be defined.
     code = info["code"]
 
-    print_stderr("AAA")
     assert_nsym_okay_to_define(sym)
-    print_stderr("BBB")
     assert_nsym_defined(sym, "readonly")
-    print_stderr("CCC")
 
     # if (flag_allfalse_p(code, TYPE_ARRAY TYPE_SYMBOL))
     #     error("@readonly: name must be symbol or array")

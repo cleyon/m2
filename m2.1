@@ -229,9 +229,9 @@ definition refers to a parameter which is not supplied.
 .Em WARNING :
 Parameters are parsed by splitting on white space.
 This means that in:
-.Dl @foo "a b" c
+.Dl @foo \[dq]a b\[dq] c
 .Va foo
-is given three arguments, not two: '"a', 'b"', and 'c'
+is given three arguments: '"a', 'b"', and 'c' -- not two!
 .Ed
 .Pp
 .Em Example :
@@ -1131,6 +1131,7 @@ line numbering, labeling, and argument passing.
 .Qc
 .Ed
 .Bl -hang -compact
+.\" Next line generates warning "can't break line".  That's okay...
 .It Lk https://www.govinfo.gov/content/pkg/GOVPUB-C13-dd583e065aac7203f7521309ec41220b/pdf/GOVPUB-C13-dd583e065aac7203f7521309ec41220b.pdf
 .El
 .It M8

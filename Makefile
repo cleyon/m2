@@ -28,6 +28,12 @@ callgraph-io:
 m2.cat1: m2.1
 	nroff -mdoc m2.1 > $@
 
+m2.ps: m2.1
+	groff -Tps -mdoc $^ > $@
+
+m2.pdf: m2.ps
+	pstopdf $^ -o $@
+
 gm2:
 	sed '1s,$(AWK),$(GAWK),' m2 > $@
 	chmod +x $@
@@ -55,5 +61,4 @@ tags:
 	$(TAGS) m2
 
 test check:
-#	@$(VPATH)/tests/check.sh $(VPATH)/tests $(pkgversion)
 	@./check.sh

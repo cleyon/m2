@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-08-07 02:49:27 cleyon>
+#  Time-stamp:  <2024-08-08 00:30:37 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -18,7 +18,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION    = "4.0.0_pre1"
+    M2_VERSION    = "4.0.0_pre2"
 
     # Customize these paths as needed for correct operation on your system.
     __secure_level   = 0
@@ -211,7 +211,7 @@ function extract_cmd_name(text,
     if (!match(text, "^@[a-zA-Z0-9_]+"))
         error("(extract_cmd_name) Could not understand command '" text "'")
     name = substr(text, 2, RLENGTH-1)
-    #dbg_print("xeq", 3, "(extract_cmd_name) '" text "' => '" name "'")
+    dbg_print("xeq", 7, "(extract_cmd_name) '" text "' => '" name "'")
     return name
 }
 
@@ -427,7 +427,7 @@ function curr_atmode(    top_block)
 function curr_dstblk(    top_block)
 {
     if (nstk_emptyp(__scan_stack))
-         error("(curr_dstblk) Scan stack is empty!")
+        error("(curr_dstblk) Scan stack is empty!")
     top_block = nstk_top(__scan_stack)
     dbg_print_block("ship_out", 7, top_block, "(curr_dstblk) top_block [top of __scan_stack]")
     if (! ( (top_block, "dstblk") in nblktab) ) {
@@ -455,22 +455,21 @@ function ppf_mode(mode)
 
 function raise_namespace()
 {
-    nstk_push(__ns_stack, nstk_depth(__ns_stack) + 1)
-    dbg_print("namespace", 4, "(raise_namespace) namespace now " nstk_depth(__ns_stack))
-    return nstk_depth(__ns_stack)
+    __namespace++
+    dbg_print("namespace", 4, "(raise_namespace) namespace now " __namespace)
+    return __namespace
 }
 
 
-function lower_namespace(    curr_level)
+function lower_namespace()
 {
-    if (nstk_emptyp(__ns_stack))
+    if (__namespace == GLOBAL_NAMESPACE)
         error("(lower_namespace) Cannot be called from global namespace")
-    curr_level = nstk_top(__ns_stack)
-    nsym_purge(curr_level)
-    nnam_purge(curr_level)
-    nstk_pop(__ns_stack)
-    dbg_print("namespace", 4, "(lower_namespace) namespace now " nstk_depth(__ns_stack))
-    return nstk_depth(__ns_stack)
+    nsym_purge(__namespace)
+    nnam_purge(__namespace)
+    __namespace--
+    dbg_print("namespace", 4, "(lower_namespace) namespace now " __namespace)
+    return __namespace
 }
 
 
@@ -704,7 +703,7 @@ function readline(    getstat, i)
             nsym_increment("__NLINE__", 1)
         }
     }
-#    dbg_print("io", 4, sprintf("(readline) return %d, '%s'", getstat, $0))
+    dbg_print("io", 6, sprintf("(readline) returns %d, $0='%s'", getstat, $0))
     return getstat
 }
 
@@ -764,7 +763,7 @@ BEGIN {
 
     nnamtab["__DBG__", GLOBAL_NAMESPACE] = TYPE_ARRAY FLAG_SYSTEM
     split("args block braces case del divert dosubs dump expr for if io namespace" \
-          " ncmd nnam nseq nsym read scan ship_out symbol while xeq",
+          " ncmd nnam nseq nstk nsym read scan ship_out symbol while xeq",
           _dbg_sys_array, " ")
     for (_dsys in _dbg_sys_array) {
         __dbg_sysnames[_dbg_sys_array[_dsys]] = TRUE
@@ -792,6 +791,7 @@ function initialize_debugging()
     dbg_set_level("ncmd",       5)
     dbg_set_level("nnam",       3)
     dbg_set_level("nseq",       3)
+    dbg_set_level("nstk",       5)
     dbg_set_level("nsym",       5)
    #dbg_set_level("read",       0)
     dbg_set_level("scan",       5)
@@ -826,6 +826,7 @@ function clear_debugging(    dsys)
     # dbg_set_level("ncmd",       0)
     # dbg_set_level("nnam",       0)
     # dbg_set_level("nseq",       0)
+    # dbg_set_level("nstk",       0)
     # dbg_set_level("nsym",       0)
     # dbg_set_level("read",       0)
     # dbg_set_level("scan",       0)
@@ -1032,6 +1033,18 @@ function dbg_print_block(dsys, lev, blknum, description,
                        nblktab[blknum, "body_block"],
                        chomp(slotinfo))
 
+    } else if (blk_type == BLK_WHILE) {
+        text = sprintf("Block # %d : %s\n" \
+                       "  type        : %s\n" \
+                       "  valid       : %s\n" \
+                       "  condition   : '%s'\n" \
+                       "  body_block  : %d",
+                       blknum, description,
+                       blk_label,
+                       ppf_bool(nblktab[blknum, "valid"]),
+                       nblktab[blknum, "condition"],
+                       nblktab[blknum, "body_block"])
+
     } else
         error(sprintf("(dbg_print_block) Can't handle type '%s' for block %d",
                       nblk_type(blknum), blknum))
@@ -1073,7 +1086,10 @@ function nblk_new(blk_type,
         nblktab[new_blknum, "terminator"] = "@next"
     else if (blk_type == BLK_LONGDEF)
         nblktab[new_blknum, "terminator"] = "@endlong|@endlongdef"
-    else if (blk_type == BLK_USER)
+    else if (blk_type == BLK_TERMINAL) {
+        nblktab[new_blknum, "atmode"] = MODE_AT_LITERAL
+        nblktab[new_blknum, "dstblk"] = TERMINAL
+    } else if (blk_type == BLK_USER)
         nblktab[new_blknum, "terminator"] = "@endcmd"
     else if (blk_type == BLK_WHILE)
         nblktab[new_blknum, "terminator"] = "@endwhile"
@@ -1088,11 +1104,9 @@ function nblk_new(blk_type,
 
 function nblk_type(blknum)
 {
-    # if ( (i, j) in A )  print A[i, j]         # EXAMPLE
-  # if (! (blknum, "type") in nblktab) {      # OLD
-    if (! ( (blknum,"type") in nblktab) ) {      # NEW
+    if (! ((blknum,"type") in nblktab))
         error("(nblk_type) Block # " blknum " has no type!")
-    }
+
     return nblktab[blknum, "type"]
 }
 
@@ -1251,7 +1265,7 @@ function execute__block(blknum,
     dbg_print("xeq", 3, sprintf("(execute__block) START blknum=%d, type=%s",
                                 blknum, ppf_block_type(blk_type)))
 
-    old_level = nstk_depth(__ns_stack)
+    old_level = __namespace
     if      (blk_type == BLK_AGG)       xeq_blk__agg(blknum)
     else if (blk_type == BLK_CASE)      xeq_blk__case(blknum)
     else if (blk_type == BLK_FOR)       xeq_blk__for(blknum)
@@ -1263,9 +1277,9 @@ function execute__block(blknum,
         error(sprintf("(execute__block) Block # %d: type %s (%s) not handled",
                       blknum, blk_type, ppf_block_type(blk_type)))
     }
-    if (nstk_depth(__ns_stack) != old_level)
-        error(sprintf("(execute__block) blknum=%d, type=%s: %s",
-                      blknum, ppf_block_type(blk_type), "Namespace level mismatch"))
+    if (__namespace != old_level)
+        error(sprintf("(execute__block) blknum=%d, type=%s: %s; old_level=%d, __namespace=%d",
+                      blknum, ppf_block_type(blk_type), "Namespace level mismatch", old_level, __namespace))
 }
 
 
@@ -1443,7 +1457,7 @@ function execute__command(name, cmdline,
     dbg_print("xeq", 3, sprintf("(execute__command) START name='%s', cmdline='%s'",
                                 name, cmdline))
 
-    old_level = nstk_depth(__ns_stack)
+    old_level = __namespace
 
     # DISPATCH
     # Also need an array entry to initialize command name.  [search: CMDS]
@@ -1483,22 +1497,21 @@ function execute__command(name, cmdline,
     else
         error("(execute__command) Unrecognized command '" name "' in '" cmdline "'")
 
-    if (nstk_depth(__ns_stack) != old_level)
+    if (__namespace != old_level)
         error("(execute__command) @%s %s: Namespace level mismatch")
 }
 
 
-function assert_ncmd_okay_to_define(name,
-                                    curr_level)
+function assert_ncmd_okay_to_define(name)
 {
     if (!ncmd_valid_p(name))
         error("Name '" name "' not valid:" $0)
-    curr_level = nstk_depth(__ns_stack)
+
     # FIXME This is not quite sufficient (I think).  I probably need
     # to do a full nnam_parse() / nnam_lookup() because I don't want
     # to shadow a system symbol.  At least I need to be more careful
     # than "it's not in the current namespace, looks good!!"
-    if (nnam_ll_in(name, curr_level))
+    if (nnam_ll_in(name, __namespace))
         error("Name '" name "' not available:" $0)
     return TRUE
 }
@@ -1513,10 +1526,26 @@ function assert_ncmd_okay_to_define(name,
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
 #*****************************************************************************
-function dofile(filename, create_only,
-                file_block, retval, cvtbool)
+function dump_scan_stack(    level, block, blk_type)
 {
-    dbg_print("scan", 5, "(dofile) START filename='" filename "', create_only=" ppf_bool(create_only))
+    print_stderr("BEGIN dump scan stack")
+    if (nstk_depth(__scan_stack) == 0)
+        print_stderr("scan stack is empty")
+    else
+        for (level = nstk_depth(__scan_stack); level > 0; level--) {
+            block = __scan_stack[level]
+            blk_type = nblk_type(block)
+            print_stderr("Level " level ", block # " block ", type=" blk_type )
+            dbg_print_block("xeq", -1, block)
+        }
+    print_stderr("END dump scan stack")
+}
+
+
+function prep_file(filename,
+                   file_block, retval)
+{
+    dbg_print("scan", 7, "(prep_file) START filename='" filename "'")
     # create and return a BLK_FILE set up for the terminal
     file_block = nblk_new(BLK_FILE)
     if (filename == "-")
@@ -1525,19 +1554,25 @@ function dofile(filename, create_only,
     nblktab[file_block, "dstblk"] = TERMINAL
     nblktab[file_block, "atmode"] = MODE_AT_PROCESS
 
-    if (create_only) {
-        dbg_print("scan", 5, "(dofile) END create_only is True, returning Block # " file_block)
-        retval = file_block
-        cvtbool = FALSE
-    } else {
-        nstk_push(__scan_stack, file_block)
-        dbg_print("scan", 5, "(dofile) CALLING scan__file()")
-        retval = scan__file()
-        dbg_print("scan", 5, "(dofile) RETURNED FROM scan__file()")
-        cvtbool = TRUE
-    }
+    dbg_print("scan", 7, "(prep_file) END; file_block => " file_block)
+    return file_block
+}
 
-    dbg_print("scan", 5, "(dofile) END => " (cvtbool ? ppf_bool(retval) : retval))
+
+function dofile(filename,
+                file_block, retval)
+{
+    dbg_print("scan", 5, "(dofile) START filename='" filename "'")
+    # create and return a BLK_FILE set up for the terminal
+    file_block = prep_file(filename)
+
+    dbg_print("scan", 7, sprintf("(dofile) Pushing file block %d (%s) onto scan_stack", file_block, filename))
+    nstk_push(__scan_stack, file_block)
+    dbg_print("scan", 5, "(dofile) CALLING scan__file()")
+    retval = scan__file()
+    dbg_print("scan", 5, "(dofile) RETURNED FROM scan__file()")
+
+    dbg_print("scan", 5, "(dofile) END => " ppf_bool(retval))
     return retval
 }
 
@@ -1569,6 +1604,7 @@ function scan__file(    filename, file_block1, file_block2, scanstat, d)
     if (!path_exists_p(filename)) {
         dbg_print("scan", 1, sprintf("(scan__file) END File '%s' does not exist => %s",
                                      filename, ppf_bool(FALSE)))
+        nstk_pop(__scan_stack)  # Remove BLK_FILE for non-existent file
         return FALSE
     }
     if (filename in __active_files)
@@ -1607,7 +1643,6 @@ function scan__file(    filename, file_block1, file_block2, scanstat, d)
     #     error("(scan__file) Corrupt scan stack")
     # }
     assert_scan_stack_okay(BLK_FILE)
-
     file_block2 = nstk_pop(__scan_stack)
     __buffer = nblktab[file_block2, "old.buffer"]
     nsym_ll_write("__FILE__",      "", GLOBAL_NAMESPACE, nblktab[file_block2, "old.file"])
@@ -1622,7 +1657,7 @@ function scan__file(    filename, file_block1, file_block2, scanstat, d)
 
 # SCAN
 function scan(              code, terminator, readstat, name, retval, new_block, fc,
-                            info, level, scanner, scanner_type, scanner_label)
+                            info, level, scanner, scanner_type, scanner_label, i, scnt, found)
 {
     dbg_print("scan", 3, "(scan) START dstblk=" curr_dstblk() ", mode=" ppf_mode(curr_atmode()))
 
@@ -1696,7 +1731,32 @@ function scan(              code, terminator, readstat, name, retval, new_block,
                     # This command is immediate, so we must run it right now.
                     # Some are known to create and return new blocks,
                     # which must be shipped out.
-                    if (name == "case") {
+
+                    if (name == "break" || name == "continue") {
+                        # @break and @continue are hybrid commands, with
+                        # both immediate and regular components.  The
+                        # scan_stack check for a FOR or WHILE must be
+                        # done immediately because the scan_stack is
+                        # gone by the time the command is shipped out.
+                        # But the actual effect of @break or @continue
+                        # is not seen until run-time, so the command
+                        # must also be shipped out like a normal command
+                        # would have been.
+                        found = FALSE
+                        for (i = nstk_depth(__scan_stack); i > 0; i--) {
+                            scnt = nblk_type(__scan_stack[i])
+                            if (scnt == BLK_FOR || scnt == BLK_WHILE) {
+                                found = TRUE
+                                break
+                            }
+                        }
+                        if (! found)
+                            error("@break/@continue: Did not find a @for or @while loop")
+                        dbg_print("scan", 3, sprintf("(scan) [%s] CALLING ship_out__command('%s')", scanner_label, $0))
+                        ship_out__command($0)
+                        dbg_print("scan", 3, "(scan) [" scanner_label "] RETURNED FROM ship_out__command()")
+
+                    } else if (name == "case") {
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__case(dstblk=" curr_dstblk() ")"))
                         new_block = scan__case()
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__case() : new_block => " new_block))
@@ -2197,7 +2257,7 @@ function nnam_lookup(info,
     name = info["name"]
     dbg_print("nsym", 5, sprintf("(nnam_lookup) sym='%s' START", name))
 
-    for (level = nstk_depth(__ns_stack); level >= GLOBAL_NAMESPACE; level--)
+    for (level = __namespace; level >= GLOBAL_NAMESPACE; level--)
         if (nnam_ll_in(name, level)) {
             info["code"] = code = nnam_ll_read(name, level)
             info["isarray"] = flag_1true_p(code, TYPE_ARRAY)
@@ -2349,7 +2409,7 @@ function assert_nseq_okay_to_define(name)
 #*****************************************************************************
 function nstk_depth(stack)
 {
-    return stack[0] + 0
+    return stack[0]
 }
 
 
@@ -2485,7 +2545,7 @@ function nsym_valid_p(sym,
 #     # code, with the level specified directly), and the user certainly
 #     # can't do it.
 #     #level = nnam_system_p(name) ? GLOBAL_NAMESPACE : __namespace
-#     level = nstk_depth(__ns_stack)
+#     level = __namespace
 #
 #     # Error if name exists at that level
 #     if (nsym_info_defined_lev_p(info, level))
@@ -2682,8 +2742,7 @@ function nsym_defined_p(sym,
 
     # We've found some matching name on some level, but not sure if it's a Symbol or not.
     # This step is necessary to make sure it's actually a Symbol.
-    for (i = nnam_system_p(name) ? GLOBAL_NAMESPACE : nstk_depth(__ns_stack); \
-         i >= GLOBAL_NAMESPACE; i--) {
+    for (i = nnam_system_p(name) ? GLOBAL_NAMESPACE : __namespace; i >= GLOBAL_NAMESPACE; i--) {
         if (nsym_info_defined_lev_p(info, i)) {
             dbg_print("nsym", 2, sprintf("(nsym_defined_p) END sym='%s', level=%d => %s", sym, i, ppf_bool(TRUE)))
             return TRUE
@@ -3068,7 +3127,7 @@ function nsym_protected_p(sym,
         error("not in nnamtab!?  name=" name ", level=" level)
 
     # Check for intermediate level - endpoints are excluded
-    if (GLOBAL_NAMESPACE < level && level < nstk_depth(__ns_stack))
+    if (GLOBAL_NAMESPACE < level && level < __namespace)
         error("nsym_protected_p: Cannot select random namespace")
 
     # Error if name does not exist at that level
@@ -3159,17 +3218,16 @@ function assert_nsym_defined(sym, hint,    s)
 
 
 function assert_nsym_okay_to_define(name,
-                                    code, curr_level)
+                                    code)
 {
     assert_nsym_valid_name(name)
     assert_nsym_unprotected(name)
-    curr_level = nstk_depth(__ns_stack)
 
-    if (nnam_ll_in(name, curr_level) &&
-        flag_alltrue_p((code = nnam_ll_read(name, curr_level)), TYPE_SYMBOL) &&
+    if (nnam_ll_in(name, __namespace) &&
+        flag_alltrue_p((code = nnam_ll_read(name, __namespace)), TYPE_SYMBOL) &&
         flag_allfalse_p(code, FLAG_READONLY))
         return TRUE
-    if (nnam_ll_in(name, curr_level)) return FALSE
+    if (nnam_ll_in(name, __namespace)) return FALSE
 
     if (nnam_ll_in(name, GLOBAL_NAMESPACE) &&
         flag_alltrue_p((code = nnam_ll_read(name, GLOBAL_NAMESPACE)), TYPE_SYMBOL) &&
@@ -3282,17 +3340,16 @@ function execute__text(text)
 #*****************************************************************************
 # @array                ARR
 function xeq_cmd__array(name, cmdline,
-                        arr, curr_level)
+                        arr)
 {
     $0 = cmdline
     if (NF < 1)
         error("Bad parameters:" $0)
     arr = $1
     assert_nsym_okay_to_define(arr)
-    curr_level = nstk_depth(__ns_stack)
-    if (nnam_ll_in(arr, curr_level))
+    if (nnam_ll_in(arr, __namespace))
         error("Array '" arr "' already defined")
-    nnam_ll_write(arr, curr_level, TYPE_ARRAY)
+    nnam_ll_write(arr, __namespace, TYPE_ARRAY)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -3306,11 +3363,9 @@ function xeq_cmd__array(name, cmdline,
 #
 #*****************************************************************************
 # @break
-function xeq_cmd__break(name, cmdline)
+function xeq_cmd__break(name, cmdline,
+                        level, block, blk_type)
 {
-    # Follow scan stack upwards to make sure there's a @for or @while
-    # loop to break out of
-
     # Logical check
     if (__loop_ctl != LOOP_NORMAL)
         error("(xeq_cmd__break) __loop_ctl is not normal, how did that happen?")
@@ -3972,6 +4027,7 @@ function execute__foreach(for_block,
     # }
     loopvar = nblktab[for_block, "loopvar"]
     arrname = nblktab[for_block, "arrname"]
+    level = nblktab[for_block, "level"]
     body_block = nblktab[for_block, "body_block"]
     dbg_print("for", 4, sprintf("(execute__foreach) loopvar='%s', arrname='%s'",
                                 loopvar, arrname))
@@ -3987,9 +4043,9 @@ function execute__foreach(for_block,
         new_level = raise_namespace()
         nnam_ll_write(loopvar, new_level, TYPE_SYMBOL FLAG_READONLY)
         nsym_ll_write(loopvar, "", new_level, k)
-        dbg_print("for", 5, sprintf("(execute__for) CALLING execute__block(%d)", body_block))
+        dbg_print("for", 5, sprintf("(execute__foreach) CALLING execute__block(%d)", body_block))
         execute__block(body_block)
-        dbg_print("for", 5, sprintf("(execute__for) RETURNED FROM execute__block()"))
+        dbg_print("for", 5, sprintf("(execute__foreach) RETURNED FROM execute__block()"))
         lower_namespace()
 
         # Check for break or continue
@@ -4003,7 +4059,7 @@ function execute__foreach(for_block,
             # about to re-iterate the loop anyway
         }
     }
-    dbg_print("for", 1, "(execute__for) END")
+    dbg_print("for", 1, "(execute__foreach) END")
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -4314,12 +4370,13 @@ function xeq_cmd__include(name, cmdline,
     # $1 = ""
     # sub("^[ \t]*", "")
     filename = rm_quotes(cmdline) # dosubs($0)
-    file_block = dofile(filename, TRUE) # create only
+    file_block = prep_file(filename)
     nblktab[file_block, "dstblk"] = curr_dstblk()
     nblktab[file_block, "atmode"] = substr(name, length(name)-4) == "paste" \
                                       ? MODE_AT_LITERAL : MODE_AT_PROCESS
-    # Normally dofile() pushes the BLK_FILE onto the __scan_stack,
-    # but we have to do that ourselves due to customization
+    # prep_file doesn't push the BLK_FILE onto the __scan_stack,
+    # so we have to do that ourselves due to customization
+    dbg_print("scan", 7, sprintf("(xeq_cmd__include) Pushing file block %d (%s) onto scan_stack", file_block, filename))
     nstk_push(__scan_stack, file_block)
 
     dbg_print("scan", 5, "(xeq_cmd__include) CALLING scan__file()")
@@ -4404,22 +4461,21 @@ function xeq_cmd__input(name, cmdline,
 # @local                NAME
 # @local FOO adds to nnamtab (as a scalar) in the current namespace, does not define it
 function xeq_cmd__local(name, cmdline,
-                        sym, curr_level)
+                        sym)
 {
     $0 = cmdline
     if (NF < 1)
         error("Bad parameters:" $0)
-    if (nstk_emptyp(__ns_stack))
+    if (__namespace == GLOBAL_NAMESPACE)
         error("Cannot use @local in global namespace")
     sym = $1
     # check for valid name
     if (!nnam_valid_with_strict_as(sym, strictp("symbol")))
         error("@local: Invalid name")
     assert_nsym_okay_to_define(sym)
-    curr_level = nstk_depth(__ns_stack)
-    if (nnam_ll_in(sym, curr_level))
+    if (nnam_ll_in(sym, __namespace))
         error("Symbol '" sym "' already defined")
-    nnam_ll_write(sym, curr_level, TYPE_SYMBOL)
+    nnam_ll_write(sym, __namespace, TYPE_SYMBOL)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -4536,7 +4592,10 @@ function xeq_cmd__m2(name, cmdline,
         dbg_set_level("nnam",       3)
         dbg_set_level("nsym",       5)
 
-    } else
+    } else if (x == 2)
+        dump_scan_stack()
+
+    else
         error("Unrecognized parameter " $1) 
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
@@ -4655,7 +4714,7 @@ function ship_out__user(cmdline,
 
 
 function xeq_blk__user(newcmd_block,
-                       blk_type, name, curr_level)
+                       blk_type, name)
 {
     blk_type = nblktab[newcmd_block, "type"]
     dbg_print("ncmd", 3, sprintf("(xeq_blk__user) START dstblk=%d, newcmd_block=%d, type=%s",
@@ -4667,12 +4726,11 @@ function xeq_blk__user(newcmd_block,
 
     # Instantiate command, but do not run.  "@newcmd FOO" is just declaring FOO.
     # @FOO{...} actually ships it out (and is done under ship_out/xeq_user).
-    curr_level = nstk_depth(__ns_stack)
     name = nblktab[newcmd_block, "name"]
     dbg_print("ncmd", 3, sprintf("(xeq_blk__user) name='%s', level=%d: TYPE_USER, value=%d",
-                                 name, curr_level, newcmd_block))
-    nnam_ll_write(name, curr_level, TYPE_USER)
-    ncmd_ll_write(name, curr_level, newcmd_block)
+                                 name, __namespace, newcmd_block))
+    nnam_ll_write(name, __namespace, TYPE_USER)
+    ncmd_ll_write(name, __namespace, newcmd_block)
 
     dbg_print("ncmd", 1, "(xeq_blk__user) END")
 }
@@ -4691,7 +4749,7 @@ function execute__user(name, cmdline,
     dbg_print("xeq", 3, sprintf("(execute__user) START name='%s', cmdline='%s'",
                                 name, cmdline))
 
-    old_level = nstk_depth(__ns_stack)
+    old_level = __namespace
 
     if (nnam_parse(name, info) == ERROR)
         error("(execute__user) Parse error on '" name "' -- should not happen")
@@ -4721,7 +4779,7 @@ function execute__user(name, cmdline,
 
     execute__user_body(user_block, args)
 
-    if (nstk_depth(__ns_stack) != old_level)
+    if (__namespace != old_level)
         error("(execute__user) @%s %s: Namespace level mismatch")
 }
 
@@ -4828,7 +4886,7 @@ function xeq_cmd__readarray(name, cmdline,
     if (level == ERROR)
         error(sprintf("(xeq_cmd__readarray) Name not found: '%s'", arr))
     # I don't think I care about this....
-    # if (info["level"] != nstk_depth(__ns_stack))
+    # if (info["level"] != __namespace)
     #     error(sprintf("(xeq_cmd__readarray) Name not in current namespace: '%s'", arr))
     if (info["isarray"] != TRUE)
         error(sprintf("(xeq_cmd__readarray) Name not an array: '%s'", arr))
@@ -4850,10 +4908,11 @@ function xeq_cmd__readarray(name, cmdline,
     nsymtab[arr, key, level, "agg_block"] = agg_block
 
     # create a new file scanner : dstblk = agg, mode=literal
-    file_block = dofile(filename, TRUE)
+    file_block = prep_file(filename)
     nblktab[file_block, "dstblk"] = agg_block
     nblktab[file_block, "atmode"] = MODE_AT_LITERAL
-    # Push scanner manually because we called dofile() with create_only
+    # Push scanner manually because prep_file doesn't do that
+    dbg_print("scan", 7, sprintf("(xeq_cmd__readarray) Pushing file block %d (%s) onto scan_stack", file_block, filename))
     nstk_push(__scan_stack, file_block)
 
     dbg_print("scan", 5, "(xeq_cmd__readarray) CALLING scan__file()")
@@ -5157,7 +5216,7 @@ function xeq_cmd__typeout(name, cmdline,
     if (nstk_emptyp(__scan_stack))
         error("(xeq_cmd__typeout) Scan stack is empty")
 
-    for (i = nstk_depth(__scan_stack); i >= 1; i--) {
+    for (i = nstk_depth(__scan_stack); i > 0; i--) {
         dbg_print_block("scan", -1, __scan_stack[i], sprintf("(xeq_cmd__typeout) __scan_stack[%d]", i))
         scanner = __scan_stack[i]
         if (nblk_type(scanner) == BLK_FILE) {
@@ -6175,29 +6234,30 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
 
     # BLKS
     # Block types
-    BLK_AGG       = "A";                __blk_label[BLK_AGG]     = "AGG"
-      SLOT_BLKNUM = "b";                __blk_label[SLOT_BLKNUM] = "BLKNUM"
-      SLOT_CMD    = "c";                __blk_label[SLOT_CMD]    = "CMD"
-      SLOT_TEXT   = "t";                __blk_label[SLOT_TEXT]   = "TEXT"
-      SLOT_USER   = "u";                __blk_label[SLOT_USER]   = "USER"
-    BLK_CASE      = "C";                __blk_label[BLK_CASE]    = "CASE"
-    BLK_FILE      = "F";                __blk_label[BLK_FILE]    = "FILE"
-    BLK_IF        = "I";                __blk_label[BLK_IF]      = "IF"
-    BLK_FOR       = "4";                __blk_label[BLK_FOR]     = "FOR"
-    BLK_LONGDEF   = "L";                __blk_label[BLK_LONGDEF] = "LONGDEF"
-    BLK_REGEXP    = "R";                __blk_label[BLK_REGEXP]  = "REGEXP"
-    BLK_USER      = "U";                __blk_label[BLK_USER]    = "USER"
-    BLK_WHILE     = "W";                __blk_label[BLK_WHILE]   = "WHILE"
+    BLK_AGG       = "A";                __blk_label[BLK_AGG]      = "AGG"
+      SLOT_BLKNUM = "b";                __blk_label[SLOT_BLKNUM]  = "BLKNUM"
+      SLOT_CMD    = "c";                __blk_label[SLOT_CMD]     = "CMD"
+      SLOT_TEXT   = "t";                __blk_label[SLOT_TEXT]    = "TEXT"
+      SLOT_USER   = "u";                __blk_label[SLOT_USER]    = "USER"
+    BLK_CASE      = "C";                __blk_label[BLK_CASE]     = "CASE"
+    BLK_FILE      = "F";                __blk_label[BLK_FILE]     = "FILE"
+    BLK_IF        = "I";                __blk_label[BLK_IF]       = "IF"
+    BLK_FOR       = "R";                __blk_label[BLK_FOR ]     = "FOR"
+    BLK_LONGDEF   = "L";                __blk_label[BLK_LONGDEF]  = "LONGDEF"
+    BLK_REGEXP    = "X";                __blk_label[BLK_REGEXP]   = "REGEXP"
+    BLK_TERMINAL  = "T";                __blk_label[BLK_TERMINAL] = "TERMINAL"
+    BLK_USER      = "U";                __blk_label[BLK_USER]     = "USER"
+    BLK_WHILE     = "W";                __blk_label[BLK_WHILE]    = "WHILE"
 
     LOOP_NORMAL   = 0
     LOOP_BREAK    = 1
     LOOP_CONTINUE = 2
 
-    __block_cnt          = 0 # MAX_STREAM
+    __block_cnt          = 0
     __buffer             = EMPTY
     __init_files_loaded  = FALSE # Becomes True in load_init_files()
     __loop_ctl           = LOOP_NORMAL
-    __ns_stack[0]        = GLOBAL_NAMESPACE
+    __namespace          = GLOBAL_NAMESPACE
     __ord_initialized    = FALSE # Becomes True in initialize_ord()
     __print_mode         = MODE_TEXT_PRINT
     __scan_stack[0]      = 0
@@ -6301,9 +6361,9 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
 
     # IMMEDS
     # These commands are Immediate
-    split("case dump! else endcase endcmd endif endlong endlongdef endwhile" \
-          " esac fi for foreach if ifdef ifndef longdef newcmd next of" \
-          " otherwise unless while",
+    split("break case continue dump! else endcase endcmd endif endlong" \
+          " endlongdef endwhile esac fi for foreach if ifdef ifndef longdef" \
+          " newcmd next of otherwise unless while",
           array, " ")
     for (elem in array)
         nnam_ll_write(array[elem], GLOBAL_NAMESPACE, TYPE_COMMAND FLAG_SYSTEM FLAG_IMMEDIATE)
@@ -6411,10 +6471,10 @@ function load_init_files(    old_debug)
     nsymtab["__DEBUG__", "", GLOBAL_NAMESPACE, "symval"] = FALSE
 
     if ("M2RC" in ENVIRON && path_exists_p(ENVIRON["M2RC"]))
-        dofile(ENVIRON["M2RC"], FALSE)
+        dofile(ENVIRON["M2RC"])
     else if ("HOME" in ENVIRON)
-        dofile(ENVIRON["HOME"] "/.m2rc", FALSE)
-    dofile("./.m2rc", FALSE)
+        dofile(ENVIRON["HOME"] "/.m2rc")
+    dofile("./.m2rc")
 
     # Don't count init files in total line/file tally - it's better to
     # keep them in sync with the files from the command line.
@@ -6444,7 +6504,7 @@ BEGIN {
     # No command line arguments: process standard input.
     if (ARGC == 1) {
         load_init_files()
-        __exit_code = dofile("-", FALSE) ? EX_OK : EX_NOINPUT
+        __exit_code = dofile("-") ? EX_OK : EX_NOINPUT
 
     # Else, process all command line files/macro definitions.  ARGC is never zero,
     # so if it's not 1 (no command line args), there must be parameters.
@@ -6479,7 +6539,7 @@ BEGIN {
             # Otherwise load a file
             } else {
                 load_init_files()
-                if (! dofile(rm_quotes(_arg), FALSE)) {
+                if (! dofile(rm_quotes(_arg))) {
                     warn("File '" _arg "' does not exist", "ARGV", _i)
                     __exit_code = EX_NOINPUT
                 }
@@ -6492,8 +6552,14 @@ BEGIN {
         # read standard input, so that is what we must now do.
         if (!__init_files_loaded) {
             load_init_files()
-            __exit_code = dofile("-", FALSE) ? EX_OK : EX_NOINPUT
+            __exit_code = dofile("-") ? EX_OK : EX_NOINPUT
         }
+    }
+
+    # All blocks should have been popped from the scan stack
+    if (! nstk_emptyp(__scan_stack)) {
+        warn("(main) Scan stack not is empty!")
+        dump_scan_stack()
     }
 
     end_program(MODE_STREAMS_SHIP_OUT)
@@ -6512,6 +6578,12 @@ function end_program(diverted_streams_final_disposition,
     # diverted data.  See "STREAMS & DIVERSIONS" documentation above
     # to see how the user can prevent this, if desired.
     if (diverted_streams_final_disposition == MODE_STREAMS_SHIP_OUT) {
+        # Regardless of whether the scan stack is empty or not, streams
+        # which ship out when m2 ends must go to standard output.  So
+        # always create a TERMINAL block to receive this data.  Since
+        # the program is about to terminate anyway, we don't care about
+        # managing the scan stack from here on out.
+        nstk_push(__scan_stack, nblk_new(BLK_TERMINAL))
         nsym_ll_write("__DIVNUM__", "", GLOBAL_NAMESPACE, TERMINAL)
         undivert_all()
     }

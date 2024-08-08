@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-08-08 00:30:37 cleyon>
+#  Time-stamp:  <2024-08-08 01:04:29 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -913,7 +913,7 @@ function dbg_print(dsys, lev, text,
 
 
 function dbg_print_block(dsys, lev, blknum, description,
-                         blk_type, blk_label, text, count, slotinfo, x)
+                         blk_type, blk_label, text)
 {
     if (! dbg(dsys, lev))
         return
@@ -925,129 +925,19 @@ function dbg_print_block(dsys, lev, blknum, description,
     blk_label = ppf_block_type(blk_type)
     # print_stderr("(dbg_print_block) blk_type = " blk_type)
 
-    if (blk_type == BLK_AGG) {
-        slotinfo = ""
-        count = nblktab[blknum, "count"]
-        if (count > 0 ) {
-            slotinfo = "  Slots:\n"
-            for (x = 1; x <= count; x++)
-                slotinfo = slotinfo sprintf("  [%d]=%s: %s\n",
-                        x,
-                        ppf_block_type(nblk_ll_slot_type(blknum, x)),
-                        nblk_ll_slot_value(blknum, x))
-        }
-        text = sprintf("Block # %d : %s\n" \
-                       "  type    : %s\n" \
-                       "  count   : %d\n" \
-                       "%s",
-                       blknum, description,
-                       blk_label,
-                       count,
-                       chomp(slotinfo))
-
-    } else if (blk_type == BLK_CASE) {
-        text = sprintf("Block # %d : %s\n" \
-                       "  type    : %s\n",
-                       blknum, description,
-                       blk_label)
-
-    } else if (blk_type == BLK_FILE) {
-        text = sprintf("Block # %d : %s\n" \
-                       "  type    : %s\n" \
-                       "  filename: %s\n"       \
-                       "  atmode  : %s\n"  \
-                       "  dstblk  : %d\n",
-                       blknum, description,
-                       blk_label,
-                       nblktab[blknum, "filename"],
-                       ppf_mode(nblktab[blknum, "atmode"]),
-                       nblktab[blknum, "dstblk"])
-
-    } else if (blk_type == BLK_FOR) {
-        text = sprintf("Block # %d\n" \
-                       "  type    : %s\n"  \
-                       "  valid   : %s\n" \
-                       "  loopvar : %s\n"       \
-                       "  start   : %d\n"       \
-                       "  end     : %d\n"       \
-                       "  incr    : %d\n"       \
-                       "  body    : %d",
-                       blknum, description,
-                       blk_label,
-                       ppf_bool(nblktab[blknum, "valid"]),
-                       nblktab[blknum, "loopvar"],
-                       nblktab[blknum, "start"],
-                       nblktab[blknum, "end"],
-                       nblktab[blknum, "incr"],
-                       nblktab[blknum, "body_block"])
-
-    } else if (blk_type == BLK_IF) {
-        text = sprintf("Block # %d : %s\n" \
-                       "  type        : %s\n" \
-                       "  valid       : %s\n" \
-                       "  condition   : '%s'\n" \
-                       "  true_block  : %d\n" \
-                       "  seen_else   : %s\n" \
-                       "  false_block : %s",
-                       blknum, description,
-                       blk_label,
-                       ppf_bool(nblktab[blknum, "valid"]),
-                       nblktab[blknum, "condition"],
-                       nblktab[blknum, "true_block"],
-                       ppf_bool(nblktab[blknum, "seen_else"]),
-                       ((blknum, "false_block") in nblktab) \
-                         ? nblktab[blknum, "false_block"] \
-                         : "<no false block>")
-
-    } else if (blk_type == BLK_REGEXP) {
-        text = sprintf("Block # %d : %s\n" \
-                       "  type        : %s\n" \
-                       "  valid       : %s\n" \
-                       "  terminator  : '%s'",
-                       blknum, description,
-                       blk_label,
-                       ppf_bool(nblktab[blknum, "valid"]),
-                       nblktab[blknum, "terminator"])
-
-    } else if (blk_type == BLK_USER) {
-        slotinfo = ""
-        count = nblktab[blknum, "nparam"]
-        if (count > 0 ) {
-            slotinfo = "  Parameters:\n"
-            for (x = 1; x <= count; x++)
-                slotinfo = slotinfo sprintf("  [%d]=%s\n",
-                                            x, nblktab[blknum, "param", x])
-        }
-        text = sprintf("Block # %d : %s\n" \
-                       "  type    : %s\n" \
-                       "  name    : %s\n" \
-                       "  valid   : %s\n" \
-                       "  nparam  : %d\n" \
-                       "  body    : %d\n" \
-                       "%s",
-                       blknum, description,
-                       blk_label,
-                       nblktab[blknum, "name"],
-                       ppf_bool(nblktab[blknum, "valid"]),
-                       nblktab[blknum, "nparam"],
-                       nblktab[blknum, "body_block"],
-                       chomp(slotinfo))
-
-    } else if (blk_type == BLK_WHILE) {
-        text = sprintf("Block # %d : %s\n" \
-                       "  type        : %s\n" \
-                       "  valid       : %s\n" \
-                       "  condition   : '%s'\n" \
-                       "  body_block  : %d",
-                       blknum, description,
-                       blk_label,
-                       ppf_bool(nblktab[blknum, "valid"]),
-                       nblktab[blknum, "condition"],
-                       nblktab[blknum, "body_block"])
-
-    } else
+    if      (blk_type == BLK_AGG)    text = prt_blk__agg(blknum)
+    else if (blk_type == BLK_CASE)   text = prt_blk__case(blknum)
+    else if (blk_type == BLK_FILE)   text = prt_blk__file(blknum)
+    else if (blk_type == BLK_FOR)    text = prt_blk__for(blknum)
+    else if (blk_type == BLK_IF)     text = prt_blk__if(blknum)
+    else if (blk_type == BLK_REGEXP) text = prt_blk__regexp(blknum)
+    else if (blk_type == BLK_USER)   text = prt_blk__user(blknum)
+    else if (blk_type == BLK_WHILE)  text = prt_blk__while()
+    else
         error(sprintf("(dbg_print_block) Can't handle type '%s' for block %d",
                       nblk_type(blknum), blknum))
+
+    print_stderr(sprintf("Block # %d [%s]: %s", blknum, blk_label, description))
     print_stderr(text)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
@@ -1320,6 +1210,27 @@ function xeq_blk__agg(agg_block,
         } else
             error(sprintf("(xeq_blk__agg) Bad slot type %s", slot_type))
     }
+}
+
+
+function prt_blk__agg(blknum,
+                      slotinfo, count, x)
+{
+    slotinfo = ""
+    count = nblktab[blknum, "count"]
+    if (count > 0 ) {
+        slotinfo = "  Slots:\n"
+        for (x = 1; x <= count; x++)
+            slotinfo = slotinfo sprintf("  [%d]=%s: %s\n",
+                                        x,
+                                        ppf_block_type(nblk_ll_slot_type(blknum, x)),
+                                        nblk_ll_slot_value(blknum, x))
+    }
+    return sprintf("  count   : %d\n" \
+                   "%s",
+                   count,
+                   chomp(slotinfo))
+
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -1922,6 +1833,26 @@ function scan(              code, terminator, readstat, name, retval, new_block,
     } # continue loop again, reading next line
     dbg_print("scan", 5, "(scan) END => " ppf_bool(retval))
     return retval
+}
+
+
+function prt_blk__file(blknum)
+{
+    return sprintf("  filename: %s\n"             \
+                   "  atmode  : %s\n"             \
+                   "  dstblk  : %d",
+                   nblktab[blknum, "filename"],
+                   ppf_mode(nblktab[blknum, "atmode"]),
+                   nblktab[blknum, "dstblk"])
+}
+
+
+function prt_blk__regexp(blknum)
+{
+    return sprintf("  valid       : %s\n"       \
+                   "  terminator  : '%s'",
+                   ppf_bool(nblktab[blknum, "valid"]),
+                   nblktab[blknum, "terminator"])
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -3524,6 +3455,12 @@ function xeq_blk__case(case_block,
 
     dbg_print("case", 3, sprintf("(xeq_blk__case) END"))
 }
+
+
+function prt_blk__case(blknum)
+{
+    return ""
+}
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
 
@@ -4061,6 +3998,23 @@ function execute__foreach(for_block,
     }
     dbg_print("for", 1, "(execute__foreach) END")
 }
+
+
+function prt_blk__for(blknum)
+{
+    return sprintf("  valid   : %s\n" \
+                   "  loopvar : %s\n"       \
+                   "  start   : %d\n"       \
+                   "  end     : %d\n"       \
+                   "  incr    : %d\n"       \
+                   "  body    : %d",
+                   ppf_bool(nblktab[blknum, "valid"]),
+                   nblktab[blknum, "loopvar"],
+                   nblktab[blknum, "start"],
+                   nblktab[blknum, "end"],
+                   nblktab[blknum, "incr"],
+                   nblktab[blknum, "body_block"])
+}
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
 
@@ -4315,6 +4269,24 @@ function evaluate_condition(cond, negate,
     dbg_print("if", 3, sprintf("(evaluate_condition) END retval=%s", (retval == ERROR) ? "ERROR" \
                                                                    : ppf_bool(retval)))
     return retval
+}
+
+
+function prt_blk__if(blknum)
+{
+    return sprintf("  valid       : %s\n" \
+                   "  condition   : '%s'\n" \
+                   "  true_block  : %d\n" \
+                   "  seen_else   : %s\n" \
+                   "  false_block : %s",
+                   ppf_bool(nblktab[blknum, "valid"]),
+                   nblktab[blknum, "condition"],
+                   nblktab[blknum, "true_block"],
+                   ppf_bool(nblktab[blknum, "seen_else"]),
+                   ((blknum, "false_block") in nblktab) \
+                     ? nblktab[blknum, "false_block"]     \
+                     : "<no false block>")
+
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -4815,6 +4787,30 @@ function execute__user_body(user_block, args,
 
     lower_namespace()
     dbg_print("ncmd", 1, "(execute__user_body) END")
+}
+
+
+function prt_blk__user(blknum,
+                       slotinfo, count, x)
+{
+    slotinfo = ""
+    count = nblktab[blknum, "nparam"]
+    if (count > 0 ) {
+        slotinfo = "  Parameters:\n"
+        for (x = 1; x <= count; x++)
+            slotinfo = slotinfo sprintf("  [%d]=%s\n",
+                                        x, nblktab[blknum, "param", x])
+    }
+    return sprintf("  name    : %s\n" \
+                   "  valid   : %s\n" \
+                   "  nparam  : %d\n" \
+                   "  body    : %d\n" \
+                   "%s",
+                   nblktab[blknum, "name"],
+                   ppf_bool(nblktab[blknum, "valid"]),
+                   nblktab[blknum, "nparam"],
+                   nblktab[blknum, "body_block"],
+                   chomp(slotinfo))
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -5433,6 +5429,17 @@ function xeq_blk__while(while_block,
     }
 
     dbg_print("while", 3, sprintf("(xeq_blk__while) END"))
+}
+
+
+function prt_blk__while(blknum)
+{
+    return sprintf("  valid       : %s\n"       \
+                   "  condition   : '%s'\n"     \
+                   "  body_block  : %d",
+                   ppf_bool(nblktab[blknum, "valid"]),
+                   nblktab[blknum, "condition"],
+                   nblktab[blknum, "body_block"])
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 

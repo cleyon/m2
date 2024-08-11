@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-08-08 22:40:05 cleyon>
+#  Time-stamp:  <2024-08-11 10:57:51 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -789,11 +789,11 @@ function initialize_debugging()
     dbg_set_level("if",         7)
     dbg_set_level("io",         3)
     dbg_set_level("namespace",  5)
-    dbg_set_level("cmd",       5)
-    dbg_set_level("nam",       3)
-    dbg_set_level("seq",       3)
-    dbg_set_level("stk",       5)
-    dbg_set_level("sym",       5)
+    dbg_set_level("cmd",        5)
+    dbg_set_level("nam",        5)
+    dbg_set_level("seq",        3)
+    dbg_set_level("stk",        5)
+    dbg_set_level("sym",        5)
    #dbg_set_level("read",       0)
     dbg_set_level("scan",       5)
     dbg_set_level("ship_out",   5)
@@ -1267,7 +1267,7 @@ function cmd_defined_p(name, code)
 }
 
 
-function cmd_definition_pp(name)
+function cmd_definition_ppf(name)
 {
     print_stderr("(cmd_definition_pp) BROKEN")
     # XXX parameters
@@ -1381,7 +1381,7 @@ function execute__command(name, cmdline,
     else if (name == "default")     xeq_cmd__define(name, cmdline)
     else if (name == "define")      xeq_cmd__define(name, cmdline)
     else if (name == "divert")      xeq_cmd__divert(name, cmdline)
-    else if (name == "dump")        xeq_cmd__dump(name, cmdline)
+    else if (name ~  /dump(all)?/)  xeq_cmd__dump(name, cmdline)
     else if (name ~  /s?echo/)      xeq_cmd__error(name, cmdline)
     else if (name == "error")       xeq_cmd__error(name, cmdline)
     else if (name ~  /s?exit/)      xeq_cmd__exit(name, cmdline)
@@ -2033,7 +2033,7 @@ function flag_set_clear(code, set_fs, clear_fs,
 function nam_parse(text, info,
                     name, key, nparts, part, count, i)
 {
-    dbg_print("nam", 5, sprintf("nam_parse) START text='%s'", text))
+    dbg_print("nam", 5, sprintf("(nam_parse) START text='%s'", text))
     #info["text"] = text
 
     # Simple test for CHARS or CHARS[CHARS]
@@ -2045,7 +2045,7 @@ function nam_parse(text, info,
     # to exclude ! [ \ ] { | }
     if (text !~ /^["-Z^-z~]+(\[["-Z^-z~]+\])?$/) {
         warn("(nam_parse) Name '" text "' not valid")
-        dbg_print("nam", 2, sprintf("nam_parse(%s) => %d", text, ERROR))
+        dbg_print("nam", 2, sprintf("(nam_parse(%s) => %d", text, ERROR))
         return ERROR
     }
 
@@ -2149,7 +2149,7 @@ function nam_ll_read(name, level)
 
 function nam_ll_in(name, level)
 {
-    if (level == EMPTY) error("nam_ll_in: LEVEL missing")
+    if (level == EMPTY) error("(nam_ll_in) LEVEL missing")
     return (name, level) in namtab
 }
 
@@ -2157,10 +2157,10 @@ function nam_ll_in(name, level)
 function nam_ll_write(name, level, code,
                        retval)
 {
-    if (level == EMPTY) error("nam_ll_write: LEVEL missing")
+    if (level == EMPTY) error("(nam_ll_write) LEVEL missing")
     if (sym_ll_in("__DBG__", "nam", GLOBAL_NAMESPACE) &&
         sym_ll_read("__DBG__", "nam", GLOBAL_NAMESPACE) >= 5)
-        print_stderr(sprintf("nam_ll_write: namtab[\"%s\", %d] = %s", name, level, code))
+        print_stderr(sprintf("(nam_ll_write) namtab[\"%s\", %d] = %s", name, level, code))
     return namtab[name, level] = code
 }
 
@@ -2178,7 +2178,7 @@ function nam_ll_write(name, level, code,
 #       type    : Character code for TYPE_xxx
 #*****************************************************************************
 function nam_lookup(info,
-                     name, level, code)
+                    name, level, code)
 {
     name = info["name"]
     dbg_print("sym", 5, sprintf("(nam_lookup) sym='%s' START", name))
@@ -2199,7 +2199,7 @@ function nam_lookup(info,
 
 
 function nam_ppf_name_level(name, level,
-                             s, code, desc, l, x)
+                            s, code, desc, l, x)
 {
     code = nam_ll_read(name, level)
     s = __flag_label[first(code)] "'" name "'{" level "}"
@@ -2245,7 +2245,7 @@ function seq_defined_p(name,
 }
 
 
-function seq_definition_pp(name,    buf, TAB)
+function seq_definition_ppf(name,    buf, TAB)
 {
     print_stderr("(seq_definition_pp) BROKEN")
     TAB = "\t"
@@ -2560,22 +2560,43 @@ function nam_system_p(name)
 }
 
 
-function sym_dump_symtab(flagset,    \
-                           x, k, code)
+function sym_dump_symtab(type, include_sys,
+                         x, k, code, buf, cond_matched,
+                         key, keys, cnt, i)
 {
-    print_stderr("(BROKEN?) Begin symtab:")
+    dbg_print("sym", 4, "(sym_dump_symtab) BEGIN")
+    sym_define_all_deferred()
+
+    cnt = 0
     for (k in symtab) {
         split(k, x, SUBSEP)
         # print "name  =", x[1]
         # print "key   =", x[2]
         # print "level =", x[3]
         # print "elem  =", x[4]
-        print_stderr(sprintf("symtab[\"%s\",\"%s\",%s,\"%s\"] = '%s'",
-                      x[1], x[2], x[3], x[4],
-                             symtab[x[1], x[2], x[3], x[4]]))
-        # print "----------------"
+        if (x[4] != "symval") continue
+        code = nam_ll_read(x[1], x[3]) # name, level
+        dbg_print("sym", 7, sprintf("(sym_dump_symtab) name='%s', key='%s', code=%s",
+                                    x[1], x[2], code))
+
+        if ((type == TYPE_SYMBOL &&
+             ((x[2] == EMPTY && flag_1true_p(code, TYPE_SYMBOL)) ||
+              (x[2] != EMPTY && flag_1true_p(code, TYPE_ARRAY)))) \
+             || flag_1true_p(code, type)) {
+            if (!include_sys && flag_1true_p(code, FLAG_SYSTEM))
+                continue
+            keys[++cnt] = x[1] (x[2] != EMPTY ? "[" x[2] "]" : "")
+        }
     }
-    print_stderr("End symtab")
+
+    qsort(keys, 1, cnt)
+    buf = EMPTY
+    for (i = 1; i <= cnt; i++) {
+        key = keys[i]
+        buf = buf sym_definition_ppf(key)
+    }
+    print chomp(buf)
+    dbg_print("sym", 4, "(sym_dump_symtab) END")
 }
 
 
@@ -2615,6 +2636,30 @@ function sym_deferred_p(sym,
     return ((sym, "", level, "deferred_prog") in symtab &&
             (sym, "", level, "deferred_arg")  in symtab &&
           !((sym, "", level, "symval")        in symtab))
+}
+
+
+function sym_define_all_deferred(    x, k, def_list, sym, code)
+{
+    dbg_print("nam", 5, "(sym_define_all_deferred) BEGIN")
+    if (secure_level() >= 2)
+        return
+
+    for (k in namtab) {
+        split(k, x, SUBSEP)
+        sym = x[1]
+        code = nam_ll_read(sym, GLOBAL_NAMESPACE)
+        if (flag_1true_p(code, FLAG_DEFERRED)) {
+            dbg_print("nam", 7, "(sym_define_all_deferred) Defining deferred " sym)
+            def_list[sym] = TRUE
+        }
+    }
+
+    for (sym in def_list) {
+        dbg_print("nam", 5, "(sym_define_all_deferred) Defining deferred " sym)
+        sym_deferred_define_now(sym)
+    }
+    dbg_print("nam", 5, "(sym_define_all_deferred) END")
 }
 
 
@@ -3077,9 +3122,9 @@ function sym_ll_protected(name, code)
 }
 
 
-function sym_definition_pp(sym,    sym_name, definition)
+function sym_definition_ppf(sym,    sym_name, definition)
 {
-    print_stderr("(sym_definition_pp) BROKEN")
+    # print_stderr("(sym_definition_ppf) BROKEN")
     sym_name = sym
     definition = sym_fetch(sym)
     return (index(definition, "\n") == IDX_NOT_FOUND) \
@@ -3562,15 +3607,15 @@ function xeq_cmd__dump(name, cmdline,
     #     sub("^[ \t]*", "")
     #     dumpfile = rm_quotes(dosubs($0))
     # }
+
     # Count and sort the keys from the symbol and sequence tables
-    cnt = 0
 
     if (NF == 0)
         $1 = "symbols"
     $1 = tolower($1)
     if ($1 ~ /sym(bol)?s?/) {
-        nam_dump_namtab(TYPE_SYMBOL FLAG_SYSTEM)
-        sym_dump_symtab(what)
+        #nam_dump_namtab(TYPE_SYMBOL FLAG_SYSTEM)
+        sym_dump_symtab(TYPE_SYMBOL, all_flag)
     } else if ($1 ~ /seq(uence)?s?/) {
         nam_dump_namtab(TYPE_SEQUENCE FLAG_SYSTEM)
         seq_dump_seqtab(what)
@@ -3586,11 +3631,6 @@ function xeq_cmd__dump(name, cmdline,
         error("Invalid dump argument " $1)
 
     return
-
-    # for (key in symtab) {
-    #     if (all_flag || ! nam_system_p(key))
-    #         keys[++cnt] = key
-    # }
 
     # for (key in seqtab) {
     #     split(key, fields, SUBSEP)
@@ -3609,11 +3649,11 @@ function xeq_cmd__dump(name, cmdline,
     for (i = 1; i <= cnt; i++) {
         key = keys[i]
         if (sym_defined_p(key))
-            buf = buf sym_definition_pp(key)
+            buf = buf sym_definition_ppf(key)
         else if (seq_defined_p(key))
-            buf = buf seq_definition_pp(key)
+            buf = buf seq_definition_ppf(key)
         else if (cmd_defined_p(key))
-            buf = buf cmd_definition_pp(key)
+            buf = buf cmd_definition_ppf(key)
         else                    # Can't happen
             error("Name '" key "' not available:" $0)
     }
@@ -3625,7 +3665,7 @@ function xeq_cmd__dump(name, cmdline,
         # was not read properly...
         warn("Empty symbol table:" $0)
     } else if (dumpfile == EMPTY)  # No FILE arg provided to @dump command
-        print_stderr(buf)
+        print buf
     # else {
     #     print buf > dumpfile
     #     close(dumpfile)
@@ -3662,7 +3702,7 @@ function _less_than(s1, s2,    fs1, fs2, d1, d2)
     fs1 = first(s1)
     fs2 = first(s2)
 
-    if      (fs1 == "" && fs2 == "") error("Comparison operator invalid [_less_than]")
+    if      (fs1 == "" && fs2 == "") error("(_less_than) fs1 and fs2 are empty!")
     else if (fs1 == "" && fs2 != "") return TRUE
     else if (fs1 != "" && fs2 == "") return FALSE
 
@@ -6259,9 +6299,9 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
 
             sym_ll_fiat("__DATE__",         "", FLAGS_READONLY_INTEGER, d[1] d[2] d[3])
             sym_ll_fiat("__EPOCH__",        "", FLAGS_READONLY_INTEGER, d[8])
-            sym_ll_fiat("__TIME__",         "", FLAGS_READONLY_INTEGER, d[4] d[5] d[6])
+            sym_ll_fiat("__TIME__",         "", FLAGS_READONLY_SYMBOL,  d[4] d[5] d[6]) # not an INTEGER because I want leading 0 if before 12:00
             sym_ll_fiat("__TIMESTAMP__",    "", FLAGS_READONLY_SYMBOL,  d[1] "-" d[2] "-" d[3] \
-                                                                     "T" d[4] ":" d[5] ":" d[6] d[7])
+                                                                    "T" d[4] ":" d[5] ":" d[6] d[7])
             sym_ll_fiat("__TZ__",           "", FLAGS_READONLY_SYMBOL,  d[7])
         }
 
@@ -6331,7 +6371,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     # CMDS
     # Built-in commands
     # Also need to add entry in execute__command()  [search: DISPATCH]
-    split("append array break continue debug decr default define divert dump" \
+    split("append array break continue debug decr default define divert dump dumpall" \
           " echo error exit ignore" \
           " include incr initialize input local m2 nextfile paste readfile" \
           " readarray readonly secho sequence sexit shell sinclude" \

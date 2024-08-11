@@ -1,0 +1,8 @@
+Symbols:
+@define bar	2
+@longdef baz
+Line A
+Line B
+@endlongdef
+@define foo	1
+End Symbols

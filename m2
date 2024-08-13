@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-08-11 10:57:51 cleyon>
+#  Time-stamp:  <2024-08-13 10:23:07 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -480,7 +480,7 @@ function assert_scan_stack_okay(expected_block_type,
     if (stk_emptyp(__scan_stack))
         error("(assert_scan_stack_okay) Scan stack is empty!")
     blknum = stk_top(__scan_stack)
-    if ((blktab[blknum, "type"] != expected_block_type) ||
+    if ((blk_type(blknum) != expected_block_type) ||
         # We have to subtract 1 because the original "depth" was stored
         # before the block was pushed onto the __scan_stack; and at this
         # point it hasn't been popped yet...
@@ -776,27 +776,26 @@ BEGIN {
 # every time a non-zero value is stored into __DEBUG__.
 function initialize_debugging()
 {
-   #dbg_set_level("args",       1)
+    dbg_set_level("args",       0)
     dbg_set_level("block",      0)
-   #dbg_set_level("braces",     0)
+    dbg_set_level("braces",     0)
     dbg_set_level("case",       5)
+    dbg_set_level("cmd",        5)
     dbg_set_level("del",        5)
     dbg_set_level("divert",     1)
     dbg_set_level("dosubs",     7)
     dbg_set_level("dump",       5)
-   #dbg_set_level("expr",       0)
+    dbg_set_level("expr",       0)
     dbg_set_level("for",        5)
     dbg_set_level("if",         7)
     dbg_set_level("io",         3)
-    dbg_set_level("namespace",  5)
-    dbg_set_level("cmd",        5)
     dbg_set_level("nam",        5)
+    dbg_set_level("namespace",  5)
+    dbg_set_level("read",       0)
+    dbg_set_level("scan",       5)
     dbg_set_level("seq",        3)
     dbg_set_level("stk",        5)
     dbg_set_level("sym",        5)
-   #dbg_set_level("read",       0)
-    dbg_set_level("scan",       5)
-    dbg_set_level("ship_out",   5)
     dbg_set_level("while",      5)
     dbg_set_level("xeq",        5)
 
@@ -920,7 +919,7 @@ function dbg_print_block(dsys, lev, blknum, description,
     # print_stderr("(dbg_print_block) blknum = " blknum)
     if (! ( (blknum,"type") in blktab) )
         error("(dbg_print_block) No 'type' field for block " blknum)
-    block_type = blktab[blknum, "type"]
+    block_type = blk_type(blknum)
     blk_label = ppf_block_type(block_type)
     # print_stderr("(dbg_print_block) block_type = " block_type)
 
@@ -991,12 +990,15 @@ function blk_new(block_type,
 }
 
 
-function blk_type(blknum)
+function blk_type(blknum,
+                  bt)
 {
     if (! ((blknum,"type") in blktab))
         error("(blk_type) Block # " blknum " has no type!")
-
-    return blktab[blknum, "type"]
+    bt = blktab[blknum, "type"]
+    if (! (bt in __blk_label))
+        error("(blk_type) Block # " blknum " has invalid block type '" bt "'")
+   return bt
 }
 
 
@@ -1041,7 +1043,7 @@ function blk_ll_write(blknum, slot, type, new_val)
 function blk_append(blknum, slot_type, value,
                      slot)
 {
-    if (blktab[blknum, "type"] != BLK_AGG)
+    if (blk_type(blknum) != BLK_AGG)
         error(sprintf("(blk_append) Block %d has type %s, not AGG",
                       blknum, ppf_block_type(blk_type(blknum))))
 
@@ -1072,6 +1074,7 @@ function blk_dump_blktab(    x, k, blknum, seen, type)
         }
         seen[blknum]++
     }
+    return "FOO!!"
 }
 
 
@@ -1099,7 +1102,7 @@ function blk_to_string(blknum,
 function ppf_block_type(block_type)
 {
     if (block_type == EMPTY)
-        warn("(ppf_block_type) block_type is empty, how did that happen?")
+        error("(ppf_block_type) block_type is empty, how did that happen?")
     dbg_print("xeq", 7, "(ppf_block_type) block_type = " block_type)
     if (! (block_type in __blk_label)) {
         error("(ppf_block_type) Invalid block type '" block_type "'")
@@ -1142,6 +1145,28 @@ function ship_out__block(blknum,
 }
 
 
+function ppf__block(blknum,
+                    block_type, buf)
+{
+    dbg_print("xeq", 3, sprintf("(ppf__block) START blknum=%d, type=%s",
+                                blknum, blktab[blknum, "type"]))
+    block_type = blk_type(blknum)
+
+    if      (block_type == BLK_AGG)       buf = ppf__agg(blknum)
+    else if (block_type == BLK_CASE)      buf = ppf__case(blknum)
+    else if (block_type == BLK_FOR)       buf = ppf__for(blknum)
+    else if (block_type == BLK_IF)        buf = ppf__if(blknum)
+    else if (block_type == BLK_LONGDEF)   buf = ppf__longdef(blknum)
+    else if (block_type == BLK_USER)      buf = "ppf__user(" blknum ")"
+    else if (block_type == BLK_WHILE)     buf = ppf__while(blknum)
+    else {
+        error(sprintf("(ppf__block) Block # %d: type %s (%s) not handled",
+                      blknum, block_type, ppf_block_type(block_type)))
+    }
+    return buf
+}
+
+
 function execute__block(blknum,
                         block_type, old_level)
 {
@@ -1150,7 +1175,7 @@ function execute__block(blknum,
         return
     }
 
-    block_type = blktab[blknum , "type"]
+    block_type = blk_type(blknum)
     dbg_print("xeq", 3, sprintf("(execute__block) START blknum=%d, type=%s",
                                 blknum, ppf_block_type(block_type)))
 
@@ -1175,7 +1200,7 @@ function execute__block(blknum,
 function xeq_blk__agg(agg_block,
                       i, lim, slot_type, value, block_type, name)
 {
-    block_type = blktab[agg_block , "type"]
+    block_type = blk_type(agg_block)
     dbg_print("xeq", 3, sprintf("(xeq_blk__agg) START dstblk=%d, agg_block=%d, type=%s",
                                 curr_dstblk(), agg_block, ppf_block_type(block_type)))
 
@@ -1209,6 +1234,46 @@ function xeq_blk__agg(agg_block,
         } else
             error(sprintf("(xeq_blk__agg) Bad slot type %s", slot_type))
     }
+}
+
+
+function ppf__agg(agg_block,
+                  lim, i, slot_type, value, buf)
+{
+    if (blk_type(agg_block) != BLK_AGG)
+        error(sprintf("(ppf__agg) Block %d type != AGG",
+                      agg_block))
+    lim = blktab[agg_block, "count"]
+    buf = ""
+    for (i = 1; i <= lim; i++) {
+        slot_type = blk_ll_slot_type(agg_block, i)
+        value = blk_ll_slot_value(agg_block, i)
+
+        if (slot_type == SLOT_BLKNUM) {
+            #dbg_print("xeq", 3, sprintf("(ppf__agg) CALLING ship_out__block(%d)", value+0))
+            buf = buf ppf__block(value) "\n"
+            #dbg_print("xeq", 3, "(ppf__agg) RETURNED FROM ship_out__block()")
+
+        } else if (slot_type == SLOT_CMD) {
+            #dbg_print("xeq", 3, sprintf("(ppf__agg) CALLING ship_out__command('%s')", value))
+            buf = buf value "\n"
+            #dbg_print("xeq", 3, "(ppf__agg) RETURNED FROM ship_out__command()")
+
+        } else if (slot_type == SLOT_TEXT) {
+            #dbg_print("xeq", 3, sprintf("(ppf__agg) CALLING ship_out__text('%s')", value))
+            buf = buf value "\n"
+            #dbg_print("xeq", 3, "(ppf__agg) RETURNED FROM ship_out__text()")
+
+        } else if (slot_type == SLOT_USER) {
+            #dbg_print("xeq", 3, sprintf("(ppf__agg) CALLING ship_out__user('%s')", value))
+            buf = buf value "\n"
+            #dbg_print("xeq", 3, "(ppf__agg) RETURNED FROM ship_out__user()")
+
+        } else
+            error(sprintf("(ppf__agg) Bad slot type %s", slot_type))
+    }
+
+    return chomp(buf)
 }
 
 
@@ -1255,25 +1320,42 @@ function prt_blk__agg(blknum,
 #       can only be on a line of their own and (mostly) do not produce output.
 #
 #*****************************************************************************
-function cmd_defined_p(name, code)
-{
-    print_stderr("(cmd_defined_p) BROKEN")
-    if (!cmd_valid_p(name))
-        return FALSE
-    if (! nam_ll_in(name, GLOBAL_NAMESPACE))
-        return FALSE
-    return TRUE
-    #return flag_1true_p(code, TYPE_USER)
-}
+# function cmd_defined_p(name, code)
+# {
+#     print_stderr("(cmd_defined_p) BROKEN")
+#     if (!cmd_valid_p(name))
+#         return FALSE
+#     if (! nam_ll_in(name, GLOBAL_NAMESPACE))
+#         return FALSE
+#     return TRUE
+#     #return flag_1true_p(code, TYPE_USER)
+# }
 
 
-function cmd_definition_ppf(name)
+function cmd_definition_ppf(name,
+                            info, level, code, user_block, i, p, nparam, params)
 {
-    print_stderr("(cmd_definition_pp) BROKEN")
-    # XXX parameters
-    return "@newcmd " name    "\n" \
-           cmd_ll_read(name) "\n" \
-           "@endcmd"          "\n"
+    if (nam_parse(name, info) == ERROR)
+        error("(cmd_definition_ppf) Parse error on '" name "' -- should not happen")
+    if ((level = nam_lookup(info)) == ERROR)
+        error("(cmd_definition_ppf) nam_lookup failed -- should not happen")
+    # See if it's a user command
+    if (flag_1false_p((code = nam_ll_read(name, level)), TYPE_USER))
+        error("(cmd_definition_ppf) " name " seems to no longer be a command")
+
+    user_block = cmd_ll_read(name, level)
+    if ((blk_type(user_block) != BLK_USER) ||
+        (blktab[user_block, "valid"] != TRUE))
+        error("(cmd_definition_ppf) Bad user_block config")
+
+    params = ""
+    for (i = 1; i <= blktab[user_block, "nparam"]; i++)
+        params = params "{" blktab[user_block, "param", i] "}"
+
+    #print_stderr("(cmd_definition_ppf) body_block=" blktab[user_block, "body_block"])
+    return "@newcmd " name params                             "\n" \
+              ppf__agg(blktab[user_block, "body_block"]) "\n" \
+           "@endcmd"
 }
 
 
@@ -1814,7 +1896,7 @@ function scan(              code, terminator, readstat, name, retval, new_block,
                     # name is definitely not a user commands, so we do nothing
                     # for the moment in that case and let normal test ship out.
                     # But it's not an ERROR, so something was found at "level".
-                    # See if it's a user command
+                    # See if it's a user command and ship it out if so.
                     if (flag_1true_p((code = nam_ll_read(name, level)), TYPE_USER)) {
                         dbg_print("scan", 3, sprintf("(scan) [%s] CALLING ship_out__user('%s')", scanner_label, $0))
                         ship_out__user($0)
@@ -1991,6 +2073,36 @@ function flag_set_clear(code, set_fs, clear_fs,
         }
 
     return code
+}
+
+
+function ppf__flag_type(code,
+                        type)
+{
+    if (code == EMPTY)
+        warn("(ppf__flag_type) code is empty, how did that happen?")
+    code = first(code)
+    dbg_print("xeq", 7, "(ppf__flag_type) code = " code)
+    if (! (code in __flag_label)) {
+        error("(ppf__flag_type) Invalid type '" code "'")
+    }
+    return __flag_label[code]
+}
+
+
+function ppf__flags(code,
+                    l, s, desc, x)
+{
+    if ((l = length(code)) == 0)
+        error("(ppf_flag) Did not specify code")
+    s = ppf__flag_type(code) # __flag_label[first(code)]
+    if (l > 1) {
+        desc = ""
+        for (x = 2; x <= l; x++)
+            desc = desc __flag_label[substr(code, x, 1)] ","
+        s = s "<" chop(desc) ">"
+    }
+    return s
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -2247,9 +2359,8 @@ function seq_defined_p(name,
 
 function seq_definition_ppf(name,    buf, TAB)
 {
-    print_stderr("(seq_definition_pp) BROKEN")
     TAB = "\t"
-        buf =     "@sequence " name TAB "create\n"
+    buf =         "@sequence " name TAB "create\n"
     if (seq_ll_read(name) != SEQ_DEFAULT_INIT)
         buf = buf "@sequence " name TAB "set " seq_ll_read(name) "\n"
     if (seqtab[name, "init"] != SEQ_DEFAULT_INIT)
@@ -2258,22 +2369,7 @@ function seq_definition_ppf(name,    buf, TAB)
         buf = buf "@sequence " name TAB "incr " seqtab[name, "incr"] "\n"
     if (seqtab[name, "fmt"] != sym_ll_read("__FMT__", "seq"))
         buf = buf "@sequence " name TAB "format " seqtab[name, "fmt"] "\n"
-    return buf
-}
-
-
-function seq_dump_seqtab(flagset,
-                           x, k, code)
-{
-    print("Begin seqtab:")
-    for (k in seqtab) {
-        split(k, x, SUBSEP)
-        print sprintf("seqtab[\"%s\",\"%s\"] = '%s'",
-                      x[1], x[2],
-                      seqtab[x[1], x[2]])
-        # print "----------------"
-    }
-    print("End seqtab")
+    return chop(buf)
 }
 
 
@@ -2402,7 +2498,7 @@ function undivert(stream)
         dbg_print("divert", 3, "(undivert) END ship_out__block() because stream <0 or ==DIVNUM")
         return
     }
-    if (blktab[stream, "type"] != BLK_AGG)
+    if (blk_type(stream) != BLK_AGG)
         error(sprintf("(undivert) Block %d has type %s, not AGG",
                       stream, ppf_block_type(blk_type(stream))))
     if (blktab[stream, "count"] > 0) {
@@ -2557,46 +2653,6 @@ function nam_system_p(name)
         error("nam_system_p: NAME missing")
     return nam_ll_in(name, GLOBAL_NAMESPACE) &&
            flag_1true_p(nam_ll_read(name, GLOBAL_NAMESPACE), FLAG_SYSTEM)
-}
-
-
-function sym_dump_symtab(type, include_sys,
-                         x, k, code, buf, cond_matched,
-                         key, keys, cnt, i)
-{
-    dbg_print("sym", 4, "(sym_dump_symtab) BEGIN")
-    sym_define_all_deferred()
-
-    cnt = 0
-    for (k in symtab) {
-        split(k, x, SUBSEP)
-        # print "name  =", x[1]
-        # print "key   =", x[2]
-        # print "level =", x[3]
-        # print "elem  =", x[4]
-        if (x[4] != "symval") continue
-        code = nam_ll_read(x[1], x[3]) # name, level
-        dbg_print("sym", 7, sprintf("(sym_dump_symtab) name='%s', key='%s', code=%s",
-                                    x[1], x[2], code))
-
-        if ((type == TYPE_SYMBOL &&
-             ((x[2] == EMPTY && flag_1true_p(code, TYPE_SYMBOL)) ||
-              (x[2] != EMPTY && flag_1true_p(code, TYPE_ARRAY)))) \
-             || flag_1true_p(code, type)) {
-            if (!include_sys && flag_1true_p(code, FLAG_SYSTEM))
-                continue
-            keys[++cnt] = x[1] (x[2] != EMPTY ? "[" x[2] "]" : "")
-        }
-    }
-
-    qsort(keys, 1, cnt)
-    buf = EMPTY
-    for (i = 1; i <= cnt; i++) {
-        key = keys[i]
-        buf = buf sym_definition_ppf(key)
-    }
-    print chomp(buf)
-    dbg_print("sym", 4, "(sym_dump_symtab) END")
 }
 
 
@@ -2867,10 +2923,12 @@ function sym_store(sym, new_val,
             break # - - - - - - - - - - - - - - - - - - - - - - - - - -
         }
 
-        nam_dump_namtab(TYPE_SYMBOL)
-        sym_dump_symtab()
-        # print_stderr(sprintf("(sym_store) LOOP BOTTOM: name='%s', key='%s', level=%d, code='%s'",
-        #                      name, key, level, code))
+        if (dbg5) {
+            print_stderr(sprintf("(sym_store) LOOP BOTTOM: name='%s', key='%s', level=%d, code='%s', good=%s",
+                                 name, key, level, code, ppf_bool(good)))
+            nam_dump_namtab(TYPE_SYMBOL)
+            print_stderr(dump__symtab(TYPE_SYMBOL, FALSE)) # print_stderr() adds newline.  FALSE means omit system symbols
+        }
     } while (FALSE)
 
     # if nam_system_p(name)          level = 0
@@ -3098,8 +3156,8 @@ function sym_protected_p(sym,
         error("not in namtab!?  name=" name ", level=" level)
 
     # Check for intermediate level - endpoints are excluded
-    if (GLOBAL_NAMESPACE < level && level < __namespace)
-        error("sym_protected_p: Cannot select random namespace")
+    # if (GLOBAL_NAMESPACE < level && level < __namespace)
+    #     error("sym_protected_p: Cannot select random namespace")
 
     # Error if name does not exist at that level
     code = nam_ll_read(name, level)
@@ -3122,16 +3180,15 @@ function sym_ll_protected(name, code)
 }
 
 
-function sym_definition_ppf(sym,    sym_name, definition)
+function sym_definition_ppf(sym,
+                            definition)
 {
-    # print_stderr("(sym_definition_ppf) BROKEN")
-    sym_name = sym
     definition = sym_fetch(sym)
     return (index(definition, "\n") == IDX_NOT_FOUND) \
-        ? "@define " sym_name "\t" definition "\n" \
-        : "@longdef " sym_name "\n" \
+        ? "@define " sym "\t" definition \
+        : "@longdef " sym "\n" \
           definition           "\n" \
-          "@endlongdef"        "\n"
+          "@endlongdef"
 }
 
 
@@ -3431,12 +3488,12 @@ function scan__endcase(                case_block)
 function xeq_blk__case(case_block,
                        block_type, casevar, caseval, preamble_block)
 {
-    block_type = blktab[case_block , "type"]
+    block_type = blk_type(case_block)
     dbg_print("case", 3, sprintf("(xeq_blk__case) START dstblk=%d, case_block=%d, type=%s",
                                  curr_dstblk(), case_block, ppf_block_type(block_type)))
 
     dbg_print_block("case", 7, case_block, "(xeq_blk__case) case_block")
-    if ((blktab[case_block, "type"] != BLK_CASE) || \
+    if ((blk_type(case_block) != BLK_CASE) ||  \
         (blktab[case_block, "valid"] != TRUE))
         error("(xeq_blk__case) Bad config")
 
@@ -3479,9 +3536,28 @@ function xeq_blk__case(case_block,
 }
 
 
+function ppf__case(case_block,
+                   buf, i, caseval, x, k)
+{
+    buf = "@case " blktab[case_block, "casevar"] "\n"
+    buf = buf ppf__block(blktab[case_block, "preamble_block"]) "\n"
+    for (k in blktab) {
+        split(k, x, SUBSEP)
+        if (x[1] == case_block && x[2] == "of")
+            buf = buf "@of " x[3] "\n" \
+                  ppf__block(blktab[case_block, "of", x[3]]) "\n"
+    }
+    if (blktab[case_block, "seen_otherwise"])
+        buf = buf "@otherwise\n" \
+              ppf__block(blktab[case_block, "otherwise_block"]) "\n"
+    buf = buf "@endcase"
+    return buf
+}
+
+
 function prt_blk__case(blknum)
 {
-    return ""
+    return "(prt_blk__case) BROKEN"
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -3590,86 +3666,58 @@ function xeq_cmd__divert(name, cmdline,
 #       @<command>  SPACE  <name>  TAB  <stuff includes spaces...>
 function xeq_cmd__dump(name, cmdline,
                        buf, cnt, definition, dumpfile, i, key, keys, sym_name, all_flag,
-                       what)
+                       what, what_type)
 {
     all_flag = $1 == "@dumpall"
+    dumpfile = EMPTY
 
     $0 = cmdline
-    if (NF >= 1) {
-        if (NF >= 2) {
-            $1 = ""
-            dumpfile = cmdline
-            print_stderr(sprintf("dumpfile = '%s'", dumpfile))
-        }
+    if (NF > 1) {
+        warn("(xeq_cmd__dump) Dumpfile is not supported yet")
+        what = $1
+        $1 = ""
+        sub("^[ \t]*", "")
+        dumpfile = rm_quotes(dosubs($0))
+        # print_stderr(sprintf("dumpfile = '%s'", dumpfile))
+    } else if (NF == 0) {
+        what = "symbols"
+    } else {                    # NF == 1
+        what = tolower($1)
     }
-    # if (NF > 1) {
-    #     $1 = ""
-    #     sub("^[ \t]*", "")
-    #     dumpfile = rm_quotes(dosubs($0))
-    # }
 
-    # Count and sort the keys from the symbol and sequence tables
-
-    if (NF == 0)
-        $1 = "symbols"
-    $1 = tolower($1)
-    if ($1 ~ /sym(bol)?s?/) {
-        #nam_dump_namtab(TYPE_SYMBOL FLAG_SYSTEM)
-        sym_dump_symtab(TYPE_SYMBOL, all_flag)
-    } else if ($1 ~ /seq(uence)?s?/) {
-        nam_dump_namtab(TYPE_SEQUENCE FLAG_SYSTEM)
-        seq_dump_seqtab(what)
-    } else if ($1 ~ /(cmd|command)s?/) {
-        nam_dump_namtab(TYPE_COMMAND FLAG_SYSTEM)
-    } else if ($1 ~ /\*|any/) {
-        error("@dump any not supported yet")
-    } else if ($1 ~ /name?s?/) {
-        nam_dump_namtab(TYPE_ANY FLAG_SYSTEM)
-    } else if ($1 ~ /bl(oc)?ks?/) {
-        blk_dump_blktab()
+    if (what ~ /sym(bol)?s?/) {
+        what_type = TYPE_SYMBOL
+        buf = dump__symtab(what_type, all_flag)
+    } else if (what ~ /seq(uence)?s?/) {
+        what_type = TYPE_SEQUENCE
+        buf = dump__seqtab(what_type, all_flag)
+    } else if (what ~ /(cmd|command)s?/) {
+        what_type = TYPE_USER
+        #buf = nam_dump_namtab(what_type, all_flag)
+        buf = dump__cmdtab(what_type, all_flag)
+    } else if (what ~ /name?s?/) {
+        what_type = TYPE_ANY
+        buf = nam_dump_namtab(what_type, all_flag)
+    } else if (what ~ /bl(oc)?ks?/) {
+        buf = "BROKEN: " blk_dump_blktab()
     } else
-        error("Invalid dump argument " $1)
-
-    return
-
-    # for (key in seqtab) {
-    #     split(key, fields, SUBSEP)
-    #     if (fields[2] == "defined")
-    #         keys[++cnt] = fields[1]
-    # }
-    # for (key in cmdtab) {
-    #     split(key, fields, SUBSEP)
-    #     if (fields[2] == "defined")
-    #         keys[++cnt] = fields[1]
-    # }
-    qsort(keys, 1, cnt)
+        error("Invalid dump argument " what)
 
     # Format definitions
-    buf = EMPTY
-    for (i = 1; i <= cnt; i++) {
-        key = keys[i]
-        if (sym_defined_p(key))
-            buf = buf sym_definition_ppf(key)
-        else if (seq_defined_p(key))
-            buf = buf seq_definition_ppf(key)
-        else if (cmd_defined_p(key))
-            buf = buf cmd_definition_ppf(key)
-        else                    # Can't happen
-            error("Name '" key "' not available:" $0)
-    }
-    buf = chop(buf)
     if (emptyp(buf)) {
         # I don't usually condone chatty programs, but it seems to me
         # that if the user asks for the symbol table and there's nothing
         # to print, she'd probably like to know.  Perhaps a config file
         # was not read properly...
-        warn("Empty symbol table:" $0)
-    } else if (dumpfile == EMPTY)  # No FILE arg provided to @dump command
+        warn(sprintf("(xeq_cmd__dump) Empty %s table; dumpfile='%s'", ppf__flags(what_type), dumpfile))
+    } else if (emptyp(dumpfile))  # No FILE arg provided to @dump command
         print buf
-    # else {
-    #     print buf > dumpfile
-    #     close(dumpfile)
-    # }
+    else {
+        dbg_print("sym", 3, sprintf("(xeq_cmd__dump) %s table dump to '%s'",
+                                    ppf__flags(what_type), dumpfile))
+        print buf > dumpfile
+        close(dumpfile)
+    }
 }
 
 
@@ -3735,6 +3783,127 @@ function _less_than(s1, s2,    fs1, fs2, d1, d2)
 
     else
         return s1 < s2
+}
+
+
+# Like ppf__XX functions, last line of multi-line buffer
+# *omits* newline.
+function dump__symtab(type, include_sys, # caller names this "all_flag"
+                      x, k, code, buf, cond_matched,
+                      keys, cnt, i)
+{
+    dbg_print("sym", 4, "(dump__symtab) BEGIN")
+    if (first(type) != TYPE_SYMBOL)
+        error("(dump__symtab) Bad type " ppf__flags(first(type)))
+    sym_define_all_deferred()
+
+    # Build keys[] array, whose values are printable symbol names that
+    # pass restrictive checks.
+    cnt = 0
+    for (k in symtab) {
+        split(k, x, SUBSEP)
+        # print "name  =", x[1]
+        # print "key   =", x[2]
+        # print "level =", x[3]
+        # print "elem  =", x[4]
+        if (x[4] != "symval") continue
+        code = nam_ll_read(x[1], x[3]) # name, level
+        dbg_print("sym", 7, sprintf("(dump__symtab) name='%s', key='%s', code=%s",
+                                    x[1], x[2], code))
+        if (((flag_1true_p(code, TYPE_SYMBOL) && x[2] == EMPTY) ||
+             (flag_1true_p(code, TYPE_ARRAY)  && x[2] != EMPTY))) {
+            # So far so good - now see if we should eliminate system symbols
+            if (!include_sys && flag_1true_p(code, FLAG_SYSTEM))
+                continue
+            keys[++cnt] = x[1] (x[2] != EMPTY ? "[" x[2] "]" : "")
+        }
+    }
+
+    qsort(keys, 1, cnt)
+
+    # Construct output lines in buf
+    buf = EMPTY
+    for (i = 1; i <= cnt; i++)
+        buf = buf sym_definition_ppf(keys[i]) "\n"
+    dbg_print("sym", 4, "(dump__symtab) END")
+    return chomp(buf)
+}
+
+
+function dump__seqtab(type, include_sys,
+                      x, k, keys, cnt, code, buf, i)
+{
+    dbg_print("seq", 4, "(dump__seqtab) BEGIN")
+    if (first(type) != TYPE_SEQUENCE)
+        error("(dump__seqtab) Bad type " ppf__flags(first(type)))
+
+    # Build keys[] array, whose values are printable symbol names that
+    # pass restrictive checks.
+    cnt = 0
+    for (k in seqtab) {
+        split(k, x, SUBSEP)
+        # print "name  =", x[1]
+        # print "elem  =", x[2]
+        if (x[2] != "seqval") continue
+        code = nam_ll_read(x[1], GLOBAL_NAMESPACE) # name, level
+        dbg_print("seq", 7, sprintf("(dump__seqtab) name='%s', code=%s",
+                                    x[1], code))
+        if (flag_1true_p(code, TYPE_SEQUENCE)) {
+            # I don't think there are any system sequences yet...
+            if (!include_sys && flag_1true_p(code, FLAG_SYSTEM))
+                continue
+            keys[++cnt] = x[1]
+        }
+    }
+
+    qsort(keys, 1, cnt)
+
+    # Construct output lines in buf
+    buf = EMPTY
+    for (i = 1; i <= cnt; i++)
+        buf = buf seq_definition_ppf(keys[i]) "\n"
+    dbg_print("seq", 4, "(dump__seqtab) END")
+    return chomp(buf)
+}
+
+
+function dump__cmdtab(type, include_sys,
+                      x, k, keys, cnt, code, buf, i)
+{
+    dbg_print("cmd", 4, "(dump__cmdtab) BEGIN")
+    if (first(type) != TYPE_USER)
+        error("(dump__cmdtab) Bad type " ppf__flags(first(type)))
+
+    # Build keys[] array, whose values are printable symbol names that
+    # pass restrictive checks.
+    cnt = 0
+    for (k in cmdtab) {
+        split(k, x, SUBSEP)
+        # print_stderr("x[1]=" x[1])
+        # print_stderr("x[2]=" x[2])
+        # print_stderr("x[3]=" x[3])
+        # print_stderr("value => " cmdtab[x[1], x[2], x[3]])
+
+        if (x[3] != "user_block") continue
+        code = nam_ll_read(x[1], x[2]) # name, level
+        dbg_print("cmd", 5, sprintf("(dump__cmdtab) name='%s', code=%s",
+                                    x[1], code))
+        if (flag_1true_p(code, TYPE_USER)) {
+            # # I don't think there are any system sequences yet...
+            # if (!include_sys && flag_1true_p(code, FLAG_SYSTEM))
+            #     continue
+            keys[++cnt] = x[1]
+        }
+    }
+
+    qsort(keys, 1, cnt)
+
+    # Construct output lines in buf
+    buf = EMPTY
+    for (i = 1; i <= cnt; i++)
+        buf = buf cmd_definition_ppf(keys[i]) "\n"
+    dbg_print("cmd", 4, "(dump__cmdtab) END")
+    return chomp(buf)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -3905,11 +4074,11 @@ function scan__next(                   for_block)
 function xeq_blk__for(for_block,
                       block_type)
 {
-    block_type = blktab[for_block, "type"]
+    block_type = blk_type(for_block)
     dbg_print("for", 3, sprintf("(xeq_blk__for) START dstblk=%d, for_block=%d, type=%s",
                                 curr_dstblk(), for_block, ppf_block_type(block_type)))
     dbg_print_block("for", 7, for_block, "(xeq_blk__for) for_block")
-    if ((blktab[for_block, "type"] != BLK_FOR) || \
+    if ((block_type != BLK_FOR) || \
         (blktab[for_block, "valid"] != TRUE))
         error("(xeq_blk__for) Bad config")
 
@@ -4017,6 +4186,19 @@ function execute__foreach(for_block,
 }
 
 
+function ppf__for(for_block,
+                  buf)
+{
+    if (blktab[for_block, "each"])
+        buf = "@foreach " blktab[for_block, "loopvar"] " " blktab[for_block, "arrname"] "\n"
+    else
+        buf = "@for " blktab[for_block, "loopvar"] " " blktab[for_block, "start"] " " blktab[for_block, "end"] " " blktab[for_block, "incr"] "\n"
+    buf = buf ppf__block(blktab[for_block, "body_block"]) "\n"
+    buf = buf "@next "  blktab[for_block, "loopvar"]
+    return buf
+}
+
+
 function prt_blk__for(blknum)
 {
     return sprintf("  valid   : %s\n" \
@@ -4091,7 +4273,7 @@ function scan__else(                   if_block, false_block)
     if (stk_emptyp(__scan_stack))
         error("(scan__else) Scan stack is empty!")
     if_block = stk_top(__scan_stack)
-    if (blktab[if_block, "type"] != BLK_IF)
+    if (blk_type(if_block) != BLK_IF)
         error("(scan__else) Scan error: top != IF")
 
     # Check if already seen @else
@@ -4130,12 +4312,12 @@ function scan__endif(                    if_block)
 function xeq_blk__if(if_block,
                      block_type, condition, condval)
 {
-    block_type = blktab[if_block , "type"]
+    block_type = blk_type(if_block)
     dbg_print("if", 3, sprintf("(xeq_blk__if) START dstblk=%d, if_block=%d, type=%s",
                                curr_dstblk(), if_block, ppf_block_type(block_type)))
 
     dbg_print_block("if", 7, if_block, "(xeq_blk__if) if_block")
-    if ((blktab[if_block, "type"] != BLK_IF) || \
+    if ((block_type != BLK_IF) || \
         (blktab[if_block, "valid"] != TRUE))
         error("(xeq_blk__if) Bad config")
 
@@ -4162,6 +4344,18 @@ function xeq_blk__if(if_block,
     lower_namespace()
 
     dbg_print("if", 3, sprintf("(xeq_blk__if) END"))
+}
+
+
+function ppf__if(if_block,
+    buf)
+{
+    buf = "@if " blktab[if_block, "condition"] "\n" \
+            ppf__block(blktab[if_block, "true_block"]) "\n"
+    if (blktab[if_block, "seen_else"])
+        buf = buf "@else\n" \
+              ppf__block(blktab[if_block, "false_block"]) "\n"
+    return buf "@endif" 
 }
 
 
@@ -4532,11 +4726,11 @@ function scan__endlongdef(    sym_block)
 function xeq_blk__longdef(longdef_block,
                           block_type, name, body_block, opm)
 {
-    block_type = blktab[longdef_block, "type"]
+    block_type = blk_type(longdef_block)
     dbg_print("sym", 3, sprintf("(xeq_blk__longdef) START dstblk=%d, longdef_block=%d, type=%s",
                                  curr_dstblk(), longdef_block, ppf_block_type(block_type)))
     dbg_print_block("sym", 7, longdef_block, "(xeq_blk__longdef) longdef_block")
-    if ((blktab[longdef_block, "type"] != BLK_LONGDEF) ||
+    if ((block_type != BLK_LONGDEF) ||
         (blktab[longdef_block, "valid"] != TRUE))
         error("(xeq_blk__longdef) Bad config")
 
@@ -4547,6 +4741,15 @@ function xeq_blk__longdef(longdef_block,
     dbg_print_block("sym", 3, body_block, "(xeq_blk__longdef) body_block")
     sym_store(name, blk_to_string(body_block))
     dbg_print("sym", 1, "(xeq_blk__longdef) END")
+}
+
+
+function ppf__longdef(longdef_block,
+                      buf)
+{
+    return "@longdef " blktab[longdef_block, "name"] "\n" \
+            ppf__block(blktab[longdef_block, "body_block"]) "\n" \
+            "@endlong"
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -4682,7 +4885,7 @@ function ship_out__user(cmdline,
 
     if ((stream = divnum()) > TERMINAL) {
         dbg_print("ship_out", 3, sprintf("(ship_out__user) stream=%d", stream))
-        # Name is known to be a command, therefore its code must be in the symbol table
+        # Name is known to be a command, therefore its code must be in the symbol (?) table
         sub(/^[ \t]*[^ \t]+[ \t]*/, "", cmdline)
         dbg_print("ship_out", 3, sprintf("(ship_out__user) name='%s', cmdline now '%s'",
                                          name, cmdline))
@@ -4705,11 +4908,11 @@ function ship_out__user(cmdline,
 function xeq_blk__user(newcmd_block,
                        block_type, name)
 {
-    block_type = blktab[newcmd_block, "type"]
+    block_type = blk_type(newcmd_block)
     dbg_print("cmd", 3, sprintf("(xeq_blk__user) START dstblk=%d, newcmd_block=%d, type=%s",
                                  curr_dstblk(), newcmd_block, ppf_block_type(block_type)))
     dbg_print_block("cmd", 7, newcmd_block, "(xeq_blk__user) newcmd_block")
-    if ((blktab[newcmd_block, "type"] != BLK_USER) ||
+    if ((block_type != BLK_USER) ||
         (blktab[newcmd_block, "valid"] != TRUE))
         error("(xeq_blk__user) Bad config")
 
@@ -4731,12 +4934,12 @@ function execute__user(name, cmdline,
                        user_block,
                        args, arg, narg, argval)
 {
+    dbg_print("xeq", 3, sprintf("(execute__user) START name='%s', cmdline='%s'",
+                                name, cmdline))
     if (__loop_ctl != LOOP_NORMAL) {
         dbg_print("xeq", 3, "(execute__user) NOP due to loop_ctl=" __loop_ctl)
         return
     }
-    dbg_print("xeq", 3, sprintf("(execute__user) START name='%s', cmdline='%s'",
-                                name, cmdline))
 
     old_level = __namespace
 
@@ -4776,11 +4979,11 @@ function execute__user(name, cmdline,
 function execute__user_body(user_block, args,
                        block_type, new_level, i, p, body_block)
 {
-    block_type = blktab[user_block , "type"]
+    block_type = blk_type(user_block)
     dbg_print("cmd", 3, sprintf("(execute__user_body) START dstblk=%d, user_block=%d, type=%s",
                                  curr_dstblk(), user_block, ppf_block_type(block_type)))
     dbg_print_block("cmd", 7, user_block, "(execute__user_body) user_block")
-    if ((blktab[user_block, "type"] != BLK_USER) ||
+    if ((block_type != BLK_USER) ||
         (blktab[user_block, "valid"] != TRUE))
         error("(execute__user_body) Bad config")
 
@@ -5399,12 +5602,12 @@ function xeq_blk__while(while_block,
     #     return
     # }
 
-    block_type = blktab[while_block , "type"]
+    block_type = blk_type(while_block)
     dbg_print("while", 3, sprintf("(xeq_blk__while) START dstblk=%d, while_block=%d, type=%s",
                                curr_dstblk(), while_block, ppf_block_type(block_type)))
 
     dbg_print_block("while", 7, while_block, "(xeq_blk__while) while_block")
-    if ((blktab[while_block, "type"] != BLK_WHILE) || \
+    if ((block_type != BLK_WHILE) || \
         (blktab[while_block, "valid"] != TRUE))
         error("(xeq_blk__while) Bad config")
 
@@ -5443,6 +5646,16 @@ function xeq_blk__while(while_block,
     }
 
     dbg_print("while", 3, sprintf("(xeq_blk__while) END"))
+}
+
+
+function ppf__while(while_block,
+                    buf)
+{
+    buf = "@while " blktab[while_block, "condition"] "\n" \
+          ppf__block(blktab[while_block, "body_block"]) "\n" \
+          "@endwhile"
+    return buf
 }
 
 

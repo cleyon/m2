@@ -4,6 +4,4 @@
 Line A
 Line B
 @endlong
-Symbols:
 @dump symbols
-End Symbols

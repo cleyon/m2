@@ -113,9 +113,9 @@ run_test()
     [ $debug = "true" ] && echo "TESTNAME is $TESTNAME"
     printf "*** $test_id/$TESTNAME ... "
 
-    [ -f ${TESTNAME}.disabled ] && { echo "SKIP (test disabled)"; return; }
-    [ -r "$M2_FILE" ] || { echo "SKIP (unreadable test file)"; return; }
-    [ -s "$M2_FILE" ] || { echo "SKIP (empty test file)"; return; }
+    [ -f ${TESTNAME}.disabled ] && { echo "SKIPPED - test disabled"; return; }
+    [ -r "$M2_FILE" ] || { echo "SKIPPED - unreadable test file"; return; }
+    [ -s "$M2_FILE" ] || { echo "SKIPPED - empty test file"; return; }
     [ -f ${TESTNAME}.target ] || framework_error "$TESTNAME.target does not exist"
 
     rm -f ${TESTNAME}.out ${TESTNAME}.err ${TESTNAME}.code ${TESTNAME}.want_code

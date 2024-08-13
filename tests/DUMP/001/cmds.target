@@ -1,12 +1,11 @@
 @newcmd FOO
 Foo on you!
 @endcmd
-@newcmd hello{name}
-Hello, @name@!
-@endcmd
 @newcmd guilty{who}
-@for i 1 4
+@for i 1 4 1
 That's guilty, @who@, guilty!
 @next i
 @endcmd
-@dump commands
+@newcmd hello{name}
+Hello, @name@!
+@endcmd

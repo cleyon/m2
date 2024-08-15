@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-08-15 02:53:31 cleyon>
+#  Time-stamp:  <2024-08-15 10:16:41 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -1170,8 +1170,8 @@ function ppf__block(blknum,
 function execute__block(blknum,
                         block_type, old_level)
 {
-    if (__loop_ctl != LOOP_NORMAL) {
-        dbg_print("xeq", 3, "(execute__block) NOP due to loop_ctl=" __loop_ctl)
+    if (__xeq_ctl != XEQ_NORMAL) {
+        dbg_print("xeq", 3, "(execute__block) NOP due to __xeq_ctl=" __xeq_ctl)
         return
     }
 
@@ -1449,8 +1449,8 @@ function ship_out__command(cmdline,
 function execute__command(name, cmdline,
                           old_level)
 {
-    if (__loop_ctl != LOOP_NORMAL) {
-        dbg_print("xeq", 3, "(execute__command) NOP due to loop_ctl=" __loop_ctl)
+    if (__xeq_ctl != XEQ_NORMAL) {
+        dbg_print("xeq", 3, "(execute__command) NOP due to __xeq_ctl=" __xeq_ctl)
         return
     }
     dbg_print("xeq", 3, sprintf("(execute__command) START name='%s', cmdline='%s'",
@@ -3368,8 +3368,8 @@ function ship_out__text(text,
 
 function execute__text(text)
 {
-    if (__loop_ctl != LOOP_NORMAL) {
-        dbg_print("xeq", 3, "(execute__text) NOP due to loop_ctl=" __loop_ctl)
+    if (__xeq_ctl != XEQ_NORMAL) {
+        dbg_print("xeq", 3, "(execute__text) NOP due to __xeq_ctl=" __xeq_ctl)
         return
     }
     dbg_print("xeq", 3, sprintf("(execute__text) START; text='%s'", text))
@@ -3422,10 +3422,10 @@ function xeq_cmd__break(name, cmdline,
                         level, block, block_type)
 {
     # Logical check
-    if (__loop_ctl != LOOP_NORMAL)
-        error("(xeq_cmd__break) __loop_ctl is not normal, how did that happen?")
+    if (__xeq_ctl != XEQ_NORMAL)
+        error("(xeq_cmd__break) __xeq_ctl is not normal, how did that happen?")
 
-    __loop_ctl = LOOP_BREAK
+    __xeq_ctl = XEQ_BREAK
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -3624,10 +3624,10 @@ function xeq_cmd__continue(name, cmdline)
     # loop to break out of
 
     # Logical check
-    if (__loop_ctl != LOOP_NORMAL)
-        error("(xeq_cmd__continue) __loop_ctl is not normal, how did that happen?")
+    if (__xeq_ctl != XEQ_NORMAL)
+        error("(xeq_cmd__continue) __xeq_ctl is not normal, how did that happen?")
 
-    __loop_ctl = LOOP_CONTINUE
+    __xeq_ctl = XEQ_CONTINUE
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -4139,8 +4139,8 @@ function xeq_blk__for(for_block,
 function execute__for(for_block,
                       loopvar, start, end, incr, done, counter, body_block, new_level)
 {
-    # if (__loop_ctl != LOOP_NORMAL) {
-    #     dbg_print("xeq", 3, "(execute__for) NOP due to loop_ctl=" __loop_ctl)
+    # if (__xeq_ctl != XEQ_NORMAL) {
+    #     dbg_print("xeq", 3, "(execute__for) NOP due to __xeq_ctl=" __xeq_ctl)
     #     return
     # }
     # Evaluate loop
@@ -4174,12 +4174,12 @@ function execute__for(for_block,
                           : (counter -= abs(incr)) < end
 
         # Check for break or continue
-        if (__loop_ctl == LOOP_BREAK) {
-            __loop_ctl = LOOP_NORMAL
+        if (__xeq_ctl == XEQ_BREAK) {
+            __xeq_ctl = XEQ_NORMAL
             break
         }
-        if (__loop_ctl == LOOP_CONTINUE) {
-            __loop_ctl = LOOP_NORMAL
+        if (__xeq_ctl == XEQ_CONTINUE) {
+            __xeq_ctl = XEQ_NORMAL
             # Actual "continue" wouldn't do anything here since we're
             # about to re-iterate the loop anyway
         }
@@ -4191,8 +4191,8 @@ function execute__for(for_block,
 function execute__foreach(for_block,
                           loopvar, arrname, level, keys, x, k, body_block, new_level)
 {
-    # if (__loop_ctl != LOOP_NORMAL) {
-    #     dbg_print("xeq", 3, "(execute__foreach) NOP due to loop_ctl=" __loop_ctl)
+    # if (__xeq_ctl != XEQ_NORMAL) {
+    #     dbg_print("xeq", 3, "(execute__foreach) NOP due to __xeq_ctl=" __xeq_ctl)
     #     return
     # }
     loopvar = blktab[for_block, "loopvar"]
@@ -4219,12 +4219,12 @@ function execute__foreach(for_block,
         lower_namespace()
 
         # Check for break or continue
-        if (__loop_ctl == LOOP_BREAK) {
-            __loop_ctl = LOOP_NORMAL
+        if (__xeq_ctl == XEQ_BREAK) {
+            __xeq_ctl = XEQ_NORMAL
             break
         }
-        if (__loop_ctl == LOOP_CONTINUE) {
-            __loop_ctl = LOOP_NORMAL
+        if (__xeq_ctl == XEQ_CONTINUE) {
+            __xeq_ctl = XEQ_NORMAL
             # Actual "continue" wouldn't do anything here since we're
             # about to re-iterate the loop anyway
         }
@@ -4978,8 +4978,8 @@ function execute__user(name, cmdline,
 {
     dbg_print("xeq", 3, sprintf("(execute__user) START name='%s', cmdline='%s'",
                                 name, cmdline))
-    if (__loop_ctl != LOOP_NORMAL) {
-        dbg_print("xeq", 3, "(execute__user) NOP due to loop_ctl=" __loop_ctl)
+    if (__xeq_ctl != XEQ_NORMAL) {
+        dbg_print("xeq", 3, "(execute__user) NOP due to __xeq_ctl=" __xeq_ctl)
         return
     }
 
@@ -5639,8 +5639,8 @@ function scan__endwhile(                    while_block)
 function xeq_blk__while(while_block,
                         block_type, body_block, condition, condval)
 {
-    # if (__loop_ctl != LOOP_NORMAL) {
-    #     dbg_print("while", 3, "(xeq_blk__while) NOP due to loop_ctl=" __loop_ctl)
+    # if (__xeq_ctl != XEQ_NORMAL) {
+    #     dbg_print("while", 3, "(xeq_blk__while) NOP due to __xeq_ctl=" __xeq_ctl)
     #     return
     # }
 
@@ -5676,12 +5676,12 @@ function xeq_blk__while(while_block,
             error("@while: Uncaught error")
 
         # Check for break or continue
-        if (__loop_ctl == LOOP_BREAK) {
-            __loop_ctl = LOOP_NORMAL
+        if (__xeq_ctl == XEQ_BREAK) {
+            __xeq_ctl = XEQ_NORMAL
             break
         }
-        if (__loop_ctl == LOOP_CONTINUE) {
-            __loop_ctl = LOOP_NORMAL
+        if (__xeq_ctl == XEQ_CONTINUE) {
+            __xeq_ctl = XEQ_NORMAL
             # Actual "continue" wouldn't do anything here since we're
             # about to re-iterate the loop anyway
         }
@@ -6525,18 +6525,18 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     BLK_USER      = "U";                __blk_label[BLK_USER]     = "USER"
     BLK_WHILE     = "W";                __blk_label[BLK_WHILE]    = "WHILE"
 
-    LOOP_NORMAL   = 0
-    LOOP_BREAK    = 1
-    LOOP_CONTINUE = 2
+    XEQ_NORMAL   = 0
+    XEQ_BREAK    = 1
+    XEQ_CONTINUE = 2
 
     __block_cnt          = 0
     __buffer             = EMPTY
     __init_files_loaded  = FALSE # Becomes True in load_init_files()
-    __loop_ctl           = LOOP_NORMAL
     __namespace          = GLOBAL_NAMESPACE
     __ord_initialized    = FALSE # Becomes True in initialize_ord()
     __print_mode         = MODE_TEXT_PRINT
     __scan_stack[0]      = 0
+    __xeq_ctl            = XEQ_NORMAL
 
     srand()                     # Seed random number generator
     initialize_prog_paths()

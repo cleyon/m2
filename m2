@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-08-14 22:48:53 cleyon>
+#  Time-stamp:  <2024-08-15 01:06:35 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -1751,6 +1751,7 @@ function scan(              code, terminator, readstat, name, retval, new_block,
 
                     } else if (name == "case") {
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__case(dstblk=" curr_dstblk() ")"))
+                        raise_namespace()
                         new_block = scan__case()
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__case() : new_block => " new_block))
                         dbg_print("scan", 5, sprintf("(scan) [" scanner_label "] CALLING ship_out__block(%d)", new_block))
@@ -1762,12 +1763,15 @@ function scan(              code, terminator, readstat, name, retval, new_block,
 
                     } else if (name == "else") {
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__else(dstblk=" curr_dstblk() ")"))
+                        lower_namespace() # trigger name/symbol purge
+                        raise_namespace()
                         scan__else()
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__else() : dstblk => " curr_dstblk()))
 
                     } else if (name == "endcase" || name == "esac") {
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__endcase(dstblk=" curr_dstblk() ")"))
                         scan__endcase()
+                        lower_namespace()
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__endcase() : dstblk => " curr_dstblk()))
                         if (match($1, terminator)) {
                             dbg_print("scan", 5, "(scan) [" scanner_label "] END; @endcase matched terminator => TRUE")
@@ -1798,10 +1802,6 @@ function scan(              code, terminator, readstat, name, retval, new_block,
                             # happens in xeq_blk__user.)
                             if (! nam_ll_in(name, __namespace)) {
                                 new_cmd_name = blktab[new_block, "name"]
-                                # Top element of scan_stack should be USER command
-                                clevel = stk_depth(__scan_stack)
-                                if (clevel == 0 || blk_type(__scan_stack[clevel]) != BLK_USER)
-                                    error("@endcmd : Bad config")
                                 dbg_print("scan", 3, sprintf("Declaring new user command '%s' at level %d",
                                                              new_cmd_name, __namespace))
                                 nam_ll_write(new_cmd_name, __namespace, TYPE_USER)
@@ -1813,6 +1813,7 @@ function scan(              code, terminator, readstat, name, retval, new_block,
                     } else if (name == "endif" || name == "fi") {
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__endif(dstblk=" curr_dstblk() ")"))
                         scan__endif()
+                        lower_namespace()
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__endif() : dstblk => " curr_dstblk()))
                         if (match($1, terminator)) {
                             dbg_print("scan", 5, "(scan) [" scanner_label "] END; @endif matched terminator => TRUE")
@@ -1833,6 +1834,7 @@ function scan(              code, terminator, readstat, name, retval, new_block,
                     } else if (name == "endwhile") {
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__endwhile(dstblk=" curr_dstblk() ")"))
                         scan__endwhile()
+                        lower_namespace()
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__endwhile() : dstblk => " curr_dstblk()))
                         if (match($1, terminator)) {
                             dbg_print("scan", 5, "(scan) [" scanner_label "] END; @endwhile matched terminator => TRUE")
@@ -1843,6 +1845,7 @@ function scan(              code, terminator, readstat, name, retval, new_block,
                     } else if (name == "for" || name == "foreach") {
                         dbg_print("scan", 5, sprintf("(scan) [%s] curr_dstblk()=%d CALLING scan__for()",
                                                      scanner_label, curr_dstblk()))
+                        raise_namespace()
                         new_block = scan__for()
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__for() : new_block is " new_block))
                         dbg_print("scan", 5, sprintf("(scan) [" scanner_label "] CALLING ship_out__block(%d)", new_block))
@@ -1851,6 +1854,7 @@ function scan(              code, terminator, readstat, name, retval, new_block,
 
                     } else if (name == "if" || name == "unless" || name ~ /ifn?def/) {
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__if(dstblk=" curr_dstblk() ")"))
+                        raise_namespace()
                         new_block = scan__if()
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__if() : new_block => " new_block))
                         dbg_print("scan", 5, sprintf("(scan) [" scanner_label "] CALLING ship_out__block(%d)", new_block))
@@ -1878,6 +1882,7 @@ function scan(              code, terminator, readstat, name, retval, new_block,
                         dbg_print("scan", 5, sprintf("(scan) [%s] dstblk=%d; CALLING scan__next()",
                                                      scanner_label, curr_dstblk()))
                         scan__next()
+                        lower_namespace()
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__next() : dstblk => " curr_dstblk()))
                         if (match($1, terminator)) {
                             dbg_print("scan", 5, "(scan) [" scanner_label "] END Matched terminator => TRUE")
@@ -1887,15 +1892,20 @@ function scan(              code, terminator, readstat, name, retval, new_block,
 
                     } else if (name == "of") {
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__of(dstblk=" curr_dstblk() ")"))
+                        lower_namespace()
+                        raise_namespace()
                         scan__of()
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__of() : dstblk => " curr_dstblk()))
 
                     } else if (name == "otherwise") {
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__otherwise(dstblk=" curr_dstblk() ")"))
+                        lower_namespace()
+                        raise_namespace()
                         scan__otherwise()
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__otherwise() : dstblk => " curr_dstblk()))
 
                     } else if (name == "while") {
+                        raise_namespace()
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__while(dstblk=" curr_dstblk() ")"))
                         new_block = scan__while()
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__while() : new_block => " new_block))
@@ -3533,17 +3543,19 @@ function xeq_blk__case(case_block,
     dbg_print("case", 5, sprintf("(xeq_blk__case) caseval '%s'", caseval))
 
     if ( (case_block, "of", caseval) in blktab) {
-        # See if there's a preamble which is non-empty.  By the way,
-        # preambles DO NOT get their own namespace.
+        # See if there's a preamble which is non-empty.  Preambles get
+        # their own namespace.
         preamble_block = blktab[case_block, "preamble_block"]
         if (blktab[preamble_block, "count"]+0 > 0) {
             dbg_print("case", 5, sprintf("(xeq_blk__case) CALLING execute__block(%d)",
                                          blktab[case_block, "preamble_block"]))
+            raise_namespace()
             execute__block(blktab[case_block, "preamble_block"])
+            lower_namespace()
             dbg_print("case", 5, sprintf("(xeq_blk__case) RETURNED FROM execute__block()"))
         }
 
-        # But the @of branch DOES get a new namespace
+        # The @of branch gets a new namespace
         raise_namespace()
         dbg_print("case", 5, sprintf("(xeq_blk__case) CALLING execute__block(%d)",
                                      blktab[case_block, "of", caseval]))
@@ -4921,7 +4933,7 @@ function ship_out__user(cmdline,
     dbg_print("ship_out", 3, sprintf("(ship_out__user) CALLING execute__user('%s', '%s')",
                                      name, cmdline))
     #sub(/^[ \t]*[^ \t]+[ \t]*/, "", cmdline)
-    execute__user(name, cmdline) # dosubs(cmdline))
+    execute__user(name, dosubs(cmdline))
     dbg_print("ship_out", 3, sprintf("(ship_out__user) RETURNED FROM execute__user('%s', ...)",
                                      name))
     dbg_print("ship_out", 3, sprintf("(ship_out__user) END"))

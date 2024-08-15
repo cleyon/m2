@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-08-15 10:49:32 cleyon>
+#  Time-stamp:  <2024-08-15 11:16:31 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -2264,7 +2264,7 @@ function nam_purge(level,
 }
 
 
-function nam_dump_namtab(filter_fs,
+function nam_dump_namtab(filter_fs, include_sys,
                            x, k, code, s, desc, name, level, f_arr, l,
                            include_system)
 {
@@ -2987,7 +2987,7 @@ function sym_store(sym, new_val,
         if (dbg5) {
             print_stderr(sprintf("(sym_store) LOOP BOTTOM: name='%s', key='%s', level=%d, code='%s', good=%s",
                                  name, key, level, code, ppf_bool(good)))
-            nam_dump_namtab(TYPE_SYMBOL)
+            nam_dump_namtab(TYPE_SYMBOL, FALSE)
             print_stderr(dump__symtab(TYPE_SYMBOL, FALSE)) # print_stderr() adds newline.  FALSE means omit system symbols
         }
     } while (FALSE)

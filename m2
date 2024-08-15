@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-08-13 10:23:07 cleyon>
+#  Time-stamp:  <2024-08-14 22:48:53 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -1649,7 +1649,8 @@ function scan__file(    filename, file_block1, file_block2, scanstat, d)
 
 # SCAN
 function scan(              code, terminator, readstat, name, retval, new_block, fc,
-                            info, level, scanner, scanner_type, scanner_label, i, scnt, found)
+                            info, level, scanner, scanner_type, scanner_label, i, scnt, found,
+                            new_cmd_name, clevel)
 {
     dbg_print("scan", 3, "(scan) START dstblk=" curr_dstblk() ", mode=" ppf_mode(curr_atmode()))
 
@@ -1776,10 +1777,35 @@ function scan(              code, terminator, readstat, name, retval, new_block,
 
                     } else if (name == "endcmd") {
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__endcmd(dstblk=" curr_dstblk() ")"))
-                        scan__endcmd()
+                        new_block = scan__endcmd()
+                        lower_namespace()
+                        dbg_print_block("scan", 7, new_block, sprintf("newcmd block returned from scan__endcmd"))
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__endcmd() : dstblk => " curr_dstblk()))
+
                         if (match($1, terminator)) {
                             dbg_print("scan", 5, "(scan) [" scanner_label "] END; @endcmd matched terminator => TRUE")
+
+                            # Create an entry for the new command name.
+                            # We do this at Scan time so that future
+                            # invocations of new command @FOO will
+                            # immediately be recognized as an available
+                            # user command.  All we need to do is create
+                            # a namtab entry with correct TYPE_USER.  NB
+                            # - we don't have an entry in the cmdtab
+                            # yet.  That's okay because the command is
+                            # only being declared, not defined, and it's
+                            # not ready to run yet.  (That next bit
+                            # happens in xeq_blk__user.)
+                            if (! nam_ll_in(name, __namespace)) {
+                                new_cmd_name = blktab[new_block, "name"]
+                                # Top element of scan_stack should be USER command
+                                clevel = stk_depth(__scan_stack)
+                                if (clevel == 0 || blk_type(__scan_stack[clevel]) != BLK_USER)
+                                    error("@endcmd : Bad config")
+                                dbg_print("scan", 3, sprintf("Declaring new user command '%s' at level %d",
+                                                             new_cmd_name, __namespace))
+                                nam_ll_write(new_cmd_name, __namespace, TYPE_USER)
+                            }
                             return TRUE
                         }
                         error("(scan) [" scanner_label "] Found @endcmd but expecting '" terminator "'")
@@ -1840,6 +1866,7 @@ function scan(              code, terminator, readstat, name, retval, new_block,
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM ship_out__block()"))
 
                     } else if (name == "newcmd") {
+                        raise_namespace()
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__newcmd(dstblk=" curr_dstblk() ")"))
                         new_block = scan__newcmd()
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__newcmd() : new_block => " new_block))
@@ -2262,6 +2289,7 @@ function nam_ll_read(name, level)
 function nam_ll_in(name, level)
 {
     if (level == EMPTY) error("(nam_ll_in) LEVEL missing")
+    dbg_print("sym", 5, sprintf("(nam_ll_in) Looking for '%s' at level %d", name, level))
     return (name, level) in namtab
 }
 
@@ -4848,16 +4876,11 @@ function scan__endcmd(                     newcmd_block)
     dbg_print("cmd", 3, sprintf("(scan__endcmd) START dstblk=%d, mode=%s",
                                  curr_dstblk(), ppf_mode(curr_atmode())))
 
-    # if (stk_emptyp(__scan_stack))
-    #     error("(scan__endcmd) Scan stack is empty!")
-    # newcmd_block = stk_pop(__scan_stack)
-    # if ((blktab[newcmd_block, "type"] != BLK_USER) ||
-    #     (blktab[newcmd_block, "depth"] != stk_depth(__scan_stack)))
-    #     error("(scan__endcmd) Corrupt scan stack")
     assert_scan_stack_okay(BLK_USER)
     newcmd_block = stk_pop(__scan_stack)
     blktab[newcmd_block, "valid"] = TRUE
     dbg_print("cmd", 3, sprintf("(scan__endcmd) END => %d", newcmd_block))
+    dbg_print_block("scan", 7, newcmd_block, sprintf("newcmd block just scanned:"))
     return newcmd_block
 }
 

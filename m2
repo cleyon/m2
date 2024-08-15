@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-08-15 10:16:41 cleyon>
+#  Time-stamp:  <2024-08-15 10:49:32 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -1486,6 +1486,7 @@ function execute__command(name, cmdline,
     else if (name ~  /s?readarray/) xeq_cmd__readarray(name, cmdline)
     else if (name ~  /s?readfile/)  xeq_cmd__readfile(name, cmdline)
     else if (name == "readonly")    xeq_cmd__readonly(name, cmdline)
+    else if (name == "return")      xeq_cmd__return(name, cmdline)
     else if (name == "sequence")    xeq_cmd__sequence(name, cmdline)
     else if (name == "shell")       xeq_cmd__shell(name, cmdline)
     else if (name == "stderr")      xeq_cmd__error(name, cmdline)
@@ -1910,6 +1911,21 @@ function scan(              code, terminator, readstat, name, retval, new_block,
                         raise_namespace()
                         scan__otherwise()
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__otherwise() : dstblk => " curr_dstblk()))
+
+                    } else if (name == "return") {
+                        found = FALSE
+                        for (i = stk_depth(__scan_stack); i > 0; i--) {
+                            scnt = blk_type(__scan_stack[i])
+                            if (scnt == BLK_USER) {
+                                found = TRUE
+                                break
+                            }
+                        }
+                        if (! found)
+                            error("@return: Not executing a user command")
+                        dbg_print("scan", 3, sprintf("(scan) [%s] CALLING ship_out__command('%s')", scanner_label, $0))
+                        ship_out__command($0)
+                        dbg_print("scan", 3, "(scan) [" scanner_label "] RETURNED FROM ship_out__command()")
 
                     } else if (name == "while") {
                         raise_namespace()
@@ -3620,9 +3636,6 @@ function prt_blk__case(blknum)
 # @continue
 function xeq_cmd__continue(name, cmdline)
 {
-    # Follow scan stack upwards to make sure there's a @for or @while
-    # loop to break out of
-
     # Logical check
     if (__xeq_ctl != XEQ_NORMAL)
         error("(xeq_cmd__continue) __xeq_ctl is not normal, how did that happen?")
@@ -4374,7 +4387,7 @@ function xeq_blk__if(if_block,
     condval = evaluate_condition(condition, blktab[if_block, "init_negate"])
     dbg_print("if", 1, sprintf("(xeq_blk__if) evaluate_condition('%s') => %s", condition, ppf_bool(condval)))
     if (condval == ERROR)
-        error("@if: Uncaught error")
+        error("@if: Error evaluating condition '" condition "'")
 
     raise_namespace()
     if (condval) {
@@ -5046,8 +5059,15 @@ function execute__user_body(user_block, args,
     dbg_print("cmd", 5, sprintf("(execute__user_body) CALLING execute__block(%d)", body_block))
     execute__block(body_block)
     dbg_print("cmd", 5, sprintf("(execute__user_body) RETURNED FROM execute__block()"))
-
     lower_namespace()
+
+    # If we've been asked to return, well now we have
+    if (__xeq_ctl == XEQ_RETURN)
+        __xeq_ctl = XEQ_NORMAL
+    # If things are still not normal, that's a problem
+    if (__xeq_ctl != XEQ_NORMAL)
+        error("(xeq_cmd__return) __xeq_ctl is not normal, how did that happen?")
+
     dbg_print("cmd", 1, "(execute__user_body) END")
 }
 
@@ -5285,6 +5305,27 @@ function xeq_cmd__readonly(cmd, cmdline,
     if (flag_1true_p(code, FLAG_SYSTEM))
         error("@readonly: name protected")
     nam_ll_write(name, level, flag_set_clear(code, FLAG_READONLY))
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  R E T U R N
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#*****************************************************************************
+# @return
+function xeq_cmd__return(name, cmdline,
+                        level, block, block_type)
+{
+    # Logical check
+    if (__xeq_ctl != XEQ_NORMAL)
+        error("(xeq_cmd__return) __xeq_ctl is not normal, how did that happen?")
+
+    __xeq_ctl = XEQ_RETURN
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -5660,7 +5701,7 @@ function xeq_blk__while(while_block,
     condval = evaluate_condition(condition, blktab[while_block, "init_negate"])
     dbg_print("while", 1, sprintf("(xeq_blk__while) Initial evaluate_condition('%s') => %s", condition, ppf_bool(condval)))
     if (condval == ERROR)
-        error("@while: Uncaught error")
+        error("@while: Error evaluating condition '" condition "'")
 
     while (condval) {
         raise_namespace()
@@ -5673,7 +5714,7 @@ function xeq_blk__while(while_block,
         condval = evaluate_condition(condition, blktab[while_block, "init_negate"])
         dbg_print("while", 1, sprintf("(xeq_blk__while) Repeat evaluate_condition('%s') => %s", condition, ppf_bool(condval)))
         if (condval == ERROR)
-            error("@while: Uncaught error")
+            error("@while: Error evaluating condition '" condition "'")
 
         # Check for break or continue
         if (__xeq_ctl == XEQ_BREAK) {
@@ -6528,6 +6569,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     XEQ_NORMAL   = 0
     XEQ_BREAK    = 1
     XEQ_CONTINUE = 2
+    XEQ_RETURN   = 3
 
     __block_cnt          = 0
     __buffer             = EMPTY
@@ -6626,7 +6668,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     # CMDS
     # Built-in commands
     # Also need to add entry in execute__command()  [search: DISPATCH]
-    split("append array break continue debug decr default define divert dump dumpall" \
+    split("append array debug decr default define divert dump dumpall" \
           " echo error exit ignore" \
           " include incr initialize input local m2 nextfile paste readfile" \
           " readarray readonly secho sequence sexit shell sinclude" \
@@ -6639,7 +6681,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     # These commands are Immediate
     split("break case continue dump! else endcase endcmd endif endlong" \
           " endlongdef endwhile esac fi for foreach if ifdef ifndef longdef" \
-          " newcmd next of otherwise unless while",
+          " newcmd next of otherwise return unless while",
           array, " ")
     for (elem in array)
         nam_ll_write(array[elem], GLOBAL_NAMESPACE, TYPE_COMMAND FLAG_SYSTEM FLAG_IMMEDIATE)

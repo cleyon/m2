@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-08-15 01:06:35 cleyon>
+#  Time-stamp:  <2024-08-15 02:53:31 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -1157,7 +1157,7 @@ function ppf__block(blknum,
     else if (block_type == BLK_FOR)       buf = ppf__for(blknum)
     else if (block_type == BLK_IF)        buf = ppf__if(blknum)
     else if (block_type == BLK_LONGDEF)   buf = ppf__longdef(blknum)
-    else if (block_type == BLK_USER)      buf = "ppf__user(" blknum ")"
+    else if (block_type == BLK_USER)      buf = ppf__user(blknum)
     else if (block_type == BLK_WHILE)     buf = ppf__while(blknum)
     else {
         error(sprintf("(ppf__block) Block # %d: type %s (%s) not handled",
@@ -1333,26 +1333,33 @@ function prt_blk__agg(blknum,
 
 
 function cmd_definition_ppf(name,
-                            info, level, code, user_block, i, p, nparam, params)
+                            info, level, user_block)
 {
     if (nam_parse(name, info) == ERROR)
         error("(cmd_definition_ppf) Parse error on '" name "' -- should not happen")
     if ((level = nam_lookup(info)) == ERROR)
         error("(cmd_definition_ppf) nam_lookup failed -- should not happen")
     # See if it's a user command
-    if (flag_1false_p((code = nam_ll_read(name, level)), TYPE_USER))
+    if (flag_1false_p(nam_ll_read(name, level), TYPE_USER))
         error("(cmd_definition_ppf) " name " seems to no longer be a command")
 
     user_block = cmd_ll_read(name, level)
+    return ppf__user(user_block)
+}
+
+
+function ppf__user(user_block,
+                   name, params, i)
+{
     if ((blk_type(user_block) != BLK_USER) ||
         (blktab[user_block, "valid"] != TRUE))
-        error("(cmd_definition_ppf) Bad user_block config")
+        error("(ppf__user) Bad user_block config")
 
+    name = blktab[user_block, "name"]
     params = ""
     for (i = 1; i <= blktab[user_block, "nparam"]; i++)
         params = params "{" blktab[user_block, "param", i] "}"
 
-    #print_stderr("(cmd_definition_ppf) body_block=" blktab[user_block, "body_block"])
     return "@newcmd " name params                             "\n" \
               ppf__agg(blktab[user_block, "body_block"]) "\n" \
            "@endcmd"

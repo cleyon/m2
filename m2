@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-08-15 23:04:42 cleyon>
+#  Time-stamp:  <2024-08-15 23:12:21 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -955,8 +955,6 @@ function blk_new(block_type,
         blktab[new_blknum, "terminator"] = "@endcase|@esac"
     else if (block_type == BLK_IF)
         blktab[new_blknum, "terminator"] = "@endif|@fi"
-    else if (block_type == BLK_REGEXP)
-        ;                       # Caller must set up desired terminator
     else if (block_type == BLK_FILE) {
         blktab[new_blknum, "open"] = FALSE
         blktab[new_blknum, "terminator"] = ""
@@ -1150,7 +1148,6 @@ function ppf__block(blknum,
     else if (block_type == BLK_FOR)       buf = ppf__for(blknum)
     else if (block_type == BLK_IF)        buf = ppf__if(blknum)
     else if (block_type == BLK_LONGDEF)   buf = ppf__longdef(blknum)
-   #else if (block_type == BLK_REGEXP)    buf = ppf__regexp(blknum) # does not exist yet
     else if (block_type == BLK_USER)      buf = ppf__user(blknum)
     else if (block_type == BLK_WHILE)     buf = ppf__while(blknum)
     else
@@ -1173,7 +1170,6 @@ function ppf__BLK(blknum,
     else if (block_type == BLK_FOR)     text = ppf__BLK_FOR(blknum)
     else if (block_type == BLK_IF)      text = ppf__BLK_IF(blknum)
     else if (block_type == BLK_LONGDEF) text = ppf__BLK_LONGDEF(blknum)
-    else if (block_type == BLK_REGEXP)  text = ppf__BLK_REGEXP(blknum)
     else if (block_type == BLK_USER)    text = ppf__BLK_USER(blknum)
     else if (block_type == BLK_WHILE)   text = ppf__BLK_WHILE(blknum)
     else
@@ -1204,8 +1200,6 @@ function execute__block(blknum,
     else if (block_type == BLK_FOR)       xeq__BLK_FOR(blknum)
     else if (block_type == BLK_IF)        xeq__BLK_IF(blknum)
     else if (block_type == BLK_LONGDEF)   xeq__BLK_LONGDEF(blknum)
-    else if (block_type == BLK_REGEXP)    error("(execute__block) Cannot execute block # %d (%s)",
-                                                blknum, ppf__block_type(block_type))
     else if (block_type == BLK_USER)      xeq__BLK_USER(blknum)
     else if (block_type == BLK_WHILE)     xeq__BLK_WHILE(blknum)
     else
@@ -1699,12 +1693,6 @@ function scan(              code, terminator, readstat, name, retval, new_block,
         }
         dbg_print("scan", 5, "(scan) [" scanner_label "] readline() okay; $0='" $0 "'")
 
-        # Check for Regexp block terminator - do this for every line, even in Literal mode
-        if (scanner_type == BLK_REGEXP && match($0, terminator)) {
-            dbg_print("scan", 5, sprintf("(scan) [%s] END; line matched terminator '%s' => TRUE", scanner_label, terminator))
-            return TRUE
-        }
-
         # Maybe short-circuit and ship line out now
         if (curr_atmode() == MODE_AT_LITERAL || index($0, "@") == IDX_NOT_FOUND) {
             dbg_print("scan", 3, sprintf("(scan) [%s, short circuit] CALLING ship_out__text('%s')",
@@ -1993,15 +1981,6 @@ function ppf__BLK_FILE(blknum)
                    ppf_bool(blktab[blknum, "open"]),
                    ppf_mode(blktab[blknum, "atmode"]),
                    blktab[blknum, "dstblk"])
-}
-
-
-function ppf__BLK_REGEXP(blknum)
-{
-    return sprintf("  valid       : %s\n"       \
-                   "  terminator  : '%s'",
-                   ppf_bool(blktab[blknum, "valid"]),
-                   blktab[blknum, "terminator"])
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -6531,7 +6510,6 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     BLK_IF        = "I";                __blk_label[BLK_IF]       = "IF"
     BLK_FOR       = "R";                __blk_label[BLK_FOR ]     = "FOR"
     BLK_LONGDEF   = "L";                __blk_label[BLK_LONGDEF]  = "LONGDEF"
-    BLK_REGEXP    = "X";                __blk_label[BLK_REGEXP]   = "REGEXP"
     BLK_TERMINAL  = "T";                __blk_label[BLK_TERMINAL] = "TERMINAL"
     BLK_USER      = "U";                __blk_label[BLK_USER]     = "USER"
     BLK_WHILE     = "W";                __blk_label[BLK_WHILE]    = "WHILE"

@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-08-15 22:43:27 cleyon>
+#  Time-stamp:  <2024-08-15 23:04:42 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -480,10 +480,11 @@ function assert_scan_stack_okay(expected_block_type,
     if (stk_emptyp(__scan_stack))
         error("(assert_scan_stack_okay) Scan stack is empty!")
     blknum = stk_top(__scan_stack)
+
+    # We have to subtract 1 because the original "depth" was stored
+    # before the block was pushed onto the __scan_stack; and at this
+    # point it hasn't been popped yet...
     if ((blk_type(blknum) != expected_block_type) ||
-        # We have to subtract 1 because the original "depth" was stored
-        # before the block was pushed onto the __scan_stack; and at this
-        # point it hasn't been popped yet...
         (blktab[blknum, "depth"] != stk_depth(__scan_stack) - 1))
         error("(assert_scan_stack_okay) Corrupt scan stack")
 }
@@ -1597,11 +1598,8 @@ function dofile(filename,
 # Caller is responsible for removing potential quotes from filename.
 function scan__file(    filename, file_block1, file_block2, scanstat, d)
 {
-    if (stk_emptyp(__scan_stack))
-        error("(scan__file) Scan stack is empty!")
+    assert_scan_stack_okay(BLK_FILE)
     file_block1 = stk_top(__scan_stack)
-    if (blk_type(file_block1) != BLK_FILE)
-        error("(scan__file) Top file scanner has type != FILE")
 
     filename = blktab[file_block1, "filename"]
     dbg_print("scan", 1, sprintf("(scan__file) filename='%s', dstblk=%d, mode=%s",
@@ -1651,6 +1649,7 @@ function scan__file(    filename, file_block1, file_block2, scanstat, d)
     # }
     assert_scan_stack_okay(BLK_FILE)
     file_block2 = stk_pop(__scan_stack)
+
     __buffer = blktab[file_block2, "old.buffer"]
     sym_ll_write("__FILE__",      "", GLOBAL_NAMESPACE, blktab[file_block2, "old.file"])
     sym_ll_write("__LINE__",      "", GLOBAL_NAMESPACE, blktab[file_block2, "old.line"])
@@ -3498,7 +3497,6 @@ function scan__of(                case_block, of_block, of_val)
 {
     dbg_print("case", 3, sprintf("(scan__of) START dstblk=%d, mode=%s, $0='%s'",
                                  curr_dstblk(), ppf_mode(curr_atmode()), $0))
-
     assert_scan_stack_okay(BLK_CASE)
     case_block = stk_top(__scan_stack)
 
@@ -3519,11 +3517,10 @@ function scan__otherwise(                case_block, otherwise_block)
 {
     dbg_print("case", 3, sprintf("(scan__otherwise) START dstblk=%d, mode=%s",
                                curr_dstblk(), ppf_mode(curr_atmode())))
-
     assert_scan_stack_okay(BLK_CASE)
+    case_block = stk_top(__scan_stack)
 
     # Check if already seen @else
-    case_block = stk_top(__scan_stack)
     if (blktab[case_block, "seen_otherwise"] == TRUE)
         error("(scan__otherwise) Cannot have more than one @otherwise")
 
@@ -3540,17 +3537,10 @@ function scan__endcase(                case_block)
 {
     dbg_print("case", 3, sprintf("(scan__endcase) START dstblk=%d, mode=%s",
                                curr_dstblk(), ppf_mode(curr_atmode())))
-    # if (stk_emptyp(__scan_stack))
-    #     error("(scan__endcase) Scan stack is empty!")
-    # case_block = stk_pop(__scan_stack)
-    # if ((blktab[case_block, "type"] != BLK_CASE) ||
-    #     (blktab[case_block, "depth"] != stk_depth(__scan_stack)))
-    #     error("(scan__endcase) Corrupt scan stack")
     assert_scan_stack_okay(BLK_CASE)
-
     case_block = stk_pop(__scan_stack)
-    blktab[case_block, "valid"] = TRUE
 
+    blktab[case_block, "valid"] = TRUE
     return case_block
 }
 
@@ -4127,17 +4117,9 @@ function scan__next(                   for_block)
 {
     dbg_print("for", 3, sprintf("(scan__next) START dstblk=%d, mode=%s, $0='%s'",
                                 curr_dstblk(), ppf_mode(curr_atmode()), $0))
-
-    # if (stk_emptyp(__scan_stack))
-    #     error("(scan__next) Scan stack is empty!")
-    # for_block = stk_pop(__scan_stack)
-    # if ((blktab[for_block, "type"] != BLK_FOR) ||
-    #     (blktab[for_block, "depth"] != stk_depth(__scan_stack)))
-    #     error("(scan__next) Corrupt scan stack")
     assert_scan_stack_okay(BLK_FOR)
-
     for_block = stk_pop(__scan_stack)
-    # dbg_print_block("for", 7, for_block, "(scan__next) for_block")
+
     if (blktab[for_block, "loopvar"] != $2)
         error(sprintf("(scan__next) Variable mismatch; '%s' specified, but '%s' was expected",
                       $2, blktab[for_block, "loopvar"]))
@@ -4338,12 +4320,8 @@ function scan__else(                   if_block, false_block)
 {
     dbg_print("if", 3, sprintf("(scan__else) START dstblk=%d, mode=%s",
                                curr_dstblk(), ppf_mode(curr_atmode())))
-
-    if (stk_emptyp(__scan_stack))
-        error("(scan__else) Scan stack is empty!")
+    assert_scan_stack_okay(BLK_IF)
     if_block = stk_top(__scan_stack)
-    if (blk_type(if_block) != BLK_IF)
-        error("(scan__else) Scan error: top != IF")
 
     # Check if already seen @else
     if (blktab[if_block, "seen_else"] == TRUE)
@@ -4363,17 +4341,9 @@ function scan__endif(                    if_block)
 {
     dbg_print("if", 3, sprintf("(scan__endif) START dstblk=%d, mode=%s",
                                curr_dstblk(), ppf_mode(curr_atmode())))
-    # if (stk_emptyp(__scan_stack))
-    #     error("(scan__endif) Scan stack is empty!")
-    # if_block = stk_pop(__scan_stack)
-    # if ((blktab[if_block, "type"] != BLK_IF) ||
-    #     (blktab[if_block, "depth"] != stk_depth(__scan_stack)))
-    #     error("(scan__endif) Corrupt scan stack")
     assert_scan_stack_okay(BLK_IF)
-
     if_block = stk_pop(__scan_stack)
     blktab[if_block, "valid"] = TRUE
-
     return if_block
 }
 
@@ -4775,15 +4745,9 @@ function scan__endlongdef(    sym_block)
 {
     dbg_print("sym", 3, sprintf("(scan__endlongdef) START dstblk=%d, mode=%s",
                                  curr_dstblk(), ppf_mode(curr_atmode())))
-
-    # if (stk_emptyp(__scan_stack))
-    #     error("(scan__endlongdef) Scan stack is empty!")
-    # sym_block = stk_pop(__scan_stack)
-    # if ((blktab[sym_block, "type"] != BLK_LONGDEF) ||
-    #     (blktab[sym_block, "depth"] != stk_depth(__scan_stack)))
-    #     error("(scan__endlongdef) Corrupt scan stack")
     assert_scan_stack_okay(BLK_LONGDEF)
     sym_block = stk_pop(__scan_stack)
+
     blktab[sym_block, "valid"] = TRUE
     dbg_print("sym", 3, sprintf("(scan__endlongdef) END => %d", sym_block))
     return sym_block
@@ -4925,9 +4889,9 @@ function scan__endcmd(                     newcmd_block)
 {
     dbg_print("cmd", 3, sprintf("(scan__endcmd) START dstblk=%d, mode=%s",
                                  curr_dstblk(), ppf_mode(curr_atmode())))
-
     assert_scan_stack_okay(BLK_USER)
     newcmd_block = stk_pop(__scan_stack)
+
     blktab[newcmd_block, "valid"] = TRUE
     dbg_print("cmd", 3, sprintf("(scan__endcmd) END => %d", newcmd_block))
     dbg_print_block("scan", 7, newcmd_block, sprintf("newcmd block just scanned:"))
@@ -5680,14 +5644,9 @@ function scan__endwhile(                    while_block)
 {
     dbg_print("while", 3, sprintf("(scan__endwhile) START dstblk=%d, mode=%s",
                                curr_dstblk(), ppf_mode(curr_atmode())))
-    # if (stk_emptyp(__scan_stack))
-    #     error("(scan__endwhile) Scan stack is empty!")
-    # while_block = stk_pop(__scan_stack)
-    # if ((blktab[while_block, "type"] != BLK_WHILE) ||
-    #     (blktab[while_block, "depth"] != stk_depth(__scan_stack)))
-    #     error("(scan__endwhile) Corrupt scan stack")
     assert_scan_stack_okay(BLK_WHILE)
     while_block = stk_pop(__scan_stack)
+
     blktab[while_block, "valid"] = TRUE
     return while_block
 }
@@ -6887,7 +6846,7 @@ BEGIN {
 
     # All blocks should have been popped from the scan stack
     if (! stk_emptyp(__scan_stack)) {
-        warn("(main) Scan stack not is empty!")
+        warn("(main) Scan stack is not empty!")
         dump_scan_stack()
     }
 

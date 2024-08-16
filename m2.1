@@ -64,7 +64,8 @@ Add TEXT to an already defined macro NAME
 .It @array ARR
 Declare ARR as an array
 .It @break
-Interrupt enclosing @for or @while loop.
+Interrupt execution of enclosing loop.
+@break is only valid inside a @for, @foreach, or @while block.
 .It @case NAME
 Evaluate value of NAME, comparing it with
 .It \ \ \ @of TEXT
@@ -76,7 +77,8 @@ End @case structure.  Also @esac
 .It @comment [TEXT]
 Comment; ignore line.  Also @@, @c, @;, and @#
 .It @continue
-Continue next iteration of @for or @while loop
+Continue next iteration of enclosing loop.
+@continue is only valid inside a @for, @foreach, or @while block.
 .It @debug [TEXT]
 If debugging, send TEXT to standard error
 .It @decr NAME [N]
@@ -157,6 +159,7 @@ Read each line from FILE into array ARR
 Make NAME unchangeable -- cannot be undone
 .It @return
 Cease execution of a user command.
+@return is only valid inside a @newcmd definition.
 .It @sequence ID ACT [N]
 Create and manage sequences
 .It @shell DELIM [PROG]

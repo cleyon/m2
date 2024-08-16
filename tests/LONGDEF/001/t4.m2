@@ -5,6 +5,6 @@ Start
 I = @I@
 @next I
 End
-@endlong
+@endlongdef
 @testing@
 Bye

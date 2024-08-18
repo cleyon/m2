@@ -132,9 +132,9 @@ run_test()
     [ $debug = "true" ] && echo "TESTNAME is $TESTNAME"
     printf "*** $test_id/$TESTNAME ... "
 
-    [ -f ${TESTNAME}.disabled ] && { echo "SKIPPED - test disabled"; return; }
-    [ -r "$M2_FILE" ] || { echo "SKIPPED - unreadable test file"; return; }
-    [ -s "$M2_FILE" ] || { echo "SKIPPED - empty test file"; return; }
+    [ -f ${TESTNAME}.disabled ] && { echo "SKIP - test disabled"; return; }
+    [ -r "$M2_FILE" ] || { echo "SKIP - unreadable test file"; return; }
+    [ -s "$M2_FILE" ] || { echo "SKIP - empty test file"; return; }
 
     rm -f ${TESTNAME}.ur_out ${TESTNAME}.ur_err ${TESTNAME}.ur_exit ${TESTNAME}.want_exit
     if [ -f ${TESTNAME}.exit ]; then
@@ -157,12 +157,12 @@ run_test()
     echo $? >${TESTNAME}.ur_exit
 
     if ! cmp -s ${TESTNAME}.ur_exit ${TESTNAME}.want_exit; then
-        echo "Incorrect exit code"
+        echo "FAIL - exit code"
         echo "    Exit code `cat ${TESTNAME}.ur_exit`;  wanted `cat ${TESTNAME}.want_exit`"
         fail=127
     fi
     if ! cmp -s ${TESTNAME}.ur_out ${TESTNAME}.want_out; then
-        echo "Incorrect text output"
+        echo "FAIL - text output"
         echo "FILE $CATEGORY/$SERIES/$M2_FILE"
         echo ">>>  EXPECTED OUTPUT  >>>"
         cat ${TESTNAME}.want_out
@@ -174,7 +174,7 @@ run_test()
         fi
         fail=127
     elif ! cmp -s ${TESTNAME}.ur_err ${TESTNAME}.want_err; then
-        echo "Incorrect error output"
+        echo "FAIL - error messages"
         echo "FILE $CATEGORY/$SERIES/$M2_FILE"
         echo ">>>  EXPECTED ERRORS  >>>"
         cat ${TESTNAME}.want_err
@@ -182,7 +182,7 @@ run_test()
         cat ${TESTNAME}.ur_err
         fail=127
     else
-        echo "OK"
+        echo "PASS"
         rm -f ${TESTNAME}.ur_out ${TESTNAME}.ur_err
     fi
     rm -f ${TESTNAME}.ur_exit ${TESTNAME}.want_exit ${TESTNAME}.want_err ${TESTNAME}.want_out

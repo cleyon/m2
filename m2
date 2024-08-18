@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-08-18 01:02:25 cleyon>
+#  Time-stamp:  <2024-08-18 14:35:07 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -1921,7 +1921,7 @@ function scan(              code, terminator, readstat, name, retval, new_block,
                         ship_out__command($0)
                         dbg_print("scan", 3, "(scan) [" scanner_label "] RETURNED FROM ship_out__command()")
 
-                    } else if (name == "while") {
+                    } else if (name == "while" || name == "until") {
                         raise_namespace()
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__while(dstblk=" curr_dstblk() ")"))
                         new_block = scan__while()
@@ -4401,7 +4401,8 @@ function evaluate_condition(cond, negate,
     }
 
     cond = dosubs(cond)
-    dbg_print("if", 4, sprintf("(evaluate_condition) After dosubs, cond='%s'", cond))
+    dbg_print("if", 4, sprintf("(evaluate_condition) After dosubs, negate=%s, cond='%s'",
+                               ppf_bool(negate), cond))
 
     if (cond ~ /^[0-9]+$/) {
         dbg_print("if", 6, sprintf("(evaluate_condition) Found simple integer '%s'", cond))
@@ -4483,12 +4484,12 @@ function evaluate_condition(cond, negate,
 
         dbg_print("if", 6, sprintf("(evaluate_condition) lhs='%s'[%s], op='%s', rhs='%s'[%s]", lhs, lval, op, rhs, rval))
 
-        if      (op == "<")                 retval = lval <  rval
-        else if (op == "<=")                retval = lval <= rval
-        else if (op == "="  || op == "==")  retval = lval == rval
-        else if (op == "!=" || op == "<>")  retval = lval != rval
-        else if (op == ">=")                retval = lval >= rval
-        else if (op == ">")                 retval = lval >  rval
+        if      (op == "<")                 retval = lval+0 <  rval+0
+        else if (op == "<=")                retval = lval+0 <= rval+0
+        else if (op == "="  || op == "==")  retval = lval+0 == rval+0
+        else if (op == "!=" || op == "<>")  retval = lval+0 != rval+0
+        else if (op == ">=")                retval = lval+0 >= rval+0
+        else if (op == ">")                 retval = lval+0 >  rval+0
         else
             error("Comparison operator '" op "' invalid")
     }
@@ -5586,6 +5587,7 @@ function xeq_cmd__undivert(name, cmdline,
 #
 #*****************************************************************************
 # @while CONDITION
+# @until CONDITION
 function scan__while(                 name, while_block, body_block, scanstat)
 {
     dbg_print("while", 3, sprintf("(scan__while) START dstblk=%d, $0='%s'", curr_dstblk(), $0))
@@ -5600,7 +5602,7 @@ function scan__while(                 name, while_block, body_block, scanstat)
     dbg_print("while", 5, "(scan__while) New block # " body_block " type " ppf__block_type(blk_type(body_block)))
 
     blktab[while_block, "condition"] = $0
-    blktab[while_block, "init_negate"] = FALSE
+    blktab[while_block, "init_negate"] = (name == "@until")
     blktab[while_block, "body_block"] = body_block
     blktab[while_block, "dstblk"] = body_block
     blktab[while_block, "valid"]      = FALSE
@@ -6629,7 +6631,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     # These commands are Immediate
     split("break case continue dump! else endcase endcmd endif endlong" \
           " endlongdef endwhile esac fi for foreach if ifdef ifndef longdef" \
-          " newcmd next of otherwise return unless while",
+          " newcmd next of otherwise return unless until while",
           array, " ")
     for (elem in array)
         nam_ll_write(array[elem], GLOBAL_NAMESPACE, TYPE_COMMAND FLAG_SYSTEM FLAG_IMMEDIATE)

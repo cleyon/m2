@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-08-15 23:12:21 cleyon>
+#  Time-stamp:  <2024-08-18 01:02:25 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -3032,7 +3032,7 @@ function sym_ll_write(name, key, level, val)
         initialize_debugging()
     else if (name == "__SECURE__") {
         val = max(secure_level(), val) # Don't allow __SECURE__ to decrease
-        print_stderr(sprintf("New __SECURE__ = %d", val))
+        #print_stderr(sprintf("New __SECURE__ = %d", val))
     }
     # Maintain equivalence:  __FMT__[number] === CONVFMT
     if (name == "__FMT__" && key == "number" && level == GLOBAL_NAMESPACE) {
@@ -5474,7 +5474,7 @@ function xeq_cmd__typeout(name, cmdline,
         error("(xeq_cmd__typeout) Scan stack is empty")
 
     for (i = stk_depth(__scan_stack); i > 0; i--) {
-        dbg_print_block("scan", -1, __scan_stack[i], sprintf("(xeq_cmd__typeout) __scan_stack[%d]", i))
+        dbg_print_block("scan", 6, __scan_stack[i], sprintf("(xeq_cmd__typeout) __scan_stack[%d]", i))
         scanner = __scan_stack[i]
         if (blk_type(scanner) == BLK_FILE) {
             dbg_print_block("scan", 7, scanner, "(xeq_cmd__typeout) scanner")

@@ -7,13 +7,32 @@
 
 
 # CATEGORY/SERIES/TESTNAME              (CATEGORY/SERIES is called test_id)
-#
-# Run the *.m2 "scripts" and compare their output against the TESTNAME.target files,
+# ========================
+# Run the *.m2 "scripts" and compare their output against the TESTNAME.out files,
 # which contain the correct output.
 #
 # It is expected that m2 will succeed and exit with a zero status.  If
 # that is not the case (i.e., you expect the test to fail and exit with
 # a non-zero status), the expected code should be put in TESTNAME.exit
+
+
+# FILE NAMING CONVENTION
+# ======================
+# User-specified config files:
+# ----------------------------
+# TESTNAME.disabled     If present, TESTNAME is not executed for testing.  OPT CONFIG
+# TESTNAME.err          If present, expected m2 error text.  Default "".  CONFIG
+# TESTNAME.exit         If present, expected m2 exit code.  Default 0.  CONFIG
+# TESTNAME.out          If present, expected m2 standard output.  Default "".  CONFIG
+#
+# Temporary working files, deleted after run:
+# -------------------------------------------
+# TESTNAME.ur_err       m2 run standard error.
+# TESTNAME.ur_exit      m2 run exit code.
+# TESTNAME.ur_out       m2 run standard output.
+# TESTNAME.want_err     Copy of desired error text, if any, default blank.
+# TESTNAME.want_exit    Copy of desired exit code.
+
 
 debug="false"   # "true"
 
@@ -116,40 +135,57 @@ run_test()
     [ -f ${TESTNAME}.disabled ] && { echo "SKIPPED - test disabled"; return; }
     [ -r "$M2_FILE" ] || { echo "SKIPPED - unreadable test file"; return; }
     [ -s "$M2_FILE" ] || { echo "SKIPPED - empty test file"; return; }
-    [ -f ${TESTNAME}.target ] || framework_error "$TESTNAME.target does not exist"
 
-    rm -f ${TESTNAME}.out ${TESTNAME}.err ${TESTNAME}.code ${TESTNAME}.want_code
+    rm -f ${TESTNAME}.ur_out ${TESTNAME}.ur_err ${TESTNAME}.ur_exit ${TESTNAME}.want_exit
     if [ -f ${TESTNAME}.exit ]; then
-        cp ${TESTNAME}.exit ${TESTNAME}.want_code
+        cp ${TESTNAME}.exit ${TESTNAME}.want_exit
     else
-        echo "0" >${TESTNAME}.want_code
+        echo "0" >${TESTNAME}.want_exit
+    fi
+    if [ -f ${TESTNAME}.out ]; then
+        cp ${TESTNAME}.out ${TESTNAME}.want_out
+    else
+        cp /dev/null ${TESTNAME}.want_out
+    fi
+    if [ -f ${TESTNAME}.err ]; then
+        cp ${TESTNAME}.err ${TESTNAME}.want_err
+    else
+        cp /dev/null ${TESTNAME}.want_err
     fi
 
-    "${new_M2}" $M2_FILE > ${TESTNAME}.out 2> ${TESTNAME}.err
-    echo $? >${TESTNAME}.code
+    "${new_M2}" $M2_FILE > ${TESTNAME}.ur_out 2> ${TESTNAME}.ur_err
+    echo $? >${TESTNAME}.ur_exit
 
-    if ! cmp -s ${TESTNAME}.code ${TESTNAME}.want_code; then
+    if ! cmp -s ${TESTNAME}.ur_exit ${TESTNAME}.want_exit; then
         echo "Incorrect exit code"
-        echo "    Exit code `cat ${TESTNAME}.code`;  wanted `cat ${TESTNAME}.want_code`"
+        echo "    Exit code `cat ${TESTNAME}.ur_exit`;  wanted `cat ${TESTNAME}.want_exit`"
         fail=127
     fi
-    if ! cmp -s ${TESTNAME}.out ${TESTNAME}.target; then
+    if ! cmp -s ${TESTNAME}.ur_out ${TESTNAME}.want_out; then
         echo "Incorrect text output"
-        echo "    $CATEGORY/$SERIES/$M2_FILE"
+        echo "FILE $CATEGORY/$SERIES/$M2_FILE"
         echo ">>>  EXPECTED OUTPUT  >>>"
-        cat ${TESTNAME}.target
+        cat ${TESTNAME}.want_out
         echo ">>>  ACTUAL OUTPUT  >>>"
-        cat ${TESTNAME}.out
-        if [ -s ${TESTNAME}.err ]; then
+        cat ${TESTNAME}.ur_out
+        if [ -s ${TESTNAME}.ur_err ]; then
             echo ">>>  ERRORS  >>>"
-            cat ${TESTNAME}.err
+            cat ${TESTNAME}.ur_err
         fi
+        fail=127
+    elif ! cmp -s ${TESTNAME}.ur_err ${TESTNAME}.want_err; then
+        echo "Incorrect error output"
+        echo "FILE $CATEGORY/$SERIES/$M2_FILE"
+        echo ">>>  EXPECTED ERRORS  >>>"
+        cat ${TESTNAME}.want_err
+        echo ">>>  ACTUAL ERRORS  >>>"
+        cat ${TESTNAME}.ur_err
         fail=127
     else
         echo "OK"
-        rm -f ${TESTNAME}.out ${TESTNAME}.err
+        rm -f ${TESTNAME}.ur_out ${TESTNAME}.ur_err
     fi
-    rm -f ${TESTNAME}.code ${TESTNAME}.want_code
+    rm -f ${TESTNAME}.ur_exit ${TESTNAME}.want_exit ${TESTNAME}.want_err ${TESTNAME}.want_out
 }
 
 

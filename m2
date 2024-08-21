@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-08-18 14:35:07 cleyon>
+#  Time-stamp:  <2024-08-20 11:31:36 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -188,7 +188,7 @@ function abs(n)
 }
 
 
-function ppf_bool(x)
+function ppf__bool(x)
 {
     return (x == 0 || x == "") ? "False" : "True"
 }
@@ -438,7 +438,7 @@ function curr_dstblk(    top_block)
 }
 
 
-function ppf_mode(mode)
+function ppf__mode(mode)
 {
          if (mode == MODE_AT_LITERAL)       return "Literal"
     else if (mode == MODE_AT_PROCESS)       return "ProcessAt"
@@ -449,7 +449,7 @@ function ppf_mode(mode)
     else if (mode == MODE_STREAMS_DISCARD)  return "DiscardStream"
     else if (mode == MODE_STREAMS_SHIP_OUT) return "ShipOutStream"
     # else
-    #     error("(ppf_mode) Unknown mode '" mode "'")
+    #     error("(ppf__mode) Unknown mode '" mode "'")
     else return "UnknownMode('" mode "')"
 }
 
@@ -1573,7 +1573,7 @@ function dofile(filename,
     retval = scan__file()
     dbg_print("scan", 5, "(dofile) RETURNED FROM scan__file()")
 
-    dbg_print("scan", 5, "(dofile) END => " ppf_bool(retval))
+    dbg_print("scan", 5, "(dofile) END => " ppf__bool(retval))
     return retval
 }
 
@@ -1598,10 +1598,10 @@ function scan__file(    filename, file_block1, file_block2, scanstat, d)
     filename = blktab[file_block1, "filename"]
     dbg_print("scan", 1, sprintf("(scan__file) filename='%s', dstblk=%d, mode=%s",
                                  filename, blktab[file_block1, "dstblk"],
-                                 ppf_mode(blktab[file_block1, "atmode"])))
+                                 ppf__mode(blktab[file_block1, "atmode"])))
     if (!path_exists_p(filename)) {
         dbg_print("scan", 1, sprintf("(scan__file) END File '%s' does not exist => %s",
-                                     filename, ppf_bool(FALSE)))
+                                     filename, ppf__bool(FALSE)))
         stk_pop(__scan_stack)  # Remove BLK_FILE for non-existent file
         return FALSE
     }
@@ -1625,7 +1625,7 @@ function scan__file(    filename, file_block1, file_block2, scanstat, d)
     # Read the file and process each line
     dbg_print("scan", 5, "(scan__file) CALLING scan()")
     scanstat = scan()
-    dbg_print("scan", 5, "(scan__file) RETURNED FROM scan() => " ppf_bool(scanstat))
+    dbg_print("scan", 5, "(scan__file) RETURNED FROM scan() => " ppf__bool(scanstat))
 
     # Reached end of file
     flush_stdout(1)
@@ -1636,11 +1636,6 @@ function scan__file(    filename, file_block1, file_block2, scanstat, d)
     blktab[file_block1, "open"] = FALSE
     delete __active_files[filename]
 
-    # file_block2 = stk_pop(__scan_stack)
-    # if ((blktab[file_block2, "type"] != BLK_FILE) ||
-    #     (blktab[file_block2, "depth"] != stk_depth(__scan_stack))) {
-    #     error("(scan__file) Corrupt scan stack")
-    # }
     assert_scan_stack_okay(BLK_FILE)
     file_block2 = stk_pop(__scan_stack)
 
@@ -1650,7 +1645,7 @@ function scan__file(    filename, file_block1, file_block2, scanstat, d)
     sym_ll_write("__FILE_UUID__", "", GLOBAL_NAMESPACE, blktab[file_block2, "old.file_uuid"])
 
     dbg_print("scan", 1, sprintf("(scan__file) END '%s' => %s",
-                                 filename, ppf_bool(scanstat)))
+                                 filename, ppf__bool(scanstat)))
     return scanstat
 }
 
@@ -1660,7 +1655,7 @@ function scan(              code, terminator, readstat, name, retval, new_block,
                             info, level, scanner, scanner_type, scanner_label, i, scnt, found,
                             new_cmd_name, clevel)
 {
-    dbg_print("scan", 3, "(scan) START dstblk=" curr_dstblk() ", mode=" ppf_mode(curr_atmode()))
+    dbg_print("scan", 3, "(scan) START dstblk=" curr_dstblk() ", mode=" ppf__mode(curr_atmode()))
 
     # The "scanner" is the topmost element of the __scan_stack
     # which we wish to access a few times
@@ -1966,7 +1961,7 @@ function scan(              code, terminator, readstat, name, retval, new_block,
         ship_out__text($0)
         dbg_print("scan", 3, "(scan) [" scanner_label "] RETURNED FROM ship_out__text()")
     } # continue loop again, reading next line
-    dbg_print("scan", 5, "(scan) END => " ppf_bool(retval))
+    dbg_print("scan", 5, "(scan) END => " ppf__bool(retval))
     return retval
 }
 
@@ -1978,8 +1973,8 @@ function ppf__BLK_FILE(blknum)
                    "  atmode  : %s\n"             \
                    "  dstblk  : %d",
                    blktab[blknum, "filename"],
-                   ppf_bool(blktab[blknum, "open"]),
-                   ppf_mode(blktab[blknum, "atmode"]),
+                   ppf__bool(blktab[blknum, "open"]),
+                   ppf__mode(blktab[blknum, "atmode"]),
                    blktab[blknum, "dstblk"])
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
@@ -2592,7 +2587,7 @@ function sym_valid_p(sym,
     retval = (nparts == 1) ?  info["namevalid"] \
                            : (info["namevalid"] && info["keyvalid"])
     dbg_print("sym", 4, sprintf("(sym_valid_p) END sym='%s' => %s",
-                                 sym, ppf_bool(retval)))
+                                 sym, ppf__bool(retval)))
     return retval
 }
 
@@ -2802,7 +2797,7 @@ function sym_defined_p(sym,
 
     # Parse sym => name, key
     if ((nparts = nam_parse(sym, info)) == ERROR) {
-        dbg_print("sym", 2, sprintf("(sym_defined_p) END nam_parse('%s') failed => %s", sym, ppf_bool(FALSE)))
+        dbg_print("sym", 2, sprintf("(sym_defined_p) END nam_parse('%s') failed => %s", sym, ppf__bool(FALSE)))
         return FALSE
     }
     name = info["name"]
@@ -2811,7 +2806,7 @@ function sym_defined_p(sym,
     # Now call nam_lookup(info)
     level = nam_lookup(info)
     if (level == ERROR) {
-        dbg_print("sym", 2, sprintf("(sym_defined_p) END nam_lookup('%s') failed, maybe ok? => %s", sym, ppf_bool(FALSE)))
+        dbg_print("sym", 2, sprintf("(sym_defined_p) END nam_lookup('%s') failed, maybe ok? => %s", sym, ppf__bool(FALSE)))
         return FALSE
     }
 
@@ -2819,7 +2814,7 @@ function sym_defined_p(sym,
     # This step is necessary to make sure it's actually a Symbol.
     for (i = nam_system_p(name) ? GLOBAL_NAMESPACE : __namespace; i >= GLOBAL_NAMESPACE; i--) {
         if (sym_info_defined_lev_p(info, i)) {
-            dbg_print("sym", 2, sprintf("(sym_defined_p) END sym='%s', level=%d => %s", sym, i, ppf_bool(TRUE)))
+            dbg_print("sym", 2, sprintf("(sym_defined_p) END sym='%s', level=%d => %s", sym, i, ppf__bool(TRUE)))
             return TRUE
         }
     }
@@ -2840,12 +2835,12 @@ function sym_defined_p(sym,
             # Make sure slot holds text, which it pretty much has to
             if (blk_ll_slot_type(agg_block, key) != SLOT_TEXT)
                 error(sprintf("(sym_defined_p) Block # %d slot %d is not SLOT_TEXT", agg_block, key))
-            dbg_print("sym", 2, sprintf("(sym_defined_p) END sym='%s', level=%d => %s", sym, level, ppf_bool(TRUE)))
+            dbg_print("sym", 2, sprintf("(sym_defined_p) END sym='%s', level=%d => %s", sym, level, ppf__bool(TRUE)))
             return TRUE
         }
     }
 
-    dbg_print("sym", 2, sprintf("(sym_defined_p) END No symbol named '%s' on any level => %s", sym, ppf_bool(FALSE)))
+    dbg_print("sym", 2, sprintf("(sym_defined_p) END No symbol named '%s' on any level => %s", sym, ppf__bool(FALSE)))
     return FALSE
 }
 
@@ -2973,7 +2968,7 @@ function sym_store(sym, new_val,
 
         if (dbg5) {
             print_stderr(sprintf("(sym_store) LOOP BOTTOM: name='%s', key='%s', level=%d, code='%s', good=%s",
-                                 name, key, level, code, ppf_bool(good)))
+                                 name, key, level, code, ppf__bool(good)))
             nam_dump_namtab(TYPE_SYMBOL, FALSE)
             print_stderr(dump__symtab(TYPE_SYMBOL, FALSE)) # print_stderr() adds newline.  FALSE means omit system symbols
         }
@@ -3145,7 +3140,7 @@ function sym_fetch(sym,
         val = sym_ll_read(name, key, level)
     }
 
-        dbg_print("sym", 2, sprintf("(sym_fetch) END sym='%s', level=%d => %s", sym, level, ppf_bool(TRUE)))
+        dbg_print("sym", 2, sprintf("(sym_fetch) END sym='%s', level=%d => %s", sym, level, ppf__bool(TRUE)))
     if (flag_1true_p(code, FLAG_INTEGER))
         return 0 + val
     else if (flag_1true_p(code, FLAG_NUMERIC))
@@ -3210,7 +3205,7 @@ function sym_protected_p(sym,
     # Error if name does not exist at that level
     code = nam_ll_read(name, level)
     retval = sym_ll_protected(name, code)
-    dbg_print("sym", 4, sprintf("(sym_protected_p) END; sym '%s' => %s", sym, ppf_bool(retval)))
+    dbg_print("sym", 4, sprintf("(sym_protected_p) END; sym '%s' => %s", sym, ppf__bool(retval)))
     return retval
     #return sym_ll_protected(name, code)
 }
@@ -3338,7 +3333,7 @@ function ship_out__text(text,
 {
     dstblk = curr_dstblk()
     dbg_print("ship_out", 3, sprintf("(ship_out__text) START dstblk=%d, mode=%s, text='%s'",
-                                     dstblk, ppf_mode(curr_atmode()), text))
+                                     dstblk, ppf__mode(curr_atmode()), text))
 
     if (dstblk < 0) {
         dbg_print("ship_out", 3, "(ship_out__text) END, because dstblk <0")
@@ -3463,7 +3458,7 @@ function scan__case(                case_block, preamble_block, scanstat)
 
     dbg_print("case", 5, "(scan__case) CALLING scan()")
     scanstat = scan() # scan() should return after it encounters @endcase
-    dbg_print("case", 5, "(scan__case) RETURNED FROM scan() => " ppf_bool(scanstat))
+    dbg_print("case", 5, "(scan__case) RETURNED FROM scan() => " ppf__bool(scanstat))
     if (!scanstat)
         error("(scan__case) Scan failed")
 
@@ -3475,7 +3470,7 @@ function scan__case(                case_block, preamble_block, scanstat)
 function scan__of(                case_block, of_block, of_val)
 {
     dbg_print("case", 3, sprintf("(scan__of) START dstblk=%d, mode=%s, $0='%s'",
-                                 curr_dstblk(), ppf_mode(curr_atmode()), $0))
+                                 curr_dstblk(), ppf__mode(curr_atmode()), $0))
     assert_scan_stack_okay(BLK_CASE)
     case_block = stk_top(__scan_stack)
 
@@ -3495,7 +3490,7 @@ function scan__of(                case_block, of_block, of_val)
 function scan__otherwise(                case_block, otherwise_block)
 {
     dbg_print("case", 3, sprintf("(scan__otherwise) START dstblk=%d, mode=%s",
-                               curr_dstblk(), ppf_mode(curr_atmode())))
+                               curr_dstblk(), ppf__mode(curr_atmode())))
     assert_scan_stack_okay(BLK_CASE)
     case_block = stk_top(__scan_stack)
 
@@ -3515,7 +3510,7 @@ function scan__otherwise(                case_block, otherwise_block)
 function scan__endcase(                case_block)
 {
     dbg_print("case", 3, sprintf("(scan__endcase) START dstblk=%d, mode=%s",
-                               curr_dstblk(), ppf_mode(curr_atmode())))
+                               curr_dstblk(), ppf__mode(curr_atmode())))
     assert_scan_stack_okay(BLK_CASE)
     case_block = stk_pop(__scan_stack)
 
@@ -4036,7 +4031,7 @@ function xeq_cmd__exit(name, cmdline,
 function scan__for(                  for_block, body_block, scanstat, incr, info, nparts, level)
 {
     dbg_print("for", 5, sprintf("(scan__for) START dstblk=%d, mode=%s, $0='%s'",
-                                curr_dstblk(), ppf_mode(curr_atmode()), $0))
+                                curr_dstblk(), ppf__mode(curr_atmode()), $0))
     if (NF < 3)
         error("(scan__for) Bad parameters")
 
@@ -4082,7 +4077,7 @@ function scan__for(                  for_block, body_block, scanstat, incr, info
 
     dbg_print("for", 5, "(scan__for) CALLING scan()")
     scanstat = scan() # scan() should return after it encounters @next
-    dbg_print("for", 5, "(scan__for) RETURNED FROM scan() => " ppf_bool(scanstat))
+    dbg_print("for", 5, "(scan__for) RETURNED FROM scan() => " ppf__bool(scanstat))
     if (!scanstat)
         error("(scan__for) Scan failed")
 
@@ -4095,7 +4090,7 @@ function scan__for(                  for_block, body_block, scanstat, incr, info
 function scan__next(                   for_block)
 {
     dbg_print("for", 3, sprintf("(scan__next) START dstblk=%d, mode=%s, $0='%s'",
-                                curr_dstblk(), ppf_mode(curr_atmode()), $0))
+                                curr_dstblk(), ppf__mode(curr_atmode()), $0))
     assert_scan_stack_okay(BLK_FOR)
     for_block = stk_pop(__scan_stack)
 
@@ -4237,7 +4232,7 @@ function ppf__BLK_FOR(blknum)
                    "  end     : %d\n"       \
                    "  incr    : %d\n"       \
                    "  body    : %d",
-                   ppf_bool(blktab[blknum, "valid"]),
+                   ppf__bool(blktab[blknum, "valid"]),
                    blktab[blknum, "loopvar"],
                    blktab[blknum, "start"],
                    blktab[blknum, "end"],
@@ -4285,7 +4280,7 @@ function scan__if(                 name, if_block, true_block, scanstat)
 
     dbg_print("if", 5, "(scan__if) CALLING scan()")
     scanstat = scan() # scan() should return after it encounters @endif
-    dbg_print("if", 5, "(scan__if) RETURNED FROM scan() => " ppf_bool(scanstat))
+    dbg_print("if", 5, "(scan__if) RETURNED FROM scan() => " ppf__bool(scanstat))
     if (!scanstat)
         error("(scan__if) Scan failed")
 
@@ -4298,7 +4293,7 @@ function scan__if(                 name, if_block, true_block, scanstat)
 function scan__else(                   if_block, false_block)
 {
     dbg_print("if", 3, sprintf("(scan__else) START dstblk=%d, mode=%s",
-                               curr_dstblk(), ppf_mode(curr_atmode())))
+                               curr_dstblk(), ppf__mode(curr_atmode())))
     assert_scan_stack_okay(BLK_IF)
     if_block = stk_top(__scan_stack)
 
@@ -4319,7 +4314,7 @@ function scan__else(                   if_block, false_block)
 function scan__endif(                    if_block)
 {
     dbg_print("if", 3, sprintf("(scan__endif) START dstblk=%d, mode=%s",
-                               curr_dstblk(), ppf_mode(curr_atmode())))
+                               curr_dstblk(), ppf__mode(curr_atmode())))
     assert_scan_stack_okay(BLK_IF)
     if_block = stk_pop(__scan_stack)
     blktab[if_block, "valid"] = TRUE
@@ -4343,7 +4338,7 @@ function xeq__BLK_IF(if_block,
     # which block to follow.  For now, always take TRUE path
     condition = blktab[if_block, "condition"]
     condval = evaluate_condition(condition, blktab[if_block, "init_negate"])
-    dbg_print("if", 1, sprintf("(xeq__BLK_IF) evaluate_condition('%s') => %s", condition, ppf_bool(condval)))
+    dbg_print("if", 1, sprintf("(xeq__BLK_IF) evaluate_condition('%s') => %s", condition, ppf__bool(condval)))
     if (condval == ERROR)
         error("@if: Error evaluating condition '" condition "'")
 
@@ -4402,7 +4397,7 @@ function evaluate_condition(cond, negate,
 
     cond = dosubs(cond)
     dbg_print("if", 4, sprintf("(evaluate_condition) After dosubs, negate=%s, cond='%s'",
-                               ppf_bool(negate), cond))
+                               ppf__bool(negate), cond))
 
     if (cond ~ /^[0-9]+$/) {
         dbg_print("if", 6, sprintf("(evaluate_condition) Found simple integer '%s'", cond))
@@ -4432,7 +4427,7 @@ function evaluate_condition(cond, negate,
         dbg_print("if", 6, sprintf("(evaluate_condition) Found condition exists(%s)", name))
         if (name == EMPTY) return ERROR
         retval = path_exists_p(name)
-        #print_stderr(sprintf("File '%s' exists?  %s", name, ppf_bool(retval)))
+        #print_stderr(sprintf("File '%s' exists?  %s", name, ppf__bool(retval)))
 
     } else if (match(cond, ".* (in|IN) .*")) { # poor regexp, fragile
         # This whole section is pretty easy to confound....
@@ -4497,7 +4492,7 @@ function evaluate_condition(cond, negate,
     if (negate && retval != ERROR)
         retval = !retval
     dbg_print("if", 3, sprintf("(evaluate_condition) END retval=%s", (retval == ERROR) ? "ERROR" \
-                                                                   : ppf_bool(retval)))
+                                                                   : ppf__bool(retval)))
     return retval
 }
 
@@ -4509,10 +4504,10 @@ function ppf__BLK_IF(blknum)
                    "  true_block  : %d\n" \
                    "  seen_else   : %s\n" \
                    "  false_block : %s",
-                   ppf_bool(blktab[blknum, "valid"]),
+                   ppf__bool(blktab[blknum, "valid"]),
                    blktab[blknum, "condition"],
                    blktab[blknum, "true_block"],
-                   ppf_bool(blktab[blknum, "seen_else"]),
+                   ppf__bool(blktab[blknum, "seen_else"]),
                    ((blknum, "false_block") in blktab) \
                      ? blktab[blknum, "false_block"]     \
                      : "<no false block>")
@@ -4534,7 +4529,7 @@ function xeq_cmd__ignore(name, cmdline,
                          readstat)
 {
     dbg_print("scan", 5, sprintf("(xeq_cmd__ignore) START dstblk=%d, mode=%s, $0='%s'",
-                                curr_dstblk(), ppf_mode(curr_atmode()), $0))
+                                curr_dstblk(), ppf__mode(curr_atmode()), $0))
 
     $0 = cmdline
     if (NF == 0)
@@ -4542,7 +4537,7 @@ function xeq_cmd__ignore(name, cmdline,
 
     dbg_print("scan", 5, "(xeq_cmd__ignore) CALLING read_lines_until()")
     readstat = read_lines_until(cmdline, DISCARD)
-    dbg_print("scan", 5, "(xeq_cmd__ignore) RETURNED FROM read_lines_until() => " ppf_bool(readstat))
+    dbg_print("scan", 5, "(xeq_cmd__ignore) RETURNED FROM read_lines_until() => " ppf__bool(readstat))
     if (!readstat)
         error("(xeq_cmd__ignore) Scan failed")
     dbg_print("scan", 5, "(xeq_cmd__ignore) END")
@@ -4692,7 +4687,7 @@ function xeq_cmd__local(name, cmdline,
 # @longdef              NAME
 function scan__longdef(    sym, sym_block, body_block, scanstat)
 {
-    dbg_print("sym", 5, "(scan__longdef) START dstblk=" curr_dstblk() ", mode=" ppf_mode(curr_atmode()) "; $0='" $0 "'")
+    dbg_print("sym", 5, "(scan__longdef) START dstblk=" curr_dstblk() ", mode=" ppf__mode(curr_atmode()) "; $0='" $0 "'")
 
     # Create two new blocks: one for the "longdef" block, other for definition body
     sym_block = blk_new(BLK_LONGDEF)
@@ -4712,7 +4707,7 @@ function scan__longdef(    sym, sym_block, body_block, scanstat)
 
     dbg_print("sym", 5, "(scan__longdef) CALLING scan()")
     scanstat = scan() # scan() should return after it encounters @endcmd
-    dbg_print("sym", 5, "(scan__longdef) RETURNED FROM scan() => " ppf_bool(scanstat))
+    dbg_print("sym", 5, "(scan__longdef) RETURNED FROM scan() => " ppf__bool(scanstat))
     if (!scanstat)
         error("(scan__longdef) Scan failed")
 
@@ -4724,7 +4719,7 @@ function scan__longdef(    sym, sym_block, body_block, scanstat)
 function scan__endlongdef(    sym_block)
 {
     dbg_print("sym", 3, sprintf("(scan__endlongdef) START dstblk=%d, mode=%s",
-                                 curr_dstblk(), ppf_mode(curr_atmode())))
+                                 curr_dstblk(), ppf__mode(curr_atmode())))
     assert_scan_stack_okay(BLK_LONGDEF)
     sym_block = stk_pop(__scan_stack)
 
@@ -4770,7 +4765,7 @@ function ppf__BLK_LONGDEF(longdef_block)
                    "  valid       : %s\n" \
                    "  body_block  : %d",
                    blktab[longdef_block, "name"],
-                   ppf_bool(blktab[longdef_block, "valid"]),
+                   ppf__bool(blktab[longdef_block, "valid"]),
                    blktab[longdef_block, "body_block"])
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
@@ -4826,7 +4821,7 @@ function xeq_cmd__m2(name, cmdline,
 function scan__newcmd(                     name, newcmd_block, body_block, scanstat, nparam, p, pname)
 {
     nparam = 0
-    dbg_print("cmd", 5, "(scan__newcmd) START dstblk=" curr_dstblk() ", mode=" ppf_mode(curr_atmode()) "; $0='" $0 "'")
+    dbg_print("cmd", 5, "(scan__newcmd) START dstblk=" curr_dstblk() ", mode=" ppf__mode(curr_atmode()) "; $0='" $0 "'")
 
     # Create two new blocks: one for the "new command" block, other for command body
     newcmd_block = blk_new(BLK_USER)
@@ -4856,7 +4851,7 @@ function scan__newcmd(                     name, newcmd_block, body_block, scans
 
     dbg_print("cmd", 5, "(scan__newcmd) CALLING scan()")
     scanstat = scan() # scan() should return after it encounters @endcmd
-    dbg_print("cmd", 5, "(scan__newcmd) RETURNED FROM scan() => " ppf_bool(scanstat))
+    dbg_print("cmd", 5, "(scan__newcmd) RETURNED FROM scan() => " ppf__bool(scanstat))
     if (!scanstat)
         error("(scan__newcmd) Scan failed")
 
@@ -4868,7 +4863,7 @@ function scan__newcmd(                     name, newcmd_block, body_block, scans
 function scan__endcmd(                     newcmd_block)
 {
     dbg_print("cmd", 3, sprintf("(scan__endcmd) START dstblk=%d, mode=%s",
-                                 curr_dstblk(), ppf_mode(curr_atmode())))
+                                 curr_dstblk(), ppf__mode(curr_atmode())))
     assert_scan_stack_okay(BLK_USER)
     newcmd_block = stk_pop(__scan_stack)
 
@@ -5051,7 +5046,7 @@ function ppf__BLK_USER(blknum,
                    "  body_block : %d\n" \
                    "%s",
                    blktab[blknum, "name"],
-                   ppf_bool(blktab[blknum, "valid"]),
+                   ppf__bool(blktab[blknum, "valid"]),
                    nparam,
                    blktab[blknum, "body_block"],
                    chomp(param_desc))
@@ -5072,11 +5067,11 @@ function xeq_cmd__nextfile(name, cmdline,
                            readstat)
 {
     dbg_print("scan", 5, sprintf("(xeq_cmd__nextfile) START dstblk=%d, mode=%s, $0='%s'",
-                                curr_dstblk(), ppf_mode(curr_atmode()), $0))
+                                curr_dstblk(), ppf__mode(curr_atmode()), $0))
 
     dbg_print("scan", 5, "(xeq_cmd__nextfile) CALLING read_lines_until()")
     readstat = read_lines_until("", DISCARD)
-    dbg_print("scan", 5, "(xeq_cmd__nextfile) RETURNED FROM read_lines_until() => " ppf_bool(readstat))
+    dbg_print("scan", 5, "(xeq_cmd__nextfile) RETURNED FROM read_lines_until() => " ppf__bool(readstat))
     if (!readstat)
         error("(xeq_cmd__nextfile) Scan failed")
     dbg_print("scan", 5, "(xeq_cmd__nextfile) END")
@@ -5611,7 +5606,7 @@ function scan__while(                 name, while_block, body_block, scanstat)
 
     dbg_print("while", 5, "(scan__while) CALLING scan()")
     scanstat = scan() # scan() should return after it encounters @endif
-    dbg_print("while", 5, "(scan__while) RETURNED FROM scan() => " ppf_bool(scanstat))
+    dbg_print("while", 5, "(scan__while) RETURNED FROM scan() => " ppf__bool(scanstat))
     if (!scanstat)
         error("(scan__while) Scan failed")
 
@@ -5624,7 +5619,7 @@ function scan__while(                 name, while_block, body_block, scanstat)
 function scan__endwhile(                    while_block)
 {
     dbg_print("while", 3, sprintf("(scan__endwhile) START dstblk=%d, mode=%s",
-                               curr_dstblk(), ppf_mode(curr_atmode())))
+                               curr_dstblk(), ppf__mode(curr_atmode())))
     assert_scan_stack_okay(BLK_WHILE)
     while_block = stk_pop(__scan_stack)
 
@@ -5650,7 +5645,7 @@ function xeq__BLK_WHILE(while_block,
     body_block = blktab[while_block, "body_block"]
     condition = blktab[while_block, "condition"]
     condval = evaluate_condition(condition, blktab[while_block, "init_negate"])
-    dbg_print("while", 1, sprintf("(xeq__BLK_WHILE) Initial evaluate_condition('%s') => %s", condition, ppf_bool(condval)))
+    dbg_print("while", 1, sprintf("(xeq__BLK_WHILE) Initial evaluate_condition('%s') => %s", condition, ppf__bool(condval)))
     if (condval == ERROR)
         error("@while: Error evaluating condition '" condition "'")
 
@@ -5663,7 +5658,7 @@ function xeq__BLK_WHILE(while_block,
         lower_namespace()
 
         condval = evaluate_condition(condition, blktab[while_block, "init_negate"])
-        dbg_print("while", 1, sprintf("(xeq__BLK_WHILE) Repeat evaluate_condition('%s') => %s", condition, ppf_bool(condval)))
+        dbg_print("while", 1, sprintf("(xeq__BLK_WHILE) Repeat evaluate_condition('%s') => %s", condition, ppf__bool(condval)))
         if (condval == ERROR)
             error("@while: Error evaluating condition '" condition "'")
 
@@ -5698,7 +5693,7 @@ function ppf__BLK_WHILE(blknum)
     return sprintf("  valid       : %s\n"       \
                    "  condition   : '%s'\n"     \
                    "  body_block  : %d",
-                   ppf_bool(blktab[blknum, "valid"]),
+                   ppf__bool(blktab[blknum, "valid"]),
                    blktab[blknum, "condition"],
                    blktab[blknum, "body_block"])
 }

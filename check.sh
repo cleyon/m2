@@ -163,7 +163,7 @@ run_test()
     fi
     if ! cmp -s ${TESTNAME}.ur_out ${TESTNAME}.want_out; then
         echo "FAIL - text output"
-        echo "FILE $CATEGORY/$SERIES/$M2_FILE"
+        echo "    (file $CATEGORY/$SERIES/$M2_FILE)"
         echo ">>>  EXPECTED OUTPUT  >>>"
         cat ${TESTNAME}.want_out
         echo ">>>  ACTUAL OUTPUT  >>>"
@@ -175,7 +175,7 @@ run_test()
         fail=127
     elif ! cmp -s ${TESTNAME}.ur_err ${TESTNAME}.want_err; then
         echo "FAIL - error messages"
-        echo "FILE $CATEGORY/$SERIES/$M2_FILE"
+        echo "    (file $CATEGORY/$SERIES/$M2_FILE)"
         echo ">>>  EXPECTED ERRORS  >>>"
         cat ${TESTNAME}.want_err
         echo ">>>  ACTUAL ERRORS  >>>"

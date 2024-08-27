@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-08-27 12:16:07 cleyon>
+#  Time-stamp:  <2024-08-27 12:39:28 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -18,7 +18,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION    = "4.0.0_pre3"
+    M2_VERSION    = "4.0.0_pre4"
 
     # Customize these paths as needed for correct operation on your system.
     # If a program is not available, it's okay to remove the entry entirely.

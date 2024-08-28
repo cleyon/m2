@@ -1,2 +1,2 @@
-@booltest defined(__TIME__) && TRUE
-@booltest defined(__TIME__) && FALSE
+True
+False

@@ -1,4 +1,12 @@
 @comment	Simple boolean expressions
 @define TRUE 1
-@booltest defined(__TIME__) && TRUE
-@booltest defined(__TIME__) && FALSE
+@if defined(__TIME__) && TRUE
+True
+@else
+False
+@fi
+@if defined(__TIME__) && FALSE
+True
+@else
+False
+@fi

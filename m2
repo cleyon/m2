@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-08-27 12:39:28 cleyon>
+#  Time-stamp:  <2024-08-28 18:43:14 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -197,6 +197,12 @@ function ppf__bool(x)
 function integerp(pat)
 {
     return pat ~ /^[-+]?[0-9]+$/
+}
+
+
+function floatp(pat)
+{
+    return pat ~ /^[-+]?([0-9]+(\.[0-9]*)?([eE][-+]?[0-9]+)?|\.[0-9]+)$/
 }
 
 
@@ -4631,8 +4637,8 @@ function ppf__if(if_block,
 #           @if SOMETHING <OP> TEXT
 #           @if KEY in ARR
 function evaluate_condition(cond, negate,
-                      retval, name, sp, op, expr,
-                        nparts, arr, key, info, level, lhs, rhs, lval, rval)
+                            retval, name, sp, op, expr,
+                            nparts, arr, key, info, level, lhs, rhs, lval, rval)
 {
     dbg_print("if", 7, sprintf("(evaluate_condition) START cond='%s'", cond))
     if (cond == EMPTY) {
@@ -4702,9 +4708,9 @@ function evaluate_condition(cond, negate,
         
         retval = sym_ll_in(arr, key, info["level"])
 
-    } else if (match(cond, ".* (<|<=|==|!=|>=|>) .*")) { # poor regexp, fragile
+    } else if (match(cond, "[^ ]+ *(<|<=|=|==|!=|>=|>) *[^ ]+")) { # poor regexp, fragile
         # This whole section is pretty easy to confound....
-        dbg_print("if", 6, sprintf("(evaluate_condition) Found IN"))
+        dbg_print("if", 6, sprintf("(evaluate_condition) Found comparison"))
         # Find name
         sp = index(cond, " ")
         lhs = substr(cond, 1, sp-1)
@@ -4730,14 +4736,27 @@ function evaluate_condition(cond, negate,
 
         dbg_print("if", 6, sprintf("(evaluate_condition) lhs='%s'[%s], op='%s', rhs='%s'[%s]", lhs, lval, op, rhs, rval))
 
-        if      (op == "<")                 retval = lval+0 <  rval+0
-        else if (op == "<=")                retval = lval+0 <= rval+0
-        else if (op == "="  || op == "==")  retval = lval+0 == rval+0
-        else if (op == "!=" || op == "<>")  retval = lval+0 != rval+0
-        else if (op == ">=")                retval = lval+0 >= rval+0
-        else if (op == ">")                 retval = lval+0 >  rval+0
-        else
-            error("Comparison operator '" op "' invalid")
+        # If both sides look like numbers, compare them numerically;
+        # otherwise do normal (string-based) comparison.
+        if (floatp(lval) && floatp(rval)) {
+            if      (op == "<")                retval = lval+0 <  rval+0
+            else if (op == "<=")               retval = lval+0 <= rval+0
+            else if (op == "==")               retval = lval+0 == rval+0
+            else if (op == "!=" || op == "<>") retval = lval+0 != rval+0
+            else if (op == ">=")               retval = lval+0 >= rval+0
+            else if (op == ">")                retval = lval+0 >  rval+0
+            else
+                error("Comparison operator '" op "' invalid")
+        } else {
+            if      (op == "<")                retval = lval <  rval
+            else if (op == "<=")               retval = lval <= rval
+            else if (op == "==")               retval = lval == rval
+            else if (op == "!=" || op == "<>") retval = lval != rval
+            else if (op == ">=")               retval = lval >= rval
+            else if (op == ">")                retval = lval >  rval
+            else
+                error("Comparison operator '" op "' invalid")
+        }
     }
 
     if (negate && retval != ERROR)

@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-08-28 18:43:14 cleyon>
+#  Time-stamp:  <2024-08-29 11:28:14 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -1488,7 +1488,7 @@ function execute__command(name, cmdline,
     else if (name == "initialize")  xeq_cmd__define(name, cmdline)
     else if (name == "input")       xeq_cmd__input(name, cmdline)
     else if (name == "local")       xeq_cmd__local(name, cmdline)
-    else if (name == "m2")          xeq_cmd__m2(name, cmdline)
+    else if (name == "m2ctl")       xeq_cmd__m2ctl(name, cmdline)
     else if (name == "nextfile")    xeq_cmd__nextfile(name, cmdline)
     else if (name ~  /s?paste/)     xeq_cmd__include(name, cmdline)
     else if (name ~  /s?readarray/) xeq_cmd__readarray(name, cmdline)
@@ -2235,7 +2235,7 @@ function nam_parse(text, info,
 function nam_purge(level,
                     x, k, del_list)
 {
-    dbg_print("nam", 5, "(nam_purge) BEGIN")
+    dbg_print("nam", 7, "(nam_purge) BEGIN")
     
     for (k in namtab) {
         split(k, x, SUBSEP)
@@ -2249,7 +2249,7 @@ function nam_purge(level,
                                      x[1], x[2]))
         delete namtab[x[1], x[2]]
     }
-    dbg_print("nam", 5, "(nam_purge) START")
+    dbg_print("nam", 7, "(nam_purge) START")
 }
 
 
@@ -2311,7 +2311,8 @@ function nam_ll_read(name, level)
 function nam_ll_in(name, level)
 {
     if (level == EMPTY) error("(nam_ll_in) LEVEL missing")
-    dbg_print("sym", 5, sprintf("(nam_ll_in) Looking for '%s' at level %d", name, level))
+    if (name != "__LINE__" && name != "__NLINE__")
+        dbg_print("sym", 5, sprintf("(nam_ll_in) Looking for '%s' at level %d", name, level))
     return (name, level) in namtab
 }
 
@@ -2710,7 +2711,7 @@ function nam_system_p(name)
 function sym_purge(level,
                     x, k, del_list)
 {
-    dbg_print("sym", 5, "(sym_purge) BEGIN")
+    dbg_print("sym", 7, "(sym_purge) BEGIN")
     for (k in symtab) {
         split(k, x, SUBSEP)
         if (x[3]+0 >= level)
@@ -2723,7 +2724,7 @@ function sym_purge(level,
                                      x[1], x[2], x[3], x[4]))
         delete symtab[x[1], x[2], x[3], x[4]]
     }
-    dbg_print("sym", 5, "(sym_purge) END")
+    dbg_print("sym", 7, "(sym_purge) END")
 }
 
 
@@ -3483,7 +3484,7 @@ function bool__tokenize_string(s,
                 c = substr(s, ++i, 1)
             }
             __btoken[++__bnf] = TOK_EXISTS_P
-            __btoken[++__bnf] = substr(s, oldi, i-oldi)
+            __btoken[++__bnf] = dosubs(substr(s, oldi, i-oldi))
             if (substr(s, i, 1) != TOK_CPAREN)
                 error(sprintf("(bool__tokenize_string) exists - no closing paren; __btoken[%d]='%s', i now %d", __bnf, __btoken[__bnf], i))
             c = substr(s, ++i, 1)       # char after closing paren
@@ -5051,13 +5052,13 @@ function ppf__BLK_LONGDEF(longdef_block)
 #*****************************************************************************
 
 # Undocumented - Reserved for internal use
-# @m2                   ARGS
-function xeq_cmd__m2(name, cmdline,
+# @m2ctl                ARGS
+function xeq_cmd__m2ctl(name, cmdline,
                      x,
                      getstat, input, e)
 {
     $0 = cmdline
-    dbg_print("xeq", 1, sprintf("(xeq_cmd__m2) START dstblk=%d, cmdline='%s'",
+    dbg_print("xeq", 1, sprintf("(xeq_cmd__m2ctl) START dstblk=%d, cmdline='%s'",
                                    curr_dstblk(), cmdline))
     if (NF == 0)
         error("Bad parameters:" $0)
@@ -5090,9 +5091,9 @@ function xeq_cmd__m2(name, cmdline,
             __bf = 1
             e = bool__parse_expr(input)
             if (e == ERROR)
-                warn(sprintf("(xeq_cmd__m2) bool__parse_expr('%s') returned ERROR - should exit?", input))
+                warn(sprintf("(xeq_cmd__m2ctl) bool__parse_expr('%s') returned ERROR - should exit?", input))
             else
-                printf("(xeq_cmd__m2) __bf=%d,__bnf=%d; FINAL ANSWER: %d == %s\n", __bf, __bnf, e, ppf__bool(e))
+                printf("(xeq_cmd__m2ctl) __bf=%d,__bnf=%d; FINAL ANSWER: %d == %s\n", __bf, __bnf, e, ppf__bool(e))
         } while (TRUE)
 
     } else
@@ -6917,7 +6918,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     # Also need to add entry in execute__command()  [search: DISPATCH]
     split("append array debug decr default define divert dump dumpall" \
           " echo error exit ignore" \
-          " include incr initialize input local m2 nextfile paste readfile" \
+          " include incr initialize input local m2ctl nextfile paste readfile" \
           " readarray readonly secho sequence sexit shell sinclude" \
           " spaste sreadfile sreadarray stderr typeout undefine undivert warn", array, " ")
     for (elem in array)

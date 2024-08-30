@@ -62,3 +62,7 @@ tags:
 
 test check:
 	@./check.sh
+
+quiet-test quiet-check:
+	@echo "Beginning test run..."
+	@time ./check.sh | grep -v 'PASS$$'

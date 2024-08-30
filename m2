@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-08-30 17:37:02 cleyon>
+#  Time-stamp:  <2024-08-30 18:13:23 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -18,11 +18,10 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION    = "4.0.0_pre4"
+    M2_VERSION    = "4.0.0_pre5"
 
     # Customize these paths as needed for correct operation on your system.
     # If a program is not available, it's okay to remove the entry entirely.
-    __secure_level   = 0        # secure_level 2 prevents invoking these programs
     PROG["basename"] = "/usr/bin/basename"
     PROG["date"]     = "/bin/date"
     PROG["dirname"]  = "/usr/bin/dirname"
@@ -34,7 +33,19 @@ BEGIN {
     PROG["stat"]     = "/usr/bin/stat"
     PROG["uname"]    = "/usr/bin/uname"
 
-    # Do not change anything below this line
+    # Secure level 0 (default) allows user-code to run arbitrary code in
+    # a sub-shell.  Secure level 1 prevents this, but does allow m2 to
+    # run the utilities listed above in PROG.  These are used to support
+    # more advanced m2 features, but are not necessary for basic operation.
+    # Secure level 2 prevents invoking any programs, and will terminate
+    # with a security violation error if an attempt is made.  At level 2,
+    # m2 does not know the current time or date, host or user name, etc.
+    __secure_level   = 0
+}
+
+
+# DO NOT CHANGE anything below this line
+BEGIN {
     TRUE = OKAY      =  1
     FALSE = EOF      =  0
     ERROR = DISCARD  = -1
@@ -810,7 +821,7 @@ function initialize_debugging()
     dbg_set_level("xeq",        5)
 
     sym_ll_write("__STRICT__", "cmd", GLOBAL_NAMESPACE, TRUE)
-    sym_ll_write("__SYNC__",      "", GLOBAL_NAMESPACE, 2)
+    sym_ll_write("__SYNC__",      "", GLOBAL_NAMESPACE, SYNC_LINE)
 }
 
 
@@ -819,7 +830,7 @@ function clear_debugging(    dsys)
     for (dsys in _dbg_sys_array)
         sym_ll_write("__DBG__", dsys, GLOBAL_NAMESPACE, 0)
     sym_ll_write("__STRICT__", "cmd", GLOBAL_NAMESPACE, FALSE)
-    sym_ll_write("__SYNC__",      "", GLOBAL_NAMESPACE, 1)
+    sym_ll_write("__SYNC__",      "", GLOBAL_NAMESPACE, SYNC_FILE)
 }
 
 
@@ -1445,39 +1456,39 @@ function execute__command(name, cmdline,
     # DISPATCH
     # Also need an array entry to initialize command name.  [search: CMDS]
     # NB - immediate commands are not listed here; instead, [search: IMMEDS]
-    if      (name == "append")      xeq_cmd__define(name, cmdline)
-    else if (name == "array")       xeq_cmd__array(name, cmdline)
-    else if (name == "break")       xeq_cmd__break(name, cmdline)
-    else if (name == "continue")    xeq_cmd__continue(name, cmdline)
-    else if (name == "debug")       xeq_cmd__error(name, cmdline)
-    else if (name == "decr")        xeq_cmd__incr(name, cmdline)
-    else if (name == "default")     xeq_cmd__define(name, cmdline)
-    else if (name == "define")      xeq_cmd__define(name, cmdline)
-    else if (name == "divert")      xeq_cmd__divert(name, cmdline)
-    else if (name ~  /dump(all)?/)  xeq_cmd__dump(name, cmdline)
-    else if (name ~  /s?echo/)      xeq_cmd__error(name, cmdline)
-    else if (name == "error")       xeq_cmd__error(name, cmdline)
-    else if (name ~  /s?exit/)      xeq_cmd__exit(name, cmdline)
-    else if (name == "ignore")      xeq_cmd__ignore(name, cmdline)
-    else if (name ~  /s?include/)   xeq_cmd__include(name, cmdline)
-    else if (name == "incr")        xeq_cmd__incr(name, cmdline)
-    else if (name == "initialize")  xeq_cmd__define(name, cmdline)
-    else if (name == "input")       xeq_cmd__input(name, cmdline)
-    else if (name == "local")       xeq_cmd__local(name, cmdline)
-    else if (name == "m2ctl")       xeq_cmd__m2ctl(name, cmdline)
-    else if (name == "nextfile")    xeq_cmd__nextfile(name, cmdline)
-    else if (name ~  /s?paste/)     xeq_cmd__include(name, cmdline)
-    else if (name ~  /s?readarray/) xeq_cmd__readarray(name, cmdline)
-    else if (name ~  /s?readfile/)  xeq_cmd__readfile(name, cmdline)
-    else if (name == "readonly")    xeq_cmd__readonly(name, cmdline)
-    else if (name == "return")      xeq_cmd__return(name, cmdline)
-    else if (name == "sequence")    xeq_cmd__sequence(name, cmdline)
-    else if (name == "shell")       xeq_cmd__shell(name, cmdline)
-    else if (name == "stderr")      xeq_cmd__error(name, cmdline)
-    else if (name == "typeout")     xeq_cmd__typeout(name, cmdline)
-    else if (name == "undefine")    xeq_cmd__undefine(name, cmdline)
-    else if (name == "undivert")    xeq_cmd__undivert(name, cmdline)
-    else if (name == "warn")        xeq_cmd__error(name, cmdline)
+    if      (name ==  "append")         xeq_cmd__define(name, cmdline)
+    else if (name ==  "array")          xeq_cmd__array(name, cmdline)
+    else if (name ==  "break")          xeq_cmd__break(name, cmdline)
+    else if (name ==  "continue")       xeq_cmd__continue(name, cmdline)
+    else if (name ==  "debug")          xeq_cmd__error(name, cmdline)
+    else if (name ==  "decr")           xeq_cmd__incr(name, cmdline)
+    else if (name ==  "default")        xeq_cmd__define(name, cmdline)
+    else if (name ==  "define")         xeq_cmd__define(name, cmdline)
+    else if (name ==  "divert")         xeq_cmd__divert(name, cmdline)
+    else if (name ~   /dump(all)?/)     xeq_cmd__dump(name, cmdline)
+    else if (name ~ /s?echo/)           xeq_cmd__error(name, cmdline)
+    else if (name ==  "error")          xeq_cmd__error(name, cmdline)
+    else if (name ~ /s?exit/)           xeq_cmd__exit(name, cmdline)
+    else if (name ==  "ignore")         xeq_cmd__ignore(name, cmdline)
+    else if (name ~ /s?include/)        xeq_cmd__include(name, cmdline)
+    else if (name ==  "incr")           xeq_cmd__incr(name, cmdline)
+    else if (name ==  "initialize")     xeq_cmd__define(name, cmdline)
+    else if (name ==  "input")          xeq_cmd__input(name, cmdline)
+    else if (name ==  "local")          xeq_cmd__local(name, cmdline)
+    else if (name ==  "m2ctl")          xeq_cmd__m2ctl(name, cmdline)
+    else if (name ==  "nextfile")       xeq_cmd__nextfile(name, cmdline)
+    else if (name ~ /s?paste/)          xeq_cmd__include(name, cmdline)
+    else if (name ~ /s?readarray/)      xeq_cmd__readarray(name, cmdline)
+    else if (name ~ /s?readfile/)       xeq_cmd__readfile(name, cmdline)
+    else if (name ==  "readonly")       xeq_cmd__readonly(name, cmdline)
+    else if (name ==  "return")         xeq_cmd__return(name, cmdline)
+    else if (name ==  "sequence")       xeq_cmd__sequence(name, cmdline)
+    else if (name ==  "shell")          xeq_cmd__shell(name, cmdline)
+    else if (name ==  "stderr")         xeq_cmd__error(name, cmdline)
+    else if (name ==  "typeout")        xeq_cmd__typeout(name, cmdline)
+    else if (name ==  "undefine")       xeq_cmd__undefine(name, cmdline)
+    else if (name ==  "undivert")       xeq_cmd__undivert(name, cmdline)
+    else if (name ==  "warn")           xeq_cmd__error(name, cmdline)
     else
         error("(execute__command) Unrecognized command '" name "' in '" cmdline "'")
 
@@ -1611,7 +1622,7 @@ function scan__file(    filename, file_block1, file_block2, scanstat, d)
     dbg_print("scan", 5, "(scan__file) RETURNED FROM scan() => " ppf__bool(scanstat))
 
     # Reached end of file
-    flush_stdout(1)
+    flush_stdout(SYNC_FILE)
 
     # Avoid I/O errors (on BSD at least) on attempt to close stdin
     if (filename != "/dev/stdin")
@@ -3344,7 +3355,7 @@ function execute__text(text)
 
     if (__print_mode == MODE_TEXT_PRINT) {
         printf("%s\n", text)
-        flush_stdout(2)
+        flush_stdout(SYNC_LINE)
     } else if (__print_mode == MODE_TEXT_STRING)
         __textbuf = sprintf("%s%s\n", __textbuf, text)
     else
@@ -6763,27 +6774,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     TAU                  = 8 * atan2(1, 1) # 2 * PI
     TERMINAL             = 0    # Block zero means standard output
 
-    MODE_AT_LITERAL       = "L" # atmode - scan literally
-    MODE_AT_PROCESS       = "P" # atmode - scan with "@" macro processing
-    MODE_IO_CAPTURE       = "C" # build command for getline
-    MODE_IO_SILENT        = "X" # redirect >/dev/null 2>/dev/null
-    MODE_TEXT_PRINT       = "P" # executed text is printed
-    MODE_TEXT_STRING      = "S" # executed text is stored in a string
-    MODE_STREAMS_DISCARD  = "D" # diverted streams final disposition
-    MODE_STREAMS_SHIP_OUT = "O" # diverted streams final disposition
-
-    # Tokens used in boolean expression evaluation
-    TOK_AND       = "&&"
-    TOK_CPAREN    = ")"
-    TOK_DEFINED_P = "?D"
-    TOK_ENV_P     = "?E"
-    TOK_EXISTS_P  = "?X"
-    TOK_NOT       = "!"
-    TOK_OPAREN    = "("
-    TOK_OR        = "||"
-
-    # BLKS
-    # Block types
+    # BLK_*     Block types
     BLK_AGG       = "A";                __blk_label[BLK_AGG]      = "AGG"
       SLOT_BLKNUM = "b";                __blk_label[SLOT_BLKNUM]  = "BLKNUM"
       SLOT_CMD    = "c";                __blk_label[SLOT_CMD]     = "CMD"
@@ -6798,6 +6789,32 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     BLK_USER      = "U";                __blk_label[BLK_USER]     = "USER"
     BLK_WHILE     = "W";                __blk_label[BLK_WHILE]    = "WHILE"
 
+    # Various modes
+    MODE_AT_LITERAL       = "L" # atmode - scan literally
+    MODE_AT_PROCESS       = "P" # atmode - scan with "@" macro processing
+    MODE_IO_CAPTURE       = "C" # build command for getline
+    MODE_IO_SILENT        = "X" # redirect >/dev/null 2>/dev/null
+    MODE_TEXT_PRINT       = "P" # executed text is printed
+    MODE_TEXT_STRING      = "S" # executed text is stored in a string
+    MODE_STREAMS_DISCARD  = "D" # diverted streams final disposition
+    MODE_STREAMS_SHIP_OUT = "O" # diverted streams final disposition
+
+    # When to flush standard output
+    SYNC_LINE = 2
+    SYNC_FILE = 1               # default
+    SYNC_EXIT = 0
+
+    # Tokens used in boolean expression evaluation
+    TOK_AND       = "&&"
+    TOK_CPAREN    = ")"
+    TOK_DEFINED_P = "?D"
+    TOK_ENV_P     = "?E"
+    TOK_EXISTS_P  = "?X"
+    TOK_NOT       = "!"
+    TOK_OPAREN    = "("
+    TOK_OR        = "||"
+
+    # Execution control states for loops
     XEQ_NORMAL   = 0
     XEQ_BREAK    = 1
     XEQ_CONTINUE = 2
@@ -6885,7 +6902,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     sym_ll_fiat("__STRICT__",   "file", "",                     TRUE)
     sym_ll_fiat("__STRICT__", "symbol", "",                     TRUE)
     sym_ll_fiat("__STRICT__",  "undef", "",                     TRUE)
-    sym_ll_fiat("__SYNC__",         "", FLAGS_WRITABLE_INTEGER, 1)
+    sym_ll_fiat("__SYNC__",         "", FLAGS_WRITABLE_INTEGER, SYNC_FILE)
 
     # FUNCS
     # Functions cannot be used as symbol or sequence names.
@@ -7164,7 +7181,7 @@ function end_program(diverted_streams_final_disposition,
         undivert_all()
     }
 
-    flush_stdout(0)
+    flush_stdout(SYNC_EXIT)
     if (debugp())
         print_stderr("m2:END M2")
     exit __exit_code

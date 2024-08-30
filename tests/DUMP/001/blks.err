@@ -1,0 +1,42 @@
+Block # 7, Type=AGG: (blk_dump_blktab)
+  count   : 0
+
+Block # 4, Type=AGG: (blk_dump_blktab)
+  count   : 0
+
+Block # 8, Type=AGG: (blk_dump_blktab)
+  count   : 0
+
+Block # 5, Type=AGG: (blk_dump_blktab)
+  count   : 0
+
+Block # 6, Type=AGG: (blk_dump_blktab)
+  count   : 0
+
+Block # 9, Type=AGG: (blk_dump_blktab)
+  count   : 0
+
+Block # 11, Type=FILE: (blk_dump_blktab)
+  filename: ./.m2rc
+  open    : False
+  atmode  : ProcessAt
+  dstblk  : 0
+Block # 10, Type=FILE: (blk_dump_blktab)
+  filename: /Users/cleyon/.m2rc
+  open    : False
+  atmode  : ProcessAt
+  dstblk  : 0
+Block # 12, Type=FILE: (blk_dump_blktab)
+  filename: blks.m2
+  open    : True
+  atmode  : ProcessAt
+  dstblk  : 0
+Block # 1, Type=AGG: (blk_dump_blktab)
+  count   : 0
+
+Block # 2, Type=AGG: (blk_dump_blktab)
+  count   : 0
+
+Block # 3, Type=AGG: (blk_dump_blktab)
+  count   : 0
+

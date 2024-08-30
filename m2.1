@@ -159,9 +159,17 @@ Cease execution of a user command.
 .It @sequence ID ACT [N]
 Create and manage sequences
 .It @shell DELIM [PROG]
-Evaluate input until DELIM, send raw data to PROG
-.It \ \ \ <...>
-Prog output is captured; exit status in __SHELL__
+Evaluate input until DELIM and send raw data to PROG.
+Output stream is captured; shell exit status will be stored in
+.Va __SHELL__ .
+If PROG is not specified, the value of symbol
+.Va M2_SHELL
+will be used if defined; if not, the value of environment variable
+.Ev SHELL
+will be used.
+If also not defined, the value of
+.Va __PROG__[sh]
+will be used.
 .It @typeout
 Print remainder of input file literally, no macros
 .It @undefine NAME
@@ -674,6 +682,9 @@ and
 .Qq ||
 are
 .Em not supported !
+(However, see
+.Sx Boolean expressions
+below.)
 .Pp
 .Ql @expr@
 supports the following functions:
@@ -732,7 +743,7 @@ Tangent of x, in radians
 .El
 .Pp
 .Ql @expr@
-will automatically use symbols' values in expressions.
+will automatically use symbols' and sequences' values in expressions.
 Inside
 .Ql "@expr ...@" ,
 there is no need to surround symbol names
@@ -785,17 +796,8 @@ True if FILE exists
 True if array contains elem
 .El
 .Pp
-.Ql @ifdef
-and
-.Ql @ifndef
-are implemented internally as
-.\" I'm sure there are interesting macros with parens and parameters
-.Ql @if defined(NAME)
-and
-.Ql @if\ ! defined(NAME)
-respectively.
-Any other expression is handled as a mathematical expression and hope
-for the best.
+Any other expression is evaluated as a mathematical expression and
+considered True if the result is non-zero.
 .Sh IMPLEMENTATION NOTES
 .Nm
 is written in portable
@@ -809,10 +811,18 @@ are avoided.
 .It Ev HOME
 Used to access your
 .Pa $HOME/.m2rc
-file
+file.
+Available through symbol
+.Va __HOME__ .
 .It Ev M2RC
 If exists, overrides
 .Pa $HOME/.m2rc
+.It Ev PWD
+If exists, assumed to be user's current directory; otherwise, retrieved
+by invoking
+.Xr pwd 1 .
+Available through symbol
+.Va __CWD__ .
 .It Ev SHELL
 Used as a possible default shell.
 .It Ev TMPDIR

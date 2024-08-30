@@ -1,19 +1,23 @@
 bool
-        TRUE    Abend if symbol is not defined
-        FALSE   Non-existent symbol is always False
+        TRUE    Error if symbol is not defined [DEFAULT]
+        FALSE   Undefined/non-existent symbols are always False
+
+cmd
+        TRUE    Lines beginning with @ must specify a valid commnd
+        FALSE   Lines with @ but no matching cmd name are output as is [DEFAULT]
 
 env
-        TRUE    Error if environment variable is not defined
-        FALSE   Variable expansion is empty string
+        TRUE    Error if environment variable is not defined [DEFAULT]
+        FALSE   Variable expansion results in empty string
 
 file
-        TRUE    Attempt to include a non-existent file causes abend
-        FALSE   No op
+        TRUE    Error when attempting to include a non-existent file [DEFAULT]
+        FALSE   Print warning if file does not exist, continue processing
 
 symbol
-        TRUE    Symbol name must match stringent regexp - nsym_valid_p()
+        TRUE    Symbol name must match stringent regexp - nsym_valid_p() [DEFAULT]
         FALSE   Very liberal regexp, but some chars still prohibited
 
 symfunc
-        TRUE    Error if symfunc is not defined
-        FALSE   Expansion is empty string
+        TRUE    Error if symfunc is not defined [DEFAULT]
+        FALSE   Expansion of @xlerb foo@ is empty string

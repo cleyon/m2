@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-08-29 11:28:14 cleyon>
+#  Time-stamp:  <2024-08-30 00:38:10 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -801,7 +801,7 @@ function initialize_debugging()
     dbg_set_level("nam",        5)
     dbg_set_level("namespace",  5)
     dbg_set_level("read",       0)
-    dbg_set_level("scan",       5)
+    dbg_set_level("scan",       7)
     dbg_set_level("seq",        3)
     dbg_set_level("stk",        5)
     dbg_set_level("sym",        5)
@@ -1710,14 +1710,19 @@ function scan(              code, terminator, readstat, name, retval, new_block,
             continue
 
         # See if it's a command of some kind
-        dbg_print("scan", 7, "(scan) [" scanner_label "] $1='" $1 "'")
-        # first = @ and last != @ catches @foo...@ at BOL not being a command
-        if (first($1) == "@" && last($1) != "@") {
-            name = rest($1)
 
-            # Check for cmd arguments
-            while (match(name, "\\{.*\\}"))
-                name = substr(name, 1, RSTART-1) substr(name, RSTART+RLENGTH)
+        # first == @ and last != @ catches @foo...@ at BOL not being a command
+        if (first($1) == "@" && last($1) != "@") {
+            # Winnow out the primary name.  Be sure to handle
+            # "@myfn{aaa}{ccc ddd}".  (Naive old code name=$1 resulted
+            # in $1 being "@myfn{aaa}{ccc" which wrecks havoc.)
+            # However, we need to keep $1 intact in order for upcoming
+            # match($1,terminator) checks to work.  This takes advantage
+            # of the fact that all commands must have strict names.
+            for (i = 2; substr($0, i, 1) ~ /[A-Za-z#_0-9]/; i++)
+                ;
+            name = substr($0, 2, i-2)
+            dbg_print("scan", 7, "(scan) [" scanner_label "] name now '" name "'")
             
             # See if it's a built-in command
             if (nam_ll_in(name, GLOBAL_NAMESPACE) &&
@@ -5049,6 +5054,11 @@ function ppf__BLK_LONGDEF(longdef_block)
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
+#       @m2ctl 0        Clear debugging
+#       @m2ctl 1        Debug namespaces
+#       @m2ctl 2        Dump scan stack
+#       @m2ctl 3        Parse boolean expr from user
+#
 #*****************************************************************************
 
 # Undocumented - Reserved for internal use
@@ -5123,7 +5133,7 @@ function scan__newcmd(                     name, newcmd_block, body_block, scans
 
     $1 = ""
     name = $2
-    while (match(name, "{.*}")) {
+    while (match(name, "{[^}]*}")) {
         p = ++nparam
         pname = substr(name, RSTART+1, RLENGTH-2)
         dbg_print("cmd", 5, sprintf("(scan__newcmd) Parameter %d : %s",
@@ -5263,7 +5273,7 @@ function execute__user(name, cmdline,
 
     # Check for cmd arguments
     narg = 0
-    while (match(cmdline, "{.*}")) {
+    while (match(cmdline, "{[^}]*}")) {
         arg = ++narg
         argval = substr(cmdline, RSTART+1, RLENGTH-2)
         dbg_print("scan", 5, sprintf("(scan) Arg %d : %s",
@@ -6899,7 +6909,6 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     sym_ll_fiat("__STRICT__",    "cmd", "",                     FALSE)
     sym_ll_fiat("__STRICT__",    "env", "",                     TRUE)
     sym_ll_fiat("__STRICT__",   "file", "",                     TRUE)
-    sym_ll_fiat("__STRICT__",   "func", "",                     TRUE)
     sym_ll_fiat("__STRICT__", "symbol", "",                     TRUE)
     sym_ll_fiat("__STRICT__",  "undef", "",                     TRUE)
     sym_ll_fiat("__SYNC__",         "", FLAGS_WRITABLE_INTEGER, 1)
@@ -7088,12 +7097,39 @@ BEGIN {
                 _eq = index(_arg, "=")
                 _name = substr(_arg, 1, _eq-1)
                 _val = substr(_arg, _eq+1)
-                if (_name == "debug")
+                if (_name == "debug") {
                     _name = "__DEBUG__"
-                else if (_name == "secure")
+                } else if (_name == "noinit") {
+                    if (_val == 0) { # `Don't not load the init files''
+                        # This makes it possible to load init files
+                        # without a specifying a command-line file.
+                        load_init_files()
+                    } else {
+                        # Inhibit loading of init files by pretending we
+                        # already did it.
+                        __init_files_loaded = TRUE
+                    }
+                    continue
+                } else if (_name == "secure") {
                     _name = "__SECURE__"
-                else if (_name == "strict")
-                    warn("Special processing for '" _arg "' does not function", "ARGV", _i)
+                } else if (_name == "strict") {
+                    if (_val == 0) {
+                        # Turn off strict settings
+                        sym_ll_write("__STRICT__",   "bool", GLOBAL_NAMESPACE, FALSE)
+                        sym_ll_write("__STRICT__",    "cmd", GLOBAL_NAMESPACE, FALSE)
+                        sym_ll_write("__STRICT__",    "env", GLOBAL_NAMESPACE, FALSE)
+                        sym_ll_write("__STRICT__",   "file", GLOBAL_NAMESPACE, FALSE)
+                        sym_ll_write("__STRICT__", "symbol", GLOBAL_NAMESPACE, FALSE)
+                        sym_ll_write("__STRICT__",  "undef", GLOBAL_NAMESPACE, FALSE)
+                    } else if (_val > 0)  {
+                        # Positive means more strict, presumably.  But
+                        # the only remaining ssys that doesn't default
+                        # to TRUE is __STRICT__[cmd].  So we turn it on.
+                        # (Note: initialize_debugging also does this.)
+                        sym_ll_write("__STRICT__", "cmd", GLOBAL_NAMESPACE, TRUE)
+                    }
+                    continue
+                }
                 if (!sym_valid_p(_name))
                     error("Name '" _name "' not valid:" _arg, "ARGV", _i)
                 if (sym_protected_p(_name))

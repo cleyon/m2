@@ -8,7 +8,7 @@
 @echo
 @break
 @fi
-@if @BLK@ == 0
+@if @BLK@ <= 0
 @break
 @fi
 @dumpall @BLK@

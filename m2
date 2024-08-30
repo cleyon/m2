@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-08-30 05:28:39 cleyon>
+#  Time-stamp:  <2024-08-30 17:37:02 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -771,8 +771,8 @@ BEGIN {
     symtab["__DEBUG__", "",  GLOBAL_NAMESPACE, "symval"] = FALSE
 
     namtab["__DBG__", GLOBAL_NAMESPACE] = TYPE_ARRAY FLAG_SYSTEM
-    split("args block bool braces case del divert dosubs dump expr for if io" \
-          " namespace cmd nam seq stk sym read scan ship_out while xeq",
+    split("args block bool braces case cmd del divert dosubs dump expr for if io" \
+          " nam namespace read scan seq ship_out stk sym while xeq",
           _dbg_sys_array, " ")
     for (_dsys in _dbg_sys_array) {
         __dbg_sysnames[_dbg_sys_array[_dsys]] = TRUE
@@ -796,20 +796,21 @@ function initialize_debugging()
     dbg_set_level("dump",       5)
     dbg_set_level("expr",       0)
     dbg_set_level("for",        5)
-    dbg_set_level("if",         7)
+    dbg_set_level("if",         5)
     dbg_set_level("io",         3)
     dbg_set_level("nam",        5)
     dbg_set_level("namespace",  5)
     dbg_set_level("read",       0)
     dbg_set_level("scan",       7)
     dbg_set_level("seq",        3)
+    dbg_set_level("ship_out",   3)
     dbg_set_level("stk",        5)
     dbg_set_level("sym",        5)
     dbg_set_level("while",      5)
     dbg_set_level("xeq",        5)
 
     sym_ll_write("__STRICT__", "cmd", GLOBAL_NAMESPACE, TRUE)
-    sym_ll_write("__SYNC__", "", GLOBAL_NAMESPACE, 2)
+    sym_ll_write("__SYNC__",      "", GLOBAL_NAMESPACE, 2)
 }
 
 
@@ -817,30 +818,8 @@ function clear_debugging(    dsys)
 {
     for (dsys in _dbg_sys_array)
         sym_ll_write("__DBG__", dsys, GLOBAL_NAMESPACE, 0)
-
-    # dbg_set_level("args",       0)
-    # dbg_set_level("block",      0)
-    # dbg_set_level("braces",     0)
-    # dbg_set_level("case",       0)
-    # dbg_set_level("del",        0)
-    # dbg_set_level("divert",     0)
-    # dbg_set_level("dosubs",     0)
-    # dbg_set_level("dump",       0)
-    # dbg_set_level("expr",       0)
-    # dbg_set_level("for",        0)
-    # dbg_set_level("if",         0)
-    # dbg_set_level("io",         0)
-    # dbg_set_level("namespace",  0)
-    # dbg_set_level("cmd",       0)
-    # dbg_set_level("nam",       0)
-    # dbg_set_level("seq",       0)
-    # dbg_set_level("stk",       0)
-    # dbg_set_level("sym",       0)
-    # dbg_set_level("read",       0)
-    # dbg_set_level("scan",       0)
-    # dbg_set_level("ship_out",   0)
-    # dbg_set_level("while",      0)
-    # dbg_set_level("xeq",        0)
+    sym_ll_write("__STRICT__", "cmd", GLOBAL_NAMESPACE, FALSE)
+    sym_ll_write("__SYNC__",      "", GLOBAL_NAMESPACE, 1)
 }
 
 
@@ -1951,8 +1930,8 @@ function scan(              code, terminator, readstat, name, retval, new_block,
                     error("(scan) [" scanner_label "] Parse error on '" name "'")
                 if ((level = nam_lookup(info)) != ERROR) {
                     # An ERROR here simply means not found, in which case
-                    # name is definitely not a user commands, so we do nothing
-                    # for the moment in that case and let normal test ship out.
+                    # name is definitely not a user command, so we do nothing
+                    # for the moment in that case and let normal text ship out.
                     # But it's not an ERROR, so something was found at "level".
                     # See if it's a user command and ship it out if so.
                     if (flag_1true_p((code = nam_ll_read(name, level)), TYPE_USER)) {
@@ -2174,8 +2153,8 @@ function ppf__flags(code,
 #
 # Return value:
 #    -1 (ERROR)
-#       Text does not pass simple parsing test.  Even so, it still be
-#       invalid depending strict, etc).
+#       Text does not pass simple parsing test.  Even so, it still
+#       may be invalid depending strict, etc).
 #    1 or 2
 #       Text parsed.  1 is returned if it's a simple NAME,
 #       2 indicates a NAME[KEY] format.
@@ -2524,15 +2503,14 @@ function stk_pop(stack)
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
+#       Send text to the destination stream __DIVNUM__
+#         < 0         Discard
+#         = 0         Standard output
+#         > 0         Stream # N
+#
 #       See @divert, @undivert
 #
 #*****************************************************************************
-
-# Send text to the destination stream __DIVNUM__
-#   < 0         Discard
-#   = 0         Standard output
-#   > 0         Stream # N
-
 function divnum()
 {
     return sym_ll_read("__DIVNUM__", "", GLOBAL_NAMESPACE) + 0
@@ -3208,19 +3186,15 @@ function sym_protected_p(sym,
     if (!nam_ll_in(name, level))
         error("not in namtab!?  name=" name ", level=" level)
 
-    # Check for intermediate level - endpoints are excluded
-    # if (GLOBAL_NAMESPACE < level && level < __namespace)
-    #     error("sym_protected_p: Cannot select random namespace")
-
     # Error if name does not exist at that level
     code = nam_ll_read(name, level)
     retval = sym_ll_protected(name, code)
     dbg_print("sym", 4, sprintf("(sym_protected_p) END; sym '%s' => %s", sym, ppf__bool(retval)))
     return retval
-    #return sym_ll_protected(name, code)
 }
 
 
+# Protected symbols cannot be changed by the user.
 function sym_ll_protected(name, code)
 {
     if (flag_1true_p(code, FLAG_READONLY))
@@ -3243,20 +3217,6 @@ function sym_definition_ppf(sym,
           definition      "\n" \
           "@endlongdef"
 }
-
-
-# Protected symbols cannot be changed by the user.
-# function sym_protected_p(sym,    root)
-# {
-#     root = sym
-#     # Names known to be protected
-#     if (root in protected_syms)
-#         return TRUE
-#     # Whitelist of known safe symbols
-#     if (root in unprotected_syms)
-#         return FALSE
-#     return double_underscores_p(root)
-# }
 
 
 function sym_true_p(sym,
@@ -3428,7 +3388,7 @@ function bool__tokenize_string(s,
     while (TRUE) {
         if (i > slen || c == "")
             break
-        while (c == " " || c == "\t")           # skip ws
+        while (c == " " || c == "\t")   # skip whitespace
             c = substr(s, ++i, 1)
 
         if (c == TOK_NOT ||
@@ -3554,22 +3514,26 @@ function bool__tokenize_string(s,
     dbg_print("bool", 7, "(bool__tokenize_string) DONE; __bnf=" __bnf)
     if (dbg("bool", 3))
         for (i = 1; i <= __bnf; i++)
-            print_stderr(sprintf("__btoken[%d]='%s'", i, __btoken[i]))
+            print_stderr(sprintf("(bool__tokenize_string) __btoken[%d]='%s'", i, __btoken[i]))
 }
 
 
 function bool__parse_expr(    e, f, r)           # term   | term || term
 {
-    # print(sprintf("(bool__parse_expr) __bf=%d, __btoken[]=%s, e='%s'", __bf, __btoken[__bf], e))
+    # print_stderr(sprintf("(bool__parse_expr) __bf=%d, __btoken[]=%s, e='%s'", __bf, __btoken[__bf], e))
     e = bool__parse_term()
-    # print(sprintf("(bool__parse_expr) After bool__parse_term, __bf=%d, __btoken[%d]=%s, e='%s'(%s)", __bf, __bf, __btoken[__bf], e, ppf__bool(e)))
+    if (e == ERROR) {
+        warn("(bool__parse_expr) Initial e returned ERROR, propagating")
+        return e
+    }
+
+    # print_stderr(sprintf("(bool__parse_expr) After bool__parse_term, __bf=%d, __btoken[%d]=%s, e='%s'(%s)", __bf, __bf, __btoken[__bf], e, ppf__bool(e)))
     while (__btoken[__bf] == TOK_OR) {
         __bf++
         f = bool__parse_term()
         r = e || f
-        #print("Found TOK_OR, __bf now " __bf++)
+        #print_stderr("Found TOK_OR, __bf now " __bf++)
         dbg_print("bool", 5, sprintf("(bool__parse_expr) TOK_OR, e'%s' || f'%s' => %s", e, f, ppf__bool(r)))
-        # e = e || bool__parse_term()
         e = r
     }
     return e
@@ -3583,7 +3547,7 @@ function bool__parse_term(    e, f, r)           # factor | factor && factor
         warn("(bool__parse_term) Initial e returned ERROR, propagating")
         return e
     }
-    # print(sprintf("(bool__parse_term) After bool__parse_factor, __bf=%d, __btoken[]=%s, e='%s'(%s)", __bf, __btoken[__bf], e, ppf__bool(e)))
+    # print_stderr(sprintf("(bool__parse_term) After bool__parse_factor, __bf=%d, __btoken[]=%s, e='%s'(%s)", __bf, __btoken[__bf], e, ppf__bool(e)))
     while (__btoken[__bf] == TOK_AND) {
         __bf++
         f = bool__parse_factor()
@@ -3593,7 +3557,6 @@ function bool__parse_term(    e, f, r)           # factor | factor && factor
         }
         r = e && f
         dbg_print("bool", 5, sprintf("(bool__parse_term) TOK_AND, e'%s' && f'%s' => %s", e, f, ppf__bool(r)))
-        #e = e && bool__parse_factor()
         e = r
     }
     return e
@@ -3607,6 +3570,7 @@ function bool__parse_factor(    e, r,         # ! factor | variable | ( expressi
     if (__btoken[__bf] ~ /^[01]$/) {
         dbg_print("bool", 5, "(bool__parse_factor) Match regexp 1")
         return 0+__btoken[__bf++]
+
     } else if (__btoken[__bf] == TOK_OPAREN) {
         __bf++
         e = bool__parse_expr()
@@ -3614,6 +3578,7 @@ function bool__parse_factor(    e, r,         # ! factor | variable | ( expressi
             error("(bool__parse_factor) Missing ')' at " __btoken[__bf])
         dbg_print("bool", 5, "(bool__parse_factor) Found parens, returning " ppf__bool(e))
         return e
+
     } else if (__btoken[__bf] == TOK_NOT) {
         __bf++
         e = bool__parse_factor()
@@ -3624,6 +3589,7 @@ function bool__parse_factor(    e, r,         # ! factor | variable | ( expressi
             dbg_print("bool", 5, "(bool__parse_factor) NOT: Just read " e ", so returning " ppf__bool(!e))
             return !e
         }
+
     } else if (__btoken[__bf] == TOK_DEFINED_P) {
         name = __btoken[++__bf]
         if (name == EMPTY) return ERROR
@@ -3632,6 +3598,7 @@ function bool__parse_factor(    e, r,         # ! factor | variable | ( expressi
         dbg_print("bool", 5, "(bool__parse_factor): DEFINED; name='" name "', returning " ppf__bool(r))
         __bf++
         return r
+
     } else if (__btoken[__bf] == TOK_ENV_P) {
         name = __btoken[++__bf]
         if (name == EMPTY) return ERROR
@@ -3640,6 +3607,7 @@ function bool__parse_factor(    e, r,         # ! factor | variable | ( expressi
         dbg_print("bool", 5, "(bool__parse_factor): ENV; name='" name "', returning " ppf__bool(r))
         __bf++
         return r
+
     } else if (__btoken[__bf] == TOK_EXISTS_P) {
         name = __btoken[++__bf]
         if (name == EMPTY) return ERROR
@@ -3647,15 +3615,16 @@ function bool__parse_factor(    e, r,         # ! factor | variable | ( expressi
         dbg_print("bool", 5, "(bool__parse_factor) EXISTS; name='" name "', returning " ppf__bool(r))
         __bf++
         return r
+
     } else if (__btoken[__bf] ~ /^[A-Za-z#_][A-Za-z#_0-9]*$/) { # symbol?
         r = sym_true_p(__btoken[__bf])
         dbg_print("bool", 5, "(bool__parse_factor): SYM; just read '" __btoken[__bf] "', so returning " ppf__bool(r))
         __bf++
         return r
+
     } else {
-        #print(sprintf("bool__parse_factor: Did not match __bf=%d, __btoken[]=%s, e='%s'", __bf, __btoken[__bf], e))
-        # error("??") # print("M2 would normally exit() here but we'll try 'evaluate_condition'")
-        #print_stderr("AAA: evaluate_condition(" __btoken[__bf] ")")
+        # Boolean evaluation would normally fail here, but we'll pass it along to 'evaluate_condition'
+        #print_stderr(sprintf("bool__parse_factor: Did not match __bf=%d, __btoken[]=%s, e='%s'", __bf, __btoken[__bf], e))
         r = evaluate_condition(__btoken[__bf], FALSE) 
         if (r == ERROR)
             warn("(bool__parse_factor): evaluate_condition('" __btoken[__bf] "') returned ERROR")
@@ -5052,18 +5021,18 @@ function ppf__BLK_LONGDEF(longdef_block)
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
-#       @m2ctl 0        Clear debugging
-#       @m2ctl 1        Debug namespaces
-#       @m2ctl 2        Dump scan stack
-#       @m2ctl 3        Parse boolean expr from user
+#       @m2ctl 0                Clear debugging
+#       @m2ctl 1                Debug namespaces
+#       @m2ctl 2                Dump scan stack
+#       @m2ctl 3                Parse boolean expr from user
+#       @m2ctl 4 dsys level     Set debug level directly
 #
 #*****************************************************************************
 
 # Undocumented - Reserved for internal use
 # @m2ctl                ARGS
 function xeq_cmd__m2ctl(name, cmdline,
-                     x,
-                     getstat, input, e)
+                        x, getstat, input, e, dsys, lev)
 {
     $0 = cmdline
     dbg_print("xeq", 1, sprintf("(xeq_cmd__m2ctl) START dstblk=%d, cmdline='%s'",
@@ -5085,11 +5054,11 @@ function xeq_cmd__m2ctl(name, cmdline,
     } else if (x == 2) {
         dump_scan_stack()
 
-    } else if (x == 3) {
+    } else if (x == 3) {        # Interactively evaluate boolean expressions
         do {
             print_stderr("Enter line to parse as boolean expr (RETURN to end):")
             getstat = getline input < "/dev/tty"
-            print("just read '" input "'")
+            #print("just read '" input "'")
             if (input == EMPTY) {
                 print_stderr("Exiting boolean expr; returning to regular commands!")
                 break
@@ -5101,8 +5070,14 @@ function xeq_cmd__m2ctl(name, cmdline,
             if (e == ERROR)
                 warn(sprintf("(xeq_cmd__m2ctl) bool__parse_expr('%s') returned ERROR - should exit?", input))
             else
-                printf("(xeq_cmd__m2ctl) __bf=%d,__bnf=%d; FINAL ANSWER: %d == %s\n", __bf, __bnf, e, ppf__bool(e))
+                print_stderr(sprintf("(xeq_cmd__m2ctl) __bf=%d,__bnf=%d; FINAL ANSWER: %d == %s\n", __bf, __bnf, e, ppf__bool(e)))
         } while (TRUE)
+
+    } else if (x == 4) {        # Set __DBG__[dsys] level directly
+        dsys = $2               # Note, does not affect __DEBUG__
+        lev = $3
+        print_stderr(sprintf("Setting __DBG__[%s] to %d", dsys, lev))
+        dbg_set_level(dsys, lev)
 
     } else
         error("Unrecognized parameter " $1) 

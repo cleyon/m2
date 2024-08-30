@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-08-30 00:38:10 cleyon>
+#  Time-stamp:  <2024-08-30 05:28:39 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -1059,18 +1059,15 @@ function blk_dump_blktab(    x, k, blknum, seen, type)
 {
     for (k in blktab) {
         split(k, x, SUBSEP)
-        # if (x[2]+0 >= level)
-        #     del_list[x[1], x[2]] = TRUE
         blknum = x[1] + 0
-#        print_stderr(">" blknum "<")
         if (! (blknum in seen)) {
             type = blk_type(blknum+0)
-#            print_stderr(">> type=" type " <<")
+            dbg_print("xeq", 5, "(blk_dump_blktab) type=" type)
             dbg_print_block("xeq", -1, blknum, "(blk_dump_blktab)")
         }
         seen[blknum]++
     }
-    return "FOO!!"
+    return "(blk_dump_blktab)"
 }
 
 
@@ -3419,116 +3416,139 @@ function evaluate_boolean(text, negate,
 
 
 function bool__tokenize_string(s,
-                               slen, i, oldi, c, pcnt)
+                               slen, i, oldi, c, pcnt, name)
 {
-    dbg_print("bool", 7, "(bool__tokenize_string) START")
+    dbg_print("bool", 6, "(bool__tokenize_string) START")
     slen = length(s)
     i = 1
     __bnf = 0
     c = substr(s, i, 1)
-    dbg_print("bool", 5, sprintf("(bool__tokenize_string) Top: slen=%d, i=%d, c=%s", slen, i, c))
+    dbg_print("bool", 5, sprintf("(bool__tokenize_string) TOP; slen=%d, i=%d, c=%s", slen, i, c))
 
     while (TRUE) {
-        if (i > slen || c == "") break
-        while (c == " " || c == "\t")   c = substr(s, ++i, 1) # skip ws
+        if (i > slen || c == "")
+            break
+        while (c == " " || c == "\t")           # skip ws
+            c = substr(s, ++i, 1)
+
         if (c == TOK_NOT ||
             c == TOK_OPAREN ||
             c == TOK_CPAREN) {
+            dbg_print("bool", 7, sprintf("(bool__tokenize_string) Found '%s' at i=%d", c, i))
             __btoken[++__bnf] = c
-            dbg_print("bool", 5, sprintf("(bool__tokenize_string) found '%s'; __btoken[%d]=TOK_NOT|[OC]PAREN, i now %d", c, __bnf, i))
-            c = substr(s, ++i, 1)
-            while (c == " " || c == "\t")   c = substr(s, ++i, 1) # skip ws
+            i++
+            c = substr(s, i, 1)
+            while (c == " " || c == "\t")
+                c = substr(s, ++i, 1)
+            dbg_print("bool", 5, sprintf("(bool__tokenize_string) %s __btoken[%d]=TOK_{NOT|OPAREN|CPAREN}, i now %d", __btoken[__bnf], __bnf, i))
+
         } else if (substr(s, i, 2) == "&&") {
+            dbg_print("bool", 7, sprintf("(bool__tokenize_string) Found '&&' at i=%d", i))
             __btoken[++__bnf] = TOK_AND
             i += 2
-            dbg_print("bool", 5, sprintf("(bool__tokenize_string) found '&&'; __btoken[%d]=TOK_AND, i now %d", __bnf, i))
             c = substr(s, i, 1)
-            while (c == " " || c == "\t")   c = substr(s, ++i, 1) # skip ws
+            while (c == " " || c == "\t")
+                c = substr(s, ++i, 1)
+            dbg_print("bool", 5, sprintf("(bool__tokenize_string) && __btoken[%d]=TOK_AND, i now %d", __bnf, i))
+
         } else if (substr(s, i, 2) == "||") {
-            #print(">>||")
+            dbg_print("bool", 7, sprintf("(bool__tokenize_string) Found '||' at i=%d", i))
             __btoken[++__bnf] = TOK_OR
             i += 2
-            dbg_print("bool", 5, sprintf("(bool__tokenize_string) found '||'; __btoken[%d]=TOK_OR, i now %d", __bnf, i))
             c = substr(s, i, 1)
-            while (c == " " || c == "\t")   c = substr(s, ++i, 1) # skip ws
+            while (c == " " || c == "\t")
+                c = substr(s, ++i, 1)
+            dbg_print("bool", 5, sprintf("(bool__tokenize_string) || __btoken[%d]=TOK_OR, i now %d", __bnf, i))
+
         } else if (substr(s, i, 8) == "defined(") {
-            #print(">>defined")
-            #print(sprintf("bool__tokenize_string: found defined; __btoken[%d]=TOK_OR, i now %d", __bnf, i))
+            dbg_print("bool", 7, sprintf("(bool__tokenize_string) Found 'defined(' at i=%d", i))
             i += 8
             oldi = i
-            while (c != TOK_CPAREN) {
+            while (c != TOK_CPAREN && i <= slen)
                 c = substr(s, ++i, 1)
-            }
-            __btoken[++__bnf] = TOK_DEFINED_P
-            __btoken[++__bnf] = substr(s, oldi, i-oldi)
             if (substr(s, i, 1) != TOK_CPAREN)
                 error(sprintf("(bool__tokenize_string) defined - no closing paren; __btoken[%d]='%s', i now %d", __bnf, __btoken[__bnf], i))
+            name = substr(s, oldi, i-oldi)
+            if (emptyp(name))
+                error("(bool__tokenize_string) defined(); Name cannot be empty")
+            assert_sym_valid_name(name)
+            __btoken[++__bnf] = TOK_DEFINED_P
+            __btoken[++__bnf] = name
             c = substr(s, ++i, 1)       # char after closing paren
-            while (c == " " || c == "\t")   c = substr(s, ++i, 1) # skip ws
-            dbg_print("bool", 5, sprintf("(bool__tokenize_string) found defined; __btoken[%d]='%s', i now %d", __bnf, __btoken[__bnf], i))
+            while (c == " " || c == "\t")
+                c = substr(s, ++i, 1)
+            dbg_print("bool", 5, sprintf("(bool__tokenize_string) defined() __btoken[%d]='%s', i now %d", __bnf, __btoken[__bnf], i))
+
         } else if (substr(s, i, 4) == "env(") {
-            #print(">>env")
-            #print(sprintf("bool__tokenize_string: found env; __btoken[%d]=TOK_OR, i now %d", __bnf, i))
+            dbg_print("bool", 7, sprintf("(bool__tokenize_string) Found 'env(' at i=%d", i))
             i += 4
             oldi = i
-            while (c != TOK_CPAREN) {
+            while (c != TOK_CPAREN && i <= slen)
                 c = substr(s, ++i, 1)
-            }
-            __btoken[++__bnf] = TOK_ENV_P
-            __btoken[++__bnf] = substr(s, oldi, i-oldi)
             if (substr(s, i, 1) != TOK_CPAREN)
                 error(sprintf("(bool__tokenize_string) env - no closing paren; __btoken[%d]='%s', i now %d", __bnf, __btoken[__bnf], i))
+            name = substr(s, oldi, i-oldi)
+            if (emptyp(name))
+                error("(bool__tokenize_string) env(); Name cannot be empty")
+            assert_valid_env_var_name(name)
+            __btoken[++__bnf] = TOK_ENV_P
+            __btoken[++__bnf] = name
             c = substr(s, ++i, 1)       # char after closing paren
-            while (c == " " || c == "\t")   c = substr(s, ++i, 1) # skip ws
-            dbg_print("bool", 5, sprintf("(bool__tokenize_string) found env; __btoken[%d]='%s', i now %d", __bnf, __btoken[__bnf], i))
+            while (c == " " || c == "\t")
+                c = substr(s, ++i, 1)
+            dbg_print("bool", 5, sprintf("(bool__tokenize_string) env() __btoken[%d]='%s', i now %d", __bnf, __btoken[__bnf], i))
+
         } else if (substr(s, i, 7) == "exists(") {
-            #print(">>exists")
+            dbg_print("bool", 7, sprintf("(bool__tokenize_string) Found 'exists(' at i=%d", i))
             i += 7
             oldi = i
-            while (c != TOK_CPAREN) {
+            while (c != TOK_CPAREN && i <= slen)
                 c = substr(s, ++i, 1)
-            }
-            __btoken[++__bnf] = TOK_EXISTS_P
-            __btoken[++__bnf] = dosubs(substr(s, oldi, i-oldi))
             if (substr(s, i, 1) != TOK_CPAREN)
                 error(sprintf("(bool__tokenize_string) exists - no closing paren; __btoken[%d]='%s', i now %d", __bnf, __btoken[__bnf], i))
+            name = substr(s, oldi, i-oldi)
+            if (emptyp(name))
+                error("(bool__tokenize_string) exists(); Name cannot be empty")
+            __btoken[++__bnf] = TOK_EXISTS_P
+            __btoken[++__bnf] = dosubs(name)
             c = substr(s, ++i, 1)       # char after closing paren
-            while (c == " " || c == "\t")   c = substr(s, ++i, 1) # skip ws
-            dbg_print("bool", 5, sprintf("(bool__tokenize_string) found exists; __btoken[%d]='%s', i now %d", __bnf, __btoken[__bnf], i))
-        } else {
+            while (c == " " || c == "\t")
+                c = substr(s, ++i, 1)
+            dbg_print("bool", 5, sprintf("(bool__tokenize_string) exists() __btoken[%d]='%s', i now %d", __bnf, __btoken[__bnf], i))
+
+        } else {                # OTHER
             pcnt = 0
             oldi = i            # start pos
+            dbg_print("bool", 7, sprintf("(bool__tokenize_string) Starting to scan other at i=%d, s='%s'", i, substr(s, i)))
             while (TRUE) {
-                #print(sprintf("(bool__tokenize_string) other LOOP (oldi %d): i=%d, s='%s'", oldi, i, substr(s, i)))
-                if (c == "") {
+                if (i > slen || c == "")
                     break
-                } else if (c == TOK_OPAREN) {
+                if (c == TOK_OPAREN) {
                     pcnt++
                     c = substr(s, ++i, 1) # next char
-                    dbg_print("bool", 7, "(bool__tokenize_string) other: OPAREN, pcnt now " pcnt ", i=" i)
+                    dbg_print("bool", 7, "(bool__tokenize_string) other: '(', pcnt now " pcnt ", at i=" i)
                 } else if (c == TOK_CPAREN) {
                     if (pcnt > 0) {
                         pcnt--
-                        dbg_print("bool", 7, "(bool__tokenize_string) other: CPAREN, but pcnt was " pcnt+1 " so just decr cnt => now " pcnt "; i=" i)
+                        dbg_print("bool", 7, "(bool__tokenize_string) other: ')', but pcnt was " pcnt+1 " so just decr; pcnt now " pcnt "; at i=" i)
                     } else {
-                        dbg_print("bool", 7, "(bool__tokenize_string) other: CPAREN, all parens closed (pcnt " pcnt "), we're done, i=" i)
+                        dbg_print("bool", 7, "(bool__tokenize_string) other: '(', all parens closed (pcnt=" pcnt "), we're done, at i=" i)
                         break
                     }
-                    #print("other: CPAREN, but pcnt is " pcnt " so just [break]ing")
                 } else if (substr(s, i, 2) == "&&" || substr(s, i, 2) == "||") {
                     # && and || cannot appear in a calc3 expression -
                     # they must separate boolean clauses here.
-                    dbg_print("bool", 7, "(bool__tokenize_string) other: found operator '" substr(s, i, 2) "' at i=" i)
+                    dbg_print("bool", 7, "(bool__tokenize_string) other: found '" substr(s, i, 2) "' at i=" i)
                     c = substr(s, i, 1)
                     break
                 } else {
                     c = substr(s, ++i, 1) # next char
-                    dbg_print("bool", 8, "(bool__tokenize_string) other: continuing along, i=" i "...")
+                    dbg_print("bool", 8, "(bool__tokenize_string) other: continuing, i=" i "...")
                 }
             }
             __btoken[++__bnf] = rtrim(substr(s, oldi, i-oldi))
             while (c == " " || c == "\t")   c = substr(s, ++i, 1) # skip ws
-            dbg_print("bool", 5, sprintf("(bool__tokenize_string) found other; __btoken[%d]='%s', i now %d", __bnf, __btoken[__bnf], i))
+            dbg_print("bool", 5, sprintf("(bool__tokenize_string) other __btoken[%d]='%s', i now %d", __bnf, __btoken[__bnf], i))
         }
     }
     dbg_print("bool", 7, "(bool__tokenize_string) DONE; __bnf=" __bnf)
@@ -3548,7 +3568,7 @@ function bool__parse_expr(    e, f, r)           # term   | term || term
         f = bool__parse_term()
         r = e || f
         #print("Found TOK_OR, __bf now " __bf++)
-        dbg_print("bool", 5, sprintf("(bool__parse_expr) TOK_OR, e'%s' || f'%s' -> %s", e, f, ppf__bool(r)))
+        dbg_print("bool", 5, sprintf("(bool__parse_expr) TOK_OR, e'%s' || f'%s' => %s", e, f, ppf__bool(r)))
         # e = e || bool__parse_term()
         e = r
     }
@@ -3572,7 +3592,7 @@ function bool__parse_term(    e, f, r)           # factor | factor && factor
             return f
         }
         r = e && f
-        dbg_print("bool", 5, sprintf("(bool__parse_term) TOK_AND, e'%s' && f'%s' -> %s", e, f, ppf__bool(r)))
+        dbg_print("bool", 5, sprintf("(bool__parse_term) TOK_AND, e'%s' && f'%s' => %s", e, f, ppf__bool(r)))
         #e = e && bool__parse_factor()
         e = r
     }
@@ -3598,14 +3618,13 @@ function bool__parse_factor(    e, r,         # ! factor | variable | ( expressi
         __bf++
         e = bool__parse_factor()
         if (e == ERROR) {
-            dbg_print("bool", 5, "(bool__parse_factor): NOT: returning ERROR")
+            dbg_print("bool", 5, "(bool__parse_factor): NOT: parse_factor => ERROR, propagating")
             return ERROR
         } else {
             dbg_print("bool", 5, "(bool__parse_factor) NOT: Just read " e ", so returning " ppf__bool(!e))
             return !e
         }
     } else if (__btoken[__bf] == TOK_DEFINED_P) {
-        # r = (__btoken[__bf] in tab) ? TRUE : FALSE
         name = __btoken[++__bf]
         if (name == EMPTY) return ERROR
         assert_sym_valid_name(name)
@@ -4670,27 +4689,6 @@ function evaluate_condition(cond, negate,
         dbg_print("if", 6, sprintf("(evaluate_condition) Found simple name '%s'", cond))
         assert_sym_valid_name(cond)
         retval = sym_true_p(cond)
-
-    # } else if (match(cond, "^defined(.*)$")) {
-    #     name = substr(cond, RSTART+8, RLENGTH-9)
-    #     dbg_print("if", 6, sprintf("(evaluate_condition) Found condition defined(%s)", name))
-    #     if (name == EMPTY) return ERROR
-    #     assert_sym_valid_name(name)
-    #     retval = sym_defined_p(name)
-
-    # } else if (match(cond, "^env(.*)$")) {
-    #     name = substr(cond, RSTART+4, RLENGTH-5)
-    #     dbg_print("if", 6, sprintf("(evaluate_condition) Found condition env(%s)", name))
-    #     if (name == EMPTY) return ERROR
-    #     assert_valid_env_var_name(name)
-    #     retval = name in ENVIRON
-
-    # } else if (match(cond, "^exists(.*)$")) {
-    #     name = substr(cond, RSTART+7, RLENGTH-8)
-    #     dbg_print("if", 6, sprintf("(evaluate_condition) Found condition exists(%s)", name))
-    #     if (name == EMPTY) return ERROR
-    #     retval = path_exists_p(name)
-    #     #print_stderr(sprintf("File '%s' exists?  %s", name, ppf__bool(retval)))
 
     } else if (match(cond, ".* (in|IN) .*")) { # poor regexp, fragile
         # This whole section is pretty easy to confound....
@@ -6439,7 +6437,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
                     r = sym_ll_read("__FMT__", !!p) r
             }
 
-        # chr SYM : Output character with ASCII code SYM
+        # chr SYM: Output character with ASCII code SYM
         #   @chr 65@ => A
         } else if (fn == "chr") {
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
@@ -6454,11 +6452,11 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
             } else
                 error("Bad parameters in '" m "':" $0)
 
-        # date     : Current date as YYYY-MM-DD
-        # epoch    : Number of seconds since Epoch
-        # strftime : User-specified date format, see strftime(3)
-        # time     : Current time as HH:MM:SS
-        # tz       : Current time zone name
+        # date    : Current date as YYYY-MM-DD
+        # epoch   : Number of seconds since Epoch
+        # strftime: User-specified date format, see strftime(3)
+        # time    : Current time as HH:MM:SS
+        # tz      : Current time zone name
         } else if (fn == "date" ||
                    fn == "epoch" ||
                    fn == "strftime" ||
@@ -6501,7 +6499,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
             if (!silent)
                 r = x r
 
-        # getenv : Get environment variable
+        # getenv: Get environment variable
         # sgetenv
         #   @getenv HOME@ => /home/user
         } else if (fn == "getenv" || fn == "sgetenv") {
@@ -6517,8 +6515,9 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
                 error("Environment variable '" p "' not defined:" $0)
 
         # lc : Lower case
-        # len : Length.        @len SYM@ => N
-        # uc SYM: Upper case
+        # len: Length
+        # uc : Upper case
+        #   @len ALPHABET@ => 26
         } else if (fn == "lc" ||
                    fn == "len" ||
                    fn == "uc") {
@@ -6533,7 +6532,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
                 r   # ^^^ This error() bit can't happen but I need something
                     # to the right of the :, and error() will abend.
 
-        # left : Left (substring)
+        # left: Left (substring)
         #   @left ALPHABET 7@ => ABCDEFG
         } else if (fn == "left") {
             if (nparam < 1 || nparam > 2) error("Bad parameters in '" m "':" $0)
@@ -6548,7 +6547,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
             }
             r = substr(sym_fetch(p), 1, x) r
 
-        # mid : Substring ...  SYMBOL, START[, LENGTH]
+        # mid: Substring ...  SYMBOL, START[, LENGTH]
         #   @mid ALPHABET 15 5@ => OPQRS
         #   @mid FOO 3@
         #   @mid FOO 2 2@
@@ -6596,7 +6595,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
             close(cmdline)
             r = expand r
 
-        # ord SYM : Output character with ASCII code SYM
+        # ord SYM: Output character with ASCII code SYM
         #   @define B *Nothing of interest*
         #   @ord A@ => 65
         #   @ord B@ => 42
@@ -6609,14 +6608,14 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
                 p = sym_fetch(p)
             r = __ord[first(p)] r
 
-        # rem : Remark
+        # rem: Remark
         #   @rem STUFF@ is considered a comment and ignored
         #   @srem STUFF@ like @rem, but preceding whitespace is also discarded
         } else if (fn == "rem" || fn == "srem") {
             if (first(fn) == "s")
                 sub(/[ \t]+$/, "", l)
 
-        # right : Right (substring)
+        # right: Right (substring)
         #   @right ALPHABET 20@ => TUVWXYZ
         } else if (fn == "right") {
             if (nparam < 1 || nparam > 2) error("Bad parameters in '" m "':" $0)
@@ -6660,7 +6659,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
                 expand = rtrim(expand)
             r = expand r
 
-        # uuid : Something that resembles but is not a UUID
+        # uuid: Something that resembles but is not a UUID
         #   @uuid@ => C3525388-E400-43A7-BC95-9DF5FA3C4A52
         } else if (fn == "uuid") {
             r = uuid() r

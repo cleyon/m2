@@ -58,6 +58,7 @@ They consume the entire line.
 The following table lists control commands to
 evaluate, control, or define macros for subsequent processing:
 .Pp
+\" This table could use a little formatting TLC...
 .Bl -tag -width @if(_not)_defined -compact -offset indent
 .It @append NAME TEXT
 Add TEXT to an already defined macro NAME
@@ -106,19 +107,14 @@ values, or keys to an array.
 .It @next VAR
 Repeat next iteration of loop.
 .It @if NAME
-Include subsequent text if NAME is True (!= 0)
-.It @if NAME <OP> TEXT
-Test if NAME compares to TEXT (names or values)
-.It @if(_not)_defined NAME
-Test if NAME is defined
-.It @if(_not)_env VAR
-Test if VAR is defined in the environment
-.It @if(_not)_exists FILE
-Test if FILE exists
-.It @if(_not)_in KEY ARR
-Test if symbol ARR[KEY] is defined (KEY in ARR)
+Include subsequent text if NAME is True
+.It @if EXPR
+Include subsequent text if boolean expression is True.
+See
+.Sx Boolean expressions
+below.
 .It @if(n)def NAME
-Like @if_defined/@if_not_defined
+Include text if NAME is/is not defined
 .It @else
 Switch to the other branch of an @if statement
 .It @endif
@@ -174,10 +170,14 @@ Remove definition of NAME
 Inject stream N (def all) into current stream
 .It @unless NAME
 Include subsequent text if NAME == 0 (or undefined)
+.It @until EXPR
+Repeatedly evaluate input lines while boolean expression is False
+and stop when it becomes True.
 .It @warn [TEXT]
 Send TEXT to standard error; continue.  Also called @echo, @stderr
-.It @while [CONDITION]
-Repeatedly evaluate input lines while CONDITION is True.
+.It @while EXPR
+Repeatedly evaluate input lines while boolean expression is True
+and stop when it becomes False.
 .It \ \ \ <...>
 .It @endwhile
 .El
@@ -759,6 +759,43 @@ assigns the value 5 to
 and also outputs the result.
 To assign a value to a variable without printing, use
 .Ql @define .
+.Ss Boolean expressions
+Boolean expressions are used in the
+.Ql @if
+and
+.Ql @while
+commands.  They support the
+.Qq && ,
+.Qq || ,
+and
+.Qq \&!
+operators for logical AND, OR, and NOT, respectively.
+Parentheses may be used to enforce evaluation order.
+.Pp
+The following boolean functions and syntax are supported:
+.Pp
+.Bl -tag -width elem_IN_array____ -compact -offset indent
+.It defined(SYMBOL)
+True if SYMBOL is defined
+.It env(VAR)
+True if variable VAR is defined in process environment
+.It exists(FILE)
+True if FILE exists
+.It elem IN array
+True if array contains elem
+.El
+.Pp
+.Ql @ifdef
+and
+.Ql @ifndef
+are implemented internally as
+.\" I'm sure there are interesting macros with parens and parameters
+.Ql @if defined(NAME)
+and
+.Ql @if\ ! defined(NAME)
+respectively.
+Any other expression is handled as a mathematical expression and hope
+for the best.
 .Sh IMPLEMENTATION NOTES
 .Nm
 is written in portable
@@ -787,7 +824,14 @@ Used as a possible temporary directory.
 .Pa $HOME/.m2rc ,
 .Pa ./.m2rc
 .Xc
-Init files automatically read if available.
+Initialization files are automatically read if available.
+If environment variable
+.Ev M2RC
+exists, its file is read instead of
+.Pa $HOME/.m2rc .
+To inhibit automatically loading these init files, specify
+.Ar noinit=1
+on the command line.
 .It Xo
 .Pa /dev/stdin ,
 .Pa /dev/stdout ,
@@ -846,164 +890,165 @@ The following example demonstrates arrays, conditionals, and
 Region: @region@
 Image:  @my_image@
 .Ed
-.Sh DIAGNOSTICS
-Error messages are printed to standard error in the following format:
-.Dl m2:<__FILE__>:<__LINE__>:<Error text>:<Offending input line>
-.Pp
-All error texts and their meanings are as follows:
-.Pp
-.Bl -ohang
-.It Bad parameters [in 'XXX']
-.Bl -dash -offset indent -compact
-.It
-A command did not receive the expected/number of parameters.
-.El
-.It Bad @{...} expansion
-.Bl -dash -offset indent -compact
-.It
-Error expanding @{...}, often caused by a missing "}"
-.El
-.It Cannot recursively read 'XXX'
-.Bl -dash -offset indent -compact
-.It
-Attempt to @include the same file multiple times.
-.El
-.It Comparison operator 'XXX' invalid
-.Bl -dash -offset indent -compact
-.It
-An @if expression with an invalid comparison operator.
-.It
-Invalid conditions while sorting symbol table.
-.El
-.It Delimiter 'XXX' not found
-.Bl -dash -offset indent -compact
-.It
-A multi-line read (@ignore, @longdef, @shell) did not find its
-terminating delimiter line.
-.It
-An @if or @case block was not properly terminated with @endif or
-@endcase, usually due to premature end of input.
-.It
-Indicates a "starting" command did not find its finish.
-.El
-.It Division by zero
-.Bl -dash -offset indent -compact
-.It
-@expr@ attempted to divide by zero.
-.El
-.It Duplicate 'XXX' not allowed
-.Bl -dash -offset indent -compact
-.It
-More than one @else found in a single @if block.
-.It
-More than one @otherwise found in a single @case block.
-.El
-.It Empty symbol table
-.Bl -dash -offset indent -compact
-.It
-A @dump command found no definitions to display.
-.El
-.It Environment variable 'XXX' not defined
-.Bl -dash -offset indent -compact
-.It
-Attempt to getenv an undefined environment variable while
-__STRICT__[env] is in effect.
-.El
-.It Error reading file 'FILE'
-.Bl -dash -offset indent -compact
-.It
-Read error on file.
-.El
-.It Expected number or '(' at 'XXX'
-.Bl -dash -offset indent -compact
-.It
-@expr ...@ received unexpected input or bad syntax.
-.El
-.It File 'XXX' does not exist
-.Bl -dash -offset indent -compact
-.It
-Attempt to @include a non-existent file in strict file mode.
-.El
-.It Math expression error [hint]
-.Bl -dash -offset indent -compact
-.It
-An error occurred during @expr ...@ evaluation.
-.It
-A math expression returned +/-Infinity or NaN.
-.El
-.It Missing 'X' at 'XXX'
-.Bl -dash -offset indent -compact
-.It
-@expr ...@ did not match syntax required for expression (missing a , or
-( character in function calls).
-.El
-.It Name 'XXX' not available
-.Bl -dash -offset indent -compact
-.It
-Despite being valid, the name cannot be used/found here.
-.It
-Attempt to access an unknown debugging key.
-.El
-.It Name 'XXX' not defined
-.Bl -dash -offset indent -compact
-.It
-A symbol name without a value was passed to a function.
-.It
-An undefined macro was referenced and __STRICT__[func] is true.
-.It
-Attempt to use an undefined sequence ("create" is allowed).
-.El
-.It Name 'XXX' not valid
-.Bl -dash -offset indent -compact
-.It
-A symbol name does not pass validity check.
-In __STRICT__[symbol] mode (the default), a symbol name may only contain
-letters, digits, #, -, or _ characters.
-.It
-Environment variable name does not pass validity check.
-.El
-.It \&No corresponding 'XXX'
-.Bl -dash -offset indent -compact
-.It
-@if: An @else or @endif was seen without a matching @if.
-.It
-@longdef: An @endlongdef was seen without a matching @longdef.
-.It
-@newcmd: An @endcmd was seen without a matching @newcmd.
-.It
-Indicates a "finishing" command was seen without a starter.
-.El
-.It Parameter N not supplied in 'XXX'
-.Bl -dash -offset indent -compact
-.It
-A macro referred to a parameter (such as $1) for which no value was supplied.
-.El
-.It Symbol 'XXX' already defined
-.Bl -dash -offset indent -compact
-.It
-@initialize attempted to define a previously defined symbol.
-.El
-.It Symbol 'XXX' read-only
-.Bl -dash -offset indent -compact
-.It
-Attempt to modify a protected (read-only) symbol (__FOO__).
-.El
-.It Unexpected end of definition
-.Bl -dash -offset indent -compact
-.It
-Input ended before macro definition was complete.
-.El
-.It Unknown function 'FUNC'
-.Bl -dash -offset indent -compact
-.It
-@expr ...@ found an unrecognized mathematical function.
-.El
-.It Value 'XXX' must be numeric
-.Bl -dash -offset indent -compact
-.It
-Something expected to be a number was not.
-.El
-.El
+\" These are from version 3 and are very obsolete!
+\" .Sh DIAGNOSTICS
+\" Error messages are printed to standard error in the following format:
+\" .Dl m2:<__FILE__>:<__LINE__>:<Error text>:<Offending input line>
+\" .Pp
+\" All error texts and their meanings are as follows:
+\" .Pp
+\" .Bl -ohang
+\" .It Bad parameters [in 'XXX']
+\" .Bl -dash -offset indent -compact
+\" .It
+\" A command did not receive the expected/number of parameters.
+\" .El
+\" .It Bad @{...} expansion
+\" .Bl -dash -offset indent -compact
+\" .It
+\" Error expanding @{...}, often caused by a missing "}"
+\" .El
+\" .It Cannot recursively read 'XXX'
+\" .Bl -dash -offset indent -compact
+\" .It
+\" Attempt to @include the same file multiple times.
+\" .El
+\" .It Comparison operator 'XXX' invalid
+\" .Bl -dash -offset indent -compact
+\" .It
+\" An @if expression with an invalid comparison operator.
+\" .It
+\" Invalid conditions while sorting symbol table.
+\" .El
+\" .It Delimiter 'XXX' not found
+\" .Bl -dash -offset indent -compact
+\" .It
+\" A multi-line read (@ignore, @longdef, @shell) did not find its
+\" terminating delimiter line.
+\" .It
+\" An @if or @case block was not properly terminated with @endif or
+\" @endcase, usually due to premature end of input.
+\" .It
+\" Indicates a "starting" command did not find its finish.
+\" .El
+\" .It Division by zero
+\" .Bl -dash -offset indent -compact
+\" .It
+\" @expr@ attempted to divide by zero.
+\" .El
+\" .It Duplicate 'XXX' not allowed
+\" .Bl -dash -offset indent -compact
+\" .It
+\" More than one @else found in a single @if block.
+\" .It
+\" More than one @otherwise found in a single @case block.
+\" .El
+\" .It Empty symbol table
+\" .Bl -dash -offset indent -compact
+\" .It
+\" A @dump command found no definitions to display.
+\" .El
+\" .It Environment variable 'XXX' not defined
+\" .Bl -dash -offset indent -compact
+\" .It
+\" Attempt to getenv an undefined environment variable while
+\" __STRICT__[env] is in effect.
+\" .El
+\" .It Error reading file 'FILE'
+\" .Bl -dash -offset indent -compact
+\" .It
+\" Read error on file.
+\" .El
+\" .It Expected number or '(' at 'XXX'
+\" .Bl -dash -offset indent -compact
+\" .It
+\" @expr ...@ received unexpected input or bad syntax.
+\" .El
+\" .It File 'XXX' does not exist
+\" .Bl -dash -offset indent -compact
+\" .It
+\" Attempt to @include a non-existent file in strict file mode.
+\" .El
+\" .It Math expression error [hint]
+\" .Bl -dash -offset indent -compact
+\" .It
+\" An error occurred during @expr ...@ evaluation.
+\" .It
+\" A math expression returned +/-Infinity or NaN.
+\" .El
+\" .It Missing 'X' at 'XXX'
+\" .Bl -dash -offset indent -compact
+\" .It
+\" @expr ...@ did not match syntax required for expression (missing a , or
+\" ( character in function calls).
+\" .El
+\" .It Name 'XXX' not available
+\" .Bl -dash -offset indent -compact
+\" .It
+\" Despite being valid, the name cannot be used/found here.
+\" .It
+\" Attempt to access an unknown debugging key.
+\" .El
+\" .It Name 'XXX' not defined
+\" .Bl -dash -offset indent -compact
+\" .It
+\" A symbol name without a value was passed to a function.
+\" .It
+\" An undefined macro was referenced and __STRICT__[func] is true.
+\" .It
+\" Attempt to use an undefined sequence ("create" is allowed).
+\" .El
+\" .It Name 'XXX' not valid
+\" .Bl -dash -offset indent -compact
+\" .It
+\" A symbol name does not pass validity check.
+\" In __STRICT__[symbol] mode (the default), a symbol name may only contain
+\" letters, digits, #, -, or _ characters.
+\" .It
+\" Environment variable name does not pass validity check.
+\" .El
+\" .It \&No corresponding 'XXX'
+\" .Bl -dash -offset indent -compact
+\" .It
+\" @if: An @else or @endif was seen without a matching @if.
+\" .It
+\" @longdef: An @endlongdef was seen without a matching @longdef.
+\" .It
+\" @newcmd: An @endcmd was seen without a matching @newcmd.
+\" .It
+\" Indicates a "finishing" command was seen without a starter.
+\" .El
+\" .It Parameter N not supplied in 'XXX'
+\" .Bl -dash -offset indent -compact
+\" .It
+\" A macro referred to a parameter (such as $1) for which no value was supplied.
+\" .El
+\" .It Symbol 'XXX' already defined
+\" .Bl -dash -offset indent -compact
+\" .It
+\" @initialize attempted to define a previously defined symbol.
+\" .El
+\" .It Symbol 'XXX' read-only
+\" .Bl -dash -offset indent -compact
+\" .It
+\" Attempt to modify a protected (read-only) symbol (__FOO__).
+\" .El
+\" .It Unexpected end of definition
+\" .Bl -dash -offset indent -compact
+\" .It
+\" Input ended before macro definition was complete.
+\" .El
+\" .It Unknown function 'FUNC'
+\" .Bl -dash -offset indent -compact
+\" .It
+\" @expr ...@ found an unrecognized mathematical function.
+\" .El
+\" .It Value 'XXX' must be numeric
+\" .Bl -dash -offset indent -compact
+\" .It
+\" Something expected to be a number was not.
+\" .El
+\" .El
 .Sh SEE ALSO
 .Xr cpp 1 ,
 .Xr m4 1

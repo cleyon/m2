@@ -1,0 +1,9 @@
+<strong>Table of contents</strong>
+<ol>
+<li><a href="#H1_1">First header</a></li>
+<li><a href="#H1_2">Second header</a></li>
+<li><a href="#H1_3">Third header</a></li>
+</ol>
+<h1 id="H1_1">First header</h1>
+<h1 id="H1_2">Second header</h1>
+<h1 id="H1_3">Third header</h1>

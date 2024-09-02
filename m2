@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-08-30 18:13:23 cleyon>
+#  Time-stamp:  <2024-09-02 02:50:09 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -18,7 +18,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION    = "4.0.0_pre5"
+    M2_VERSION = "4.0.0_pre6"
 
     # Customize these paths as needed for correct operation on your system.
     # If a program is not available, it's okay to remove the entry entirely.
@@ -33,18 +33,25 @@ BEGIN {
     PROG["stat"]     = "/usr/bin/stat"
     PROG["uname"]    = "/usr/bin/uname"
 
-    # Secure level 0 (default) allows user-code to run arbitrary code in
-    # a sub-shell.  Secure level 1 prevents this, but does allow m2 to
-    # run the utilities listed above in PROG.  These are used to support
-    # more advanced m2 features, but are not necessary for basic operation.
-    # Secure level 2 prevents invoking any programs, and will terminate
-    # with a security violation error if an attempt is made.  At level 2,
-    # m2 does not know the current time or date, host or user name, etc.
-    __secure_level   = 0
+    # Secure level 0 (default) allows user-code to run arbitrary
+    # programs in a sub-shell.  This allows the @shell command to
+    # function.  Secure level 1 prevents this, but does allow m2 to
+    # utilise the (presumably secure) utilities listed above in PROG.
+    # These are used to support more advanced m2 features, but are not
+    # necessary for basic operation.  Secure level 2 prevents invoking
+    # any programs, and will terminate with a security violation error
+    # if an attempt is made.  At level 2, m2 does not know the current
+    # time or date, host or user name, etc.
+    __secure_level = 0
+
+    # Largest legal diversion (stream) number.  Traditional m4 supports
+    # nine diversions, but GNU m4 greatly increases that limit.  Despite
+    # how bloated m2 may be, I don't have a need for more, but you might.
+    MAX_STREAM = 9
 }
 
-
 # DO NOT CHANGE anything below this line
+
 BEGIN {
     TRUE = OKAY      =  1
     FALSE = EOF      =  0
@@ -370,6 +377,18 @@ function secure_level()
 }
 
 
+function LINE()
+{
+    return sym_ll_read("__LINE__", "", GLOBAL_NAMESPACE)
+}
+
+
+function FILE()
+{
+    return sym_ll_read("__FILE__", "", GLOBAL_NAMESPACE)
+}
+
+
 function strictp(ssys)
 {
     if (ssys == EMPTY)
@@ -435,10 +454,10 @@ function curr_atmode(    top_block)
         error("(curr_atmode) Scan stack is empty!")
     top_block = stk_top(__scan_stack)
     dbg_print_block("ship_out", 7, top_block, "(curr_atmode) top_block [top of __scan_stack]")
-    if (! ((top_block, "atmode") in blktab)) {
+    if (! ((top_block, 0, "atmode") in blktab)) {
         error("(curr_atmode) Top block " top_block " does not have 'atmode'")
     }
-    return blktab[top_block, "atmode"]
+    return blktab[top_block, 0, "atmode"]
 }
 
 
@@ -448,10 +467,10 @@ function curr_dstblk(    top_block)
         error("(curr_dstblk) Scan stack is empty!")
     top_block = stk_top(__scan_stack)
     dbg_print_block("ship_out", 7, top_block, "(curr_dstblk) top_block [top of __scan_stack]")
-    if (! ((top_block, "dstblk") in blktab)) {
+    if (! ((top_block, 0, "dstblk") in blktab)) {
         error("(curr_dstblk) Top block " top_block " does not have 'dstblk'")
     }
-    return blktab[top_block, "dstblk"] + 0
+    return blktab[top_block, 0, "dstblk"] + 0
 }
 
 
@@ -502,7 +521,7 @@ function assert_scan_stack_okay(expected_block_type,
     # before the block was pushed onto the __scan_stack; and at this
     # point it hasn't been popped yet...
     if ((blk_type(blknum) != expected_block_type) ||
-        (blktab[blknum, "depth"] != stk_depth(__scan_stack) - 1))
+        (blktab[blknum, 0, "depth"] != stk_depth(__scan_stack) - 1))
         error("(assert_scan_stack_okay) Corrupt scan stack")
 }
 
@@ -642,12 +661,12 @@ function format_message(text, file, line,    s)
 {
     file = file ""
     if (file == EMPTY)
-        file = sym_ll_read("__FILE__", "", GLOBAL_NAMESPACE)
+        file = FILE()
     if (file == "/dev/stdin" || file == "-")
         file = "<STDIN>"
     line = line ""
     if (line == EMPTY)
-        line = sym_ll_read("__LINE__", "", GLOBAL_NAMESPACE)
+        line = LINE()
 
     # If file and line are provided with default values, why is the if()
     # guard still necessary?  Ah, because this function might get invoked
@@ -715,9 +734,9 @@ function readline(    getstat, i)
             __buffer = substr(__buffer, i+1)
         }
     } else {
-        getstat = getline < sym_ll_read("__FILE__", "", GLOBAL_NAMESPACE)
+        getstat = getline < FILE()
         if (getstat == ERROR) {
-            warn("(readline) getline=>Error reading file '" sym_ll_read("__FILE__", "", GLOBAL_NAMESPACE) "'")
+            warn("(readline) getline=>Error reading file '" FILE() "'")
         } else if (getstat != EOF) {
             sym_increment("__LINE__", 1)
             sym_increment("__NLINE__", 1)
@@ -800,9 +819,9 @@ function initialize_debugging()
     dbg_set_level("bool",       5)
     dbg_set_level("braces",     0)
     dbg_set_level("case",       5)
-    dbg_set_level("cmd",        5)
+    dbg_set_level("cmd",        6)
     dbg_set_level("del",        5)
-    dbg_set_level("divert",     1)
+    dbg_set_level("divert",     7)
     dbg_set_level("dosubs",     7)
     dbg_set_level("dump",       5)
     dbg_set_level("expr",       0)
@@ -829,8 +848,8 @@ function clear_debugging(    dsys)
 {
     for (dsys in _dbg_sys_array)
         sym_ll_write("__DBG__", dsys, GLOBAL_NAMESPACE, 0)
-    sym_ll_write("__STRICT__", "cmd", GLOBAL_NAMESPACE, FALSE)
-    sym_ll_write("__SYNC__",      "", GLOBAL_NAMESPACE, SYNC_FILE)
+    # sym_ll_write("__STRICT__", "cmd", GLOBAL_NAMESPACE, FALSE)
+    # sym_ll_write("__SYNC__",      "", GLOBAL_NAMESPACE, SYNC_FILE)
 }
 
 
@@ -916,7 +935,7 @@ function dbg_print_block(dsys, lev, blknum, description,
         return
 ##    blknum = blknum+0
     # print_stderr("(dbg_print_block) blknum = " blknum)
-    if (! ((blknum, "type") in blktab))
+    if (! ((blknum, 0, "type") in blktab))
         error("(dbg_print_block) No 'type' field for block " blknum)
     block_type = blk_type(blknum)
     blk_label = ppf__block_type(block_type)
@@ -942,31 +961,31 @@ function blk_new(block_type,
     if (block_type == EMPTY)
         error("(blk_new) Missing type")
     new_blknum = ++__block_cnt
-    blktab[new_blknum, "depth"] = stk_depth(__scan_stack)
-    blktab[new_blknum, "type"] = block_type
-    blktab[new_blknum, "atmode"] = stk_emptyp(__scan_stack) \
+    blktab[new_blknum, 0, "depth"] = stk_depth(__scan_stack)
+    blktab[new_blknum, 0, "type"] = block_type
+    blktab[new_blknum, 0, "atmode"] = stk_emptyp(__scan_stack)           \
                                       ? MODE_AT_PROCESS : curr_atmode()
     if (block_type == BLK_AGG)
-        blktab[new_blknum, "count"] = 0
+        blktab[new_blknum, 0, "count"] = 0
     else if (block_type == BLK_CASE)
-        blktab[new_blknum, "terminator"] = "@endcase|@esac"
+        blktab[new_blknum, 0, "terminator"] = "@endcase|@esac"
     else if (block_type == BLK_IF)
-        blktab[new_blknum, "terminator"] = "@endif|@fi"
+        blktab[new_blknum, 0, "terminator"] = "@endif|@fi"
     else if (block_type == BLK_FILE) {
-        blktab[new_blknum, "open"] = FALSE
-        blktab[new_blknum, "terminator"] = ""
-        blktab[new_blknum, "oob_terminator"] = "EOF"
+        blktab[new_blknum, 0, "open"] = FALSE
+        blktab[new_blknum, 0, "terminator"] = ""
+        blktab[new_blknum, 0, "oob_terminator"] = "EOF"
     } else if (block_type == BLK_FOR)
-        blktab[new_blknum, "terminator"] = "@next"
+        blktab[new_blknum, 0, "terminator"] = "@next"
     else if (block_type == BLK_LONGDEF)
-        blktab[new_blknum, "terminator"] = "@endlong(def)?"
+        blktab[new_blknum, 0, "terminator"] = "@endlong(def)?"
     else if (block_type == BLK_TERMINAL) {
-        blktab[new_blknum, "atmode"] = MODE_AT_LITERAL
-        blktab[new_blknum, "dstblk"] = TERMINAL
+        blktab[new_blknum, 0, "atmode"] = MODE_AT_LITERAL
+        blktab[new_blknum, 0, "dstblk"] = TERMINAL
     } else if (block_type == BLK_USER)
-        blktab[new_blknum, "terminator"] = "@endcmd"
+        blktab[new_blknum, 0, "terminator"] = "@endcmd"
     else if (block_type == BLK_WHILE)
-        blktab[new_blknum, "terminator"] = "@endwhile"
+        blktab[new_blknum, 0, "terminator"] = "@endwhile"
     else
         error("(blk_new) Uncaught block_type '" block_type "'")
 
@@ -979,50 +998,36 @@ function blk_new(block_type,
 function blk_type(blknum,
                   bt)
 {
-    if (! ((blknum, "type") in blktab))
+    if (! ((blknum, 0, "type") in blktab))
         error("(blk_type) Block # " blknum " has no type!")
-    bt = blktab[blknum, "type"]
+    bt = blktab[blknum, 0, "type"]
     if (! (bt in __blk_label))
         error("(blk_type) Block # " blknum " has invalid block type '" bt "'")
    return bt
 }
 
 
-function blk_ll_slot_type(blknum, slot,
-                           x, k)
+function blk_ll_slot_type(blknum, slot)
 {
-    if      ((blknum, slot, SLOT_CMD) in blktab)
-        return SLOT_CMD
-    else if ((blknum, slot, SLOT_BLKNUM) in blktab)
-        return SLOT_BLKNUM
-    else if ((blknum, slot, SLOT_TEXT) in blktab)
-        return SLOT_TEXT
-    else if ((blknum, slot, SLOT_USER) in blktab)
-        return SLOT_USER
-    else
-        error("(blk_ll_slot_type) Not found: blknum=" blknum ", slot=" slot)
+    if ((blknum, slot, "slot_type") in blktab)
+        return blktab[blknum, slot, "slot_type"]
+    error("(blk_ll_slot_type) Not found: blknum=" blknum ", slot=" slot)
 }
 
 
-function blk_ll_slot_value(blknum, slot,
-                           x, k)
+function blk_ll_slot_value(blknum, slot)
 {
-    if ((blknum, slot, SLOT_CMD) in blktab)
-        return blktab[blknum, slot, SLOT_CMD]
-    else if ((blknum, slot, SLOT_BLKNUM) in blktab)
-        return blktab[blknum, slot, SLOT_BLKNUM] + 0
-    else if ((blknum, slot, SLOT_TEXT) in blktab)
-        return blktab[blknum, slot, SLOT_TEXT]
-    else if ((blknum, slot, SLOT_USER) in blktab)
-        return blktab[blknum, slot, SLOT_USER]
-    else
-        error("(blk_ll_slot_value) Not found: blknum=" blknum ", slot=" slot)
+    if ((blknum, slot, "slot_value") in blktab)
+        return blktab[blknum, slot, "slot_value"]
+    error("(blk_ll_slot_value) Not found: blknum=" blknum ", slot=" slot)
 }
 
 
 function blk_ll_write(blknum, slot, type, new_val)
 {
-    return blktab[blknum, slot, type] = new_val
+    blktab[blknum, slot, "slot_type"]  = type
+    blktab[blknum, slot, "slot_value"] = new_val
+    return new_val
 }
 
 
@@ -1037,7 +1042,7 @@ function blk_append(blknum, slot_type, value,
         slot_type != SLOT_TEXT && slot_type != SLOT_USER)
         error(sprintf("(blk_append) Argument has bad type %s; should be SLOT_{CMD,BLKNUM,TEXT,USER}", ppf__block_type(slot_type)))
 
-    slot = ++blktab[blknum, "count"]
+    slot = ++blktab[blknum, 0, "count"]
     dbg_print("ship_out", 3,
               sprintf("(blk_append) blknum=%d, slot=%d, slot_type=%s, value='%s'",
                       blknum, slot, ppf__block_type(slot_type), value))
@@ -1058,6 +1063,24 @@ function blk_dump_blktab(    x, k, blknum, seen, type)
         seen[blknum]++
     }
     return "(blk_dump_blktab)"
+}
+
+
+function blk_dump_block_raw(blknum,
+                            x, k, blk, type)
+{
+    type = blk_type(blknum)
+    dbg_print("xeq", 5, "(blk_dump_blktab) type=" type)
+    dbg_print_block("xeq", -1, blknum, "(blk_dump_blktab)")
+
+    for (k in blktab) {
+        split(k, x, SUBSEP)
+        blk = x[1] + 0
+        if (blk == blknum) {
+            print k
+            print x[1], "/", x[2], "/", x[3], "/", x[4]
+        }
+    }
 }
 
 
@@ -1113,12 +1136,6 @@ function ship_out__block(blknum,
 
     if (dstblk != TERMINAL)
         error(sprintf("(ship_out__block) dstblk is %d, not zero!", dstblk))
-
-    if ((stream = divnum()) > TERMINAL) {
-        dbg_print("ship_out", 5, sprintf("(ship_out__block) END Appending block %d to stream %d", blknum, stream))
-        blk_append(stream, SLOT_BLKNUM, blknum)
-        return
-    }
 
     # dstblk is zero, so block must be executed
     dbg_print("ship_out", 5, sprintf("(ship_out__block) CALLING execute__block(%d)", blknum))
@@ -1214,7 +1231,7 @@ function xeq__BLK_AGG(agg_block,
                                 curr_dstblk(), agg_block, ppf__block_type(block_type)))
 
     dbg_print_block("xeq", 7, agg_block, "(xeq__BLK_AGG) agg_block")
-    lim = blktab[agg_block, "count"]
+    lim = blktab[agg_block, 0, "count"]
     for (i = 1; i <= lim; i++) {
         slot_type = blk_ll_slot_type(agg_block, i)
         value = blk_ll_slot_value(agg_block, i)
@@ -1252,7 +1269,7 @@ function ppf__agg(agg_block,
     if (blk_type(agg_block) != BLK_AGG)
         error(sprintf("(ppf__agg) Block %d type != AGG",
                       agg_block))
-    lim = blktab[agg_block, "count"]
+    lim = blktab[agg_block, 0, "count"]
     buf = ""
     for (i = 1; i <= lim; i++) {
         slot_type = blk_ll_slot_type(agg_block, i)
@@ -1276,7 +1293,7 @@ function ppf__BLK_AGG(blknum,
                       slotinfo, count, x)
 {
     slotinfo = ""
-    count = blktab[blknum, "count"]
+    count = blktab[blknum, 0, "count"]
     if (count > 0 ) {
         slotinfo = "  Slots:\n"
         for (x = 1; x <= count; x++)
@@ -1347,16 +1364,16 @@ function ppf__user(user_block,
                    name, params, i)
 {
     if ((blk_type(user_block) != BLK_USER) ||
-        (blktab[user_block, "valid"] != TRUE))
+        (blktab[user_block, 0, "valid"] != TRUE))
         error("(ppf__user) Bad user_block config")
 
-    name = blktab[user_block, "name"]
+    name = blktab[user_block, 0, "name"]
     params = ""
-    for (i = 1; i <= blktab[user_block, "nparam"]; i++)
-        params = params "{" blktab[user_block, "param", i] "}"
+    for (i = 1; i <= blktab[user_block, 0, "nparam"]; i++)
+        params = params "{" blktab[user_block, i, "param_name"] "}"
 
     return "@newcmd " name params                             "\n" \
-              ppf__agg(blktab[user_block, "body_block"]) "\n" \
+              ppf__agg(blktab[user_block, 0, "body_block"]) "\n" \
            "@endcmd"
 }
 
@@ -1407,29 +1424,9 @@ function ship_out__command(cmdline,
         return
     }
     if (dstblk != TERMINAL)
-        error(sprintf("(ship_out_commnd) dstblk is %d, not zero!", dstblk))
+        error(sprintf("(ship_out_command) dstblk is %d, not zero!", dstblk))
 
-    if ((stream = divnum()) > TERMINAL) {
-        dbg_print("ship_out", 3, sprintf("(ship_out__command) stream=%d", stream))
-        # ship_out__command has only two callers: 1) scan(), where a
-        # line is examined and $1 checked to be a TYPE_COMMAND; and 2)
-        # xeq__BLK_AGG(), which only calls when it's a SLOT_CMD.  In
-        # either case, name is known to be a command; therefore it must
-        # be in the symbol table with a code.
-        sub(/^[ \t]*[^ \t]+[ \t]*/, "", cmdline)
-        dbg_print("ship_out", 3, sprintf("(ship_out__command) name='%s', cmdline now '%s'",
-                                         name, cmdline))
-
-        if      (name == "divert")   xeq_cmd__divert(name, cmdline)
-        else if (name == "undivert") xeq_cmd__undivert(name, cmdline)
-        else {
-            dbg_print("ship_out", 5, sprintf("(ship_out__command) END Appending command %s to stream %d", name, stream))
-            blk_append(stream, SLOT_CMD, cmdline)
-        }
-        return
-    }
-
-    # dstblk is definitely zero, so execute the command
+    # dstblk is definitely zero, so execute the command.  Don't care about DIVNUM.
     sub(/^[ \t]*[^ \t]+[ \t]*/, "", cmdline)
     dsc = dosubs(cmdline)
     dbg_print("ship_out", 3, sprintf("(ship_out__command) CALLING execute__command('%s', '%s')",
@@ -1459,6 +1456,7 @@ function execute__command(name, cmdline,
     if      (name ==  "append")         xeq_cmd__define(name, cmdline)
     else if (name ==  "array")          xeq_cmd__array(name, cmdline)
     else if (name ==  "break")          xeq_cmd__break(name, cmdline)
+    else if (name ==  "cleardivert")    xeq_cmd__cleardivert(name, cmdline)
     else if (name ==  "continue")       xeq_cmd__continue(name, cmdline)
     else if (name ==  "debug")          xeq_cmd__error(name, cmdline)
     else if (name ==  "decr")           xeq_cmd__incr(name, cmdline)
@@ -1545,9 +1543,9 @@ function prep_file(filename,
     file_block = blk_new(BLK_FILE)
     if (filename == "-")
         filename = "/dev/stdin"
-    blktab[file_block, "filename"] = filename
-    blktab[file_block, "dstblk"] = TERMINAL
-    blktab[file_block, "atmode"] = MODE_AT_PROCESS
+    blktab[file_block, 0, "filename"] = filename
+    blktab[file_block, 0, "dstblk"] = TERMINAL
+    blktab[file_block, 0, "atmode"] = MODE_AT_PROCESS
 
     dbg_print("scan", 7, "(prep_file) END; file_block => " file_block)
     return file_block
@@ -1589,10 +1587,10 @@ function scan__file(    filename, file_block1, file_block2, scanstat, d)
     assert_scan_stack_okay(BLK_FILE)
     file_block1 = stk_top(__scan_stack)
 
-    filename = blktab[file_block1, "filename"]
+    filename = blktab[file_block1, 0, "filename"]
     dbg_print("scan", 1, sprintf("(scan__file) filename='%s', dstblk=%d, mode=%s",
-                                 filename, blktab[file_block1, "dstblk"],
-                                 ppf__mode(blktab[file_block1, "atmode"])))
+                                 filename, blktab[file_block1, 0, "dstblk"],
+                                 ppf__mode(blktab[file_block1, 0, "atmode"])))
     if (!path_exists_p(filename)) {
         dbg_print("scan", 1, sprintf("(scan__file) END File '%s' does not exist => %s",
                                      filename, ppf__bool(FALSE)))
@@ -1603,11 +1601,11 @@ function scan__file(    filename, file_block1, file_block2, scanstat, d)
         error("Cannot recursively read '" filename "':" $0)
     __active_files[filename] = TRUE
     sym_increment("__NFILE__", 1)
-    blktab[file_block1, "open"]          = TRUE
-    blktab[file_block1, "old.buffer"]    = __buffer
-    blktab[file_block1, "old.file"]      = sym_ll_read("__FILE__", "", GLOBAL_NAMESPACE)
-    blktab[file_block1, "old.line"]      = sym_ll_read("__LINE__", "", GLOBAL_NAMESPACE)
-    blktab[file_block1, "old.file_uuid"] = sym_ll_read("__FILE_UUID__", "", GLOBAL_NAMESPACE)
+    blktab[file_block1, 0, "open"]          = TRUE
+    blktab[file_block1, 0, "old.buffer"]    = __buffer
+    blktab[file_block1, 0, "old.file"]      = FILE()
+    blktab[file_block1, 0, "old.line"]      = LINE()
+    blktab[file_block1, 0, "old.file_uuid"] = sym_ll_read("__FILE_UUID__", "", GLOBAL_NAMESPACE)
     dbg_print_block("ship_out", 7, file_block1, "(scan__file) file_block1")
 
     # # Set up new file context
@@ -1627,16 +1625,16 @@ function scan__file(    filename, file_block1, file_block2, scanstat, d)
     # Avoid I/O errors (on BSD at least) on attempt to close stdin
     if (filename != "/dev/stdin")
         close(filename)
-    blktab[file_block1, "open"] = FALSE
+    blktab[file_block1, 0, "open"] = FALSE
     delete __active_files[filename]
 
     assert_scan_stack_okay(BLK_FILE)
     file_block2 = stk_pop(__scan_stack)
 
-    __buffer = blktab[file_block2, "old.buffer"]
-    sym_ll_write("__FILE__",      "", GLOBAL_NAMESPACE, blktab[file_block2, "old.file"])
-    sym_ll_write("__LINE__",      "", GLOBAL_NAMESPACE, blktab[file_block2, "old.line"])
-    sym_ll_write("__FILE_UUID__", "", GLOBAL_NAMESPACE, blktab[file_block2, "old.file_uuid"])
+    __buffer = blktab[file_block2, 0, "old.buffer"]
+    sym_ll_write("__FILE__",      "", GLOBAL_NAMESPACE, blktab[file_block2, 0, "old.file"])
+    sym_ll_write("__LINE__",      "", GLOBAL_NAMESPACE, blktab[file_block2, 0, "old.line"])
+    sym_ll_write("__FILE_UUID__", "", GLOBAL_NAMESPACE, blktab[file_block2, 0, "old.file_uuid"])
 
     dbg_print("scan", 1, sprintf("(scan__file) END '%s' => %s",
                                  filename, ppf__bool(scanstat)))
@@ -1658,11 +1656,13 @@ function scan(              code, terminator, readstat, name, retval, new_block,
     scanner = stk_top(__scan_stack)
     scanner_type = blk_type(scanner)
     scanner_label = ppf__block_type(scanner_type)
-    terminator = blktab[scanner, "terminator"]
+    terminator = blktab[scanner, 0, "terminator"]
     retval = FALSE
 
     while (TRUE) {
-        dbg_print("scan", 4, "(scan) [" scanner_label "] TOP OF LOOP ------------------------------------------------")
+        dbg_print("scan", 4, sprintf("(scan) [%s] TOP OF LOOP: __FILE__ %s __LINE__ %d ________________",
+                                     scanner_label, FILE(), LINE()+1)) # LINE will be +1 after upcoming readline() 
+
         readstat = readline()   # OKAY, EOF, ERROR
         if (readstat == ERROR) {
             # Whatever just happened, the scan didn't finish properly
@@ -1674,9 +1674,9 @@ function scan(              code, terminator, readstat, name, retval, new_block,
             # EOF on any other block type means the scan didn't find
             # a terminator, so return FALSE.
             dbg_print("scan", 5, sprintf("(scan) [%s] readline() detected EOF on '%s'",
-                                         scanner_label, blktab[scanner, "filename"]))
-            if ((scanner, "oob_terminator") in blktab &&
-                blktab[scanner, "oob_terminator"] == "EOF")
+                                         scanner_label, blktab[scanner, 0, "filename"]))
+            if ((scanner, 0, "oob_terminator") in blktab &&
+                blktab[scanner, 0, "oob_terminator"] == "EOF")
                 retval = TRUE
             break          # out of entire scanning loop, to then return
         }
@@ -1797,7 +1797,7 @@ function scan(              code, terminator, readstat, name, retval, new_block,
                             # not ready to run yet.  (That next bit
                             # happens in xeq__BLK_USER.)
                             if (! nam_ll_in(name, __namespace)) {
-                                new_cmd_name = blktab[new_block, "name"]
+                                new_cmd_name = blktab[new_block, 0, "name"]
                                 dbg_print("scan", 3, sprintf("Declaring new user command '%s' at level %d",
                                                              new_cmd_name, __namespace))
                                 nam_ll_write(new_cmd_name, __namespace, TYPE_USER)
@@ -1971,10 +1971,10 @@ function ppf__BLK_FILE(blknum)
                    "  open    : %s\n"             \
                    "  atmode  : %s\n"             \
                    "  dstblk  : %d",
-                   blktab[blknum, "filename"],
-                   ppf__bool(blktab[blknum, "open"]),
-                   ppf__mode(blktab[blknum, "atmode"]),
-                   blktab[blknum, "dstblk"])
+                   blktab[blknum, 0, "filename"],
+                   ppf__bool(blktab[blknum, 0, "open"]),
+                   ppf__mode(blktab[blknum, 0, "atmode"]),
+                   blktab[blknum, 0, "dstblk"])
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -2009,7 +2009,7 @@ function ppf__BLK_FILE(blknum)
 #           FLAG_NUMERIC        N : Value must be a number
 #
 #       Other flags, all optional:
-#           FLAG_DEFERRED       D : Deferred means value will be defined leter
+#           FLAG_DEFERRED       D : Deferred means value will be defined later
 #           FLAG_IMMEDIATE      ! : scan() will immediately execute command
 #           FLAG_SYSTEM         Y : Internal variable, level 0, usually
 #                                   (but not always) read-only.  Also,
@@ -2313,6 +2313,8 @@ function nam_ll_write(name, level, code,
                        retval)
 {
     if (level == EMPTY) error("(nam_ll_write) LEVEL missing")
+    # It's important to use low-level functions here, and not invoke
+    # dbg_* functions in this procedure.  Nasty loops ensue.
     if (sym_ll_in("__DBG__", "nam", GLOBAL_NAMESPACE) &&
         sym_ll_read("__DBG__", "nam", GLOBAL_NAMESPACE) >= 5)
         print_stderr(sprintf("(nam_ll_write) namtab[\"%s\", %d] = %s", name, level, code))
@@ -2522,7 +2524,7 @@ function stk_pop(stack)
 #       See @divert, @undivert
 #
 #*****************************************************************************
-function divnum()
+function DIVNUM()
 {
     return sym_ll_read("__DIVNUM__", "", GLOBAL_NAMESPACE) + 0
 }
@@ -2532,21 +2534,46 @@ function divnum()
 # stream.  Negative streams and current diversion are silently ignored.
 # Buffer text is not re-parsed for macros, and buffer is cleared after
 # injection into target stream.
-function undivert(stream)
+function undivert(stream,
+                  count, i, dstblk)
 {
+    dstblk = curr_dstblk()
     dbg_print("divert", 1, sprintf("(undivert) START dstblk=%d, stream=%d",
                                    curr_dstblk(), stream))
-    if (stream < 0 || stream == divnum()) {
-        dbg_print("divert", 3, "(undivert) END ship_out__block() because stream <0 or ==DIVNUM")
+    if (dstblk < 0) {
+        dbg_print("divert", 3, "(undivert) END because dstblk <0")
+        return
+    }
+    if (stream < 0 || stream == DIVNUM()) {
+        dbg_print("divert", 3, "(undivert) END because stream <0 or ==DIVNUM")
         return
     }
     if (blk_type(stream) != BLK_AGG)
         error(sprintf("(undivert) Block %d has type %s, not AGG",
                       stream, ppf__block_type(blk_type(stream))))
-    if (blktab[stream, "count"] > 0) {
-        dbg_print("divert", 3, sprintf("(undivert) CALLING ship_out__block(%d)", stream))
-        ship_out__block(stream)
-        dbg_print("divert", 3, "(undivert) RETURNED FROM ship_out__block()")
+    if ((count = blktab[stream, 0, "count"]) > 0) {
+        # Original code just did "ship_out__block(stream)" here.  But
+        # this is not sufficient because of the requirement to clear the
+        # just undiverted stream.  Undivert streams must be cleared
+        # immediately because:
+        # 1. ship_out__block may not process the block (if dstblk not
+        #    TERMINAL) for a while, likely after we need to clear stream.
+        # 2. If we keep the block around waiting, then
+        #        @undivert N
+        #        @undivert N
+        #    produces double output which it's not supposed to do.
+        #
+        # The solution is to move each slot manually to the target
+        # stream, then clear the original diversion.
+        # dbg_print("divert", 3, sprintf("(undivert) CALLING ship_out__block(%d)", stream))
+        # ship_out__block(stream)
+        # dbg_print("divert", 3, "(undivert) RETURNED FROM ship_out__block()")
+        if (dstblk == TERMINAL)
+            execute__block(stream)
+        else
+            for (i = 1; i <= count; i++)
+                blk_append(dstblk, blk_ll_slot_type(stream, i), blk_ll_slot_value(stream, i))
+        cleardivert(stream)
     }
 }
 
@@ -2554,8 +2581,39 @@ function undivert(stream)
 function undivert_all(    stream)
 {
     for (stream = 1; stream <= MAX_STREAM; stream++)
-        if (blktab[stream, "count"] > 0)
+        if (blktab[stream, 0, "count"] > 0)
             undivert(stream)
+}
+
+
+# Remove all slots from an AGG block and return its count to zero.
+function cleardivert(stream,
+                     count, i)
+{
+    dbg_print("divert", 1, sprintf("(cleardivert) START dstblk=%d, stream=%d",
+                                   curr_dstblk(), stream))
+    if (stream < 0) {
+        dbg_print("divert", 3, "(cleardivert) END because stream <0")
+        return
+    }
+    if (blk_type(stream) != BLK_AGG)
+        error(sprintf("(cleardivert) Block %d has type %s, not AGG",
+                      stream, ppf__block_type(blk_type(stream))))
+    if ((count = blktab[stream, 0, "count"]) > 0) {
+        for (i = 1; i <= count; i++) {
+            delete blktab[stream, i, "slot_type"]
+            delete blktab[stream, i, "slot_value"]
+        }
+        blktab[stream, 0, "count"] = 0
+    }
+}
+
+
+function cleardivert_all(    stream)
+{
+    for (stream = 1; stream <= MAX_STREAM; stream++)
+        if (blktab[stream, 0, "count"] > 0)
+            cleardivert(stream)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -2829,7 +2887,7 @@ function sym_defined_p(sym,
                           name, "", level))
 
         agg_block = symtab[name, "", level, "agg_block"]
-        count = blktab[agg_block, "count"]+0
+        count = blktab[agg_block, 0, "count"]+0
         if (key >= 1 && key <= count) {
             # Make sure slot holds text, which it pretty much has to
             if (blk_ll_slot_type(agg_block, key) != SLOT_TEXT)
@@ -3124,7 +3182,7 @@ function sym_fetch(sym,
                           name, "", level))
 
         agg_block = symtab[name, "", level, "agg_block"]
-        count = blktab[agg_block, "count"]+0
+        count = blktab[agg_block, 0, "count"]+0
         if (key >= 1 && key <= count) {
             # Make sure slot holds text, which it pretty much has to
             if (blk_ll_slot_type(agg_block, key) != SLOT_TEXT)
@@ -3329,18 +3387,21 @@ function ship_out__text(text,
     if (dstblk != TERMINAL)
         error(sprintf("(ship_out__text) dstblk is %d, not zero!", dstblk))
 
-    if ((stream = divnum()) > TERMINAL) {
+    # At this point, the output block is at or below the MAX_STREAM
+    # threshold, so engage macro processing/substitution if appropriate.
+    if (curr_atmode() == MODE_AT_PROCESS)
+        text = dosubs(text)
+
+    if ((stream = DIVNUM()) > TERMINAL) {
         dbg_print("ship_out", 5, sprintf("(ship_out__text) END Appending text to stream %d", stream))
         blk_append(stream, SLOT_TEXT, text)
         return
     }
+
     # dstblk is definitely zero, so text must be executed (printed)
-    if (curr_atmode() == MODE_AT_PROCESS)
-        text = dosubs(text)
     dbg_print("ship_out", 5, sprintf("(ship_out__text) CALLING execute__text()"))
     execute__text(text)
     dbg_print("ship_out", 5, sprintf("(ship_out__text) RETURNED FROM execute__text()"))
-
     dbg_print("ship_out", 3, sprintf("(ship_out__text) END"))
 }
 
@@ -3394,7 +3455,7 @@ function bool__tokenize_string(s,
     i = 1
     __bnf = 0
     c = substr(s, i, 1)
-    dbg_print("bool", 5, sprintf("(bool__tokenize_string) TOP; slen=%d, i=%d, c=%s", slen, i, c))
+    dbg_print("bool", 5, sprintf("(bool__tokenize_string) START; slen=%d, i=%d, c=%s", slen, i, c))
 
     while (TRUE) {
         if (i > slen || c == "")
@@ -3711,12 +3772,11 @@ function scan__case(                case_block, preamble_block, scanstat)
     dbg_print("case", 5, "(scan__case) New block # " case_block " type " ppf__block_type(blk_type(preamble_block)))
 
     $1 = ""
-    blktab[case_block, "casevar"]        = $2
-    blktab[case_block, "preamble_block"] = preamble_block
-    blktab[case_block, "nof"]            = 0
-    blktab[case_block, "seen_otherwise"] = FALSE
-    blktab[case_block, "dstblk"]         = preamble_block
-    blktab[case_block, "valid"]          = FALSE
+    blktab[case_block, 0, "casevar"]        = $2
+    blktab[case_block, 0, "preamble_block"] = preamble_block
+    blktab[case_block, 0, "seen_otherwise"] = FALSE
+    blktab[case_block, 0, "dstblk"]         = preamble_block
+    blktab[case_block, 0, "valid"]          = FALSE
     dbg_print_block("case", 7, case_block, "(scan__case) case_block")
     stk_push(__scan_stack, case_block) # Push it on to the scan_stack
 
@@ -3742,11 +3802,11 @@ function scan__of(                case_block, of_block, of_val)
     of_block = blk_new(BLK_AGG)
     sub(/^@of[ \t]+/, "")
     of_val = $0
-    if ((case_block, "of", of_val) in blktab)
+    if ((case_block, of_val, "of_block") in blktab)
         error("(scan__of) Duplicate '@of' values not allowed:@of " $0)
 
-    blktab[case_block, "of", of_val] = of_block
-    blktab[case_block, "dstblk"]  = of_block
+    blktab[case_block, of_val, "of_block"] = of_block
+    blktab[case_block, 0, "dstblk"]  = of_block
     return of_block
 }
 
@@ -3759,14 +3819,14 @@ function scan__otherwise(                case_block, otherwise_block)
     case_block = stk_top(__scan_stack)
 
     # Check if already seen @else
-    if (blktab[case_block, "seen_otherwise"] == TRUE)
+    if (blktab[case_block, 0, "seen_otherwise"] == TRUE)
         error("(scan__otherwise) Cannot have more than one @otherwise")
 
     # Create a new block for the False branch and make it current
-    blktab[case_block, "seen_otherwise"] = TRUE
+    blktab[case_block, 0, "seen_otherwise"] = TRUE
     otherwise_block = blk_new(BLK_AGG)
-    blktab[case_block, "otherwise_block"] = otherwise_block
-    blktab[case_block, "dstblk"]  = otherwise_block
+    blktab[case_block, 0, "otherwise_block"] = otherwise_block
+    blktab[case_block, 0, "dstblk"]  = otherwise_block
     return otherwise_block
 }
 
@@ -3778,7 +3838,7 @@ function scan__endcase(                case_block)
     assert_scan_stack_okay(BLK_CASE)
     case_block = stk_pop(__scan_stack)
 
-    blktab[case_block, "valid"] = TRUE
+    blktab[case_block, 0, "valid"] = TRUE
     return case_block
 }
 
@@ -3792,25 +3852,25 @@ function xeq__BLK_CASE(case_block,
 
     dbg_print_block("case", 7, case_block, "(xeq__BLK_CASE) case_block")
     if ((blk_type(case_block) != BLK_CASE) ||  \
-        (blktab[case_block, "valid"] != TRUE))
+        (blktab[case_block, 0, "valid"] != TRUE))
         error("(xeq__BLK_CASE) Bad config")
 
     # Check if the case variable value matches any @of values
-    casevar = blktab[case_block, "casevar"]
+    casevar = blktab[case_block, 0, "casevar"]
     dbg_print("case", 5, sprintf("(xeq__BLK_CASE) casevar '%s'", casevar))
     assert_sym_defined(casevar)
     caseval = sym_fetch(casevar)
     dbg_print("case", 5, sprintf("(xeq__BLK_CASE) caseval '%s'", caseval))
 
-    if ((case_block, "of", caseval) in blktab) {
+    if ((case_block, caseval, "of_block") in blktab) {
         # See if there's a preamble which is non-empty.  Preambles get
         # their own namespace.
-        preamble_block = blktab[case_block, "preamble_block"]
-        if (blktab[preamble_block, "count"]+0 > 0) {
+        preamble_block = blktab[case_block, 0, "preamble_block"]
+        if (blktab[preamble_block, 0, "count"]+0 > 0) {
             dbg_print("case", 5, sprintf("(xeq__BLK_CASE) CALLING execute__block(%d)",
-                                         blktab[case_block, "preamble_block"]))
+                                         blktab[case_block, 0, "preamble_block"]))
             raise_namespace()
-            execute__block(blktab[case_block, "preamble_block"])
+            execute__block(blktab[case_block, 0, "preamble_block"])
             lower_namespace()
             dbg_print("case", 5, sprintf("(xeq__BLK_CASE) RETURNED FROM execute__block()"))
         }
@@ -3818,16 +3878,16 @@ function xeq__BLK_CASE(case_block,
         # The @of branch gets a new namespace
         raise_namespace()
         dbg_print("case", 5, sprintf("(xeq__BLK_CASE) CALLING execute__block(%d)",
-                                     blktab[case_block, "of", caseval]))
-        execute__block(blktab[case_block, "of", caseval])
+                                     blktab[case_block, caseval, "of_block"]))
+        execute__block(blktab[case_block, caseval, "of_block"])
         dbg_print("case", 5, sprintf("(xeq__BLK_CASE) RETURNED FROM execute__block()"))
         lower_namespace()
-    } else if (blktab[case_block, "seen_otherwise"] == TRUE) {
+    } else if (blktab[case_block, 0, "seen_otherwise"] == TRUE) {
         # NB - @otherwise branches DO NOT execute the preamble (if any)
         raise_namespace()
         dbg_print("case", 5, sprintf("(xeq__BLK_CASE) CALLING execute__block(%d)",
-                                     blktab[case_block, "otherwise_block"]))
-        execute__block(blktab[case_block, "otherwise_block"])
+                                     blktab[case_block, 0, "otherwise_block"]))
+        execute__block(blktab[case_block, 0, "otherwise_block"])
         dbg_print("case", 5, sprintf("(xeq__BLK_CASE) RETURNED FROM execute__block()"))
         lower_namespace()
     }
@@ -3839,17 +3899,17 @@ function xeq__BLK_CASE(case_block,
 function ppf__case(case_block,
                    buf, i, caseval, x, k)
 {
-    buf = "@case " blktab[case_block, "casevar"] "\n"
-    buf = buf ppf__block(blktab[case_block, "preamble_block"]) "\n"
+    buf = "@case " blktab[case_block, 0, "casevar"] "\n"
+    buf = buf ppf__block(blktab[case_block, 0, "preamble_block"]) "\n"
     for (k in blktab) {
         split(k, x, SUBSEP)
-        if (x[1] == case_block && x[2] == "of")
-            buf = buf "@of " x[3] "\n" \
-                  ppf__block(blktab[case_block, "of", x[3]]) "\n"
+        if (x[1] == case_block && x[3] == "of_block")
+            buf = buf "@of " x[2] "\n" \
+                ppf__block(blktab[case_block, x[2], "of_block"]) "\n"
     }
-    if (blktab[case_block, "seen_otherwise"])
+    if (blktab[case_block, 0, "seen_otherwise"])
         buf = buf "@otherwise\n" \
-              ppf__block(blktab[case_block, "otherwise_block"]) "\n"
+            ppf__block(blktab[case_block, 0, "otherwise_block"]) "\n"
     buf = buf "@endcase"
     return buf
 }
@@ -3858,6 +3918,40 @@ function ppf__case(case_block,
 function ppf__BLK_CASE(blknum)
 {
     return "(ppf__BLK_CASE) BROKEN"
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  C L E A R D I V E R T
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#*****************************************************************************
+# @cleardivert [N]...
+function xeq_cmd__cleardivert(name, cmdline,
+                           i, stream)
+{
+    $0 = cmdline
+    dbg_print("divert", 1, sprintf("(xeq_cmd__cleardivert) START dstblk=%d, cmdline='%s'",
+                                   curr_dstblk(), cmdline))
+    dbg_print_block("ship_out", 8, curr_dstblk(), "(xeq_cmd__cleardivert) curr_dstblk()")
+    if (NF == 0)
+        cleardivert_all()
+    else {
+        i = 0
+        while (++i <= NF) {
+            stream = dosubs($i)
+            if (!integerp(stream))
+                error(sprintf("Value '%s' must be numeric:", stream) $0)
+            if (stream > MAX_STREAM)
+                error("Bad parameters:" $0)
+            dbg_print("divert", 5, sprintf("(xeq_cmd__cleardivert) CALLING cleardivert(%d)", stream))
+            cleardivert(stream)
+        }
+    }
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -4000,7 +4094,7 @@ function xeq_cmd__dump(name, cmdline,
     } else if (what ~ /[0-9]+/) {
         what_type = TYPE_ANY    # There is no "block" type
         #print_stderr("Dump of block # " what)
-        if (! ((what, "type") in blktab))
+        if (! ((what, 0, "type") in blktab))
             error("(xeq_cmd__dump) No 'type' field for block " what)
         block_type = blk_type(what)
         blk_label = ppf__block_type(block_type)
@@ -4306,17 +4400,17 @@ function scan__for(                  for_block, body_block, scanstat, incr, info
     body_block = blk_new(BLK_AGG)
     dbg_print("for", 5, "(scan__for) body_block # " body_block " type " ppf__block_type(blk_type(body_block)))
 
-    blktab[for_block, "body_block"] = body_block
-    blktab[for_block, "dstblk"] = body_block
-    blktab[for_block, "valid"] = FALSE
-    blktab[for_block, "loopvar"] = $2
+    blktab[for_block, 0, "body_block"] = body_block
+    blktab[for_block, 0, "dstblk"] = body_block
+    blktab[for_block, 0, "valid"] = FALSE
+    blktab[for_block, 0, "loop_var"] = $2
 
     if ($1 == "@for") {
         #print_stderr("(scan__for) Found FOR: " $0)
-        blktab[for_block, "each"] = FALSE
-        blktab[for_block, "start"] = $3 + 0
-        blktab[for_block, "end"] = $4 + 0
-        blktab[for_block, "incr"] = incr = NF >= 5 ? ($5 + 0) : 1
+        blktab[for_block, 0, "loop_type"] = "iter"
+        blktab[for_block, 0, "loop_start"] = $3 + 0
+        blktab[for_block, 0, "loop_end"] = $4 + 0
+        blktab[for_block, 0, "loop_incr"] = incr = NF >= 5 ? ($5 + 0) : 1
         if (incr == 0)
             error("(scan__for) Increment value cannot be zero!")
 
@@ -4329,9 +4423,9 @@ function scan__for(                  for_block, body_block, scanstat, incr, info
             error(sprintf("(scan__for) Name '%s' not found", info["name"]))
         if (! info["isarray"])
             error(sprintf("(scan__for) Name '%s' is not an array", info["name"]))
-        blktab[for_block, "each"] = TRUE
-        blktab[for_block, "arrname"] = $3
-        blktab[for_block, "level"] = level
+        blktab[for_block, 0, "loop_type"] = "each"
+        blktab[for_block, 0, "loop_array_name"] = $3
+        blktab[for_block, 0, "level"] = level
 
     } else
         error("(scan__for) How did I get here?")
@@ -4358,10 +4452,10 @@ function scan__next(                   for_block)
     assert_scan_stack_okay(BLK_FOR)
     for_block = stk_pop(__scan_stack)
 
-    if (blktab[for_block, "loopvar"] != $2)
+    if (blktab[for_block, 0, "loop_var"] != $2)
         error(sprintf("(scan__next) Variable mismatch; '%s' specified, but '%s' was expected",
-                      $2, blktab[for_block, "loopvar"]))
-    blktab[for_block, "valid"] = TRUE
+                      $2, blktab[for_block, 0, "loop_var"]))
+    blktab[for_block, 0, "valid"] = TRUE
 
     dbg_print("for", 3, sprintf("(scan__next) END => %d", for_block))
     return for_block
@@ -4376,10 +4470,10 @@ function xeq__BLK_FOR(for_block,
                                 curr_dstblk(), for_block, ppf__block_type(block_type)))
     dbg_print_block("for", 7, for_block, "(xeq__BLK_FOR) for_block")
     if ((block_type != BLK_FOR) || \
-        (blktab[for_block, "valid"] != TRUE))
+        (blktab[for_block, 0, "valid"] != TRUE))
         error("(xeq__BLK_FOR) Bad config")
 
-    if (blktab[for_block, "each"] == TRUE)
+    if (blktab[for_block, 0, "loop_type"] == "each")
         execute__foreach(for_block)
     else
         execute__for(for_block)
@@ -4390,13 +4484,13 @@ function execute__for(for_block,
                       loopvar, start, end, incr, done, counter, body_block, new_level)
 {
     # Evaluate loop
-    loopvar    = blktab[for_block, "loopvar"]
-    start      = blktab[for_block, "start"] + 0
-    end        = blktab[for_block, "end"]   + 0
-    incr       = blktab[for_block, "incr"]  + 0
+    loopvar    = blktab[for_block, 0, "loop_var"]
+    start      = blktab[for_block, 0, "loop_start"] + 0
+    end        = blktab[for_block, 0, "loop_end"]   + 0
+    incr       = blktab[for_block, 0, "loop_incr"]  + 0
     done       = FALSE
     counter    = start
-    body_block = blktab[for_block, "body_block"]
+    body_block = blktab[for_block, 0, "body_block"]
 
     dbg_print_block("for", 7, for_block, "(execute__for) for_block")
     dbg_print_block("for", 7, body_block, "(execute__for) body_block")
@@ -4437,10 +4531,10 @@ function execute__for(for_block,
 function execute__foreach(for_block,
                           loopvar, arrname, level, keys, x, k, body_block, new_level)
 {
-    loopvar = blktab[for_block, "loopvar"]
-    arrname = blktab[for_block, "arrname"]
-    level = blktab[for_block, "level"]
-    body_block = blktab[for_block, "body_block"]
+    loopvar = blktab[for_block, 0, "loop_var"]
+    arrname = blktab[for_block, 0, "loop_array_name"]
+    level = blktab[for_block, 0, "level"]
+    body_block = blktab[for_block, 0, "body_block"]
     dbg_print("for", 4, sprintf("(execute__foreach) loopvar='%s', arrname='%s'",
                                 loopvar, arrname))
     # Find the keys
@@ -4478,12 +4572,12 @@ function execute__foreach(for_block,
 function ppf__for(for_block,
                   buf)
 {
-    if (blktab[for_block, "each"])
-        buf = "@foreach " blktab[for_block, "loopvar"] " " blktab[for_block, "arrname"] "\n"
+    if (blktab[for_block, 0, "loop_type"] == "each")
+        buf = "@foreach " blktab[for_block, 0, "loop_var"] " " blktab[for_block, 0, "loop_array_name"] "\n"
     else
-        buf = "@for " blktab[for_block, "loopvar"] " " blktab[for_block, "start"] " " blktab[for_block, "end"] " " blktab[for_block, "incr"] "\n"
-    buf = buf ppf__block(blktab[for_block, "body_block"]) "\n"
-    buf = buf "@next "  blktab[for_block, "loopvar"]
+        buf = "@for " blktab[for_block, 0, "loop_var"] " " blktab[for_block, 0, "loop_start"] " " blktab[for_block, 0, "loop_end"] " " blktab[for_block, 0, "loop_incr"] "\n"
+    buf = buf ppf__block(blktab[for_block, 0, "body_block"]) "\n"
+    buf = buf "@next "  blktab[for_block, 0, "loop_var"]
     return buf
 }
 
@@ -4496,12 +4590,12 @@ function ppf__BLK_FOR(blknum)
                    "  end     : %d\n"       \
                    "  incr    : %d\n"       \
                    "  body    : %d",
-                   ppf__bool(blktab[blknum, "valid"]),
-                   blktab[blknum, "loopvar"],
-                   blktab[blknum, "start"],
-                   blktab[blknum, "end"],
-                   blktab[blknum, "incr"],
-                   blktab[blknum, "body_block"])
+                   ppf__bool(blktab[blknum, 0, "valid"]),
+                   blktab[blknum, 0, "loop_var"],
+                   blktab[blknum, 0, "loop_start"],
+                   blktab[blknum, 0, "loop_end"],
+                   blktab[blknum, 0, "loop_incr"],
+                   blktab[blknum, 0, "body_block"])
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -4530,15 +4624,15 @@ function scan__if(                 name, if_block, true_block, scanstat)
 
     if (name ~ /@ifn?def/) {
         assert_sym_valid_name($0)
-        blktab[if_block, "condition"] = "defined(" $0 ")"
+        blktab[if_block, 0, "condition"] = "defined(" $0 ")"
     } else
-        blktab[if_block, "condition"] = $0
+        blktab[if_block, 0, "condition"] = $0
 
-    blktab[if_block, "init_negate"] = (name == "@unless" || name == "@ifndef")
-    blktab[if_block, "seen_else"]  = FALSE
-    blktab[if_block, "true_block"] = true_block
-    blktab[if_block, "dstblk"] = true_block
-    blktab[if_block, "valid"]      = FALSE
+    blktab[if_block, 0, "init_negate"] = (name == "@unless" || name == "@ifndef")
+    blktab[if_block, 0, "seen_else"]  = FALSE
+    blktab[if_block, 0, "true_block"] = true_block
+    blktab[if_block, 0, "dstblk"] = true_block
+    blktab[if_block, 0, "valid"]      = FALSE
     dbg_print_block("if", 7, if_block, "(scan__if) if_block")
     stk_push(__scan_stack, if_block) # Push it on to the scan_stack
 
@@ -4562,14 +4656,14 @@ function scan__else(                   if_block, false_block)
     if_block = stk_top(__scan_stack)
 
     # Check if already seen @else
-    if (blktab[if_block, "seen_else"] == TRUE)
+    if (blktab[if_block, 0, "seen_else"] == TRUE)
         error("(scan__else) Cannot have more than one @else")
 
     # Create a new block for the False branch and make it current
-    blktab[if_block, "seen_else"] = TRUE
+    blktab[if_block, 0, "seen_else"] = TRUE
     false_block = blk_new(BLK_AGG)
-    blktab[if_block, "false_block"] = false_block
-    blktab[if_block, "dstblk"]  = false_block
+    blktab[if_block, 0, "false_block"] = false_block
+    blktab[if_block, 0, "dstblk"]  = false_block
     return false_block
 }
 
@@ -4581,7 +4675,7 @@ function scan__endif(                    if_block)
                                curr_dstblk(), ppf__mode(curr_atmode())))
     assert_scan_stack_okay(BLK_IF)
     if_block = stk_pop(__scan_stack)
-    blktab[if_block, "valid"] = TRUE
+    blktab[if_block, 0, "valid"] = TRUE
     return if_block
 }
 
@@ -4595,13 +4689,13 @@ function xeq__BLK_IF(if_block,
 
     dbg_print_block("if", 7, if_block, "(xeq__BLK_IF) if_block")
     if ((block_type != BLK_IF) || \
-        (blktab[if_block, "valid"] != TRUE))
+        (blktab[if_block, 0, "valid"] != TRUE))
         error("(xeq__BLK_IF) Bad config")
 
     # Evaluate condition, determine if TRUE/FALSE and also
     # which block to follow.  For now, always take TRUE path
-    condition = blktab[if_block, "condition"]
-    negate = blktab[if_block, "init_negate"]
+    condition = blktab[if_block, 0, "condition"]
+    negate = blktab[if_block, 0, "init_negate"]
     condval = evaluate_boolean(condition, negate)
     dbg_print("if", 1, sprintf("(xeq__BLK_IF) evaluate_boolean('%s') => %s", condition, ppf__bool(condval)))
     if (condval == ERROR)
@@ -4610,13 +4704,13 @@ function xeq__BLK_IF(if_block,
     raise_namespace()
     if (condval) {
         dbg_print("if", 5, sprintf("(xeq__BLK_IF) [true branch] CALLING execute__block(%d)",
-                                   blktab[if_block, "true_block"]))
-        execute__block(blktab[if_block, "true_block"])
+                                   blktab[if_block, 0, "true_block"]))
+        execute__block(blktab[if_block, 0, "true_block"])
         dbg_print("if", 5, sprintf("(xeq__BLK_IF) RETURNED FROM execute__block()"))
-    } else if (blktab[if_block, "seen_else"] == TRUE) {
+    } else if (blktab[if_block, 0, "seen_else"] == TRUE) {
         dbg_print("if", 5, sprintf("(xeq__BLK_IF) [false branch] CALLING execute__block(%d)",
-                                   blktab[if_block, "false_block"]))
-        execute__block(blktab[if_block, "false_block"])
+                                   blktab[if_block, 0, "false_block"]))
+        execute__block(blktab[if_block, 0, "false_block"])
         dbg_print("if", 5, sprintf("(xeq__BLK_IF) RETURNED FROM execute__block()"))
     }
     lower_namespace()
@@ -4628,11 +4722,11 @@ function xeq__BLK_IF(if_block,
 function ppf__if(if_block,
     buf)
 {
-    buf = "@if " blktab[if_block, "condition"] "\n" \
-            ppf__block(blktab[if_block, "true_block"]) "\n"
-    if (blktab[if_block, "seen_else"])
+    buf = "@if " blktab[if_block, 0, "condition"] "\n" \
+        ppf__block(blktab[if_block, 0, "true_block"]) "\n"
+    if (blktab[if_block, 0, "seen_else"])
         buf = buf "@else\n" \
-              ppf__block(blktab[if_block, "false_block"]) "\n"
+            ppf__block(blktab[if_block, 0, "false_block"]) "\n"
     return buf "@endif" 
 }
 
@@ -4758,12 +4852,12 @@ function ppf__BLK_IF(blknum)
                    "  true_block  : %d\n" \
                    "  seen_else   : %s\n" \
                    "  false_block : %s",
-                   ppf__bool(blktab[blknum, "valid"]),
-                   blktab[blknum, "condition"],
-                   blktab[blknum, "true_block"],
-                   ppf__bool(blktab[blknum, "seen_else"]),
-                   ((blknum, "false_block") in blktab) \
-                     ? blktab[blknum, "false_block"]     \
+                   ppf__bool(blktab[blknum, 0, "valid"]),
+                   blktab[blknum, 0, "condition"],
+                   blktab[blknum, 0, "true_block"],
+                   ppf__bool(blktab[blknum, 0, "seen_else"]),
+                   ((blknum, 0, "false_block") in blktab) \
+                   ? blktab[blknum, 0, "false_block"]      \
                      : "<no false block>")
 
 }
@@ -4822,8 +4916,8 @@ function xeq_cmd__include(name, cmdline,
     # sub("^[ \t]*", "")
     filename = rm_quotes(cmdline) # dosubs($0)
     file_block = prep_file(filename)
-    blktab[file_block, "dstblk"] = curr_dstblk()
-    blktab[file_block, "atmode"] = substr(name, length(name)-4) == "paste" \
+    blktab[file_block, 0, "dstblk"] = curr_dstblk()
+    blktab[file_block, 0, "atmode"] = substr(name, length(name)-4) == "paste" \
                                       ? MODE_AT_LITERAL : MODE_AT_PROCESS
     # prep_file doesn't push the BLK_FILE onto the __scan_stack,
     # so we have to do that ourselves due to customization
@@ -4952,10 +5046,10 @@ function scan__longdef(    sym, sym_block, body_block, scanstat)
     $1 = ""
     sym = $2
     assert_sym_okay_to_define(sym)
-    blktab[sym_block, "name"] = sym
-    blktab[sym_block, "body_block"] = body_block
-    blktab[sym_block, "dstblk"] = body_block
-    blktab[sym_block, "valid"] = FALSE
+    blktab[sym_block, 0, "name"] = sym
+    blktab[sym_block, 0, "body_block"] = body_block
+    blktab[sym_block, 0, "dstblk"] = body_block
+    blktab[sym_block, 0, "valid"] = FALSE
     dbg_print_block("sym", 7, sym_block, "(scan__longdef) sym_block")
     stk_push(__scan_stack, sym_block) # Push it on to the scan_stack
 
@@ -4977,7 +5071,7 @@ function scan__endlongdef(    sym_block)
     assert_scan_stack_okay(BLK_LONGDEF)
     sym_block = stk_pop(__scan_stack)
 
-    blktab[sym_block, "valid"] = TRUE
+    blktab[sym_block, 0, "valid"] = TRUE
     dbg_print("sym", 3, sprintf("(scan__endlongdef) END => %d", sym_block))
     return sym_block
 }
@@ -4991,13 +5085,13 @@ function xeq__BLK_LONGDEF(longdef_block,
                                  curr_dstblk(), longdef_block, ppf__block_type(block_type)))
     dbg_print_block("sym", 7, longdef_block, "(xeq__BLK_LONGDEF) longdef_block")
     if ((block_type != BLK_LONGDEF) ||
-        (blktab[longdef_block, "valid"] != TRUE))
+        (blktab[longdef_block, 0, "valid"] != TRUE))
         error("(xeq__BLK_LONGDEF) Bad config")
 
-    name = blktab[longdef_block, "name"]
+    name = blktab[longdef_block, 0, "name"]
     assert_sym_okay_to_define(name)
 
-    body_block = blktab[longdef_block, "body_block"]
+    body_block = blktab[longdef_block, 0, "body_block"]
     dbg_print_block("sym", 3, body_block, "(xeq__BLK_LONGDEF) body_block")
     sym_store(name, blk_to_string(body_block))
     dbg_print("sym", 1, "(xeq__BLK_LONGDEF) END")
@@ -5007,8 +5101,8 @@ function xeq__BLK_LONGDEF(longdef_block,
 function ppf__longdef(longdef_block,
                       buf)
 {
-    return "@longdef " blktab[longdef_block, "name"] "\n" \
-            ppf__block(blktab[longdef_block, "body_block"]) "\n" \
+    return "@longdef " blktab[longdef_block, 0, "name"] "\n"      \
+            ppf__block(blktab[longdef_block, 0, "body_block"]) "\n" \
             "@endlong"
 }
 
@@ -5018,9 +5112,9 @@ function ppf__BLK_LONGDEF(longdef_block)
     return sprintf("  symbol      : '%s'\n" \
                    "  valid       : %s\n" \
                    "  body_block  : %d",
-                   blktab[longdef_block, "name"],
-                   ppf__bool(blktab[longdef_block, "valid"]),
-                   blktab[longdef_block, "body_block"])
+                   blktab[longdef_block, 0, "name"],
+                   ppf__bool(blktab[longdef_block, 0, "valid"]),
+                   blktab[longdef_block, 0, "body_block"])
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -5028,33 +5122,35 @@ function ppf__BLK_LONGDEF(longdef_block)
 
 #*****************************************************************************
 #
-#       @  M 2
+#       @  M 2 C T L
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
-#       @m2ctl 0                Clear debugging
-#       @m2ctl 1                Debug namespaces
-#       @m2ctl 2                Dump scan stack
-#       @m2ctl 3                Parse boolean expr from user
-#       @m2ctl 4 dsys level     Set debug level directly
+#       @m2ctl clear_debugging          Clear debugging
+#       @m2ctl dbg_namespace            Debug namespaces
+#       @m2ctl dump_scan_stack          Dump scan stack
+#       @m2ctl booltest                 Parse boolean expr from user
+#       @m2ctl set_dbg DSYS LEVEL       Set debug level directly
+#       @m2ctl dump_block BLOCK         Raw dump block #
+#       @m2ctl debug_ship_out
 #
 #*****************************************************************************
 
 # Undocumented - Reserved for internal use
 # @m2ctl                ARGS
 function xeq_cmd__m2ctl(name, cmdline,
-                        x, getstat, input, e, dsys, lev)
+                        getstat, input, e, dsys, lev, blk)
 {
     $0 = cmdline
     dbg_print("xeq", 1, sprintf("(xeq_cmd__m2ctl) START dstblk=%d, cmdline='%s'",
                                    curr_dstblk(), cmdline))
     if (NF == 0)
         error("Bad parameters:" $0)
-    x = int($1)
-    if (x == 0) {
+
+    if ($1 == "clear_debugging") {
         clear_debugging()
 
-    } else if (x == 1) {
+    } else if ($1 == "dbg_namespace") {
         # Debug namespaces
         dbg_set_level("for",       5)
         dbg_set_level("namespace", 5)
@@ -5062,10 +5158,14 @@ function xeq_cmd__m2ctl(name, cmdline,
         dbg_set_level("nam",       3)
         dbg_set_level("sym",       5)
 
-    } else if (x == 2) {
+    } else if ($1 == "dbg_ship_out") {
+        clear_debugging()
+        dbg_set_level("ship_out",   3)
+
+    } else if ($1 == "dump_scan_stack") {
         dump_scan_stack()
 
-    } else if (x == 3) {        # Interactively evaluate boolean expressions
+    } else if ($1 == "booltest") { # Interactively evaluate boolean expressions
         do {
             print_stderr("Enter line to parse as boolean expr (RETURN to end):")
             getstat = getline input < "/dev/tty"
@@ -5084,11 +5184,15 @@ function xeq_cmd__m2ctl(name, cmdline,
                 print_stderr(sprintf("(xeq_cmd__m2ctl) __bf=%d,__bnf=%d; FINAL ANSWER: %d == %s\n", __bf, __bnf, e, ppf__bool(e)))
         } while (TRUE)
 
-    } else if (x == 4) {        # Set __DBG__[dsys] level directly
-        dsys = $2               # Note, does not affect __DEBUG__
+    } else if ($1 == "set_dbg") { # Set __DBG__[dsys] level directly
+        dsys = $2                 # Note, does not affect __DEBUG__
         lev = $3
         print_stderr(sprintf("Setting __DBG__[%s] to %d", dsys, lev))
         dbg_set_level(dsys, lev)
+
+    } else if ($1 == "dump_block") {
+        blk = $2 + 0
+        blk_dump_block_raw(blk)
 
     } else
         error("Unrecognized parameter " $1) 
@@ -5122,16 +5226,16 @@ function scan__newcmd(                     name, newcmd_block, body_block, scans
         pname = substr(name, RSTART+1, RLENGTH-2)
         dbg_print("cmd", 5, sprintf("(scan__newcmd) Parameter %d : %s",
                                      p, pname))
-        blktab[newcmd_block, "param", p] = pname
+        blktab[newcmd_block, p, "param_name"] = pname
         name = substr(name, 1, RSTART-1) substr(name, RSTART+RLENGTH)
     }
     assert_cmd_okay_to_define(name)
 
-    blktab[newcmd_block, "name"] = name
-    blktab[newcmd_block, "body_block"] = body_block
-    blktab[newcmd_block, "dstblk"] = body_block
-    blktab[newcmd_block, "valid"] = FALSE
-    blktab[newcmd_block, "nparam"] = nparam
+    blktab[newcmd_block, 0, "name"] = name
+    blktab[newcmd_block, 0, "body_block"] = body_block
+    blktab[newcmd_block, 0, "dstblk"] = body_block
+    blktab[newcmd_block, 0, "valid"] = FALSE
+    blktab[newcmd_block, 0, "nparam"] = nparam
     dbg_print_block("cmd", 7, newcmd_block, "(scan__newcmd) newcmd_block")
     stk_push(__scan_stack, newcmd_block) # Push it on to the scan_stack
 
@@ -5153,7 +5257,7 @@ function scan__endcmd(                     newcmd_block)
     assert_scan_stack_okay(BLK_USER)
     newcmd_block = stk_pop(__scan_stack)
 
-    blktab[newcmd_block, "valid"] = TRUE
+    blktab[newcmd_block, 0, "valid"] = TRUE
     dbg_print("cmd", 3, sprintf("(scan__endcmd) END => %d", newcmd_block))
     dbg_print_block("scan", 7, newcmd_block, sprintf("newcmd block just scanned:"))
     return newcmd_block
@@ -5181,17 +5285,6 @@ function ship_out__user(cmdline,
     if (dstblk != TERMINAL)
         error(sprintf("(ship_out__user) dstblk is %d, not zero!", dstblk))
 
-    if ((stream = divnum()) > TERMINAL) {
-        dbg_print("ship_out", 3, sprintf("(ship_out__user) stream=%d", stream))
-        # Name is known to be a command, therefore its code must be in the symbol (?) table
-        sub(/^[ \t]*[^ \t]+[ \t]*/, "", cmdline)
-        dbg_print("ship_out", 3, sprintf("(ship_out__user) name='%s', cmdline now '%s'",
-                                         name, cmdline))
-        dbg_print("ship_out", 5, sprintf("(ship_out__user) END Appending user commandd %s to stream %d", name, stream))
-        blk_append(stream, SLOT_USER, cmdline)
-        return
-    }
-
     # dstblk is definitely zero, so execute the command
     dbg_print("ship_out", 3, sprintf("(ship_out__user) CALLING execute__user('%s', '%s')",
                                      name, cmdline))
@@ -5211,12 +5304,12 @@ function xeq__BLK_USER(newcmd_block,
                                  curr_dstblk(), newcmd_block, ppf__block_type(block_type)))
     dbg_print_block("cmd", 7, newcmd_block, "(xeq__BLK_USER) newcmd_block")
     if ((block_type != BLK_USER) ||
-        (blktab[newcmd_block, "valid"] != TRUE))
+        (blktab[newcmd_block, 0, "valid"] != TRUE))
         error("(xeq__BLK_USER) Bad config")
 
     # Instantiate command, but do not run.  "@newcmd FOO" is just declaring FOO.
     # @FOO{...} actually ships it out (and is done under ship_out/xeq_user).
-    name = blktab[newcmd_block, "name"]
+    name = blktab[newcmd_block, 0, "name"]
     dbg_print("cmd", 3, sprintf("(xeq__BLK_USER) name='%s', level=%d: TYPE_USER, value=%d",
                                  name, __namespace, newcmd_block))
     nam_ll_write(name, __namespace, TYPE_USER)
@@ -5253,7 +5346,7 @@ function execute__user(name, cmdline,
     user_block = cmd_ll_read(name, level)
 
     dbg_print_block("xeq", 7, user_block, "(execute__user) user_block")
-    dbg_print_block("xeq", 7, blktab[user_block, "body_block"], "(execute__user) body_block")
+    dbg_print_block("xeq", 7, blktab[user_block, 0, "body_block"], "(execute__user) body_block")
 
     # Check for cmd arguments
     narg = 0
@@ -5282,21 +5375,21 @@ function execute__user_body(user_block, args,
                                  curr_dstblk(), user_block, ppf__block_type(block_type)))
     dbg_print_block("cmd", 7, user_block, "(execute__user_body) user_block")
     if ((block_type != BLK_USER) ||
-        (blktab[user_block, "valid"] != TRUE))
+        (blktab[user_block, 0, "valid"] != TRUE))
         error("(execute__user_body) Bad config")
 
     # Always raise namespace level, even if nparam == 0
     # because user-mode might run @local
     new_level = raise_namespace()
-    body_block = blktab[user_block, "body_block"]
+    body_block = blktab[user_block, 0, "body_block"]
     dbg_print_block("cmd", 7, body_block, "(execute__user_body) body_block")
 
     # Instantiate parameters
-    for (i = 1; i <= blktab[user_block, "nparam"]; i++) {
-        p = blktab[user_block, "param", i]
+    for (i = 1; i <= blktab[user_block, 0, "nparam"]; i++) {
+        p = blktab[user_block, i, "param_name"]
         nam_ll_write(p, new_level, TYPE_SYMBOL)
         sym_ll_write(p, "", new_level, args[i])
-        #print_stderr("Setting param " p " to '" args[i] "'")
+        dbg_print("cmd", 6, sprintf("(execute__user_body) Setting param %s to '%s'", p, args[i]))
     }
 
     dbg_print("cmd", 5, sprintf("(execute__user_body) CALLING execute__block(%d)", body_block))
@@ -5319,22 +5412,22 @@ function ppf__BLK_USER(blknum,
                        param_desc, nparam, x)
 {
     param_desc = ""
-    nparam = blktab[blknum, "nparam"]
+    nparam = blktab[blknum, 0, "nparam"]
     if (nparam > 0 ) {
         param_desc = "  Parameters:\n"
         for (x = 1; x <= nparam; x++)
             param_desc = param_desc sprintf("  [%d]=%s\n",
-                                            x, blktab[blknum, "param", x])
+                                            x, blktab[blknum, x, "param_name"])
     }
     return sprintf("  name       : %s\n" \
                    "  valid      : %s\n" \
                    "  nparam     : %d\n" \
                    "  body_block : %d\n" \
                    "%s",
-                   blktab[blknum, "name"],
-                   ppf__bool(blktab[blknum, "valid"]),
+                   blktab[blknum, 0, "name"],
+                   ppf__bool(blktab[blknum, 0, "valid"]),
                    nparam,
-                   blktab[blknum, "body_block"],
+                   blktab[blknum, 0, "body_block"],
                    chomp(param_desc))
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
@@ -5430,8 +5523,8 @@ function xeq_cmd__readarray(name, cmdline,
 
     # create a new file scanner : dstblk = agg, mode=literal
     file_block = prep_file(filename)
-    blktab[file_block, "dstblk"] = agg_block
-    blktab[file_block, "atmode"] = MODE_AT_LITERAL
+    blktab[file_block, 0, "dstblk"] = agg_block
+    blktab[file_block, 0, "atmode"] = MODE_AT_LITERAL
     # Push scanner manually because prep_file doesn't do that
     dbg_print("scan", 7, sprintf("(xeq_cmd__readarray) Pushing file block %d (%s) onto scan_stack", file_block, filename))
     stk_push(__scan_stack, file_block)
@@ -5688,7 +5781,7 @@ function xeq_cmd__shell(name, cmdline,
     if (NF < 1)
         error("Bad parameters:" $0)
     save_line = $0
-    save_lineno = sym_ll_read("__LINE__", "", GLOBAL_NAMESPACE)
+    save_lineno = LINE()
     delim = $1
     if (NF == 1) {              # @shell DELIM
         sendto = default_shell()
@@ -5722,7 +5815,8 @@ function xeq_cmd__shell(name, cmdline,
     # Don't tell me how fragile this is, we're whistling past the graveyard
     # here.  But it suffices to run /bin/sh, which is enough for now.
     shell_cmdline = sprintf("%s < %s > %s", sendto, input_file, output_file)
-    sym_ll_write("__SHELL__", "", GLOBAL_NAMESPACE, system(shell_cmdline))
+    flush_stdout(SYNC_FORCE)     # force flush stdout
+    sym_ll_write("__SHELL_EXIT__", "", GLOBAL_NAMESPACE, system(shell_cmdline))
     while (TRUE) {
         getstat = getline line < output_file
         if (getstat == ERROR)
@@ -5761,8 +5855,8 @@ function xeq_cmd__typeout(name, cmdline,
         if (blk_type(scanner) == BLK_FILE) {
             dbg_print_block("scan", 7, scanner, "(xeq_cmd__typeout) scanner")
             dbg_print("scan", 5, sprintf("(xeq_cmd__typeout) Changing block %d file '%s' mode to Literal",
-                                         scanner, blktab[scanner, "filename"]))
-            blktab[scanner, "atmode"] = MODE_AT_LITERAL
+                                         scanner, blktab[scanner, 0, "filename"]))
+            blktab[scanner, 0, "atmode"] = MODE_AT_LITERAL
             return
         }
     }
@@ -5836,22 +5930,23 @@ function xeq_cmd__undefine(name, cmdline,
 #*****************************************************************************
 # @undivert             [N]
 function xeq_cmd__undivert(name, cmdline,
-                           i, stream, dst)
+                           i, stream)
 {
     $0 = cmdline
     dbg_print("divert", 1, sprintf("(xeq_cmd__undivert) START dstblk=%d, cmdline='%s'",
                                    curr_dstblk(), cmdline))
-    #dbg_print_block("ship_out", 7, curr_dstblk(), "(xeq_cmd__undivert) curr_dstblk()")
-    if (NF == 1)
+    dbg_print_block("divert", 8, curr_dstblk(), "(xeq_cmd__undivert) curr_dstblk()")
+    if (NF == 0)
         undivert_all()
     else {
-        i = 1
+        i = 0
         while (++i <= NF) {
             stream = dosubs($i)
             if (!integerp(stream))
                 error(sprintf("Value '%s' must be numeric:", stream) $0)
             if (stream > MAX_STREAM)
                 error("Bad parameters:" $0)
+            dbg_print("divert", 5, sprintf("(xeq_cmd__undivert) CALLING undivert(%d)", stream))
             undivert(stream)
         }
     }
@@ -5882,11 +5977,11 @@ function scan__while(                 name, while_block, body_block, scanstat)
     body_block = blk_new(BLK_AGG)
     dbg_print("while", 5, "(scan__while) New block # " body_block " type " ppf__block_type(blk_type(body_block)))
 
-    blktab[while_block, "condition"] = $0
-    blktab[while_block, "init_negate"] = (name == "@until")
-    blktab[while_block, "body_block"] = body_block
-    blktab[while_block, "dstblk"] = body_block
-    blktab[while_block, "valid"]      = FALSE
+    blktab[while_block, 0, "condition"] = $0
+    blktab[while_block, 0, "init_negate"] = (name == "@until")
+    blktab[while_block, 0, "body_block"] = body_block
+    blktab[while_block, 0, "dstblk"] = body_block
+    blktab[while_block, 0, "valid"]      = FALSE
     dbg_print_block("while", 7, while_block, "(scan__while) while_block")
     stk_push(__scan_stack, while_block) # Push it on to the scan_stack
 
@@ -5909,7 +6004,7 @@ function scan__endwhile(                    while_block)
     assert_scan_stack_okay(BLK_WHILE)
     while_block = stk_pop(__scan_stack)
 
-    blktab[while_block, "valid"] = TRUE
+    blktab[while_block, 0, "valid"] = TRUE
     return while_block
 }
 
@@ -5923,14 +6018,14 @@ function xeq__BLK_WHILE(while_block,
 
     dbg_print_block("while", 7, while_block, "(xeq__BLK_WHILE) while_block")
     if ((block_type != BLK_WHILE) || \
-        (blktab[while_block, "valid"] != TRUE))
+        (blktab[while_block, 0, "valid"] != TRUE))
         error("(xeq__BLK_WHILE) Bad config")
 
     # Evaluate condition, determine if TRUE/FALSE and also
     # which block to follow.  For now, always take TRUE path
-    body_block = blktab[while_block, "body_block"]
-    condition = blktab[while_block, "condition"]
-    negate = blktab[while_block, "init_negate"]
+    body_block = blktab[while_block, 0, "body_block"]
+    condition = blktab[while_block, 0, "condition"]
+    negate = blktab[while_block, 0, "init_negate"]
     condval = evaluate_boolean(condition, negate)
     dbg_print("while", 1, sprintf("(xeq__BLK_WHILE) Initial evaluate_boolean('%s') => %s", condition, ppf__bool(condval)))
     if (condval == ERROR)
@@ -5968,8 +6063,8 @@ function xeq__BLK_WHILE(while_block,
 function ppf__while(while_block,
                     buf)
 {
-    buf = "@while " blktab[while_block, "condition"] "\n" \
-          ppf__block(blktab[while_block, "body_block"]) "\n" \
+    buf = "@while " blktab[while_block, 0, "condition"] "\n" \
+          ppf__block(blktab[while_block, 0, "body_block"]) "\n" \
           "@endwhile"
     return buf
 }
@@ -5980,9 +6075,9 @@ function ppf__BLK_WHILE(blknum)
     return sprintf("  valid       : %s\n"       \
                    "  condition   : '%s'\n"     \
                    "  body_block  : %d",
-                   ppf__bool(blktab[blknum, "valid"]),
-                   blktab[blknum, "condition"],
-                   blktab[blknum, "body_block"])
+                   ppf__bool(blktab[blknum, 0, "valid"]),
+                   blktab[blknum, 0, "condition"],
+                   blktab[blknum, 0, "body_block"])
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -6398,10 +6493,10 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
         #  - If it's not a symbol, use its value as a boolean state.
         } else if (fn == "boolval") {
             if (nparam == 0)
-                # In a bid to spread a bit more chaos in the universe,
+                # In an effort to spread a bit more chaos in the universe,
                 # if you don't give an argument to boolval then you get
                 # True 50% of the time and False the other 50%.
-                r = sym_ll_read("__FMT__", rand() < 0.50) r # XXXXXX
+                r = sym_ll_read("__FMT__", rand() < 0.50) r
             else {
                 p = param[1 + off_by]
                 # Always accept your current representation of True or False
@@ -6684,10 +6779,11 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
                 #   | ++foo    |       -1 |      +1 |
                 #   | foo--    |       +1 |      -1 |
                 #   | foo++    |       +1 |      +1 |
-                if (pre_post == 0)
+                if (pre_post == 0) {
                     # normal call : insert current value with formatting
+                    #print_stderr(sprintf("fn='%s', Injecting '%s'", fn, seq_ll_read(fn)))
                     r = sprintf(seqtab[fn, "fmt"], seq_ll_read(fn)) r
-                else {
+                } else {
                     # Handle prefix xor postfix increment/decrement
                     if (pre_post == -1)    # prefix
                         if (inc_dec == -1) # decrement
@@ -6767,7 +6863,6 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     LOG10                = log(10)
     MAX_DBG_LEVEL        = 10
     MAX_PARAM            = 20
-    MAX_STREAM           = 9
     PI                   = atan2(0, -1)
     SEQ_DEFAULT_INCR     = 1
     SEQ_DEFAULT_INIT     = 0
@@ -6800,9 +6895,9 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     MODE_STREAMS_SHIP_OUT = "O" # diverted streams final disposition
 
     # When to flush standard output
-    SYNC_LINE = 2
-    SYNC_FILE = 1               # default
-    SYNC_EXIT = 0
+    SYNC_FORCE = 0              # only on request or end of job
+    SYNC_FILE  = 1              # at end of each processed file; default.
+    SYNC_LINE  = 2              # after every printed line
 
     # Tokens used in boolean expression evaluation
     TOK_AND       = "&&"
@@ -6916,7 +7011,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     # CMDS
     # Built-in commands
     # Also need to add entry in execute__command()  [search: DISPATCH]
-    split("append array debug decr default define divert dump dumpall" \
+    split("append array cleardivert debug decr default define divert dump dumpall" \
           " echo error exit ignore" \
           " include incr initialize input local m2ctl nextfile paste readfile" \
           " readarray readonly secho sequence sexit shell sinclude" \
@@ -7181,7 +7276,7 @@ function end_program(diverted_streams_final_disposition,
         undivert_all()
     }
 
-    flush_stdout(SYNC_EXIT)
+    flush_stdout(SYNC_FORCE)
     if (debugp())
         print_stderr("m2:END M2")
     exit __exit_code

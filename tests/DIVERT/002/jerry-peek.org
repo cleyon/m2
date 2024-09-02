@@ -1,0 +1,136 @@
+Jerry Peek wrote two articles on m4.  The second one, at:
+https://www.jpeek.com/articles/linuxmag/2005-03/
+
+has a good discussion of diversions.  It includes an example which he
+describes thusly: [an]
+
+    "HTML generator that outputs the text of each top-level
+    heading in two places: in a table of contents at the
+    start of the web page, and again, later, in the body
+    of the web page.  The table of contents includes links
+    to the actual headings later in the document, which will
+    have an anchor (an HTML id)."
+
+I ported his m4 example to m2.  I think it is interesting to compare the
+two versions.  Most changes I made are minor:
+
+- (Not really a change, but implementation choices.)  I used a
+  sequence to implement h1count rather than clumsier symbol arithmetic.
+  I also removed leading underscores from his user-defined names.
+
+- Silently changed blank lines - which probably shouldn't (?) produce
+  output - into comment lines.
+
+- Most significantly, worked around an m2 limitation: it cannot handle
+  multi-line command parameters, and Peek's second paragraph example has
+  an embedded newline.  I closed it up into a single line.
+
+Peek's "Listing Two": m4 macro calls: the htmltext.m4 file
+
+#+begin_src m4
+_h1(`First heading')
+_p(`The first paragraph.')
+_h1(`Second heading')
+_p(`The second paragraph.
+Yadda yadda yadda')
+_h1(`Third heading')
+_p(`The third paragraph.')
+#+end_src
+
+This corresponds to my htmltext.cmds file.  The similarities are obvious.
+
+#+begin_example
+@h1{First heading}
+@p{The first paragraph.}
+@h1{Second heading}
+@p{The second paragraph.  Yadda yadda yadda}
+@h1{Third heading}
+@p{The third paragraph.}
+#+end_example
+
+More interesting is "Listing Four": The m4 code that makes the HTML in
+Listing Three.  (Listing Three is the HTML output included at the bottom
+of this file.)  This file is unnamed, but you'll see that it includes
+htmltext.m4.
+
+#+begin_src m4
+define(`_h1count', 0)
+
+define(`_h1', `divert(9)
+define(`_h1count', incr(_h1count))
+<li><a href=“`#'H1`_'_h1count”>$1</a></li>
+divert(1)
+<h1 id=“H1`_'_h1count”>$1</h1>
+divert')
+
+define(`_p', `divert(1)
+<p>
+$1
+</p>
+divert')
+
+include(`htmltext.m4')
+
+<strong>Table of contents:</strong>
+<ol>
+undivert(9)
+</ol>
+undivert(1)
+#+end_src
+
+And compare with htmltext.m2
+
+#+begin_example
+@sequence h1count
+@@
+@newcmd h1{h1_arg_txt}
+@divert 9
+@sequence h1count next
+<li><a href="#H1_@h1count@">@h1_arg_txt@</a></li>
+@divert 1
+<h1 id="H1_@h1count@">@h1_arg_txt@</h1>
+@divert
+@endcmd
+@@
+@newcmd p{p_arg_txt}
+@divert 1
+<p>
+@p_arg_txt@
+</p>
+@divert
+@endcmd
+@@
+@include htmltext.cmds
+@@
+<strong>Table of contents:</strong>
+<ol>
+@undivert 9
+</ol>
+@undivert 1
+#+end_example
+
+Here is Peek's Listing 3: HTML output from the htmltext.m4 file.  m2
+produces identical output (except for the previously mentioned newline
+in the second paragraph).
+
+#+begin_src html
+<strong>Table of contents:</strong>
+<ol>
+<li><a href="#H1_1">First heading</a></li>
+<li><a href="#H1_2">Second heading</a></li>
+<li><a href="#H1_3">Third heading</a></li>
+</ol>
+<h1 id="H1_1">First heading</h1>
+<p>
+The first paragraph.
+</p>
+<h1 id="H1_2">Second heading</h1>
+<p>
+The second paragraph.
+Yadda yadda yadda
+</p>
+<h1 id="H1_3">Third heading</h1>
+<p>
+The third paragraph.
+</p>
+#+end_src

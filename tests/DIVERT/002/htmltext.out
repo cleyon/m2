@@ -1,0 +1,18 @@
+<strong>Table of contents:</strong>
+<ol>
+<li><a href="#H1_1">First heading</a></li>
+<li><a href="#H1_2">Second heading</a></li>
+<li><a href="#H1_3">Third heading</a></li>
+</ol>
+<h1 id="H1_1">First heading</h1>
+<p>
+The first paragraph.
+</p>
+<h1 id="H1_2">Second heading</h1>
+<p>
+The second paragraph.   Yadda yadda yadda
+</p>
+<h1 id="H1_3">Third heading</h1>
+<p>
+The third paragraph.
+</p>

@@ -67,58 +67,85 @@ Declare ARR as an array
 .It @break
 Interrupt execution of enclosing loop.
 @break is only valid inside a @for, @foreach, or @while block.
-.It @case NAME
+.It @case NAME [PREAMBLE] [@of TEXT ...] [@otherwise ...] @endcase
 Evaluate value of NAME, comparing it with
-.It \ \ \ @of TEXT
-each successive @of TEXT.  If none match,
-.It \ \ \ @otherwise
-use text from @otherwise block if present.
-.It @endcase
-End @case structure.  Also @esac
+each successive @of TEXT.
+If a matching @of branch is found, execute the preamble (if any) and the
+of-branch text and commands.
+If none match, use text from @otherwise block if present.
+Execution of the @otherwise block does
+.Em not
+execute the preamble.
+(The purpose of the preamble is to provide "boiler-plate" header text for
+known cases.
+The text and commands of the unexpected (@otherwise) instance are expected
+to compensate for the lack of a preamble.)
+.It @cleardivert [N ...]
+Clear stream(s) N...
+Similar to @undivert, if no arguments are provided then all streams are cleared.
+See the
+.Sx Streams and Diversions
+section.
 .It @comment [TEXT]
 Comment; ignore line.  Also @@, @c, @;, and @#
 .It @continue
 Continue next iteration of enclosing loop.
 @continue is only valid inside a @for, @foreach, or @while block.
 .It @debug [TEXT]
-If debugging, send TEXT to standard error
+If debugging, send TEXT to standard error.
 .It @decr NAME [N]
-Subtract N (1) from an already defined NAME
+Subtract N (default 1) from an already defined NAME.
 .It @default NAME VAL
-Like @define, but no-op if NAME already defined
+Like @define, but no-op if NAME already defined.
 .It @define NAME TEXT
-Set NAME to TEXT
+Set NAME to TEXT.
 .It @divert [N]
-Divert output to stream N (default 0 means stdout)
+Divert output to stream N.  Default 0 means standard out.
+See the
+.Sx Streams and Diversions
+section.
 .It @dump WHAT [FILE]
-Output symbol names & definitions to FILE (stderr)
+Output symbol names & definitions to FILE (stderr).
 .It @dumpall WHAT [FILE]
-Like @dump but include System symbols
+Like @dump but include System symbols.
+.It @else
+Switch to the alternate condition branch of an @if block.
+Only one @else statement is allowed per block.
+.It @endcase
+Indicate the end of a @case structure.
+Also called @esac thanks to Algol-60.
+.It @endcmd
+Indicate the end of a @newcmd definition.
+.It @endif
+Indicate the end of an @if (or @unless) condition block.
+Also called @fi to keep the dream alive.
+.It @endlongdef
+Indicate the end of a multi-line @longdef.
+.It @endwhile
+Indicate the end of a @while or @until loop.
 .It @error [TEXT]
 Send TEXT to standard error; exit code 2
 .It @exit [CODE]
 Immediately stop parsing; exit CODE (default 0)
 .Brq #S
-.It @for VAR START END [INCR]
-.It @foreach VAR ARRAY
+.It @for VAR START END [INCR] ... @next VAR
 Execute a loop with VAR taking on successive
-.It \ \ \ <...>
-values, or keys to an array.
-.It @next VAR
-Repeat next iteration of loop.
-.It @if NAME
-Include subsequent text if NAME is True
-.It @if EXPR
+integer values specified by START and END.
+Default INCR is 1.
+.It @foreach VAR ARRAY ... @next VAR
+Execute a loop with VAR taking on successive
+values of keys to an array.
+NOTE: Different Awk implementations may return keys in differing order.
+.It @if EXPR ... [@else ...] @endif
 Include subsequent text if boolean expression is True.
+If EXR is a simple NAME, check if NAME is True.
 See
 .Sx Boolean expressions
 below.
-.It @if(n)def NAME
-Include text if NAME is/is not defined
-.It @else
-Switch to the other branch of an @if statement
-.It @endif
-Terminate @if or @unless.  Also @fi
+.It @ifdef NAME ... @endif
+Include text if NAME is defined.
+.It @ifndef NAME ... @endif
+Include text if NAME is not defined.
 .It @ignore DELIM
 Ignore input until line that begins with DELIM
 .It @include FILE
@@ -132,16 +159,22 @@ Like @define, but abort if NAME already defined
 Read a single line from keyboard and define NAME
 .It @local NAME
 Declare NAME as a symbol local to the current namespace
-.It @longdef NAME
+.It @longdef NAME ... @endlongdef
 Set NAME to <...> (all lines until @endlongdef)
-.It \ \ \ <...>
-.It @endlongdef
-.It @newcmd NAME
+.It @newcmd NAME ... @endcmd
 Create a user command NAME (lines until @endcmd)
-.It \ \ \ <...>
-.It @endcmd
+.It @next VAR
+Continue execution of next iteration of enclosing @for or @foreach loop.
 .It @nextfile
 Ignore remainder of file, continue processing
+.It @of TEXT
+Begin a new branch of an enclosing @case structure
+matching TEXT at run time.
+Every branch's TEXT must be unique.
+.It @otherwise
+Begin a new branch of an enclosing @case structure
+which is executed if no @of branch triggers.
+Only only one @otherwise branch is permitted per @case.
 .It @paste FILE
 Insert FILE contents literally, no macros
 .Brq #S
@@ -157,11 +190,14 @@ Make NAME unchangeable -- cannot be undone
 Cease execution of a user command.
 @return is only valid inside a @newcmd definition.
 .It @sequence ID ACT [N]
-Create and manage sequences
+Create and manage sequences.
+See the
+.Sx Sequences
+section.
 .It @shell DELIM [PROG]
 Evaluate input until DELIM and send raw data to PROG.
 Output stream is captured; shell exit status will be stored in
-.Va __SHELL__ .
+.Va __SHELL_EXIT__ .
 If PROG is not specified, the value of symbol
 .Va M2_SHELL
 will be used if defined; if not, the value of environment variable
@@ -171,23 +207,28 @@ If also not defined, the value of
 .Va __PROG__[sh]
 will be used.
 .It @typeout
-Print remainder of input file literally, no macros
+Print remainder of input file literally, no macro processing will be done.
 .It @undefine NAME
 Remove definition of NAME
-.It @undivert [N]
-Inject stream N (def all) into current stream
-.It @unless NAME
-Include subsequent text if NAME == 0 (or undefined)
-.It @until EXPR
+.It @undivert [N...]
+Inject stream N... (default all) into current stream.
+See the
+.Sx Streams and Diversions
+section.
+.It @unless EXPR ... [@else ...] @endif
+Include subsequent text if EXPR is False.
+If EXPR is a simple NAME, check if NAME == 0 (or undefined).
+See
+.Sx Boolean expressions
+below.
+.It @until EXPR ... @endwhile
 Repeatedly evaluate input lines while boolean expression is False
 and stop when it becomes True.
 .It @warn [TEXT]
 Send TEXT to standard error; continue.  Also called @echo, @stderr
-.It @while EXPR
+.It @while EXPR ... @endwhile
 Repeatedly evaluate input lines while boolean expression is True
 and stop when it becomes False.
-.It \ \ \ <...>
-.It @endwhile
 .El
 .Pp
 Short macros can be defined on the command line by using the form
@@ -436,7 +477,7 @@ m2 process id
 Security level (0, 1, or 2).  See
 .Sx SECURITY CONSIDERATIONS
 for further information.
-.It __SHELL__
+.It __SHELL_EXIT__
 Exit status of most recent @shell command
 .It __STRICT__[bool]
 True if variables must be defined (def True)

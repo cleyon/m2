@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-09-02 02:50:09 cleyon>
+#  Time-stamp:  <2024-09-02 15:43:56 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -778,7 +778,7 @@ function read_lines_until(regexp, dstblk,
         }
 
         if (dstblk > 0)
-            blk_append(dstblk, SLOT_TEXT, $0)
+            blk_append(dstblk, OBJ_TEXT, $0)
     }
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
@@ -1038,9 +1038,9 @@ function blk_append(blknum, slot_type, value,
         error(sprintf("(blk_append) Block %d has type %s, not AGG",
                       blknum, ppf__block_type(blk_type(blknum))))
 
-    if (slot_type != SLOT_CMD  && slot_type != SLOT_BLKNUM &&
-        slot_type != SLOT_TEXT && slot_type != SLOT_USER)
-        error(sprintf("(blk_append) Argument has bad type %s; should be SLOT_{CMD,BLKNUM,TEXT,USER}", ppf__block_type(slot_type)))
+    if (slot_type != OBJ_CMD  && slot_type != OBJ_BLKNUM &&
+        slot_type != OBJ_TEXT && slot_type != OBJ_USER)
+        error(sprintf("(blk_append) Argument has bad type %s; should be OBJ_{CMD,BLKNUM,TEXT,USER}", ppf__block_type(slot_type)))
 
     slot = ++blktab[blknum, 0, "count"]
     dbg_print("ship_out", 3,
@@ -1117,34 +1117,6 @@ function ppf__block_type(block_type)
 }
 
 
-function ship_out__block(blknum,
-                         dstblk, stream)
-{
-    dstblk = curr_dstblk()
-    dbg_print("ship_out", 3, sprintf("(ship_out__block) START dstblk=%d, blknum=%d",
-                                     dstblk, blknum))
-
-    if (dstblk < 0) {
-        dbg_print("ship_out", 3, "(ship_out__block) END because dstblk <0")
-        return
-    }
-    if (dstblk > MAX_STREAM) {
-        dbg_print("ship_out", 5, sprintf("(ship_out__block) END Appending block %d to block %d", blknum, dstblk))
-        blk_append(dstblk, SLOT_BLKNUM, blknum)
-        return
-    }
-
-    if (dstblk != TERMINAL)
-        error(sprintf("(ship_out__block) dstblk is %d, not zero!", dstblk))
-
-    # dstblk is zero, so block must be executed
-    dbg_print("ship_out", 5, sprintf("(ship_out__block) CALLING execute__block(%d)", blknum))
-    execute__block(blknum)
-    dbg_print("ship_out", 5, sprintf("(ship_out__block) RETURNED FROM execute__block"))
-    dbg_print("ship_out", 3, sprintf("(ship_out__block) END"))
-}
-
-
 function ppf__block(blknum,
                     block_type, buf)
 {
@@ -1197,7 +1169,6 @@ function execute__block(blknum,
     block_type = blk_type(blknum)
     dbg_print("xeq", 3, sprintf("(execute__block) START blknum=%d, type=%s",
                                 blknum, ppf__block_type(block_type)))
-
     if (__xeq_ctl != XEQ_NORMAL) {
         dbg_print("xeq", 3, "(execute__block) NOP due to __xeq_ctl=" __xeq_ctl)
         return
@@ -1237,28 +1208,10 @@ function xeq__BLK_AGG(agg_block,
         value = blk_ll_slot_value(agg_block, i)
         dbg_print("xeq", 3, sprintf("(xeq__BLK_AGG) LOOP; dstblk=%d, agg_block=%d, slot=%d, slot_type=%s, value='%s'",
                                     curr_dstblk(), agg_block, i, ppf__block_type(slot_type), value))
-        if (slot_type == SLOT_BLKNUM) {
-            dbg_print("xeq", 3, sprintf("(xeq__BLK_AGG) CALLING ship_out__block(%d)", value+0))
-            ship_out__block(value+0)
-            dbg_print("xeq", 3, "(xeq__BLK_AGG) RETURNED FROM ship_out__block()")
 
-        } else if (slot_type == SLOT_CMD) {
-            dbg_print("xeq", 3, sprintf("(xeq__BLK_AGG) CALLING ship_out__command('%s')", value))
-            ship_out__command(value)
-            dbg_print("xeq", 3, "(xeq__BLK_AGG) RETURNED FROM ship_out__command()")
-
-        } else if (slot_type == SLOT_TEXT) {
-            dbg_print("xeq", 3, sprintf("(xeq__BLK_AGG) CALLING ship_out__text('%s')", value))
-            ship_out__text(value)
-            dbg_print("xeq", 3, "(xeq__BLK_AGG) RETURNED FROM ship_out__text()")
-
-        } else if (slot_type == SLOT_USER) {
-            dbg_print("xeq", 3, sprintf("(xeq__BLK_AGG) CALLING ship_out__user('%s')", value))
-            ship_out__user(value)
-            dbg_print("xeq", 3, "(xeq__BLK_AGG) RETURNED FROM ship_out__user()")
-
-        } else
-            error(sprintf("(xeq__BLK_AGG) Bad slot type %s", slot_type))
+        dbg_print("xeq", 3, sprintf("(xeq__BLK_AGG) CALLING ship_out(%s, '%s')", slot_type, value))
+        ship_out(slot_type, value)
+        dbg_print("xeq", 3, "(xeq__BLK_AGG) RETURNED FROM ship_out()")
     }
 }
 
@@ -1275,11 +1228,11 @@ function ppf__agg(agg_block,
         slot_type = blk_ll_slot_type(agg_block, i)
         value = blk_ll_slot_value(agg_block, i)
 
-        if (slot_type == SLOT_BLKNUM)
+        if (slot_type == OBJ_BLKNUM)
             buf = buf ppf__block(value) "\n"
-        else if (slot_type == SLOT_CMD  ||
-                 slot_type == SLOT_TEXT ||
-                 slot_type == SLOT_USER) {
+        else if (slot_type == OBJ_CMD  ||
+                 slot_type == OBJ_TEXT ||
+                 slot_type == OBJ_USER) {
             buf = buf value "\n"
         } else
             error(sprintf("(ppf__agg) Bad slot type %s", slot_type))
@@ -1406,47 +1359,15 @@ function cmd_ll_write(name, level, user_block)
 }
 
 
-function ship_out__command(cmdline,
-                           dstblk, stream, name, dsc)
-{
-    dstblk = curr_dstblk()
-    dbg_print("ship_out", 3, sprintf("(ship_out__command) START dstblk=%d, cmdline='%s'", dstblk, cmdline))
-    name = extract_cmd_name(cmdline)
-
-    if (dstblk < 0) {
-        dbg_print("ship_out", 3, "(ship_out__command) END, because dstblk <0")
-        return
-    }
-    if (dstblk > MAX_STREAM) {
-        # Block
-        dbg_print("ship_out", 5, sprintf("(ship_out__command) END Appending command %s to block %d", name, dstblk))
-        blk_append(dstblk, SLOT_CMD, cmdline)
-        return
-    }
-    if (dstblk != TERMINAL)
-        error(sprintf("(ship_out_command) dstblk is %d, not zero!", dstblk))
-
-    # dstblk is definitely zero, so execute the command.  Don't care about DIVNUM.
-    sub(/^[ \t]*[^ \t]+[ \t]*/, "", cmdline)
-    dsc = dosubs(cmdline)
-    dbg_print("ship_out", 3, sprintf("(ship_out__command) CALLING execute__command('%s', '%s')",
-                                     name, dsc))
-    execute__command(name, dsc) # dosubs(cmdline))
-    dbg_print("ship_out", 3, sprintf("(ship_out__command) RETURNED FROM execute__command('%s', ...)",
-                                     name))
-    dbg_print("ship_out", 3, sprintf("(ship_out__command) END"))
-}
-
-
 function execute__command(name, cmdline,
                           old_level)
 {
+    dbg_print("xeq", 3, sprintf("(execute__command) START name='%s', cmdline='%s'",
+                                name, cmdline))
     if (__xeq_ctl != XEQ_NORMAL) {
         dbg_print("xeq", 3, "(execute__command) NOP due to __xeq_ctl=" __xeq_ctl)
         return
     }
-    dbg_print("xeq", 3, sprintf("(execute__command) START name='%s', cmdline='%s'",
-                                name, cmdline))
 
     old_level = __namespace
 
@@ -1684,10 +1605,10 @@ function scan(              code, terminator, readstat, name, retval, new_block,
 
         # Maybe short-circuit and ship line out now
         if (curr_atmode() == MODE_AT_LITERAL || index($0, "@") == IDX_NOT_FOUND) {
-            dbg_print("scan", 3, sprintf("(scan) [%s, short circuit] CALLING ship_out__text('%s')",
+            dbg_print("scan", 3, sprintf("(scan) [%s, short circuit] CALLING ship_out(OBJ_TEXT, '%s')",
                                          scanner_label, $0))
-            ship_out__text($0)
-            dbg_print("scan", 3, "(scan) [" scanner_label ", short circuit] RETURNED FROM ship_out__text()")
+            ship_out(OBJ_TEXT, $0)
+            dbg_print("scan", 3, "(scan) [" scanner_label ", short circuit] RETURNED FROM ship_out()")
             continue           # text shipped out, continue to next line
         }
 
@@ -1741,18 +1662,18 @@ function scan(              code, terminator, readstat, name, retval, new_block,
                         }
                         if (! found)
                             error("@break/@continue: Did not find a @for or @while loop")
-                        dbg_print("scan", 3, sprintf("(scan) [%s] CALLING ship_out__command('%s')", scanner_label, $0))
-                        ship_out__command($0)
-                        dbg_print("scan", 3, "(scan) [" scanner_label "] RETURNED FROM ship_out__command()")
+                        dbg_print("scan", 3, sprintf("(scan) [%s] CALLING ship_out(OBJ_CMD, '%s')", scanner_label, $0))
+                        ship_out(OBJ_CMD, $0)
+                        dbg_print("scan", 3, "(scan) [" scanner_label "] RETURNED FROM ship_out()")
 
                     } else if (name == "case") {
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__case(dstblk=" curr_dstblk() ")"))
                         raise_namespace()
                         new_block = scan__case()
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__case() : new_block => " new_block))
-                        dbg_print("scan", 5, sprintf("(scan) [" scanner_label "] CALLING ship_out__block(%d)", new_block))
-                        ship_out__block(new_block)
-                        dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM ship_out__block()"))
+                        dbg_print("scan", 5, sprintf("(scan) [" scanner_label "] CALLING ship_out(OBJ_BLKNUM, %d)", new_block))
+                        ship_out(OBJ_BLKNUM, new_block)
+                        dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM ship_out()"))
 
                     } else if (name == "dump!") {
                         xeq_cmd__dump("dump!", "WHAT?")
@@ -1844,35 +1765,35 @@ function scan(              code, terminator, readstat, name, retval, new_block,
                         raise_namespace()
                         new_block = scan__for()
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__for() : new_block is " new_block))
-                        dbg_print("scan", 5, sprintf("(scan) [" scanner_label "] CALLING ship_out__block(%d)", new_block))
-                        ship_out__block(new_block)
-                        dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM ship_out__block()"))
+                        dbg_print("scan", 5, sprintf("(scan) [" scanner_label "] CALLING ship_out(OBJ_BLKNUM, %d)", new_block))
+                        ship_out(OBJ_BLKNUM, new_block)
+                        dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM ship_out()"))
 
                     } else if (name == "if" || name == "unless" || name ~ /ifn?def/) {
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__if(dstblk=" curr_dstblk() ")"))
                         raise_namespace()
                         new_block = scan__if()
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__if() : new_block => " new_block))
-                        dbg_print("scan", 5, sprintf("(scan) [" scanner_label "] CALLING ship_out__block(%d)", new_block))
-                        ship_out__block(new_block)
-                        dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM ship_out__block()"))
+                        dbg_print("scan", 5, sprintf("(scan) [" scanner_label "] CALLING ship_out(OBJ_BLKNUM, %d)", new_block))
+                        ship_out(OBJ_BLKNUM, new_block)
+                        dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM ship_out()"))
 
                     } else if (name == "longdef") {
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__longdef(dstblk=" curr_dstblk() ")"))
                         new_block = scan__longdef()
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__longdef() : new_block => " new_block))
-                        dbg_print("scan", 5, sprintf("(scan) [" scanner_label "] CALLING ship_out__block(%d)", new_block))
-                        ship_out__block(new_block)
-                        dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM ship_out__block()"))
+                        dbg_print("scan", 5, sprintf("(scan) [" scanner_label "] CALLING ship_out(OBJ_BLKNUM, %d)", new_block))
+                        ship_out(OBJ_BLKNUM, new_block)
+                        dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM ship_out()"))
 
                     } else if (name == "newcmd") {
                         raise_namespace()
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__newcmd(dstblk=" curr_dstblk() ")"))
                         new_block = scan__newcmd()
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__newcmd() : new_block => " new_block))
-                        dbg_print("scan", 5, sprintf("(scan) [" scanner_label "] CALLING ship_out__block(%d)", new_block))
-                        ship_out__block(new_block)
-                        dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM ship_out__block()"))
+                        dbg_print("scan", 5, sprintf("(scan) [" scanner_label "] CALLING ship_out(OBJ_BLKNUM, %d)", new_block))
+                        ship_out(OBJ_BLKNUM, new_block)
+                        dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM ship_out()"))
 
                     } else if (name == "next") {
                         dbg_print("scan", 5, sprintf("(scan) [%s] dstblk=%d; CALLING scan__next()",
@@ -1911,18 +1832,18 @@ function scan(              code, terminator, readstat, name, retval, new_block,
                         }
                         if (! found)
                             error("@return: Not executing a user command")
-                        dbg_print("scan", 3, sprintf("(scan) [%s] CALLING ship_out__command('%s')", scanner_label, $0))
-                        ship_out__command($0)
-                        dbg_print("scan", 3, "(scan) [" scanner_label "] RETURNED FROM ship_out__command()")
+                        dbg_print("scan", 3, sprintf("(scan) [%s] CALLING ship_out(OBJ_CMD, '%s')", scanner_label, $0))
+                        ship_out(OBJ_CMD, $0)
+                        dbg_print("scan", 3, "(scan) [" scanner_label "] RETURNED FROM ship_out()")
 
                     } else if (name == "while" || name == "until") {
                         raise_namespace()
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__while(dstblk=" curr_dstblk() ")"))
                         new_block = scan__while()
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__while() : new_block => " new_block))
-                        dbg_print("scan", 5, sprintf("(scan) [" scanner_label "] CALLING ship_out__block(%d)", new_block))
-                        ship_out__block(new_block)
-                        dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM ship_out__block()"))
+                        dbg_print("scan", 5, sprintf("(scan) [" scanner_label "] CALLING ship_out(OBJ_BLKNUM, %d)", new_block))
+                        ship_out(OBJ_BLKNUM, new_block)
+                        dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM ship_out()"))
 
                     } else
                         error("(scan) [" scanner_label "] Found immediate command " name " but no handler")
@@ -1930,9 +1851,9 @@ function scan(              code, terminator, readstat, name, retval, new_block,
                 } else {
                     # It's a non-immediate built-in command -- ship it
                     # out as a command to be executed later.
-                    dbg_print("scan", 3, sprintf("(scan) [%s] CALLING ship_out__command('%s')", scanner_label, $0))
-                    ship_out__command($0)
-                    dbg_print("scan", 3, "(scan) [" scanner_label "] RETURNED FROM ship_out__command()")
+                    dbg_print("scan", 3, sprintf("(scan) [%s] CALLING ship_out(OBJ_CMD, '%s')", scanner_label, $0))
+                    ship_out(OBJ_CMD, $0)
+                    dbg_print("scan", 3, "(scan) [" scanner_label "] RETURNED FROM ship_out()")
                 }
                 continue
             } else {
@@ -1946,9 +1867,9 @@ function scan(              code, terminator, readstat, name, retval, new_block,
                     # But it's not an ERROR, so something was found at "level".
                     # See if it's a user command and ship it out if so.
                     if (flag_1true_p((code = nam_ll_read(name, level)), TYPE_USER)) {
-                        dbg_print("scan", 3, sprintf("(scan) [%s] CALLING ship_out__user('%s')", scanner_label, $0))
-                        ship_out__user($0)
-                        dbg_print("scan", 3, "(scan) [" scanner_label "] RETURNED FROM ship_out__user()")
+                        dbg_print("scan", 3, sprintf("(scan) [%s] CALLING ship_out(OBJ_USER, '%s')", scanner_label, $0))
+                        ship_out(OBJ_USER, $0)
+                        dbg_print("scan", 3, "(scan) [" scanner_label "] RETURNED FROM ship_out()")
                         continue
                     }
                 }
@@ -1956,9 +1877,9 @@ function scan(              code, terminator, readstat, name, retval, new_block,
             # It's okay to reach here with no actions taken.  In this
             # case, just process the line as normal text.
         }
-        dbg_print("scan", 3, sprintf("(scan) [%s] CALLING ship_out__text('%s')", scanner_label, $0))
-        ship_out__text($0)
-        dbg_print("scan", 3, "(scan) [" scanner_label "] RETURNED FROM ship_out__text()")
+        dbg_print("scan", 3, sprintf("(scan) [%s] CALLING ship_out(OBJ_TEXT, '%s')", scanner_label, $0))
+        ship_out(OBJ_TEXT, $0)
+        dbg_print("scan", 3, "(scan) [" scanner_label "] RETURNED FROM ship_out()")
     } # continue loop again, reading next line
     dbg_print("scan", 5, "(scan) END => " ppf__bool(retval))
     return retval
@@ -2552,22 +2473,12 @@ function undivert(stream,
         error(sprintf("(undivert) Block %d has type %s, not AGG",
                       stream, ppf__block_type(blk_type(stream))))
     if ((count = blktab[stream, 0, "count"]) > 0) {
-        # Original code just did "ship_out__block(stream)" here.  But
-        # this is not sufficient because of the requirement to clear the
-        # just undiverted stream.  Undivert streams must be cleared
-        # immediately because:
-        # 1. ship_out__block may not process the block (if dstblk not
-        #    TERMINAL) for a while, likely after we need to clear stream.
-        # 2. If we keep the block around waiting, then
+        # It is required to clear the stream immediately after undiverting.
+        # This is to prevent
         #        @undivert N
         #        @undivert N
-        #    produces double output which it's not supposed to do.
-        #
-        # The solution is to move each slot manually to the target
-        # stream, then clear the original diversion.
-        # dbg_print("divert", 3, sprintf("(undivert) CALLING ship_out__block(%d)", stream))
-        # ship_out__block(stream)
-        # dbg_print("divert", 3, "(undivert) RETURNED FROM ship_out__block()")
+        # from producing double output.  Move each slot manually to the
+        # target stream, then clear the original diversion.
         if (dstblk == TERMINAL)
             execute__block(stream)
         else
@@ -2890,8 +2801,8 @@ function sym_defined_p(sym,
         count = blktab[agg_block, 0, "count"]+0
         if (key >= 1 && key <= count) {
             # Make sure slot holds text, which it pretty much has to
-            if (blk_ll_slot_type(agg_block, key) != SLOT_TEXT)
-                error(sprintf("(sym_defined_p) Block # %d slot %d is not SLOT_TEXT", agg_block, key))
+            if (blk_ll_slot_type(agg_block, key) != OBJ_TEXT)
+                error(sprintf("(sym_defined_p) Block # %d slot %d is not OBJ_TEXT", agg_block, key))
             dbg_print("sym", 2, sprintf("(sym_defined_p) END sym='%s', level=%d => %s", sym, level, ppf__bool(TRUE)))
             return TRUE
         }
@@ -3185,8 +3096,8 @@ function sym_fetch(sym,
         count = blktab[agg_block, 0, "count"]+0
         if (key >= 1 && key <= count) {
             # Make sure slot holds text, which it pretty much has to
-            if (blk_ll_slot_type(agg_block, key) != SLOT_TEXT)
-                error(sprintf("(sym_fetch) Block # %d slot %d is not SLOT_TEXT", agg_block, key))
+            if (blk_ll_slot_type(agg_block, key) != OBJ_TEXT)
+                error(sprintf("(sym_fetch) Block # %d slot %d is not OBJ_TEXT", agg_block, key))
             val = blk_ll_slot_value(agg_block, key)
         } else
             error(sprintf("(sym_fetch) Out of bounds"))
@@ -3367,52 +3278,23 @@ function assert_sym_valid_name(sym)
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
 #*****************************************************************************
-function ship_out__text(text,
-                        dstblk, stream, s)
+function execute__text(text,
+                       stream)
 {
-    dstblk = curr_dstblk()
-    dbg_print("ship_out", 3, sprintf("(ship_out__text) START dstblk=%d, mode=%s, text='%s'",
-                                     dstblk, ppf__mode(curr_atmode()), text))
-
-    if (dstblk < 0) {
-        dbg_print("ship_out", 3, "(ship_out__text) END, because dstblk <0")
-        return
-    }
-    if (dstblk > MAX_STREAM) {
-        # Block
-        dbg_print("ship_out", 5, sprintf("(ship_out__text) END Appending text to block %d", dstblk))
-        blk_append(dstblk, SLOT_TEXT, text)
-        return
-    }
-    if (dstblk != TERMINAL)
-        error(sprintf("(ship_out__text) dstblk is %d, not zero!", dstblk))
-
-    # At this point, the output block is at or below the MAX_STREAM
-    # threshold, so engage macro processing/substitution if appropriate.
-    if (curr_atmode() == MODE_AT_PROCESS)
-        text = dosubs(text)
-
-    if ((stream = DIVNUM()) > TERMINAL) {
-        dbg_print("ship_out", 5, sprintf("(ship_out__text) END Appending text to stream %d", stream))
-        blk_append(stream, SLOT_TEXT, text)
-        return
-    }
-
-    # dstblk is definitely zero, so text must be executed (printed)
-    dbg_print("ship_out", 5, sprintf("(ship_out__text) CALLING execute__text()"))
-    execute__text(text)
-    dbg_print("ship_out", 5, sprintf("(ship_out__text) RETURNED FROM execute__text()"))
-    dbg_print("ship_out", 3, sprintf("(ship_out__text) END"))
-}
-
-
-function execute__text(text)
-{
+    dbg_print("xeq", 3, sprintf("(execute__text) START; text='%s'", text))
     if (__xeq_ctl != XEQ_NORMAL) {
         dbg_print("xeq", 3, "(execute__text) NOP due to __xeq_ctl=" __xeq_ctl)
         return
     }
-    dbg_print("xeq", 3, sprintf("(execute__text) START; text='%s'", text))
+
+    if (curr_atmode() == MODE_AT_PROCESS)
+        text = dosubs(text)
+
+    if ((stream = DIVNUM()) > TERMINAL) {
+        dbg_print("ship_out", 5, sprintf("(execute__text) END Appending text to stream %d", stream))
+        blk_append(stream, OBJ_TEXT, text)
+        return
+    }
 
     if (__print_mode == MODE_TEXT_PRINT) {
         printf("%s\n", text)
@@ -5264,38 +5146,6 @@ function scan__endcmd(                     newcmd_block)
 }
 
 
-function ship_out__user(cmdline,
-                        dstblk, stream, name)
-{
-    dstblk = curr_dstblk()
-    dbg_print("ship_out", 3, sprintf("(ship_out__user) START dstblk=%d, cmdline='%s'",
-                                     dstblk, cmdline))
-    name = extract_cmd_name(cmdline)
-
-    if (dstblk < 0) {
-        dbg_print("ship_out", 3, "(ship_out__user) END, because dstblk <0")
-        return
-    }
-    if (dstblk > MAX_STREAM) {
-        # Block
-        dbg_print("ship_out", 5, sprintf("(ship_out__user) END Appending user commandd %s to block %d", name, dstblk))
-        blk_append(dstblk, SLOT_USER, cmdline)
-        return
-    }
-    if (dstblk != TERMINAL)
-        error(sprintf("(ship_out__user) dstblk is %d, not zero!", dstblk))
-
-    # dstblk is definitely zero, so execute the command
-    dbg_print("ship_out", 3, sprintf("(ship_out__user) CALLING execute__user('%s', '%s')",
-                                     name, cmdline))
-    #sub(/^[ \t]*[^ \t]+[ \t]*/, "", cmdline)
-    execute__user(name, dosubs(cmdline))
-    dbg_print("ship_out", 3, sprintf("(ship_out__user) RETURNED FROM execute__user('%s', ...)",
-                                     name))
-    dbg_print("ship_out", 3, sprintf("(ship_out__user) END"))
-}
-
-
 function xeq__BLK_USER(newcmd_block,
                        block_type, name)
 {
@@ -5829,7 +5679,7 @@ function xeq_cmd__shell(name, cmdline,
 
     exec_prog_cmdline("rm", ("-f " input_file))
     exec_prog_cmdline("rm", ("-f " output_file))
-    ship_out__text(chomp(output_text))
+    ship_out(OBJ_TEXT, chomp(output_text))
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -6078,6 +5928,67 @@ function ppf__BLK_WHILE(blknum)
                    ppf__bool(blktab[blknum, 0, "valid"]),
                    blktab[blknum, 0, "condition"],
                    blktab[blknum, 0, "body_block"])
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#       generic ship-out
+#*****************************************************************************
+function ship_out(obj_type, obj,
+                  dstblk, name, dsc)
+{
+    dstblk = curr_dstblk()
+    dbg_print("ship_out", 3, sprintf("(ship_out) START dstblk=%d, obj_type=%s, obj='%s'",
+                                     dstblk, obj, obj_type))
+    if (dstblk < 0) {
+        dbg_print("ship_out", 3, "(ship_out) END, because dstblk <0")
+        return
+    }
+    if (dstblk > MAX_STREAM) {
+        dbg_print("ship_out", 5, sprintf("(ship_out) END Appending obj '%s' to block %d", obj, dstblk))
+        blk_append(dstblk, obj_type, obj)
+        return
+    }
+    if (dstblk != TERMINAL)
+        error(sprintf("(ship_out) dstblk is %d, not zero!", dstblk))
+
+    # dstblk is zero, so obj must be executed (or text printed)
+    if (obj_type == OBJ_BLKNUM) {
+        dbg_print("ship_out", 5, sprintf("(ship_out) CALLING execute__block(%d)", obj))
+        execute__block(obj)
+        dbg_print("ship_out", 5, sprintf("(ship_out) RETURNED FROM execute__block"))
+
+    } else if (obj_type == OBJ_CMD) {
+        name = extract_cmd_name(obj)
+        sub(/^[ \t]*[^ \t]+[ \t]*/, "", obj)
+        dsc = dosubs(obj)
+        dbg_print("ship_out", 3, sprintf("(ship_out) CALLING execute__command('%s', '%s')",
+                                         name, dsc))
+        execute__command(name, dsc)
+        dbg_print("ship_out", 3, sprintf("(ship_out) RETURNED FROM execute__command('%s', ...)",
+                                         name))
+
+    } else if (obj_type == OBJ_TEXT) {
+        dbg_print("ship_out", 5, sprintf("(ship_out) CALLING execute__text()"))
+        execute__text(obj)
+        dbg_print("ship_out", 5, sprintf("(ship_out) RETURNED FROM execute__text()"))
+
+    } else if (obj_type == OBJ_USER) {
+        name = extract_cmd_name(obj)
+        #sub(/^[ \t]*[^ \t]+[ \t]*/, "", obj)   # OBJ_CMD does this but not here, ???
+        dsc = dosubs(obj)
+        dbg_print("ship_out", 3, sprintf("(ship_out) CALLING execute__user('%s', '%s')",
+                                         name, dsc))
+        execute__user(name, dsc)
+        dbg_print("ship_out", 3, sprintf("(ship_out) RETURNED FROM execute__user('%s', ...)",
+                                         name))
+
+    } else
+        error("(ship_out) Unrecognized obj_type '" obj_type "'")
+
+    dbg_print("ship_out", 3, sprintf("(ship_out) END"))
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -6870,19 +6781,19 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     TERMINAL             = 0    # Block zero means standard output
 
     # BLK_*     Block types
-    BLK_AGG       = "A";                __blk_label[BLK_AGG]      = "AGG"
-      SLOT_BLKNUM = "b";                __blk_label[SLOT_BLKNUM]  = "BLKNUM"
-      SLOT_CMD    = "c";                __blk_label[SLOT_CMD]     = "CMD"
-      SLOT_TEXT   = "t";                __blk_label[SLOT_TEXT]    = "TEXT"
-      SLOT_USER   = "u";                __blk_label[SLOT_USER]    = "USER"
-    BLK_CASE      = "C";                __blk_label[BLK_CASE]     = "CASE"
-    BLK_FILE      = "F";                __blk_label[BLK_FILE]     = "FILE"
-    BLK_IF        = "I";                __blk_label[BLK_IF]       = "IF"
-    BLK_FOR       = "R";                __blk_label[BLK_FOR ]     = "FOR"
-    BLK_LONGDEF   = "L";                __blk_label[BLK_LONGDEF]  = "LONGDEF"
-    BLK_TERMINAL  = "T";                __blk_label[BLK_TERMINAL] = "TERMINAL"
-    BLK_USER      = "U";                __blk_label[BLK_USER]     = "USER"
-    BLK_WHILE     = "W";                __blk_label[BLK_WHILE]    = "WHILE"
+    BLK_AGG      = "A";                 __blk_label[BLK_AGG]      = "AGG"
+      OBJ_BLKNUM = "b";                 __blk_label[OBJ_BLKNUM]   = "BLKNUM"
+      OBJ_CMD    = "c";                 __blk_label[OBJ_CMD]      = "CMD"
+      OBJ_TEXT   = "t";                 __blk_label[OBJ_TEXT]     = "TEXT"
+      OBJ_USER   = "u";                 __blk_label[OBJ_USER]     = "USER"
+    BLK_CASE     = "C";                 __blk_label[BLK_CASE]     = "CASE"
+    BLK_FILE     = "F";                 __blk_label[BLK_FILE]     = "FILE"
+    BLK_IF       = "I";                 __blk_label[BLK_IF]       = "IF"
+    BLK_FOR      = "R";                 __blk_label[BLK_FOR ]     = "FOR"
+    BLK_LONGDEF  = "L";                 __blk_label[BLK_LONGDEF]  = "LONGDEF"
+    BLK_TERMINAL = "T";                 __blk_label[BLK_TERMINAL] = "TERMINAL"
+    BLK_USER     = "U";                 __blk_label[BLK_USER]     = "USER"
+    BLK_WHILE    = "W";                 __blk_label[BLK_WHILE]    = "WHILE"
 
     # Various modes
     MODE_AT_LITERAL       = "L" # atmode - scan literally

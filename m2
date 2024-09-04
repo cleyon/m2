@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-09-04 10:48:20 cleyon>
+#  Time-stamp:  <2024-09-04 11:02:01 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -18,7 +18,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "4.0.0_pre6"
+    M2_VERSION = "4.0.0_pre7"
 
     # Customize these paths as needed for correct operation on your system.
     # If a program is not available, it's okay to remove the entry entirely.
@@ -6907,83 +6907,84 @@ function dosubs(s,
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
+#       Nothing in this function is user-customizable, so don't touch
+#
 #*****************************************************************************
-
-# Nothing in this function is user-customizable, so don't touch
 function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
 {
-    E                    = exp(1)
-    IDX_NOT_FOUND        = 0
-    LOG10                = log(10)
-    MAX_DBG_LEVEL        = 10
-    MAX_PARAM            = 20
-    PI                   = atan2(0, -1)
-    SEQ_DEFAULT_INCR     = 1
-    SEQ_DEFAULT_INIT     = 0
-    TAU                  = 8 * atan2(1, 1) # 2 * PI
-    TERMINAL             = 0    # Block zero means standard output
+    # Constants
+    E                           = exp(1)
+    IDX_NOT_FOUND               = 0
+    LOG10                       = log(10)
+    MAX_DBG_LEVEL               = 10
+    MAX_PARAM                   = 20
+    PI                          = atan2(0, -1)
+    SEQ_DEFAULT_INCR            = 1
+    SEQ_DEFAULT_INIT            = 0
+    TAU                         = 8 * atan2(1, 1) # 2 * PI
+    TERMINAL                    = 0    # Block zero means standard output
 
-    # BLK_*     Block types
-    BLK_AGG      = "A";                 __blk_label[BLK_AGG]      = "AGG"
-      OBJ_BLKNUM = "b";                 __blk_label[OBJ_BLKNUM]   = "BLKNUM"
-      OBJ_CMD    = "c";                 __blk_label[OBJ_CMD]      = "CMD"
-      OBJ_TEXT   = "t";                 __blk_label[OBJ_TEXT]     = "TEXT"
-      OBJ_USER   = "u";                 __blk_label[OBJ_USER]     = "USER"
-    BLK_CASE     = "C";                 __blk_label[BLK_CASE]     = "CASE"
-    BLK_FILE     = "F";                 __blk_label[BLK_FILE]     = "FILE"
-    BLK_IF       = "I";                 __blk_label[BLK_IF]       = "IF"
-    BLK_FOR      = "R";                 __blk_label[BLK_FOR ]     = "FOR"
-    BLK_LONGDEF  = "L";                 __blk_label[BLK_LONGDEF]  = "LONGDEF"
-    BLK_TERMINAL = "T";                 __blk_label[BLK_TERMINAL] = "TERMINAL"
-    BLK_USER     = "U";                 __blk_label[BLK_USER]     = "USER"
-    BLK_WHILE    = "W";                 __blk_label[BLK_WHILE]    = "WHILE"
+    # Block types and labels
+    BLK_AGG                     = "A"; __blk_label[BLK_AGG]      = "AGG"
+      OBJ_BLKNUM                = "b"; __blk_label[OBJ_BLKNUM]   = "BLKNUM"
+      OBJ_CMD                   = "c"; __blk_label[OBJ_CMD]      = "CMD"
+      OBJ_TEXT                  = "t"; __blk_label[OBJ_TEXT]     = "TEXT"
+      OBJ_USER                  = "u"; __blk_label[OBJ_USER]     = "USER"
+    BLK_CASE                    = "C"; __blk_label[BLK_CASE]     = "CASE"
+    BLK_FILE                    = "F"; __blk_label[BLK_FILE]     = "FILE"
+    BLK_IF                      = "I"; __blk_label[BLK_IF]       = "IF"
+    BLK_FOR                     = "R"; __blk_label[BLK_FOR ]     = "FOR"
+    BLK_LONGDEF                 = "L"; __blk_label[BLK_LONGDEF]  = "LONGDEF"
+    BLK_TERMINAL                = "T"; __blk_label[BLK_TERMINAL] = "TERMINAL"
+    BLK_USER                    = "U"; __blk_label[BLK_USER]     = "USER"
+    BLK_WHILE                   = "W"; __blk_label[BLK_WHILE]    = "WHILE"
 
     # Various modes
-    MODE_AT_LITERAL       = "L" # atmode - scan literally
-    MODE_AT_PROCESS       = "P" # atmode - scan with "@" macro processing
-    MODE_IO_CAPTURE       = "C" # build command for getline
-    MODE_IO_SILENT        = "X" # redirect >/dev/null 2>/dev/null
-    MODE_TEXT_PRINT       = "P" # executed text is printed
-    MODE_TEXT_STRING      = "S" # executed text is stored in a string
-    MODE_STREAMS_DISCARD  = "D" # diverted streams final disposition
-    MODE_STREAMS_SHIP_OUT = "O" # diverted streams final disposition
+    MODE_AT_LITERAL             = "L" # atmode - scan literally
+    MODE_AT_PROCESS             = "P" # atmode - scan with "@" macro processing
+    MODE_IO_CAPTURE             = "C" # build command for getline
+    MODE_IO_SILENT              = "X" # redirect >/dev/null 2>/dev/null
+    MODE_TEXT_PRINT             = "P" # executed text is printed
+    MODE_TEXT_STRING            = "S" # executed text is stored in a string
+    MODE_STREAMS_DISCARD        = "D" # diverted streams final disposition
+    MODE_STREAMS_SHIP_OUT       = "O" # diverted streams final disposition
 
     # When to flush standard output
-    SYNC_FORCE = 0              # only on request or end of job
-    SYNC_FILE  = 1              # at end of each processed file; default.
-    SYNC_LINE  = 2              # after every printed line
+    SYNC_FORCE                  = 0 # only on request or end of job
+    SYNC_FILE                   = 1 # at end of each processed file; default.
+    SYNC_LINE                   = 2 # after every printed line
 
     # Tokens used in boolean expression evaluation
-    TOK_AND       = "&&"
-    TOK_AT        = "@"
-    TOK_DEFINED_P = "?D"
-    TOK_ENV_P     = "?E"
-    TOK_EXISTS_P  = "?X"
-    TOK_LBRACE    = "{"
-    TOK_LPAREN    = "("
-    TOK_NEWLINE   = "\n"
-    TOK_NOT       = "!"
-    TOK_OR        = "||"
-    TOK_RBRACE    = "}"
-    TOK_RPAREN    = ")"
-    TOK_TAB       = "\t"
+    TOK_AND                     = "&&"
+    TOK_AT                      = "@"
+    TOK_DEFINED_P               = "?D"
+    TOK_ENV_P                   = "?E"
+    TOK_EXISTS_P                = "?X"
+    TOK_LBRACE                  = "{"
+    TOK_LPAREN                  = "("
+    TOK_NEWLINE                 = "\n"
+    TOK_NOT                     = "!"
+    TOK_OR                      = "||"
+    TOK_RBRACE                  = "}"
+    TOK_RPAREN                  = ")"
+    TOK_TAB                     = "\t"
 
     # Execution control states for loops
-    XEQ_NORMAL   = 0
-    XEQ_BREAK    = 1
-    XEQ_CONTINUE = 2
-    XEQ_RETURN   = 3
+    XEQ_NORMAL                  = 0
+    XEQ_BREAK                   = 1
+    XEQ_CONTINUE                = 2
+    XEQ_RETURN                  = 3
 
     # Global variables
-    __block_cnt          = 0
-    __buffer             = EMPTY
-    __init_files_loaded  = FALSE # Becomes True in load_init_files()
-    __namespace          = GLOBAL_NAMESPACE
-    __ord_initialized    = FALSE # Becomes True in initialize_ord()
-    __print_mode         = MODE_TEXT_PRINT
-    __rot13_initialized  = FALSE # Becomes True in initialize_rot13()
-    __scan_stack[0]      = 0
-    __xeq_ctl            = XEQ_NORMAL
+    __block_cnt                 = 0
+    __buffer                    = EMPTY
+    __init_files_loaded         = FALSE # Becomes True in load_init_files()
+    __namespace                 = GLOBAL_NAMESPACE
+    __ord_initialized           = FALSE # Becomes True in initialize_ord()
+    __print_mode                = MODE_TEXT_PRINT
+    __rot13_initialized         = FALSE # Becomes True in initialize_rot13()
+    __scan_stack[0]             = 0
+    __xeq_ctl                   = XEQ_NORMAL
 
     srand()                     # Seed random number generator
     initialize_prog_paths()

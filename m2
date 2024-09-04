@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-09-03 22:49:28 cleyon>
+#  Time-stamp:  <2024-09-04 10:34:52 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -793,6 +793,7 @@ function read_lines_until(regexp, dstblk,
 #
 #*****************************************************************************
 BEGIN {
+    TOK_SPACE = " "
     namtab["__SECURE__",     GLOBAL_NAMESPACE] = FLAGS_WRITABLE_INTEGER
     symtab["__SECURE__", "", GLOBAL_NAMESPACE, "symval"] = __secure_level
 
@@ -803,7 +804,7 @@ BEGIN {
     namtab["__DBG__", GLOBAL_NAMESPACE] = TYPE_ARRAY FLAG_SYSTEM
     split("args block bool braces case cmd del divert dosubs dump expr for if io" \
           " nam namespace read scan seq ship_out stk sym while xeq",
-          _dbg_sys_array, " ")
+          _dbg_sys_array, TOK_SPACE)
     for (_dsys in _dbg_sys_array) {
         __dbg_sysnames[_dbg_sys_array[_dsys]] = TRUE
     }
@@ -868,7 +869,7 @@ function dbg(dsys, lev)
 {
     if (lev == EMPTY)           lev = 1
     if (dsys == EMPTY)          error("(dbg) dsys cannot be empty")
-    if (! (dsys in __dbg_sysnames)) error("Unknown dsys name '" dsys "' (lev=" lev "): " $0)
+    if (! (dsys in __dbg_sysnames)) error("(dbg) Unknown dsys name '" dsys "' (lev=" lev "): " $0)
     if (lev < 0)                return TRUE
     if (!debugp())              return FALSE
     if (lev == 0)               return TRUE
@@ -888,7 +889,7 @@ function dbg(dsys, lev)
 function dbg_get_level(dsys)
 {
     if (dsys == EMPTY) error("(dbg_get_level) dsys cannot be empty")
-    if (! (dsys in __dbg_sysnames)) error("Unknown dsys name '" dsys "'")
+    if (! (dsys in __dbg_sysnames)) error("(dbg_get_level) Unknown dsys name '" dsys "'")
     # return (sym_fetch(sprintf("%s[%s]", "__DBG__", dsys))+0) \
     if (!sym_ll_in("__DBG__", dsys, GLOBAL_NAMESPACE))
         return 0
@@ -901,7 +902,7 @@ function dbg_get_level(dsys)
 function dbg_set_level(dsys, lev)
 {
     if (dsys == EMPTY)           error("(dbg_set_level) dsys cannot be empty")
-    if (! (dsys in __dbg_sysnames)) error("Unknown dsys name '" dsys "'")
+    if (! (dsys in __dbg_sysnames)) error("(dbg_set_level) Unknown dsys name '" dsys "'")
     if (lev == EMPTY)           lev = 1
     # Formerly, negative levels were automagically set to zero.
     # Now, the new level is the absolute value.  Since dbg_get_level()
@@ -2411,16 +2412,15 @@ function seq_defined_p(name,
 
 function seq_definition_ppf(name,    buf, TAB)
 {
-    TAB = "\t"
-    buf =         "@sequence " name TAB "create\n"
+    buf =         "@sequence " name TOK_TAB "create\n"
     if (seq_ll_read(name) != SEQ_DEFAULT_INIT)
-        buf = buf "@sequence " name TAB "set " seq_ll_read(name) TOK_NEWLINE
+        buf = buf "@sequence " name TOK_TAB "set " seq_ll_read(name) TOK_NEWLINE
     if (seqtab[name, "init"] != SEQ_DEFAULT_INIT)
-        buf = buf "@sequence " name TAB "init " seqtab[name, "init"] TOK_NEWLINE
+        buf = buf "@sequence " name TOK_TAB "init " seqtab[name, "init"] TOK_NEWLINE
     if (seqtab[name, "incr"] != SEQ_DEFAULT_INCR)
-        buf = buf "@sequence " name TAB "incr " seqtab[name, "incr"] TOK_NEWLINE
+        buf = buf "@sequence " name TOK_TAB "incr " seqtab[name, "incr"] TOK_NEWLINE
     if (seqtab[name, "fmt"] != sym_ll_read("__FMT__", "seq"))
-        buf = buf "@sequence " name TAB "format " seqtab[name, "fmt"] TOK_NEWLINE
+        buf = buf "@sequence " name TOK_TAB "format " seqtab[name, "fmt"] TOK_NEWLINE
     return chop(buf)
 }
 
@@ -3278,7 +3278,7 @@ function sym_definition_ppf(sym,
 {
     definition = sym_fetch(sym)
     return (index(definition, TOK_NEWLINE) == IDX_NOT_FOUND) \
-        ? "@define "  sym "\t" definition \
+        ? "@define "  sym TOK_TAB definition \
         : "@longdef " sym TOK_NEWLINE \
           definition      TOK_NEWLINE \
           "@endlongdef"
@@ -3428,7 +3428,7 @@ function bool__tokenize_string(s,
     while (TRUE) {
         if (i > slen || c == "")
             break
-        while (c == " " || c == "\t")   # skip whitespace
+        while (c == TOK_SPACE || c == TOK_TAB)   # skip whitespace
             c = substr(s, ++i, 1)
 
         if (c == TOK_NOT ||
@@ -3438,7 +3438,7 @@ function bool__tokenize_string(s,
             __btoken[++__bnf] = c
             i++
             c = substr(s, i, 1)
-            while (c == " " || c == "\t")
+            while (c == TOK_SPACE || c == TOK_TAB)
                 c = substr(s, ++i, 1)
             dbg_print("bool", 5, sprintf("(bool__tokenize_string) %s __btoken[%d]=TOK_{NOT|LPAREN|RPAREN}, i now %d", __btoken[__bnf], __bnf, i))
 
@@ -3447,7 +3447,7 @@ function bool__tokenize_string(s,
             __btoken[++__bnf] = TOK_AND
             i += 2
             c = substr(s, i, 1)
-            while (c == " " || c == "\t")
+            while (c == TOK_SPACE || c == TOK_TAB)
                 c = substr(s, ++i, 1)
             dbg_print("bool", 5, sprintf("(bool__tokenize_string) && __btoken[%d]=TOK_AND, i now %d", __bnf, i))
 
@@ -3456,7 +3456,7 @@ function bool__tokenize_string(s,
             __btoken[++__bnf] = TOK_OR
             i += 2
             c = substr(s, i, 1)
-            while (c == " " || c == "\t")
+            while (c == TOK_SPACE || c == TOK_TAB)
                 c = substr(s, ++i, 1)
             dbg_print("bool", 5, sprintf("(bool__tokenize_string) || __btoken[%d]=TOK_OR, i now %d", __bnf, i))
 
@@ -3475,7 +3475,7 @@ function bool__tokenize_string(s,
             __btoken[++__bnf] = TOK_DEFINED_P
             __btoken[++__bnf] = name
             c = substr(s, ++i, 1)       # char after closing paren
-            while (c == " " || c == "\t")
+            while (c == TOK_SPACE || c == TOK_TAB)
                 c = substr(s, ++i, 1)
             dbg_print("bool", 5, sprintf("(bool__tokenize_string) defined() __btoken[%d]='%s', i now %d", __bnf, __btoken[__bnf], i))
 
@@ -3494,7 +3494,7 @@ function bool__tokenize_string(s,
             __btoken[++__bnf] = TOK_ENV_P
             __btoken[++__bnf] = name
             c = substr(s, ++i, 1)       # char after closing paren
-            while (c == " " || c == "\t")
+            while (c == TOK_SPACE || c == TOK_TAB)
                 c = substr(s, ++i, 1)
             dbg_print("bool", 5, sprintf("(bool__tokenize_string) env() __btoken[%d]='%s', i now %d", __bnf, __btoken[__bnf], i))
 
@@ -3512,7 +3512,7 @@ function bool__tokenize_string(s,
             __btoken[++__bnf] = TOK_EXISTS_P
             __btoken[++__bnf] = dosubs(name)
             c = substr(s, ++i, 1)       # char after closing paren
-            while (c == " " || c == "\t")
+            while (c == TOK_SPACE || c == TOK_TAB)
                 c = substr(s, ++i, 1)
             dbg_print("bool", 5, sprintf("(bool__tokenize_string) exists() __btoken[%d]='%s', i now %d", __bnf, __btoken[__bnf], i))
 
@@ -3547,7 +3547,7 @@ function bool__tokenize_string(s,
                 }
             }
             __btoken[++__bnf] = rtrim(substr(s, oldi, i-oldi))
-            while (c == " " || c == "\t")   c = substr(s, ++i, 1) # skip ws
+            while (c == TOK_SPACE || c == TOK_TAB)   c = substr(s, ++i, 1) # skip ws
             dbg_print("bool", 5, sprintf("(bool__tokenize_string) other __btoken[%d]='%s', i now %d", __bnf, __btoken[__bnf], i))
         }
     }
@@ -4541,9 +4541,9 @@ function ppf__for(for_block,
                   buf)
 {
     if (blktab[for_block, 0, "loop_type"] == "each")
-        buf = "@foreach " blktab[for_block, 0, "loop_var"] " " blktab[for_block, 0, "loop_array_name"] TOK_NEWLINE
+        buf = "@foreach " blktab[for_block, 0, "loop_var"] TOK_SPACE blktab[for_block, 0, "loop_array_name"] TOK_NEWLINE
     else
-        buf = "@for " blktab[for_block, 0, "loop_var"] " " blktab[for_block, 0, "loop_start"] " " blktab[for_block, 0, "loop_end"] " " blktab[for_block, 0, "loop_incr"] TOK_NEWLINE
+        buf = "@for " blktab[for_block, 0, "loop_var"] TOK_SPACE blktab[for_block, 0, "loop_start"] TOK_SPACE blktab[for_block, 0, "loop_end"] TOK_SPACE blktab[for_block, 0, "loop_incr"] TOK_NEWLINE
     buf = buf ppf__block(blktab[for_block, 0, "body_block"]) TOK_NEWLINE
     buf = buf "@next "  blktab[for_block, 0, "loop_var"]
     return buf
@@ -4736,7 +4736,7 @@ function evaluate_condition(cond, negate,
         # This whole section is pretty easy to confound....
         dbg_print("if", 5, sprintf("(evaluate_condition) Found IN expression"))
         # Find name
-        sp = index(cond, " ")
+        sp = index(cond, TOK_SPACE)
         key = substr(cond, 1, sp-1)
         cond = substr(cond, sp+1)
         # Find the condition
@@ -4758,7 +4758,7 @@ function evaluate_condition(cond, negate,
         # This whole section is pretty easy to confound....
         dbg_print("if", 6, sprintf("(evaluate_condition) Found comparison"))
         # Find name
-        sp = index(cond, " ")
+        sp = index(cond, TOK_SPACE)
         lhs = substr(cond, 1, sp-1)
         cond = substr(cond, sp+1)
         # Find the condition
@@ -6381,8 +6381,10 @@ function _c3_advance(    tmp)
 #             L = L "@" M
 #             R = "@" R
 #     return L R
-function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline, c,
-                      at_brace, x, y, inc_dec, pre_post, subcmd, silent, off_by)
+function dosubs(s,
+                expand, i, j, l, m, nparam, p, param, r, fn, cmdline, c,
+                at_brace, x, y, inc_dec, pre_post, subcmd, silent, off_by,
+                br, ifelse_condition, true_text, false_text)
 {
     dbg_print("dosubs", 5, sprintf("(dosubs) START s='%s'", s))
     l = ""                   # Left of current pos  - ready for output
@@ -6447,6 +6449,9 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline, c,
 
         nparam = split(m, param) - off_by
         fn = param[0 + off_by]
+        if ((br = index(m, TOK_LBRACE)) > 0)
+            fn = substr(fn, 1, br-1)
+
         dbg_print("dosubs", 7, sprintf("(dosubs) fn=%s, nparam=%d; l='%s', m='%s', r='%s', expand='%s'", fn, nparam, l, m, r, expand))
 
         # Check for sequence modifiers.  First one wins, and
@@ -6596,6 +6601,38 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline, c,
             else if (strictp("env") && !silent)
                 error("Environment variable '" p "' not defined:" $0)
 
+        # ifelse: Choice of text to processing
+        #   A and B are @ifelse{A == B}{Equal}{Not equal}@
+        } else if (fn == "ifelse") {
+            if (!match(m, "^ifelse{[^}]+}{[^}]*}{[^}]*}$"))
+                error("(dosubs) Bad ifelse in '" m "':" $0)
+            m = substr(m, 7)    # strip "ifelse"
+
+            # Get if_clause
+            if (!match(m, "^{[^}]*}"))
+                error("(dosubs) Bad ifelse_condition in '" m "':" $0)
+            ifelse_condition = substr(m, RSTART+1, RLENGTH-2)
+            dbg_print("dosubs", 7, "(dosubs) ifelse: ifelse_condition='" ifelse_condition "'")
+            m = substr(m, RSTART+RLENGTH)
+
+            # Get true_text
+            if (!match(m, "^{[^}]*}"))
+                error("(dosubs) Bad true_text in '" m "':" $0)
+            true_text = substr(m, RSTART+1, RLENGTH-2)
+            dbg_print("dosubs", 7, "(dosubs) ifelse: true_text='" true_text "'")
+            m = substr(m, RSTART+RLENGTH)
+
+            # Get false_text
+            if (!match(m, "^{[^}]*}"))
+                error("(dosubs) Bad false_text in '" m "':" $0)
+            false_text = substr(m, RSTART+1, RLENGTH-2)
+            dbg_print("dosubs", 7, "(dosubs) ifelse: if_false='" false_text "'")
+            m = substr(m, RSTART+RLENGTH)
+            if (!emptyp(m))
+                error("(dosubs) Extra text in ifelse: m='" m "'")
+
+            r = dosubs(evaluate_boolean(ifelse_condition) ? true_text : false_text) r
+
         # lc : Lower case
         # len: Length
         # uc : Upper case
@@ -6741,7 +6778,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline, c,
                     error("Value '" x "' must be numeric:" $0)
             }
             while (x-- > 0)
-                expand = expand " "
+                expand = expand TOK_SPACE
             r = expand r
 
         # trim  SYM: Remove both leading and trailing whitespace
@@ -6932,6 +6969,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     TOK_OR        = "||"
     TOK_RBRACE    = "}"
     TOK_RPAREN    = ")"
+    TOK_TAB       = "\t"
 
     # Execution control states for loops
     XEQ_NORMAL   = 0
@@ -7031,7 +7069,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     split("basename boolval chr date dirname epoch expr getenv lc left len" \
           " ltrim mid obasename odirname ord rem right rot13 rtrim sexpr sgetenv spaces srem strftime" \
           " substr time trim tz uc uuid",
-          array, " ")
+          array, TOK_SPACE)
     for (elem in array)
         nam_ll_write(array[elem], GLOBAL_NAMESPACE, TYPE_FUNCTION FLAG_SYSTEM)
 
@@ -7042,7 +7080,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
           " echo error exit ignore" \
           " include incr initialize input local m2ctl nextfile paste readfile" \
           " readarray readonly secho sequence sexit shell sinclude" \
-          " spaste sreadfile sreadarray stderr typeout undefine undivert warn", array, " ")
+          " spaste sreadfile sreadarray stderr typeout undefine undivert warn", array, TOK_SPACE)
     for (elem in array)
         nam_ll_write(array[elem], GLOBAL_NAMESPACE, TYPE_COMMAND FLAG_SYSTEM)
 
@@ -7052,7 +7090,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     split("break case continue dump! else endcase endcmd endif endlong" \
           " endlongdef endwhile esac fi for foreach if ifdef ifndef longdef" \
           " newcmd next of otherwise return unless until while",
-          array, " ")
+          array, TOK_SPACE)
     for (elem in array)
         nam_ll_write(array[elem], GLOBAL_NAMESPACE, TYPE_COMMAND FLAG_SYSTEM FLAG_IMMEDIATE)
 

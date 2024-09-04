@@ -354,6 +354,10 @@ Evaluate mathematical expression
 .It @getenv VAR@
 Get environment variable
 .Brq #2
+.It @ifelse{CONDITION}{TRUE_TEXT}{FALSE_TEXT}@
+Evaluate CONDITION; if True, return TRUE_TEXT else return FALSE_TEXT.
+All three brace-enclosed clauses must be present.
+Resulting text is again processed for macro substitutions.
 .It @lc SYM@
 Lower case
 .It @left SYM [N]@

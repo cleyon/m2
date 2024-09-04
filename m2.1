@@ -142,10 +142,6 @@ If EXR is a simple NAME, check if NAME is True.
 See
 .Sx Boolean expressions
 below.
-.It @ifdef NAME ... @endif
-Include text if NAME is defined.
-.It @ifndef NAME ... @endif
-Include text if NAME is not defined.
 .It @ignore DELIM
 Ignore input until line that begins with DELIM
 .It @include FILE
@@ -354,10 +350,16 @@ Evaluate mathematical expression
 .It @getenv VAR@
 Get environment variable
 .Brq #2
+.It @ifdef{SYMBOL}{TRUE_TEXT}{FALSE_TEXT}@
+If SYMBOL is defined, return TRUE_TEXT, else return FALSE_TEXT.
 .It @ifelse{CONDITION}{TRUE_TEXT}{FALSE_TEXT}@
 Evaluate CONDITION; if True, return TRUE_TEXT else return FALSE_TEXT.
 All three brace-enclosed clauses must be present.
 Resulting text is again processed for macro substitutions.
+.It @ifndef{SYMBOL}{TRUE_TEXT}{FALSE_TEXT}@
+If SYMBOL is
+.Em not
+defined, return TRUE_TEXT, else return FALSE_TEXT.
 .It @lc SYM@
 Lower case
 .It @left SYM [N]@

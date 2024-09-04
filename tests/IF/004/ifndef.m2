@@ -1,11 +1,3 @@
 @define FOO
-@ifndef FOO
-Defined
-@else
-GOOD
-@fi
-@ifndef BAR
-GOOD
-@else
-Not Defined
-@fi
+@ifndef{FOO}{Defined}{GOOD}@
+@ifndef{BAR}{GOOD}{Not Defined}@

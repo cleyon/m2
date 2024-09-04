@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-09-04 11:02:01 cleyon>
+#  Time-stamp:  <2024-09-04 17:06:50 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -510,19 +510,37 @@ function lower_namespace()
 }
 
 
+# Return value:
+#       0       No problems detected
+#       1       Scan stack is empty
+#       2       Scanner mismatch (block type not as expected)
+#       3       Depth problem mismatch
+# In error cases, warning messages are printed.
 function assert_scan_stack_okay(expected_block_type,
-                                blknum)
+                                btop)
 {
-    if (stk_emptyp(__scan_stack))
-        error("(assert_scan_stack_okay) Scan stack is empty!")
-    blknum = stk_top(__scan_stack)
+    if (stk_emptyp(__scan_stack)) {
+        warn("Scan stack is empty!")
+        return 1
+    }
+
+    btop = stk_top(__scan_stack)
+    if (blk_type(btop) != expected_block_type) {
+        warn(sprintf("Current scanner has type %s but I expected %s",
+                     ppf__block_type(blk_type(btop)), ppf__block_type(expected_block_type)))
+        return 2
+    }
 
     # We have to subtract 1 because the original "depth" was stored
     # before the block was pushed onto the __scan_stack; and at this
     # point it hasn't been popped yet...
-    if ((blk_type(blknum) != expected_block_type) ||
-        (blktab[blknum, 0, "depth"] != stk_depth(__scan_stack) - 1))
-        error("(assert_scan_stack_okay) Corrupt scan stack")
+    if (blktab[btop, 0, "depth"] != stk_depth(__scan_stack) - 1) {
+        warn(sprintf("Current scanner has depth %d but I expected %d",
+                     blktab[btop, 0, "depth"], stk_depth(__scan_stack) - 1))
+        return 3
+    }
+
+    return 0
 }
 
 
@@ -1507,7 +1525,8 @@ function dofile(filename,
 # Caller is responsible for removing potential quotes from filename.
 function scan__file(    filename, file_block1, file_block2, scanstat, d)
 {
-    assert_scan_stack_okay(BLK_FILE)
+    if (assert_scan_stack_okay(BLK_FILE) != 0)
+        error("(scan__file) File scan error 1")
     file_block1 = stk_top(__scan_stack)
 
     filename = blktab[file_block1, 0, "filename"]
@@ -1551,7 +1570,8 @@ function scan__file(    filename, file_block1, file_block2, scanstat, d)
     blktab[file_block1, 0, "open"] = FALSE
     delete __active_files[filename]
 
-    assert_scan_stack_okay(BLK_FILE)
+    if (assert_scan_stack_okay(BLK_FILE) != 0)
+        error("(scan__file) File scan error 2")
     file_block2 = stk_pop(__scan_stack)
 
     __buffer = blktab[file_block2, 0, "old.buffer"]
@@ -1678,7 +1698,6 @@ function scan(              code, terminator, readstat, name, retval, new_block,
 
                     } else if (name == "case") {
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__case(dstblk=" curr_dstblk() ")"))
-                        raise_namespace()
                         new_block = scan__case()
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__case() : new_block => " new_block))
                         dbg_print("scan", 5, sprintf("(scan) [" scanner_label "] CALLING ship_out(OBJ_BLKNUM, %d)", new_block))
@@ -1687,15 +1706,12 @@ function scan(              code, terminator, readstat, name, retval, new_block,
 
                     } else if (name == "else") {
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__else(dstblk=" curr_dstblk() ")"))
-                        lower_namespace() # trigger name/symbol purge
-                        raise_namespace()
                         scan__else()
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__else() : dstblk => " curr_dstblk()))
 
                     } else if (name == "endcase" || name == "esac") {
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__endcase(dstblk=" curr_dstblk() ")"))
                         scan__endcase()
-                        lower_namespace()
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__endcase() : dstblk => " curr_dstblk()))
                         if (match($1, terminator)) {
                             dbg_print("scan", 5, "(scan) [" scanner_label "] END; @endcase matched terminator => TRUE")
@@ -1706,7 +1722,6 @@ function scan(              code, terminator, readstat, name, retval, new_block,
                     } else if (name == "endcmd") {
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__endcmd(dstblk=" curr_dstblk() ")"))
                         new_block = scan__endcmd()
-                        lower_namespace()
                         dbg_print_block("scan", 7, new_block, sprintf("newcmd block returned from scan__endcmd"))
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__endcmd() : dstblk => " curr_dstblk()))
 
@@ -1737,7 +1752,6 @@ function scan(              code, terminator, readstat, name, retval, new_block,
                     } else if (name == "endif" || name == "fi") {
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__endif(dstblk=" curr_dstblk() ")"))
                         scan__endif()
-                        lower_namespace()
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__endif() : dstblk => " curr_dstblk()))
                         if (match($1, terminator)) {
                             dbg_print("scan", 5, "(scan) [" scanner_label "] END; @endif matched terminator => TRUE")
@@ -1758,7 +1772,6 @@ function scan(              code, terminator, readstat, name, retval, new_block,
                     } else if (name == "endwhile") {
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__endwhile(dstblk=" curr_dstblk() ")"))
                         scan__endwhile()
-                        lower_namespace()
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__endwhile() : dstblk => " curr_dstblk()))
                         if (match($1, terminator)) {
                             dbg_print("scan", 5, "(scan) [" scanner_label "] END; @endwhile matched terminator => TRUE")
@@ -1769,16 +1782,14 @@ function scan(              code, terminator, readstat, name, retval, new_block,
                     } else if (name == "for" || name == "foreach") {
                         dbg_print("scan", 5, sprintf("(scan) [%s] curr_dstblk()=%d CALLING scan__for()",
                                                      scanner_label, curr_dstblk()))
-                        raise_namespace()
                         new_block = scan__for()
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__for() : new_block is " new_block))
                         dbg_print("scan", 5, sprintf("(scan) [" scanner_label "] CALLING ship_out(OBJ_BLKNUM, %d)", new_block))
                         ship_out(OBJ_BLKNUM, new_block)
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM ship_out()"))
 
-                    } else if (name == "if" || name == "unless" || name ~ /ifn?def/) {
+                    } else if (name == "if" || name == "unless") {
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__if(dstblk=" curr_dstblk() ")"))
-                        raise_namespace()
                         new_block = scan__if()
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__if() : new_block => " new_block))
                         dbg_print("scan", 5, sprintf("(scan) [" scanner_label "] CALLING ship_out(OBJ_BLKNUM, %d)", new_block))
@@ -1794,7 +1805,6 @@ function scan(              code, terminator, readstat, name, retval, new_block,
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM ship_out()"))
 
                     } else if (name == "newcmd") {
-                        raise_namespace()
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__newcmd(dstblk=" curr_dstblk() ")"))
                         new_block = scan__newcmd()
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__newcmd() : new_block => " new_block))
@@ -1806,7 +1816,6 @@ function scan(              code, terminator, readstat, name, retval, new_block,
                         dbg_print("scan", 5, sprintf("(scan) [%s] dstblk=%d; CALLING scan__next()",
                                                      scanner_label, curr_dstblk()))
                         scan__next()
-                        lower_namespace()
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__next() : dstblk => " curr_dstblk()))
                         if (match($1, terminator)) {
                             dbg_print("scan", 5, "(scan) [" scanner_label "] END Matched terminator => TRUE")
@@ -1816,15 +1825,11 @@ function scan(              code, terminator, readstat, name, retval, new_block,
 
                     } else if (name == "of") {
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__of(dstblk=" curr_dstblk() ")"))
-                        lower_namespace()
-                        raise_namespace()
                         scan__of()
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__of() : dstblk => " curr_dstblk()))
 
                     } else if (name == "otherwise") {
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__otherwise(dstblk=" curr_dstblk() ")"))
-                        lower_namespace()
-                        raise_namespace()
                         scan__otherwise()
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__otherwise() : dstblk => " curr_dstblk()))
 
@@ -1844,7 +1849,6 @@ function scan(              code, terminator, readstat, name, retval, new_block,
                         dbg_print("scan", 3, "(scan) [" scanner_label "] RETURNED FROM ship_out()")
 
                     } else if (name == "while" || name == "until") {
-                        raise_namespace()
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__while(dstblk=" curr_dstblk() ")"))
                         new_block = scan__while()
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__while() : new_block => " new_block))
@@ -3730,6 +3734,8 @@ function scan__case(                case_block, preamble_block, scanstat)
 {
     dbg_print("case", 3, sprintf("(scan__case) START dstblk=%d, $0='%s'", curr_dstblk(), $0))
 
+    raise_namespace()
+
     # Create a new block for case_block
     case_block = blk_new(BLK_CASE)
     dbg_print("case", 5, "(scan__case) New block # " case_block " type " ppf__block_type(blk_type(case_block)))
@@ -3760,8 +3766,12 @@ function scan__of(                case_block, of_block, of_val)
 {
     dbg_print("case", 3, sprintf("(scan__of) START dstblk=%d, mode=%s, $0='%s'",
                                  curr_dstblk(), ppf__mode(curr_atmode()), $0))
-    assert_scan_stack_okay(BLK_CASE)
+    if (assert_scan_stack_okay(BLK_CASE) != 0)
+        error("(scan__of) Scan error")
     case_block = stk_top(__scan_stack)
+
+    lower_namespace()           # trigger name/symbol purge
+    raise_namespace()
 
     # Create a new block for the new Of branch and make it current
     of_block = blk_new(BLK_AGG)
@@ -3780,12 +3790,16 @@ function scan__otherwise(                case_block, otherwise_block)
 {
     dbg_print("case", 3, sprintf("(scan__otherwise) START dstblk=%d, mode=%s",
                                curr_dstblk(), ppf__mode(curr_atmode())))
-    assert_scan_stack_okay(BLK_CASE)
+    if (assert_scan_stack_okay(BLK_CASE) != 0)
+        error("(scan__otherwise) Scan error")
     case_block = stk_top(__scan_stack)
 
     # Check if already seen @else
     if (blktab[case_block, 0, "seen_otherwise"] == TRUE)
         error("(scan__otherwise) Cannot have more than one @otherwise")
+
+    lower_namespace()           # trigger name/symbol purge
+    raise_namespace()
 
     # Create a new block for the False branch and make it current
     blktab[case_block, 0, "seen_otherwise"] = TRUE
@@ -3800,10 +3814,13 @@ function scan__endcase(                case_block)
 {
     dbg_print("case", 3, sprintf("(scan__endcase) START dstblk=%d, mode=%s",
                                curr_dstblk(), ppf__mode(curr_atmode())))
-    assert_scan_stack_okay(BLK_CASE)
+    if (assert_scan_stack_okay(BLK_CASE) != 0)
+        error("(scan__endcase) Scan error")
     case_block = stk_pop(__scan_stack)
 
     blktab[case_block, 0, "valid"] = TRUE
+    lower_namespace()
+
     return case_block
 }
 
@@ -4358,6 +4375,8 @@ function scan__for(                  for_block, body_block, scanstat, incr, info
     if (NF < 3)
         error("(scan__for) Bad parameters")
 
+    raise_namespace()
+
     # Create two new blocks: "for_block" for loop control (for_block),
     # and "body_block" for the loop code definition.
     for_block = blk_new(BLK_FOR)
@@ -4414,13 +4433,16 @@ function scan__next(                   for_block)
 {
     dbg_print("for", 3, sprintf("(scan__next) START dstblk=%d, mode=%s, $0='%s'",
                                 curr_dstblk(), ppf__mode(curr_atmode()), $0))
-    assert_scan_stack_okay(BLK_FOR)
+    if (assert_scan_stack_okay(BLK_FOR) != 0)
+        error("(scan__next) Scan error")
     for_block = stk_pop(__scan_stack)
 
     if (blktab[for_block, 0, "loop_var"] != $2)
         error(sprintf("(scan__next) Variable mismatch; '%s' specified, but '%s' was expected",
                       $2, blktab[for_block, 0, "loop_var"]))
     blktab[for_block, 0, "valid"] = TRUE
+
+    lower_namespace()
 
     dbg_print("for", 3, sprintf("(scan__next) END => %d", for_block))
     return for_block
@@ -4581,23 +4603,20 @@ function scan__if(                 name, if_block, true_block, scanstat)
     $1 = ""
     sub("^[ \t]*", "")
 
+    raise_namespace()
+
     # Create two new blocks: one for if_block, other for true branch
     if_block = blk_new(BLK_IF)
     dbg_print("if", 5, "(scan__if) New block # " if_block " type " ppf__block_type(blk_type(if_block)))
     true_block = blk_new(BLK_AGG)
     dbg_print("if", 5, "(scan__if) New block # " true_block " type " ppf__block_type(blk_type(true_block)))
 
-    if (name ~ /@ifn?def/) {
-        assert_sym_valid_name($0)
-        blktab[if_block, 0, "condition"] = "defined(" $0 ")"
-    } else
-        blktab[if_block, 0, "condition"] = $0
-
-    blktab[if_block, 0, "init_negate"] = (name == "@unless" || name == "@ifndef")
-    blktab[if_block, 0, "seen_else"]  = FALSE
-    blktab[if_block, 0, "true_block"] = true_block
-    blktab[if_block, 0, "dstblk"] = true_block
-    blktab[if_block, 0, "valid"]      = FALSE
+    blktab[if_block, 0, "condition"]   = $0
+    blktab[if_block, 0, "init_negate"] = (name == "@unless")
+    blktab[if_block, 0, "seen_else"]   = FALSE
+    blktab[if_block, 0, "true_block"]  = true_block
+    blktab[if_block, 0, "dstblk"]      = true_block
+    blktab[if_block, 0, "valid"]       = FALSE
     dbg_print_block("if", 7, if_block, "(scan__if) if_block")
     stk_push(__scan_stack, if_block) # Push it on to the scan_stack
 
@@ -4617,12 +4636,16 @@ function scan__else(                   if_block, false_block)
 {
     dbg_print("if", 3, sprintf("(scan__else) START dstblk=%d, mode=%s",
                                curr_dstblk(), ppf__mode(curr_atmode())))
-    assert_scan_stack_okay(BLK_IF)
+    if (assert_scan_stack_okay(BLK_IF) != 0)
+        error("(scan__else) Scan error")
     if_block = stk_top(__scan_stack)
 
     # Check if already seen @else
     if (blktab[if_block, 0, "seen_else"] == TRUE)
         error("(scan__else) Cannot have more than one @else")
+
+    lower_namespace()           # trigger name/symbol purge
+    raise_namespace()
 
     # Create a new block for the False branch and make it current
     blktab[if_block, 0, "seen_else"] = TRUE
@@ -4638,9 +4661,11 @@ function scan__endif(                    if_block)
 {
     dbg_print("if", 3, sprintf("(scan__endif) START dstblk=%d, mode=%s",
                                curr_dstblk(), ppf__mode(curr_atmode())))
-    assert_scan_stack_okay(BLK_IF)
+    if (assert_scan_stack_okay(BLK_IF) != 0)
+        error("(scan__endif) Scan error")
     if_block = stk_pop(__scan_stack)
     blktab[if_block, 0, "valid"] = TRUE
+    lower_namespace()
     return if_block
 }
 
@@ -5033,7 +5058,8 @@ function scan__endlongdef(    sym_block)
 {
     dbg_print("sym", 3, sprintf("(scan__endlongdef) START dstblk=%d, mode=%s",
                                  curr_dstblk(), ppf__mode(curr_atmode())))
-    assert_scan_stack_okay(BLK_LONGDEF)
+    if (assert_scan_stack_okay(BLK_LONGDEF) != 0)
+        error("(scan__endlongdef) Scan error")
     sym_block = stk_pop(__scan_stack)
 
     blktab[sym_block, 0, "valid"] = TRUE
@@ -5178,6 +5204,8 @@ function scan__newcmd(                     name, newcmd_block, body_block, scans
     nparam = 0
     dbg_print("cmd", 5, "(scan__newcmd) START dstblk=" curr_dstblk() ", mode=" ppf__mode(curr_atmode()) "; $0='" $0 "'")
 
+    raise_namespace()
+
     # Create two new blocks: one for the "new command" block, other for command body
     newcmd_block = blk_new(BLK_USER)
     dbg_print("cmd", 5, "(scan__newcmd) New block # " newcmd_block " type " ppf__block_type(blk_type(newcmd_block)))
@@ -5219,10 +5247,13 @@ function scan__endcmd(                     newcmd_block)
 {
     dbg_print("cmd", 3, sprintf("(scan__endcmd) START dstblk=%d, mode=%s",
                                  curr_dstblk(), ppf__mode(curr_atmode())))
-    assert_scan_stack_okay(BLK_USER)
+    if (assert_scan_stack_okay(BLK_USER) != 0)
+        error("(scan__endcmd) Scan error")
     newcmd_block = stk_pop(__scan_stack)
 
     blktab[newcmd_block, 0, "valid"] = TRUE
+    lower_namespace()
+
     dbg_print("cmd", 3, sprintf("(scan__endcmd) END => %d", newcmd_block))
     dbg_print_block("scan", 7, newcmd_block, sprintf("newcmd block just scanned:"))
     return newcmd_block
@@ -5904,6 +5935,8 @@ function scan__while(                 name, while_block, body_block, scanstat)
     $1 = ""
     sub("^[ \t]*", "")
 
+    raise_namespace()
+
     # Create two new blocks: one for while_block, other for true branch
     while_block = blk_new(BLK_WHILE)
     dbg_print("while", 5, "(scan__while) New block # " while_block " type " ppf__block_type(blk_type(while_block)))
@@ -5934,10 +5967,12 @@ function scan__endwhile(                    while_block)
 {
     dbg_print("while", 3, sprintf("(scan__endwhile) START dstblk=%d, mode=%s",
                                curr_dstblk(), ppf__mode(curr_atmode())))
-    assert_scan_stack_okay(BLK_WHILE)
+    if (assert_scan_stack_okay(BLK_WHILE) != 0)
+        error("(scan__endwhile) Scan error")
     while_block = stk_pop(__scan_stack)
 
     blktab[while_block, 0, "valid"] = TRUE
+    lower_namespace()
     return while_block
 }
 
@@ -6381,7 +6416,7 @@ function _c3_advance(    tmp)
 function dosubs(s,
                 expand, i, j, l, m, nparam, p, param, r, fn, cmdline, c,
                 at_brace, x, y, inc_dec, pre_post, subcmd, silent, off_by,
-                br, ifelse_condition, true_text, false_text)
+                br, ifelse_condition, true_text, false_text, init_negate)
 {
     dbg_print("dosubs", 5, sprintf("(dosubs) START s='%s'", s))
     l = ""                   # Left of current pos  - ready for output
@@ -6600,15 +6635,27 @@ function dosubs(s,
 
         # ifelse: Choice of text to processing
         #   A and B are @ifelse{A == B}{Equal}{Not equal}@
-        } else if (fn == "ifelse") {
-            if (!match(m, "^ifelse{[^}]+}{[^}]*}{[^}]*}$"))
+        } else if (fn == "ifelse" || fn == "ifdef" || fn == "ifndef") {
+            if (!match(m, "^if(else|n?def){[^}]+}{[^}]*}{[^}]*}$"))
                 error("(dosubs) Bad ifelse in '" m "':" $0)
-            m = substr(m, 7)    # strip "ifelse"
+            m = substr(m, index(m, TOK_LBRACE)) # strip fn name
+            init_negate = FALSE
 
             # Get if_clause
             if (!match(m, "^{[^}]*}"))
                 error("(dosubs) Bad ifelse_condition in '" m "':" $0)
             ifelse_condition = substr(m, RSTART+1, RLENGTH-2)
+            # For ifn?def, ifelse_condition should be a symbol name
+            # which will be handed to defined().
+            # For ifelse, it's an expression passed to evaluate_boolean().
+            if (fn == "ifdef") {
+                assert_sym_valid_name(ifelse_condition)
+                ifelse_condition = "defined(" ifelse_condition ")"
+            } else if (fn == "ifndef") {
+                assert_sym_valid_name(ifelse_condition)
+                init_negate = TRUE
+                ifelse_condition = "defined(" ifelse_condition ")"
+            }
             dbg_print("dosubs", 7, "(dosubs) ifelse: ifelse_condition='" ifelse_condition "'")
             m = substr(m, RSTART+RLENGTH)
 
@@ -6628,7 +6675,7 @@ function dosubs(s,
             if (!emptyp(m))
                 error("(dosubs) Extra text in ifelse: m='" m "'")
 
-            r = dosubs(evaluate_boolean(ifelse_condition) ? true_text : false_text) r
+            r = dosubs(evaluate_boolean(ifelse_condition, init_negate) ? true_text : false_text) r
 
         # lc : Lower case
         # len: Length
@@ -7064,7 +7111,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
 
     # FUNCS
     # Functions cannot be used as symbol or sequence names.
-    split("basename boolval chr date dirname epoch expr getenv lc left len" \
+    split("basename boolval chr date dirname epoch expr getenv ifdef ifelse ifndef lc left len" \
           " ltrim mid obasename odirname ord rem right rot13 rtrim sexpr sgetenv spaces srem strftime" \
           " substr time trim tz uc uuid",
           array, TOK_SPACE)
@@ -7086,7 +7133,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     # IMMEDS
     # These commands are Immediate
     split("break case continue else endcase endcmd endif endlong" \
-          " endlongdef endwhile esac fi for foreach if ifdef ifndef longdef" \
+          " endlongdef endwhile esac fi for foreach if longdef" \
           " newcmd next of otherwise return unless until while",
           array, TOK_SPACE)
     for (elem in array)
@@ -7142,16 +7189,14 @@ function initialize_ord(    low, high, i, t)
 }
 
 
-# From the ROT13 page:   http://www.miranda.org/~jkominek/rot13/
-#     "The purpose of this page is to collect and display various ROT13
-#     implementations, in as wide a variety of languages as possible."
-# Maintained (at one time) by Jay Kominek <jkominek-rot13@miranda.org>
+# From the ROT13 page:  http://www.miranda.org/~jkominek/rot13/
+# Maintained ( by Jay Kominek <jkominek-rot13@miranda.org>
 # https://web.archive.org/web/20090308134550/http://www.miranda.org/~jkominek/rot13/awk/rot13.awk
 # Rot13 in Awk                          Teknovore <tek@wiw.org> 1998
 function initialize_rot13(    from, to, i)
 {
-    from = "NOPQRSTUVWXYZABCDEFGHIJKLMnopqrstuvwxyzabcdefghijklm"
-    to   = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+    from = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+    to   = "NOPQRSTUVWXYZABCDEFGHIJKLMnopqrstuvwxyzabcdefghijklm"
     for (i = 1; i <= length(from); i++)
         __rot13[substr(from, i, 1)] = substr(to, i, 1)
     __rot13_initialized = TRUE
@@ -7323,7 +7368,10 @@ BEGIN {
         }
     }
 
-    # All blocks should have been popped from the scan stack
+    # Under normal execution, all blocks should have been popped from
+    # the scan stack, so check that.  I can't move this check into
+    # end_program(), because that routine might be called during
+    # execution with scanners still present on the stack.
     if (! stk_emptyp(__scan_stack)) {
         warn("(main) Scan stack is not empty!")
         dump_scan_stack()

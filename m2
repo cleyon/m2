@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-09-02 15:43:56 cleyon>
+#  Time-stamp:  <2024-09-03 22:49:28 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -132,7 +132,7 @@ function chop(s)
 # If last character is newline, chop() it off
 function chomp(s)
 {
-    return (last(s) == "\n") ? chop(s) : s
+    return (last(s) == TOK_NEWLINE) ? chop(s) : s
 }
 
 
@@ -432,7 +432,7 @@ function tmpdir(    t)
         t = ENVIRON["TMPDIR"]
     else
         t = sym_ll_read("__TMPDIR__", "", GLOBAL_NAMESPACE)
-    while (last(t) == "\n")
+    while (last(t) == TOK_NEWLINE)
         t = chop(t)
     return with_trailing_slash(t)
 }
@@ -551,10 +551,10 @@ function expand_braces(s,    atbr, cb, ltext, mtext, rtext)
             print_stderr("   expand_braces: rtext='" rtext "'")
         }
 
-        while (length(mtext) >= 2 && first(mtext) == "@" && last(mtext) == "@")
+        while (length(mtext) >= 2 && first(mtext) == TOK_AT && last(mtext) == TOK_AT)
             mtext = substr(mtext, 2, length(mtext) - 2)
-        s = !emptyp(mtext) ? ltext dosubs("@" mtext "@") rtext \
-                           : ltext                       rtext
+        s = !emptyp(mtext) ? ltext dosubs(TOK_AT mtext TOK_AT) rtext \
+                           : ltext                             rtext
     }
 
     dbg_print("braces", 3, ("<< expand_braces: => '" s "'"))
@@ -613,15 +613,15 @@ function find_closing_brace(s, start,    offset, c, nc, cb, slen)
         dbg_print("braces", 7, ("   find_closing_brace: offset=" offset ", c=" c ", nc=" nc))
         if (c == "") {          # end of string/error
             break
-        } else if (c == "}") {
+        } else if (c == TOK_RBRACE) {
             dbg_print("braces", 3, ("<< find_closing_brace: => " start+offset))
             return start+offset
-        } else if (c == "\\" && nc == "}") {
+        } else if (c == "\\" && nc == TOK_RBRACE) {
             # "\}" in expansion text will result in a single close brace
             # without ending the expansion text scanner.  Skip over }
             # and do not return yet.  "\}" is fixed in expand_braces().
             offset++; nc = substr(s, start+offset+1, 1)
-        } else if (c == "@" && nc == "{") {
+        } else if (c == TOK_AT && nc == TOK_LBRACE) {
             # "@{" in expansion text will invoke a recursive scan.
             cb = find_closing_brace(s, start+offset)
             if (cb <= 0)
@@ -726,7 +726,7 @@ function readline(    getstat, i)
     getstat = OKAY
     if (!emptyp(__buffer)) {
         # Return the buffer even if somehow it doesn't end with a newline
-        if ((i = index(__buffer, "\n")) == IDX_NOT_FOUND) {
+        if ((i = index(__buffer, TOK_NEWLINE)) == IDX_NOT_FOUND) {
             $0 = __buffer
             __buffer = EMPTY
         } else {
@@ -828,14 +828,14 @@ function initialize_debugging()
     dbg_set_level("for",        5)
     dbg_set_level("if",         5)
     dbg_set_level("io",         3)
-    dbg_set_level("nam",        5)
+    dbg_set_level("nam",        3)
     dbg_set_level("namespace",  5)
     dbg_set_level("read",       0)
     dbg_set_level("scan",       7)
     dbg_set_level("seq",        3)
     dbg_set_level("ship_out",   3)
     dbg_set_level("stk",        5)
-    dbg_set_level("sym",        5)
+    dbg_set_level("sym",        3)
     dbg_set_level("while",      5)
     dbg_set_level("xeq",        5)
 
@@ -1229,11 +1229,11 @@ function ppf__agg(agg_block,
         value = blk_ll_slot_value(agg_block, i)
 
         if (slot_type == OBJ_BLKNUM)
-            buf = buf ppf__block(value) "\n"
+            buf = buf ppf__block(value) TOK_NEWLINE
         else if (slot_type == OBJ_CMD  ||
                  slot_type == OBJ_TEXT ||
                  slot_type == OBJ_USER) {
-            buf = buf value "\n"
+            buf = buf value TOK_NEWLINE
         } else
             error(sprintf("(ppf__agg) Bad slot type %s", slot_type))
     }
@@ -1323,20 +1323,21 @@ function ppf__user(user_block,
     name = blktab[user_block, 0, "name"]
     params = ""
     for (i = 1; i <= blktab[user_block, 0, "nparam"]; i++)
-        params = params "{" blktab[user_block, i, "param_name"] "}"
+        params = params TOK_LBRACE blktab[user_block, i, "param_name"] TOK_RBRACE
+    dbg_print("cmd", 5, "params='" params "'") # probably 7 or 8
 
-    return "@newcmd " name params                             "\n" \
-              ppf__agg(blktab[user_block, 0, "body_block"]) "\n" \
+    return "@newcmd " name params                             TOK_NEWLINE \
+              ppf__agg(blktab[user_block, 0, "body_block"]) TOK_NEWLINE \
            "@endcmd"
 }
 
 
 function cmd_destroy(id)
 {
-    #print_stderr("(cmd_destroy) BROKEN") # still broken?
-    delete namtab[id, GLOBAL_NAMESPACE]
-    delete cmdtab[id, "definition"]
-    delete cmdtab[id, "nparam"]
+    dbg_print("cmd", 1, "(cmd_destroy) BROKEN!")
+    # delete namtab[id, GLOBAL_NAMESPACE]
+    # delete cmdtab[id, "definition"]
+    # delete cmdtab[id, "nparam"]
 }
 
 
@@ -1566,7 +1567,7 @@ function scan__file(    filename, file_block1, file_block2, scanstat, d)
 # SCAN
 function scan(              code, terminator, readstat, name, retval, new_block, fc,
                             info, level, scanner, scanner_type, scanner_label, i, scnt, found,
-                            new_cmd_name, clevel)
+                            new_cmd_name, clevel, cmdline)
 {
     dbg_print("scan", 3, "(scan) START dstblk=" curr_dstblk() ", mode=" ppf__mode(curr_atmode()))
 
@@ -1577,6 +1578,9 @@ function scan(              code, terminator, readstat, name, retval, new_block,
     scanner = stk_top(__scan_stack)
     scanner_type = blk_type(scanner)
     scanner_label = ppf__block_type(scanner_type)
+
+    # terminator is a regular expression, and we call
+    # match($1, terminator) to see if terminator is seen.
     terminator = blktab[scanner, 0, "terminator"]
     retval = FALSE
 
@@ -1604,7 +1608,7 @@ function scan(              code, terminator, readstat, name, retval, new_block,
         dbg_print("scan", 5, "(scan) [" scanner_label "] readline() okay; $0='" $0 "'")
 
         # Maybe short-circuit and ship line out now
-        if (curr_atmode() == MODE_AT_LITERAL || index($0, "@") == IDX_NOT_FOUND) {
+        if (curr_atmode() == MODE_AT_LITERAL || index($0, TOK_AT) == IDX_NOT_FOUND) {
             dbg_print("scan", 3, sprintf("(scan) [%s, short circuit] CALLING ship_out(OBJ_TEXT, '%s')",
                                          scanner_label, $0))
             ship_out(OBJ_TEXT, $0)
@@ -1617,10 +1621,15 @@ function scan(              code, terminator, readstat, name, retval, new_block,
             $1 == "@c" || $1 == "@comment")
             continue
 
-        # See if it's a command of some kind
-
+        # See if it's a command of some kind.  Of course we want
+        # first($1)==TOK_AT because we expect the at-sign in column one for
+        # a command.  Adding AND last($1)!=TOK_AT catches when we're
+        # looking at a line like @date@, which is invoking an inline
+        # "sym-function" to be resolved by dosubs().  It has a @ in
+        # column one, but that's just a coincidence.
+        #
         # first == @ and last != @ catches @foo...@ at BOL not being a command
-        if (first($1) == "@" && last($1) != "@") {
+        if (first($1) == TOK_AT && last($1) != TOK_AT) { # looks like it might be a command
             # Winnow out the primary name.  Be sure to handle
             # "@myfn{aaa}{ccc ddd}".  (Naive old code name=$1 resulted
             # in $1 being "@myfn{aaa}{ccc" which wrecks havoc.)
@@ -1867,8 +1876,9 @@ function scan(              code, terminator, readstat, name, retval, new_block,
                     # But it's not an ERROR, so something was found at "level".
                     # See if it's a user command and ship it out if so.
                     if (flag_1true_p((code = nam_ll_read(name, level)), TYPE_USER)) {
-                        dbg_print("scan", 3, sprintf("(scan) [%s] CALLING ship_out(OBJ_USER, '%s')", scanner_label, $0))
-                        ship_out(OBJ_USER, $0)
+                        cmdline = scan_user_invocation()
+                        dbg_print("scan", 3, sprintf("(scan) [%s] CALLING ship_out(OBJ_USER, '%s')", scanner_label, cmdline))
+                        ship_out(OBJ_USER, cmdline)
                         dbg_print("scan", 3, "(scan) [" scanner_label "] RETURNED FROM ship_out()")
                         continue
                     }
@@ -1876,13 +1886,89 @@ function scan(              code, terminator, readstat, name, retval, new_block,
             }
             # It's okay to reach here with no actions taken.  In this
             # case, just process the line as normal text.
-        }
+        } # doesn't look like a command - ship it out as text
         dbg_print("scan", 3, sprintf("(scan) [%s] CALLING ship_out(OBJ_TEXT, '%s')", scanner_label, $0))
         ship_out(OBJ_TEXT, $0)
         dbg_print("scan", 3, "(scan) [" scanner_label "] RETURNED FROM ship_out()")
     } # continue loop again, reading next line
     dbg_print("scan", 5, "(scan) END => " ppf__bool(retval))
     return retval
+}
+
+
+# Unlike built-in CMDs, which must be complete on a single line, USER
+# commands might span multiple physical lines.  This is because (unlike
+# CMDs), parameters are enclosed with braces, so the user might say:
+#       @mycmd{Title}{A very very very
+#       very long title}
+# Call readline() repeatedly until braces are closed properly.
+function scan_user_invocation(    s, name, obj, i, oldi, c, nc, narg, nlbr,
+                                  readstat)
+{
+    s = $0
+    narg = 0
+    dbg_print("scan", 5, "(scan_user_cmdline) s='" s "'")
+
+    i = 1
+    c = substr(s, i, 1)
+    if (c != TOK_AT)
+        error(sprintf("(scan_user_invocation) Doesn't start with @: s-'%s'", s))
+
+    # Read cmd name
+    c = substr(s, (oldi = ++i), 1)
+    while (c != "" && c != TOK_LBRACE) {
+        # print_stderr(sprintf("(scan_user_invocation) LOOP: i=%d, c='%s', nam='%s'",
+        #                      i, c, substr(s, 2, i-2)))
+        c = substr(s, ++i, 1)
+    }
+    name = substr(s, oldi, i-oldi)
+    dbg_print("scan", 3, sprintf("(scan_user_invocation) OUT: name='%s'", name))
+
+    if (c != TOK_LBRACE) {
+        # It's just @Foo, no braces, no parsing needed
+        # Soon, return name 0 SUBSEP
+        dbg_print("scan", 1, sprintf("(scan_user_invocation) END 1: narg=%d, name='%s', s='%s'", narg, name, s))
+        return s
+    }
+
+    # It *IS* a brace, so set things up that way
+    narg = nlbr = 1
+    oldi = ++i
+    c = substr(s, i, 1)
+    while (nlbr >= 0) {
+        #print_stderr(sprintf("(scan_user_invocation) TOP, i=%d, c='%s', nlbr now=%d", i, c, nlbr))
+        if (i > 255)
+            error(sprintf("(scan_user_invocation) ERROR, i too big: i=%d, c='%s'", i, c))
+        else if (c == "") {
+            if (nlbr == 0) {
+                dbg_print("scan", 1, sprintf("(scan_user_invocation) END 2 (eos, {} bal): narg=%d, s='%s'", narg, s))
+                return s
+            }
+            # We ran out of characters looking for a }
+            # Try reading some more lines to fill our need
+            readstat = readline()
+            if (readstat <= 0)
+                error(sprintf("(scan_user_invocation) ERROR, missing '}': i=%d, c='%s'", i, c))
+            #print_stderr("just read = >" $0 "<")
+            s = s TOK_NEWLINE $0
+            c = substr(s, i, 1)
+            dbg_print("scan", 7, sprintf("(scan_user_invocation) INFO, After readline, i=%d, c='%s', nlbr now=%d, s='%s'", i, c, nlbr, s))
+            continue
+        } else if (c == TOK_LBRACE) {
+            nlbr++
+            narg++
+            dbg_print("scan", 5, sprintf("(scan_user_invocation) INFO, found '{': i=%d, c='%s', nlbr now=%d", i, c, nlbr))
+            oldi = i+1
+        } else if (c == TOK_RBRACE) {
+            nlbr--
+            dbg_print("scan", 5, sprintf("(scan_user_invocation) INFO, found '}': i=%d, c='%s', nlbr now=%d", i, c, nlbr))
+            dbg_print("scan", 3, sprintf("(scan_user_invocation) Arg[%d]='%s'", narg, substr(s, oldi, i-oldi)))
+        }
+        # else normal character
+        c = substr(s, ++i, 1)
+    }
+    dbg_print("scan", 1, sprintf("(scan_user_invocation) END 3: narg=%d, s='%s'", narg, s))
+    return s
 }
 
 
@@ -2328,13 +2414,13 @@ function seq_definition_ppf(name,    buf, TAB)
     TAB = "\t"
     buf =         "@sequence " name TAB "create\n"
     if (seq_ll_read(name) != SEQ_DEFAULT_INIT)
-        buf = buf "@sequence " name TAB "set " seq_ll_read(name) "\n"
+        buf = buf "@sequence " name TAB "set " seq_ll_read(name) TOK_NEWLINE
     if (seqtab[name, "init"] != SEQ_DEFAULT_INIT)
-        buf = buf "@sequence " name TAB "init " seqtab[name, "init"] "\n"
+        buf = buf "@sequence " name TAB "init " seqtab[name, "init"] TOK_NEWLINE
     if (seqtab[name, "incr"] != SEQ_DEFAULT_INCR)
-        buf = buf "@sequence " name TAB "incr " seqtab[name, "incr"] "\n"
+        buf = buf "@sequence " name TAB "incr " seqtab[name, "incr"] TOK_NEWLINE
     if (seqtab[name, "fmt"] != sym_ll_read("__FMT__", "seq"))
-        buf = buf "@sequence " name TAB "format " seqtab[name, "fmt"] "\n"
+        buf = buf "@sequence " name TAB "format " seqtab[name, "fmt"] TOK_NEWLINE
     return chop(buf)
 }
 
@@ -3191,10 +3277,10 @@ function sym_definition_ppf(sym,
                             definition)
 {
     definition = sym_fetch(sym)
-    return (index(definition, "\n") == IDX_NOT_FOUND) \
+    return (index(definition, TOK_NEWLINE) == IDX_NOT_FOUND) \
         ? "@define "  sym "\t" definition \
-        : "@longdef " sym "\n" \
-          definition      "\n" \
+        : "@longdef " sym TOK_NEWLINE \
+          definition      TOK_NEWLINE \
           "@endlongdef"
 }
 
@@ -3346,15 +3432,15 @@ function bool__tokenize_string(s,
             c = substr(s, ++i, 1)
 
         if (c == TOK_NOT ||
-            c == TOK_OPAREN ||
-            c == TOK_CPAREN) {
+            c == TOK_LPAREN ||
+            c == TOK_RPAREN) {
             dbg_print("bool", 7, sprintf("(bool__tokenize_string) Found '%s' at i=%d", c, i))
             __btoken[++__bnf] = c
             i++
             c = substr(s, i, 1)
             while (c == " " || c == "\t")
                 c = substr(s, ++i, 1)
-            dbg_print("bool", 5, sprintf("(bool__tokenize_string) %s __btoken[%d]=TOK_{NOT|OPAREN|CPAREN}, i now %d", __btoken[__bnf], __bnf, i))
+            dbg_print("bool", 5, sprintf("(bool__tokenize_string) %s __btoken[%d]=TOK_{NOT|LPAREN|RPAREN}, i now %d", __btoken[__bnf], __bnf, i))
 
         } else if (substr(s, i, 2) == "&&") {
             dbg_print("bool", 7, sprintf("(bool__tokenize_string) Found '&&' at i=%d", i))
@@ -3378,9 +3464,9 @@ function bool__tokenize_string(s,
             dbg_print("bool", 7, sprintf("(bool__tokenize_string) Found 'defined(' at i=%d", i))
             i += 8
             oldi = i
-            while (c != TOK_CPAREN && i <= slen)
+            while (c != TOK_RPAREN && i <= slen)
                 c = substr(s, ++i, 1)
-            if (substr(s, i, 1) != TOK_CPAREN)
+            if (substr(s, i, 1) != TOK_RPAREN)
                 error(sprintf("(bool__tokenize_string) defined - no closing paren; __btoken[%d]='%s', i now %d", __bnf, __btoken[__bnf], i))
             name = substr(s, oldi, i-oldi)
             if (emptyp(name))
@@ -3397,9 +3483,9 @@ function bool__tokenize_string(s,
             dbg_print("bool", 7, sprintf("(bool__tokenize_string) Found 'env(' at i=%d", i))
             i += 4
             oldi = i
-            while (c != TOK_CPAREN && i <= slen)
+            while (c != TOK_RPAREN && i <= slen)
                 c = substr(s, ++i, 1)
-            if (substr(s, i, 1) != TOK_CPAREN)
+            if (substr(s, i, 1) != TOK_RPAREN)
                 error(sprintf("(bool__tokenize_string) env - no closing paren; __btoken[%d]='%s', i now %d", __bnf, __btoken[__bnf], i))
             name = substr(s, oldi, i-oldi)
             if (emptyp(name))
@@ -3416,9 +3502,9 @@ function bool__tokenize_string(s,
             dbg_print("bool", 7, sprintf("(bool__tokenize_string) Found 'exists(' at i=%d", i))
             i += 7
             oldi = i
-            while (c != TOK_CPAREN && i <= slen)
+            while (c != TOK_RPAREN && i <= slen)
                 c = substr(s, ++i, 1)
-            if (substr(s, i, 1) != TOK_CPAREN)
+            if (substr(s, i, 1) != TOK_RPAREN)
                 error(sprintf("(bool__tokenize_string) exists - no closing paren; __btoken[%d]='%s', i now %d", __bnf, __btoken[__bnf], i))
             name = substr(s, oldi, i-oldi)
             if (emptyp(name))
@@ -3437,11 +3523,11 @@ function bool__tokenize_string(s,
             while (TRUE) {
                 if (i > slen || c == "")
                     break
-                if (c == TOK_OPAREN) {
+                if (c == TOK_LPAREN) {
                     pcnt++
                     c = substr(s, ++i, 1) # next char
                     dbg_print("bool", 7, "(bool__tokenize_string) other: '(', pcnt now " pcnt ", at i=" i)
-                } else if (c == TOK_CPAREN) {
+                } else if (c == TOK_RPAREN) {
                     if (pcnt > 0) {
                         pcnt--
                         dbg_print("bool", 7, "(bool__tokenize_string) other: ')', but pcnt was " pcnt+1 " so just decr; pcnt now " pcnt "; at i=" i)
@@ -3525,10 +3611,10 @@ function bool__parse_factor(    e, r,         # ! factor | variable | ( expressi
         dbg_print("bool", 5, "(bool__parse_factor) Match regexp 1")
         return 0+__btoken[__bf++]
 
-    } else if (__btoken[__bf] == TOK_OPAREN) {
+    } else if (__btoken[__bf] == TOK_LPAREN) {
         __bf++
         e = bool__parse_expr()
-        if (__btoken[__bf++] != TOK_CPAREN)
+        if (__btoken[__bf++] != TOK_RPAREN)
             error("(bool__parse_factor) Missing ')' at " __btoken[__bf])
         dbg_print("bool", 5, "(bool__parse_factor) Found parens, returning " ppf__bool(e))
         return e
@@ -3781,17 +3867,17 @@ function xeq__BLK_CASE(case_block,
 function ppf__case(case_block,
                    buf, i, caseval, x, k)
 {
-    buf = "@case " blktab[case_block, 0, "casevar"] "\n"
-    buf = buf ppf__block(blktab[case_block, 0, "preamble_block"]) "\n"
+    buf = "@case " blktab[case_block, 0, "casevar"] TOK_NEWLINE
+    buf = buf ppf__block(blktab[case_block, 0, "preamble_block"]) TOK_NEWLINE
     for (k in blktab) {
         split(k, x, SUBSEP)
         if (x[1] == case_block && x[3] == "of_block")
-            buf = buf "@of " x[2] "\n" \
-                ppf__block(blktab[case_block, x[2], "of_block"]) "\n"
+            buf = buf "@of " x[2] TOK_NEWLINE \
+                ppf__block(blktab[case_block, x[2], "of_block"]) TOK_NEWLINE
     }
     if (blktab[case_block, 0, "seen_otherwise"])
         buf = buf "@otherwise\n" \
-            ppf__block(blktab[case_block, 0, "otherwise_block"]) "\n"
+            ppf__block(blktab[case_block, 0, "otherwise_block"]) TOK_NEWLINE
     buf = buf "@endcase"
     return buf
 }
@@ -4109,7 +4195,7 @@ function dump__symtab(type, include_sys, # caller names this "all_flag"
     # Construct output lines in buf
     buf = EMPTY
     for (i = 1; i <= cnt; i++)
-        buf = buf sym_definition_ppf(keys[i]) "\n"
+        buf = buf sym_definition_ppf(keys[i]) TOK_NEWLINE
     dbg_print("sym", 4, "(dump__symtab) END")
     return chomp(buf)
 }
@@ -4146,7 +4232,7 @@ function dump__seqtab(type, include_sys,
     # Construct output lines in buf
     buf = EMPTY
     for (i = 1; i <= cnt; i++)
-        buf = buf seq_definition_ppf(keys[i]) "\n"
+        buf = buf seq_definition_ppf(keys[i]) TOK_NEWLINE
     dbg_print("seq", 4, "(dump__seqtab) END")
     return chomp(buf)
 }
@@ -4186,7 +4272,7 @@ function dump__cmdtab(type, include_sys,
     # Construct output lines in buf
     buf = EMPTY
     for (i = 1; i <= cnt; i++)
-        buf = buf cmd_definition_ppf(keys[i]) "\n"
+        buf = buf cmd_definition_ppf(keys[i]) TOK_NEWLINE
     dbg_print("cmd", 4, "(dump__cmdtab) END")
     return chomp(buf)
 }
@@ -4455,10 +4541,10 @@ function ppf__for(for_block,
                   buf)
 {
     if (blktab[for_block, 0, "loop_type"] == "each")
-        buf = "@foreach " blktab[for_block, 0, "loop_var"] " " blktab[for_block, 0, "loop_array_name"] "\n"
+        buf = "@foreach " blktab[for_block, 0, "loop_var"] " " blktab[for_block, 0, "loop_array_name"] TOK_NEWLINE
     else
-        buf = "@for " blktab[for_block, 0, "loop_var"] " " blktab[for_block, 0, "loop_start"] " " blktab[for_block, 0, "loop_end"] " " blktab[for_block, 0, "loop_incr"] "\n"
-    buf = buf ppf__block(blktab[for_block, 0, "body_block"]) "\n"
+        buf = "@for " blktab[for_block, 0, "loop_var"] " " blktab[for_block, 0, "loop_start"] " " blktab[for_block, 0, "loop_end"] " " blktab[for_block, 0, "loop_incr"] TOK_NEWLINE
+    buf = buf ppf__block(blktab[for_block, 0, "body_block"]) TOK_NEWLINE
     buf = buf "@next "  blktab[for_block, 0, "loop_var"]
     return buf
 }
@@ -4604,11 +4690,11 @@ function xeq__BLK_IF(if_block,
 function ppf__if(if_block,
     buf)
 {
-    buf = "@if " blktab[if_block, 0, "condition"] "\n" \
-        ppf__block(blktab[if_block, 0, "true_block"]) "\n"
+    buf = "@if " blktab[if_block, 0, "condition"] TOK_NEWLINE \
+        ppf__block(blktab[if_block, 0, "true_block"]) TOK_NEWLINE
     if (blktab[if_block, 0, "seen_else"])
         buf = buf "@else\n" \
-            ppf__block(blktab[if_block, 0, "false_block"]) "\n"
+            ppf__block(blktab[if_block, 0, "false_block"]) TOK_NEWLINE
     return buf "@endif" 
 }
 
@@ -4983,8 +5069,8 @@ function xeq__BLK_LONGDEF(longdef_block,
 function ppf__longdef(longdef_block,
                       buf)
 {
-    return "@longdef " blktab[longdef_block, 0, "name"] "\n"      \
-            ppf__block(blktab[longdef_block, 0, "body_block"]) "\n" \
+    return "@longdef " blktab[longdef_block, 0, "name"] TOK_NEWLINE      \
+            ppf__block(blktab[longdef_block, 0, "body_block"]) TOK_NEWLINE \
             "@endlong"
 }
 
@@ -5063,7 +5149,7 @@ function xeq_cmd__m2ctl(name, cmdline,
             if (e == ERROR)
                 warn(sprintf("(xeq_cmd__m2ctl) bool__parse_expr('%s') returned ERROR - should exit?", input))
             else
-                print_stderr(sprintf("(xeq_cmd__m2ctl) __bf=%d,__bnf=%d; FINAL ANSWER: %d == %s\n", __bf, __bnf, e, ppf__bool(e)))
+                print_stderr(sprintf("(xeq_cmd__m2ctl) __bf=%d,__bnf=%d; FINAL ANSWER: %d == %s", __bf, __bnf, e, ppf__bool(e)))
         } while (TRUE)
 
     } else if ($1 == "set_dbg") { # Set __DBG__[dsys] level directly
@@ -5438,7 +5524,7 @@ function xeq_cmd__readfile(name, cmdline,
             break
         # This concatenation becomes quite slow after more than a few
         # dozen lines, which is why @readarray exists.
-        val = val line "\n"
+        val = val line TOK_NEWLINE
     }
     close(filename)
     sym_store(sym, chomp(val))
@@ -5673,7 +5759,7 @@ function xeq_cmd__shell(name, cmdline,
             warn("Error reading file '" output_file "' [shell]")
         if (getstat != OKAY)
             break
-        output_text = output_text line "\n" # Read a line
+        output_text = output_text line TOK_NEWLINE # Read a line
     }
     close(output_file)
 
@@ -5913,8 +5999,8 @@ function xeq__BLK_WHILE(while_block,
 function ppf__while(while_block,
                     buf)
 {
-    buf = "@while " blktab[while_block, 0, "condition"] "\n" \
-          ppf__block(blktab[while_block, 0, "body_block"]) "\n" \
+    buf = "@while " blktab[while_block, 0, "condition"] TOK_NEWLINE \
+          ppf__block(blktab[while_block, 0, "body_block"]) TOK_NEWLINE \
           "@endwhile"
     return buf
 }
@@ -5934,7 +6020,9 @@ function ppf__BLK_WHILE(blknum)
 
 
 #*****************************************************************************
-#       generic ship-out
+#
+#       G E N E R I C   S H I P  -  O U T
+#
 #*****************************************************************************
 function ship_out(obj_type, obj,
                   dstblk, name, dsc)
@@ -6293,8 +6381,8 @@ function _c3_advance(    tmp)
 #             L = L "@" M
 #             R = "@" R
 #     return L R
-function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
-                at_brace, x, y, inc_dec, pre_post, subcmd, silent, off_by)
+function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline, c,
+                      at_brace, x, y, inc_dec, pre_post, subcmd, silent, off_by)
 {
     dbg_print("dosubs", 5, sprintf("(dosubs) START s='%s'", s))
     l = ""                   # Left of current pos  - ready for output
@@ -6307,7 +6395,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
         if (index(r, "@{") > 0)
             r = expand_braces(r)
 
-        if ((i = index(r, "@")) == IDX_NOT_FOUND)
+        if ((i = index(r, TOK_AT)) == IDX_NOT_FOUND)
             break
 
         dbg_print("dosubs", 7, (sprintf("(dosubs) Top of loop: l='%s', r='%s', expand='%s'", l, r, expand)))
@@ -6316,15 +6404,15 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
 
         # Look for a second "@" beyond the first one.  If not found,
         # this can't be a valid m2 substitution.  Ignore it, we're done.
-        if ((i = index(r, "@")) == IDX_NOT_FOUND) {
-            l = l "@"
+        if ((i = index(r, TOK_AT)) == IDX_NOT_FOUND) {
+            l = l TOK_AT
             break
         }
 
         # A lone "@" followed by whitespace is not valid syntax.  Ignore it,
         # but keep processing the line.
         if (isspace(first(r))) {
-            l = l "@"
+            l = l TOK_AT
             continue
         }
 
@@ -6388,7 +6476,8 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
             assert_sym_valid_name(p)
             assert_sym_defined(p, fn)
             # basename in Awk, assuming Unix style path separator.
-            # return filename portion of path
+            # Return filename portion of path.  If this is not
+            # adequate, consider using @obasename SYM@.
             expand = rm_quotes(sym_fetch(p))
             sub(/^.*\//, "", expand)
             r = expand r
@@ -6435,7 +6524,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
             p = param[1 + off_by]
             if (sym_valid_p(p)) {
-                assert_sym_defined(p, "chr")
+                assert_sym_defined(p, fn)
                 x = sprintf("%c", sym_fetch(p)+0)
                 r = x r
             } else if (integerp(p) && p >= 0 && p <= 255) {
@@ -6473,7 +6562,8 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
             assert_sym_valid_name(p)
             assert_sym_defined(p, fn)
             # dirname in Awk, assuming Unix style path separator.
-            # return directory portion of path
+            # Return directory portion of path.  If this is not
+            # adequate, consider using @odirname SYM@.
             y = rm_quotes(sym_fetch(p))
             expand = (sub(/\/[^\/]*$/, "", y)) ? y : "."
             r = expand r
@@ -6577,6 +6667,7 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
         # odirname SYM: Directory name of path, using external program
         } else if (fn == "odirname") {
             if (secure_level() >= 2)
+
                 error("(odirname) Security violation")
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
             p = param[1 + off_by]
@@ -6621,6 +6712,24 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
                     error("Value '" x "' must be numeric:" $0)
             }
             r = substr(sym_fetch(p), x) r
+
+        # rot13 SYM: Output value of symbol with rot13 text
+        #   @define aRealSymbol *With 6, you get value!*
+        #   @rot13 aRealSymbol@    => *Jvgu 6, lbh trg inyhr!*
+        #   @rot13 NotaRealSymbol@ => AbgnErnyFlzoby
+        } else if (fn == "rot13") {
+            if (! __rot13_initialized)
+                initialize_rot13()
+            if (nparam == 0) error("Bad parameters in '" m "':" $0)
+            p = param[1 + off_by]
+            p = (sym_valid_p(p) && sym_defined_p(p)) \
+                ? sym_fetch(p) : substr(m, length(fn)+2)
+            expand = ""
+            for (x = 1; x <= length(p); x++) {
+                c = substr(p, x, 1)
+                expand = expand  (match(c, "[a-zA-Z]") ? __rot13[c] : c)
+            }
+            r = expand r
 
         # spaces [N]: N spaces
         } else if (fn == "spaces") {
@@ -6745,10 +6854,10 @@ function dosubs(s,    expand, i, j, l, m, nparam, p, param, r, fn, cmdline,
             error("Name '" m "' not defined [strict mode]:" $0)
 
         } else {
-            l = l "@" m
-            r = "@" r
+            l = l TOK_AT m
+            r = TOK_AT r
         }
-        i = index(r, "@")
+        i = index(r, TOK_AT)
     }
 
     dbg_print("dosubs", 3, sprintf("(dosubs) END; Out of loop => '%s'", l r))
@@ -6812,13 +6921,17 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
 
     # Tokens used in boolean expression evaluation
     TOK_AND       = "&&"
-    TOK_CPAREN    = ")"
+    TOK_AT        = "@"
     TOK_DEFINED_P = "?D"
     TOK_ENV_P     = "?E"
     TOK_EXISTS_P  = "?X"
+    TOK_LBRACE    = "{"
+    TOK_LPAREN    = "("
+    TOK_NEWLINE   = "\n"
     TOK_NOT       = "!"
-    TOK_OPAREN    = "("
     TOK_OR        = "||"
+    TOK_RBRACE    = "}"
+    TOK_RPAREN    = ")"
 
     # Execution control states for loops
     XEQ_NORMAL   = 0
@@ -6826,12 +6939,14 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     XEQ_CONTINUE = 2
     XEQ_RETURN   = 3
 
+    # Global variables
     __block_cnt          = 0
     __buffer             = EMPTY
     __init_files_loaded  = FALSE # Becomes True in load_init_files()
     __namespace          = GLOBAL_NAMESPACE
     __ord_initialized    = FALSE # Becomes True in initialize_ord()
     __print_mode         = MODE_TEXT_PRINT
+    __rot13_initialized  = FALSE # Becomes True in initialize_rot13()
     __scan_stack[0]      = 0
     __xeq_ctl            = XEQ_NORMAL
 
@@ -6902,6 +7017,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     sym_ll_fiat("__M2_VERSION__",   "", FLAGS_READONLY_SYMBOL,  M2_VERSION)
     sym_ll_fiat("__NFILE__",        "", FLAGS_READONLY_INTEGER, 0)
     sym_ll_fiat("__NLINE__",        "", FLAGS_READONLY_INTEGER, 0)
+    sym_ll_fiat("__MAX_STREAM__",   "", FLAGS_READONLY_INTEGER, MAX_STREAM)
     sym_ll_fiat("__STRICT__",   "bool", "",                     TRUE)
     sym_ll_fiat("__STRICT__",    "cmd", "",                     FALSE)
     sym_ll_fiat("__STRICT__",    "env", "",                     TRUE)
@@ -6913,7 +7029,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     # FUNCS
     # Functions cannot be used as symbol or sequence names.
     split("basename boolval chr date dirname epoch expr getenv lc left len" \
-          " ltrim mid obasename odirname ord rem right rtrim sexpr sgetenv spaces srem strftime" \
+          " ltrim mid obasename odirname ord rem right rot13 rtrim sexpr sgetenv spaces srem strftime" \
           " substr time trim tz uc uuid",
           array, " ")
     for (elem in array)
@@ -6987,6 +7103,22 @@ function initialize_ord(    low, high, i, t)
     }
 
     __ord_initialized = TRUE
+}
+
+
+# From the ROT13 page:   http://www.miranda.org/~jkominek/rot13/
+#     "The purpose of this page is to collect and display various ROT13
+#     implementations, in as wide a variety of languages as possible."
+# Maintained (at one time) by Jay Kominek <jkominek-rot13@miranda.org>
+# https://web.archive.org/web/20090308134550/http://www.miranda.org/~jkominek/rot13/awk/rot13.awk
+# Rot13 in Awk                          Teknovore <tek@wiw.org> 1998
+function initialize_rot13(    from, to, i)
+{
+    from = "NOPQRSTUVWXYZABCDEFGHIJKLMnopqrstuvwxyzabcdefghijklm"
+    to   = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+    for (i = 1; i <= length(from); i++)
+        __rot13[substr(from, i, 1)] = substr(to, i, 1)
+    __rot13_initialized = TRUE
 }
 
 

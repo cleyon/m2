@@ -358,7 +358,7 @@ Get environment variable
 Lower case
 .It @left SYM [N]@
 Substring of SYM from 1 to Nth character
-.It @len SYM@n
+.It @len SYM@
 Number of characters in SYM's value
 .It @ltrim SYM@
 Remove leading whitespace
@@ -371,6 +371,8 @@ Embedded comment text is ignored
 .Brq #S
 .It @right SYM [N]@
 Substring of SYM from N to last character
+.It @rot13 SYM@
+Output value of SYM (or literal string if SYM not defined) with rot13 text.
 .It @rtrim SYM@
 Remove trailing whitespace
 .It @spaces [N]@
@@ -407,17 +409,21 @@ The following are pre-defined; example values, defaults, or types are shown:
 .Pp
 .Bl -tag -width __FMT__[number]___ -compact -offset indent
 .It __CWD__
-Current working directory, trailing slash
+Current working directory, including trailing slash.
 .It __DATE__
-m2 run start date as YYYYMMDD (eg 19450716)
+m2 run start date as YYYYMMDD (eg: 19450716)
 .Brq #1
 .It __DBG__[<id>]
 Levels for internal debugging systems (integer)
 .It __DEBUG__
-Debugging enabled? (boolean, def FALSE)
+Debugging enabled? (boolean, default FALSE)
 .Brq #3
 .It __DIVNUM__
-Current stream number (0; 0-9 valid)
+Current stream number.
+Zero, the default value, indicates output to the terminal (standard output).
+Integer values between 0 and
+.Va __MAX_STREAM__
+are valid.
 .It __EPOCH__
 Seconds since Epoch at m2 run start time
 .Brq #1
@@ -428,30 +434,36 @@ Current file name
 .It __FILE_UUID__
 UUID unique to this file
 .It __FMT__[0]          \" bracket 0
-Text output when @boolval@ is False (0)
+Text output when @boolval@ is False.
+Default is "0".
 .Brq #3
 .It __FMT__[1]          \" bracket 1
-Text output when @boolval@ is True (1)
+Text output when @boolval@ is True.
+Default is "1".
 .Brq #3
 .It __FMT__[date]
-Date format for @date@ (%Y-%m-%d)
+Date format for @date@.
+Default is "%Y-%m-%d".
 .Brq #3
 .It __FMT__[number]
 Format for printing numbers (sync w/CONVFMT)
 .Brq #3
 .It __FMT__[seq]
-Format for printing sequence values (%d)
+Format for printing sequence values.
+Default is "%d".
 .Brq #3
 .It __FMT__[time]
-Time format for @time@ (%H:%M:%S)
+Time format for @time@.
+Default is "%H:%M:%S".
 .Brq #3
 .It __FMT__[tz]
-Time format for @tz@ (%Z)
+Time format for @tz@.
+Default is "%Z".
 .Brq #3
 .It __GID__
 Group id (effective gid)
 .It __HOME__
-User's home directory, with trailing /
+User's home directory, including trailing slash
 .It __HOST__
 Short host name (eg myhost)
 .It __HOSTNAME__
@@ -461,6 +473,12 @@ The data read by @input
 .Brq #3
 .It __LINE__
 Current line number inside __FILE__
+.It __MAX_STREAM__
+The largest valid stream number, used in
+.Ql @divert
+and
+.Ql @undivert .
+Default is 9.
 .It __M2_UUID__
 UUID unique to this m2 run
 .It __M2_VERSION__
@@ -508,10 +526,12 @@ Frequency to flush output (0..2).
 m2 run start time as HHMMSS (eg 053000)
 .Brq #1
 .It __TIMESTAMP__
-ISO 8601 timestamp (1945-07-16T05:30:00-0600)
+ISO 8601 timestamp, with "T" separator.
+Example: "1945-07-16T05:30:00-0600".
 .Brq #1
 .It __TMPDIR__
-Location for temporary files (def /tmp/)
+Location for temporary files.
+Default is /tmp/.
 .Brq #3
 .It __TZ__
 Time zone numeric offset from UTC (-0400)
@@ -619,6 +639,15 @@ shipped out yet, add the following to the end of your input data:
 @divert -1
 @undivert
 .Ed
+This is the tried-and-true, vanilla m4 way of discarding diverted data.
+GNU m4 and
+.Nm
+implement a
+.Ql @cleardivert
+command which performs a similar operation.
+Like
+.Ql @undivert ,
+with no arguments, it clears all diverted streams.
 .It Em Example :
 .br
 .Bd -literal -offset indent -compact

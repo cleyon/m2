@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-09-04 10:34:52 cleyon>
+#  Time-stamp:  <2024-09-04 10:48:20 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -1684,9 +1684,6 @@ function scan(              code, terminator, readstat, name, retval, new_block,
                         dbg_print("scan", 5, sprintf("(scan) [" scanner_label "] CALLING ship_out(OBJ_BLKNUM, %d)", new_block))
                         ship_out(OBJ_BLKNUM, new_block)
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM ship_out()"))
-
-                    } else if (name == "dump!") {
-                        xeq_cmd__dump("dump!", "WHAT?")
 
                     } else if (name == "else") {
                         dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__else(dstblk=" curr_dstblk() ")"))
@@ -7087,7 +7084,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
 
     # IMMEDS
     # These commands are Immediate
-    split("break case continue dump! else endcase endcmd endif endlong" \
+    split("break case continue else endcase endcmd endif endlong" \
           " endlongdef endwhile esac fi for foreach if ifdef ifndef longdef" \
           " newcmd next of otherwise return unless until while",
           array, TOK_SPACE)

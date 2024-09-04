@@ -1,6 +1,7 @@
-Jerry Peek wrote two articles on m4.  The second one, at:
+Jerry Peek wrote two articles on m4 for the O'Reilly book
+"Unix Power Tools".  Although now dated, this book is a classic.
+The second article, available at:
 https://www.jpeek.com/articles/linuxmag/2005-03/
-
 has a good discussion of diversions.  It includes an example which he
 describes thusly: [an]
 
@@ -12,18 +13,10 @@ describes thusly: [an]
     have an anchor (an HTML id)."
 
 I ported his m4 example to m2.  I think it is interesting to compare the
-two versions.  Most changes I made are minor:
-
-- (Not really a change, but implementation choices.)  I used a
-  sequence to implement h1count rather than clumsier symbol arithmetic.
-  I also removed leading underscores from his user-defined names.
-
-- Silently changed blank lines - which probably shouldn't (?) produce
-  output - into comment lines.
-
-- Most significantly, worked around an m2 limitation: it cannot handle
-  multi-line command parameters, and Peek's second paragraph example has
-  an embedded newline.  I closed it up into a single line.
+two versions.  I used a sequence to implement h1count rather than
+clumsier symbol arithmetic.  I also removed leading underscores from his
+user-defined names.  I also silently changed blank lines---which
+probably shouldn't (?) produce output---into comment lines.
 
 Peek's "Listing Two": m4 macro calls: the htmltext.m4 file
 
@@ -43,7 +36,8 @@ This corresponds to my htmltext.cmds file.  The similarities are obvious.
 @h1{First heading}
 @p{The first paragraph.}
 @h1{Second heading}
-@p{The second paragraph.  Yadda yadda yadda}
+@p{The second paragraph.
+Yadda yadda yadda}
 @h1{Third heading}
 @p{The third paragraph.}
 #+end_example
@@ -109,9 +103,8 @@ And compare with htmltext.m2
 @undivert 1
 #+end_example
 
-Here is Peek's Listing 3: HTML output from the htmltext.m4 file.  m2
-produces identical output (except for the previously mentioned newline
-in the second paragraph).
+Here is Peek's Listing 3: HTML output from the htmltext.m4 file.
+m2 produces identical output.
 
 #+begin_src html
 <strong>Table of contents:</strong>

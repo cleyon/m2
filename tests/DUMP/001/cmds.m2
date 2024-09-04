@@ -1,12 +1,14 @@
 @newcmd FOO
 Foo on you!
 @endcmd
-@newcmd hello{name}
+@newcmd greet{name}
 Hello, @name@!
 @endcmd
-@newcmd guilty{who}
+@newcmd pronounce{who}{judgment}
 @for i 1 4
-That's guilty, @who@, guilty!
+That's @judgment@, @who@, @judgment@!
 @next i
 @endcmd
+@greet{Mr Smith}
+@pronounce{Trump}{guilty}
 @dump commands

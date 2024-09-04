@@ -20,18 +20,22 @@
 # ======================
 # User-specified config files:
 # ----------------------------
-# TESTNAME.disabled     If present, TESTNAME is not executed for testing.  OPT CONFIG
-# TESTNAME.err          If present, expected m2 error text.  Default "".  CONFIG
-# TESTNAME.exit         If present, expected m2 exit code.  Default 0.  CONFIG
-# TESTNAME.out          If present, expected m2 standard output.  Default "".  CONFIG
+# TESTNAME.disabled         If present, TESTNAME is not executed for testing
+# TESTNAME.err              If present, expected m2 error text.  Default ""
+# TESTNAME.exit             If present, expected m2 exit code.  Default 0
+# TESTNAME.out              Expected m2 standard output.  Required to exist even if empty
+#                           This catches random .m2 files being interpreted as tests, and
+#                           also requires a test to positively specify "no output expected".
+# TESTNAME.showdiff         If present, show diff of expected/actual output on failure
 #
-# Temporary working files, deleted after run:
-# -------------------------------------------
-# TESTNAME.ur_err       m2 run standard error.
-# TESTNAME.ur_exit      m2 run exit code.
-# TESTNAME.ur_out       m2 run standard output.
-# TESTNAME.want_err     Copy of desired error text, if any, default blank.
-# TESTNAME.want_exit    Copy of desired exit code.
+# Temporary working files, deleted after test run:
+# ------------------------------------------------
+# TESTNAME.run_err          m2 run standard error
+# TESTNAME.run_exit         m2 run exit code
+# TESTNAME.run_out          m2 run standard output
+# TESTNAME.expected_err     Copy of desired error text, if any, default blank
+# TESTNAME.expected_exit    Copy of desired exit code
+# TESTNAME.expected_out     Copy of desired output text, if any, default blank
 
 
 debug="false"   # "true"
@@ -123,69 +127,78 @@ run_test()
 
     if [ ! -f $M2_FILE ]; then
         M2_FILE="${M2_FILE}.m2"
-        if [ ! -f $M2_FILE ]; then
-            framework_error "run_test: $M2_FILE does not exist!"
-        fi
+        [ -f $M2_FILE ] || { framework_error "run_test: $M2_FILE does not exist!"; return; }
     fi
 
     TESTNAME=`echo "$M2_FILE" | sed 's,^.*/,,;s,\.m2$,,'`   # remove CATEGORY and ext
     [ $debug = "true" ] && echo "TESTNAME is $TESTNAME"
+    [ -f ${TESTNAME}.out ] || { framework_error "run_test: ${test_id}/${TESTNAME}.out does not exist!"; return; }
+
     printf "*** $test_id/$TESTNAME ... "
 
-    [ -f ${TESTNAME}.disabled ] && { echo "SKIP - test disabled"; return; }
-    [ -r "$M2_FILE" ] || { echo "SKIP - unreadable test file"; return; }
-    [ -s "$M2_FILE" ] || { echo "SKIP - empty test file"; return; }
+    [ -f ${TESTNAME}.disabled ] && { echo "SKIP - Test disabled"; return; }
+    [ -r "$M2_FILE" ] || { echo "SKIP - Unreadable test file"; return; }
+    [ -s "$M2_FILE" ] || { echo "SKIP - Empty test file"; return; }
 
-    rm -f ${TESTNAME}.ur_out ${TESTNAME}.ur_err ${TESTNAME}.ur_exit ${TESTNAME}.want_exit
+    rm -f ${TESTNAME}.expected_out ${TESTNAME}.expected_err ${TESTNAME}.expected_exit
+    rm -f ${TESTNAME}.run_out      ${TESTNAME}.run_err      ${TESTNAME}.run_exit
+    trap 'rm -f ${TESTNAME}.expected_out ${TESTNAME}.expected_err ${TESTNAME}.expected_exit ${TESTNAME}.run_out ${TESTNAME}.run_err ${TESTNAME}.run_exit; exit' \
+         1 2 3 15
+
+    cp ${TESTNAME}.out ${TESTNAME}.expected_out
     if [ -f ${TESTNAME}.exit ]; then
-        cp ${TESTNAME}.exit ${TESTNAME}.want_exit
+        cp ${TESTNAME}.exit ${TESTNAME}.expected_exit
     else
-        echo "0" >${TESTNAME}.want_exit
-    fi
-    if [ -f ${TESTNAME}.out ]; then
-        cp ${TESTNAME}.out ${TESTNAME}.want_out
-    else
-        cp /dev/null ${TESTNAME}.want_out
+        echo "0" >${TESTNAME}.expected_exit
     fi
     if [ -f ${TESTNAME}.err ]; then
-        cp ${TESTNAME}.err ${TESTNAME}.want_err
+        cp ${TESTNAME}.err ${TESTNAME}.expected_err
     else
-        cp /dev/null ${TESTNAME}.want_err
+        cp /dev/null ${TESTNAME}.expected_err
     fi
 
-    "${new_M2}" $M2_FILE > ${TESTNAME}.ur_out 2> ${TESTNAME}.ur_err
-    echo $? >${TESTNAME}.ur_exit
+    "${new_M2}" $M2_FILE > ${TESTNAME}.run_out 2> ${TESTNAME}.run_err
+    echo $? >${TESTNAME}.run_exit
 
-    if ! cmp -s ${TESTNAME}.ur_exit ${TESTNAME}.want_exit; then
-        echo "FAIL - exit code"
-        echo "    Exit code `cat ${TESTNAME}.ur_exit`;  wanted `cat ${TESTNAME}.want_exit`"
+    if ! cmp -s ${TESTNAME}.run_exit ${TESTNAME}.expected_exit; then
+        echo "FAIL - Exit code"
+        echo "    Exit code `cat ${TESTNAME}.run_exit`;  wanted `cat ${TESTNAME}.expected_exit`"
         fail=127
     fi
-    if ! cmp -s ${TESTNAME}.ur_out ${TESTNAME}.want_out; then
-        echo "FAIL - text output"
+    if ! cmp -s ${TESTNAME}.run_out ${TESTNAME}.expected_out; then
+        echo "FAIL - Text output"
         echo "    (file $CATEGORY/$SERIES/$M2_FILE)"
-        echo ">>>  EXPECTED OUTPUT  >>>"
-        cat ${TESTNAME}.want_out
-        echo ">>>  ACTUAL OUTPUT  >>>"
-        cat ${TESTNAME}.ur_out
-        if [ -s ${TESTNAME}.ur_err ]; then
-            echo ">>>  ERRORS  >>>"
-            cat ${TESTNAME}.ur_err
+        if [ -f ${TESTNAME}.showdiff ]; then
+            echo ">>> DIFF EXPECTED/ACTUAL OUTPUT TEXT <<<"
+            echo diff -c ${TESTNAME}.expected_out ${TESTNAME}.run_out
+            diff -c ${TESTNAME}.expected_out ${TESTNAME}.run_out
+        else
+            echo ">>> EXPECTED OUTPUT TEXT <<<"
+            cat ${TESTNAME}.expected_out
+            echo ">>> ACTUAL OUTPUT TEXT <<<"
+            cat ${TESTNAME}.run_out
+        fi
+        if [ -s ${TESTNAME}.run_err ]; then
+            echo ">>> ERRORS <<<"
+            cat ${TESTNAME}.run_err
         fi
         fail=127
-    elif ! cmp -s ${TESTNAME}.ur_err ${TESTNAME}.want_err; then
-        echo "FAIL - error messages"
+    elif ! cmp -s ${TESTNAME}.run_err ${TESTNAME}.expected_err; then
+        echo "FAIL - Error messages"
         echo "    (file $CATEGORY/$SERIES/$M2_FILE)"
-        echo ">>>  EXPECTED ERRORS  >>>"
-        cat ${TESTNAME}.want_err
-        echo ">>>  ACTUAL ERRORS  >>>"
-        cat ${TESTNAME}.ur_err
+        echo ">>> EXPECTED ERRORS <<<"
+        cat ${TESTNAME}.expected_err
+        echo ">>> ACTUAL ERRORS <<<"
+        cat ${TESTNAME}.run_err
         fail=127
     else
         echo "PASS"
-        rm -f ${TESTNAME}.ur_out ${TESTNAME}.ur_err
+        rm -f ${TESTNAME}.run_out ${TESTNAME}.run_err
     fi
-    rm -f ${TESTNAME}.ur_exit ${TESTNAME}.want_exit ${TESTNAME}.want_err ${TESTNAME}.want_out
+
+    # Retain ${TESTNAME}.{run_out,run_err} for further investigation
+    rm -f ${TESTNAME}.expected_out ${TESTNAME}.expected_err ${TESTNAME}.expected_exit
+    rm -f                                                   ${TESTNAME}.run_exit 
 }
 
 
@@ -233,9 +246,9 @@ esac
 
 #rm -f test.txt
 if [ ${fail} -eq 0 ] ; then
-    echo "!!! SUCCESS - tests completed successfully"
+    echo "!!! SUCCESS - Tests completed successfully"
     cd "${objdir}" && rm -r tmp
 else
-    echo "!!! FAILURE - some tests failed."
+    echo "!!! FAILURE - Some tests failed"
 fi
 exit ${fail}

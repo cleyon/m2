@@ -874,12 +874,25 @@ True if array contains elem
 .Pp
 Any other expression is evaluated as a mathematical expression and
 considered True if the result is non-zero.
-.Ss User-DefinedCommands
-
-
-
-
-
+.Ss User-Defined Commands
+Q.\ What is the difference between
+.Ql @define
+and
+.Ql @newcmd ?
+.br
+A.\ @define (and @longdef) create a symbol whose value can be substituted
+in-line whenever you wish, by surrounding it with "@" characters, as in:
+.br
+.Bd -literal -offset indent -compact
+Hello @name@, I just got a great deal on this new @item@ !!!
+.Ed
+You can also invoke mini "functions", little in-line functions that may
+take parameters but generally produce or modify output in some way.
+.Pp
+Names declared with @newcmd are recognized and run in the procedure
+that processes the control commands (@if, @define, etc).
+These things can only be on a line of their own and (mostly) do not
+produce output.
 .Sh IMPLEMENTATION NOTES
 .Nm
 is written in portable

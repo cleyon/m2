@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-09-07 13:35:18 cleyon>
+#  Time-stamp:  <2024-09-07 13:45:32 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -1289,19 +1289,6 @@ function ppf__BLK_AGG(blknum,
 #       C O M M A N D   A P I
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-#
-#       Q. What is the difference between @define and @newcmd?
-#       A. @define (and @longdef) create a symbol whose value can be substituted
-#       in-line whenever you wish, by surrounding it with "@" characters, as in:
-#
-#           Hello @name@, I just got a great deal on this new @item@ !!!
-#
-#       You can also invoke mini "functions", little in-line functions that may
-#       take parameters but generally produce or modify output in some way.
-#
-#       Names declared with @newcmd are recognized and run in the procedure
-#       that processes the control commands (@if, @define, etc).  These things
-#       can only be on a line of their own and (mostly) do not produce output.
 #
 #*****************************************************************************
 # function cmd_defined_p(name, code)

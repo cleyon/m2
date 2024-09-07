@@ -67,7 +67,7 @@ Declare ARR as an array
 .It @break
 Interrupt execution of enclosing loop.
 @break is only valid inside a @for, @foreach, or @while block.
-.It @case NAME [PREAMBLE] [@of TEXT ...] [@otherwise ...] @endcase
+.It @case NAME [PREAMBLE ...] [@of TEXT ...] [@otherwise ...] @endcase
 Evaluate value of NAME, comparing it with
 each successive @of TEXT.
 If a matching @of branch is found, execute the preamble (if any) and the
@@ -80,8 +80,8 @@ execute the preamble.
 known cases.
 The text and commands of the unexpected (@otherwise) instance are expected
 to compensate for the lack of a preamble.)
-.It @cleardivert [N ...]
-Clear stream(s) N...
+.It @cleardivert [N...]
+Clear stream(s) specified by N.
 Similar to @undivert, if no arguments are provided then all streams are cleared.
 See the
 .Sx Streams and Diversions
@@ -118,7 +118,7 @@ Also called @esac thanks to Algol-60.
 Indicate the end of a @newcmd definition.
 .It @endif
 Indicate the end of an @if (or @unless) condition block.
-Also called @fi to keep the dream alive.
+Also called @fi, keeping the dream alive.
 .It @endlongdef
 Indicate the end of a multi-line @longdef.
 .It @endwhile
@@ -137,7 +137,7 @@ Execute a loop with VAR taking on successive
 values of keys to an array.
 NOTE: Different Awk implementations may return keys in differing order.
 .It @if EXPR ... [@else ...] @endif
-Include subsequent text if boolean expression is True.
+Include subsequent lines of text if boolean expression is True.
 If EXR is a simple NAME, check if NAME is True.
 See
 .Sx Boolean expressions
@@ -190,7 +190,7 @@ Create and manage sequences.
 See the
 .Sx Sequences
 section.
-.It @shell DELIM [PROG]
+.It @shell DELIM [PROG] ... DELIM
 Evaluate input until DELIM and send raw data to PROG.
 Output stream is captured; shell exit status will be stored in
 .Va __SHELL_EXIT__ .
@@ -296,9 +296,9 @@ is given three arguments: '"a', 'b"', and 'c' -- not two!
 .Nm
 can incorporate the contents of files into its data stream.
 .Ql @include
-scans and processes the file data for macros;
+retrieves and processes the file data for macros, while
 .Ql @paste
-will retrieve the contents with no modifications.
+reads the file contents with no modifications.
 Attempting to
 .Ql @include
 or
@@ -874,6 +874,12 @@ True if array contains elem
 .Pp
 Any other expression is evaluated as a mathematical expression and
 considered True if the result is non-zero.
+.Ss User-DefinedCommands
+
+
+
+
+
 .Sh IMPLEMENTATION NOTES
 .Nm
 is written in portable

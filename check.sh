@@ -161,12 +161,12 @@ run_test()
     echo $? >${TESTNAME}.run_exit
 
     if ! cmp -s ${TESTNAME}.run_exit ${TESTNAME}.expected_exit; then
-        echo "FAIL - Exit code"
+        echo "FAIL - Unexpected exit code"
         echo "    Exit code `cat ${TESTNAME}.run_exit`;  wanted `cat ${TESTNAME}.expected_exit`"
         fail=127
     fi
     if ! cmp -s ${TESTNAME}.run_out ${TESTNAME}.expected_out; then
-        echo "FAIL - Text output"
+        echo "FAIL - Unexpected output"
         echo "    (file $CATEGORY/$SERIES/$M2_FILE)"
         if [ -f ${TESTNAME}.showdiff ]; then
             echo ">>> DIFF EXPECTED/ACTUAL OUTPUT TEXT <<<"
@@ -184,7 +184,7 @@ run_test()
         fi
         fail=127
     elif ! cmp -s ${TESTNAME}.run_err ${TESTNAME}.expected_err; then
-        echo "FAIL - Error messages"
+        echo "FAIL - Unexpected error messages"
         echo "    (file $CATEGORY/$SERIES/$M2_FILE)"
         echo ">>> EXPECTED ERRORS <<<"
         cat ${TESTNAME}.expected_err
@@ -204,9 +204,11 @@ run_test()
 
 test_something()
 {
-    testwhat=$1
     local slashes
-    slashes=`echo $testwhat | tr -dc / | wc -c | tr -dc [0-9]`
+    # Consolidate, remove trailing, then count slashes
+    testwhat=`echo "$1" | tr -s /`
+    testwhat=${testwhat%/}
+    slashes=`echo "$testwhat" | tr -dc / | wc -c | tr -dc [0-9]`
     [ $debug = "true" ] && echo "slashes=$slashes"
 
     local category

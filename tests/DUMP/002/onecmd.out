@@ -1,5 +1,6 @@
 Begin
 Preamble
+Of clauses may print in different order - that's okay
 One
 End
 @newcmd one
@@ -7,6 +8,7 @@ End
 Begin
 @case FOO
 Preamble
+Of clauses may print in different order - that's okay
 @of 2
 Two
 @of 3

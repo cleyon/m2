@@ -1,1 +1,1 @@
-m2:ma3.m2:5:(scan_user_invocation) ERROR, missing '}': i=19, c=''
+m2:ma3.m2:5:(scan__usercmd_call) ERROR, missing '}': i=19, c=''

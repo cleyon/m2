@@ -1,3 +1,4 @@
+Items may print in different order - that's okay
 I=baz; Baz
 I=foo; Foo
 I=bar; Bar

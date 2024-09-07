@@ -1,1 +1,1 @@
-m2:bad.m2:33:(scan__of) Duplicate '@of' values not allowed:@of 3
+m2:bad.m2:33:(parse__of) Duplicate '@of' values not allowed:@of 3

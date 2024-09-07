@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-09-04 17:06:50 cleyon>
+#  Time-stamp:  <2024-09-07 13:35:18 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -450,10 +450,10 @@ function default_shell()
 
 function curr_atmode(    top_block)
 {
-    if (stk_emptyp(__scan_stack))
-        error("(curr_atmode) Scan stack is empty!")
-    top_block = stk_top(__scan_stack)
-    dbg_print_block("ship_out", 7, top_block, "(curr_atmode) top_block [top of __scan_stack]")
+    if (stk_emptyp(__parse_stack))
+        error("(curr_atmode) Parse stack is empty!")
+    top_block = stk_top(__parse_stack)
+    dbg_print_block("ship_out", 7, top_block, "(curr_atmode) top_block [top of __parse_stack]")
     if (! ((top_block, 0, "atmode") in blktab)) {
         error("(curr_atmode) Top block " top_block " does not have 'atmode'")
     }
@@ -463,10 +463,10 @@ function curr_atmode(    top_block)
 
 function curr_dstblk(    top_block)
 {
-    if (stk_emptyp(__scan_stack))
-        error("(curr_dstblk) Scan stack is empty!")
-    top_block = stk_top(__scan_stack)
-    dbg_print_block("ship_out", 7, top_block, "(curr_dstblk) top_block [top of __scan_stack]")
+    if (stk_emptyp(__parse_stack))
+        error("(curr_dstblk) Parse stack is empty!")
+    top_block = stk_top(__parse_stack)
+    dbg_print_block("ship_out", 7, top_block, "(curr_dstblk) top_block [top of __parse_stack]")
     if (! ((top_block, 0, "dstblk") in blktab)) {
         error("(curr_dstblk) Top block " top_block " does not have 'dstblk'")
     }
@@ -512,35 +512,35 @@ function lower_namespace()
 
 # Return value:
 #       0       No problems detected
-#       1       Scan stack is empty
-#       2       Scanner mismatch (block type not as expected)
+#       1       Parse stack is empty
+#       2       Parser mismatch (block type not as expected)
 #       3       Depth problem mismatch
 # In error cases, warning messages are printed.
-function assert_scan_stack_okay(expected_block_type,
+function check__parse_stack(expected_block_type,
                                 btop)
 {
-    if (stk_emptyp(__scan_stack)) {
-        warn("Scan stack is empty!")
-        return 1
+    if (stk_emptyp(__parse_stack)) {
+        __m2_msg = "Empty parse stack"
+        return ERR_PARSE_STACK
     }
 
-    btop = stk_top(__scan_stack)
+    btop = stk_top(__parse_stack)
     if (blk_type(btop) != expected_block_type) {
-        warn(sprintf("Current scanner has type %s but I expected %s",
-                     ppf__block_type(blk_type(btop)), ppf__block_type(expected_block_type)))
-        return 2
+        __m2_msg = sprintf("Missing parser; wanted %s but found %s", 
+                           ppf__block_type(expected_block_type), ppf__block_type(blk_type(btop)))
+        return ERR_PARSE_MISMATCH
     }
 
     # We have to subtract 1 because the original "depth" was stored
-    # before the block was pushed onto the __scan_stack; and at this
+    # before the block was pushed onto the __parse_stack; and at this
     # point it hasn't been popped yet...
-    if (blktab[btop, 0, "depth"] != stk_depth(__scan_stack) - 1) {
-        warn(sprintf("Current scanner has depth %d but I expected %d",
-                     blktab[btop, 0, "depth"], stk_depth(__scan_stack) - 1))
-        return 3
+    if (blktab[btop, 0, "depth"] != stk_depth(__parse_stack) - 1) {
+        __msg_msg = sprintf("Bad depth; wanted %d but found %d",
+                            stk_depth(__parse_stack) - 1, blktab[btop, 0, "depth"])
+        return ERR_PARSE_DEPTH
     }
 
-    return 0
+    return ERR_OKAY
 }
 
 
@@ -636,7 +636,7 @@ function find_closing_brace(s, start,    offset, c, nc, cb, slen)
             return start+offset
         } else if (c == "\\" && nc == TOK_RBRACE) {
             # "\}" in expansion text will result in a single close brace
-            # without ending the expansion text scanner.  Skip over }
+            # without ending the expansion text parser.  Skip over }
             # and do not return yet.  "\}" is fixed in expand_braces().
             offset++; nc = substr(s, start+offset+1, 1)
         } else if (c == TOK_AT && nc == TOK_LBRACE) {
@@ -737,7 +737,7 @@ function error(text, file, line)
 # processors examine the newly created text for any additional macro
 # names.  Only after all expanded text has been processed and sent to
 # the output does the program get a fresh line of input.
-# Return OKAY, ERROR, or EOF.  scan() is the only caller of readline.
+# Return OKAY, ERROR, or EOF.  parse() is the only caller of readline.
 # (That used to be true, but read_lines_until() now also calls readline.)
 function readline(    getstat, i)
 {
@@ -772,7 +772,7 @@ function readline(    getstat, i)
 function read_lines_until(regexp, dstblk,
                           readstat)
 {
-    dbg_print("scan", 3, sprintf("(read_lines_until) START; regexp='%s', dstblk=%d",
+    dbg_print("parse", 3, sprintf("(read_lines_until) START; regexp='%s', dstblk=%d",
                                  regexp, dstblk))
     if (dstblk == TERMINAL)
         error("(read_lines_until) dstblk must not be 0")
@@ -781,17 +781,17 @@ function read_lines_until(regexp, dstblk,
         readstat = readline()   # OKAY, EOF, ERROR
         if (readstat == ERROR) {
             # Whatever just happened, the read didn't finish properly
-            dbg_print("scan", 1, "(read_lines_until) readline()=>ERROR")
+            dbg_print("parse", 1, "(read_lines_until) readline()=>ERROR")
             return FALSE
         }
         if (readstat == EOF) {
-            dbg_print("scan", 5, "(read_lines_until) readline()=>EOF")
+            dbg_print("parse", 5, "(read_lines_until) readline()=>EOF")
             return regexp == EMPTY
         }
 
-        dbg_print("scan", 5, "(read_lines_until) readline()=>OKAY; $0='" $0 "'")
+        dbg_print("parse", 5, "(read_lines_until) readline()=>OKAY; $0='" $0 "'")
         if (regexp != EMPTY && match($0, regexp)) {
-            dbg_print("scan", 5, "(read_lines_until) END => TRUE")
+            dbg_print("parse", 5, "(read_lines_until) END => TRUE")
             return TRUE
         }
 
@@ -821,7 +821,7 @@ BEGIN {
 
     namtab["__DBG__", GLOBAL_NAMESPACE] = TYPE_ARRAY FLAG_SYSTEM
     split("args block bool braces case cmd del divert dosubs dump expr for if io" \
-          " nam namespace read scan seq ship_out stk sym while xeq",
+          " nam namespace parse read seq ship_out stk sym while xeq",
           _dbg_sys_array, TOK_SPACE)
     for (_dsys in _dbg_sys_array) {
         __dbg_sysnames[_dbg_sys_array[_dsys]] = TRUE
@@ -850,7 +850,7 @@ function initialize_debugging()
     dbg_set_level("nam",        3)
     dbg_set_level("namespace",  5)
     dbg_set_level("read",       0)
-    dbg_set_level("scan",       7)
+    dbg_set_level("parse",      7)
     dbg_set_level("seq",        3)
     dbg_set_level("ship_out",   3)
     dbg_set_level("stk",        5)
@@ -980,9 +980,9 @@ function blk_new(block_type,
     if (block_type == EMPTY)
         error("(blk_new) Missing type")
     new_blknum = ++__block_cnt
-    blktab[new_blknum, 0, "depth"] = stk_depth(__scan_stack)
+    blktab[new_blknum, 0, "depth"] = stk_depth(__parse_stack)
     blktab[new_blknum, 0, "type"] = block_type
-    blktab[new_blknum, 0, "atmode"] = stk_emptyp(__scan_stack)           \
+    blktab[new_blknum, 0, "atmode"] = stk_emptyp(__parse_stack)           \
                                       ? MODE_AT_PROCESS : curr_atmode()
     if (block_type == BLK_AGG)
         blktab[new_blknum, 0, "count"] = 0
@@ -1319,8 +1319,8 @@ function ppf__BLK_AGG(blknum,
 function cmd_definition_ppf(name,
                             info, level, user_block)
 {
-    if (nam_parse(name, info) == ERROR)
-        error("(cmd_definition_ppf) Parse error on '" name "' -- should not happen")
+    if (nam__scan(name, info) == ERROR)
+        error("Scan error, " __m2_msg)
     if ((level = nam_lookup(info)) == ERROR)
         error("(cmd_definition_ppf) nam_lookup failed -- should not happen")
     # See if it's a user command
@@ -1442,7 +1442,7 @@ function assert_cmd_okay_to_define(name)
         error("Name '" name "' not valid:" $0)
 
     # FIXME This is not quite sufficient (I think).  I probably need
-    # to do a full nam_parse() / nam_lookup() because I don't want
+    # to do a full nam__scan() / nam_lookup() because I don't want
     # to shadow a system symbol.  At least I need to be more careful
     # than "it's not in the current namespace, looks good!!"
     if (nam_ll_in(name, __namespace))
@@ -1460,26 +1460,26 @@ function assert_cmd_okay_to_define(name)
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
 #*****************************************************************************
-function dump_scan_stack(    level, block, block_type)
+function dump_parse_stack(    level, block, block_type)
 {
-    print_stderr("BEGIN dump scan stack")
-    if (stk_depth(__scan_stack) == 0)
-        print_stderr("scan stack is empty")
+    print_stderr("(dump_parse_stack) BEGIN")
+    if (stk_depth(__parse_stack) == 0)
+        print_stderr("Parse stack is empty")
     else
-        for (level = stk_depth(__scan_stack); level > 0; level--) {
-            block = __scan_stack[level]
+        for (level = stk_depth(__parse_stack); level > 0; level--) {
+            block = __parse_stack[level]
             block_type = blk_type(block)
             print_stderr("Level " level ", block # " block ", type=" block_type )
             dbg_print_block("xeq", -1, block)
         }
-    print_stderr("END dump scan stack")
+    print_stderr("(dump_parse_stack) END")
 }
 
 
 function prep_file(filename,
                    file_block, retval)
 {
-    dbg_print("scan", 7, "(prep_file) START filename='" filename "'")
+    dbg_print("parse", 7, "(prep_file) START filename='" filename "'")
     # create and return a BLK_FILE set up for the terminal
     file_block = blk_new(BLK_FILE)
     if (filename == "-")
@@ -1488,7 +1488,7 @@ function prep_file(filename,
     blktab[file_block, 0, "dstblk"] = TERMINAL
     blktab[file_block, 0, "atmode"] = MODE_AT_PROCESS
 
-    dbg_print("scan", 7, "(prep_file) END; file_block => " file_block)
+    dbg_print("parse", 7, "(prep_file) END; file_block => " file_block)
     return file_block
 }
 
@@ -1496,17 +1496,17 @@ function prep_file(filename,
 function dofile(filename,
                 file_block, retval)
 {
-    dbg_print("scan", 5, "(dofile) START filename='" filename "'")
+    dbg_print("parse", 5, "(dofile) START filename='" filename "'")
     # create and return a BLK_FILE set up for the terminal
     file_block = prep_file(filename)
 
-    dbg_print("scan", 7, sprintf("(dofile) Pushing file block %d (%s) onto scan_stack", file_block, filename))
-    stk_push(__scan_stack, file_block)
-    dbg_print("scan", 5, "(dofile) CALLING scan__file()")
-    retval = scan__file()
-    dbg_print("scan", 5, "(dofile) RETURNED FROM scan__file()")
+    dbg_print("parse", 7, sprintf("(dofile) Pushing file block %d (%s) onto parse_stack", file_block, filename))
+    stk_push(__parse_stack, file_block)
+    dbg_print("parse", 5, "(dofile) CALLING parse__file()")
+    retval = parse__file()
+    dbg_print("parse", 5, "(dofile) RETURNED FROM parse__file()")
 
-    dbg_print("scan", 5, "(dofile) END => " ppf__bool(retval))
+    dbg_print("parse", 5, "(dofile) END => " ppf__bool(retval))
     return retval
 }
 
@@ -1523,20 +1523,20 @@ function dofile(filename,
 # Read this function carefully--there are some nice tricks here.
 #
 # Caller is responsible for removing potential quotes from filename.
-function scan__file(    filename, file_block1, file_block2, scanstat, d)
+function parse__file(    filename, file_block1, file_block2, pstat, d)
 {
-    if (assert_scan_stack_okay(BLK_FILE) != 0)
-        error("(scan__file) File scan error 1")
-    file_block1 = stk_top(__scan_stack)
+    if (check__parse_stack(BLK_FILE) != 0)
+        error("Parse error, " __m2_msg)
+    file_block1 = stk_top(__parse_stack)
 
     filename = blktab[file_block1, 0, "filename"]
-    dbg_print("scan", 1, sprintf("(scan__file) filename='%s', dstblk=%d, mode=%s",
+    dbg_print("parse", 1, sprintf("(parse__file) filename='%s', dstblk=%d, mode=%s",
                                  filename, blktab[file_block1, 0, "dstblk"],
                                  ppf__mode(blktab[file_block1, 0, "atmode"])))
     if (!path_exists_p(filename)) {
-        dbg_print("scan", 1, sprintf("(scan__file) END File '%s' does not exist => %s",
+        dbg_print("parse", 1, sprintf("(parse__file) END File '%s' does not exist => %s",
                                      filename, ppf__bool(FALSE)))
-        stk_pop(__scan_stack)  # Remove BLK_FILE for non-existent file
+        stk_pop(__parse_stack)  # Remove BLK_FILE for non-existent file
         return FALSE
     }
     if (filename in __active_files)
@@ -1548,7 +1548,7 @@ function scan__file(    filename, file_block1, file_block2, scanstat, d)
     blktab[file_block1, 0, "old.file"]      = FILE()
     blktab[file_block1, 0, "old.line"]      = LINE()
     blktab[file_block1, 0, "old.file_uuid"] = sym_ll_read("__FILE_UUID__", "", GLOBAL_NAMESPACE)
-    dbg_print_block("ship_out", 7, file_block1, "(scan__file) file_block1")
+    dbg_print_block("ship_out", 7, file_block1, "(parse__file) file_block1")
 
     # # Set up new file context
     __buffer = EMPTY
@@ -1557,9 +1557,9 @@ function scan__file(    filename, file_block1, file_block2, scanstat, d)
     sym_ll_write("__FILE_UUID__", "", GLOBAL_NAMESPACE, uuid())
 
     # Read the file and process each line
-    dbg_print("scan", 5, "(scan__file) CALLING scan()")
-    scanstat = scan()
-    dbg_print("scan", 5, "(scan__file) RETURNED FROM scan() => " ppf__bool(scanstat))
+    dbg_print("parse", 5, "(parse__file) CALLING parse()")
+    pstat = parse()
+    dbg_print("parse", 5, "(parse__file) RETURNED FROM parse() => " ppf__bool(pstat))
 
     # Reached end of file
     flush_stdout(SYNC_FILE)
@@ -1570,70 +1570,70 @@ function scan__file(    filename, file_block1, file_block2, scanstat, d)
     blktab[file_block1, 0, "open"] = FALSE
     delete __active_files[filename]
 
-    if (assert_scan_stack_okay(BLK_FILE) != 0)
-        error("(scan__file) File scan error 2")
-    file_block2 = stk_pop(__scan_stack)
+    if (check__parse_stack(BLK_FILE) != 0)
+        error("Parse error, " __m2_msg)
+    file_block2 = stk_pop(__parse_stack)
 
     __buffer = blktab[file_block2, 0, "old.buffer"]
     sym_ll_write("__FILE__",      "", GLOBAL_NAMESPACE, blktab[file_block2, 0, "old.file"])
     sym_ll_write("__LINE__",      "", GLOBAL_NAMESPACE, blktab[file_block2, 0, "old.line"])
     sym_ll_write("__FILE_UUID__", "", GLOBAL_NAMESPACE, blktab[file_block2, 0, "old.file_uuid"])
 
-    dbg_print("scan", 1, sprintf("(scan__file) END '%s' => %s",
-                                 filename, ppf__bool(scanstat)))
-    return scanstat
+    dbg_print("parse", 1, sprintf("(parse__file) END '%s' => %s",
+                                 filename, ppf__bool(pstat)))
+    return pstat
 }
 
 
-# SCAN
-function scan(              code, terminator, readstat, name, retval, new_block, fc,
-                            info, level, scanner, scanner_type, scanner_label, i, scnt, found,
+# PARSE
+function parse(              code, terminator, rstat, name, retval, new_block, fc,
+                            info, level, parser, parser_type, parser_label, i, scnt, found,
                             new_cmd_name, clevel, cmdline)
 {
-    dbg_print("scan", 3, "(scan) START dstblk=" curr_dstblk() ", mode=" ppf__mode(curr_atmode()))
+    dbg_print("parse", 3, "(parse) START dstblk=" curr_dstblk() ", mode=" ppf__mode(curr_atmode()))
 
-    # The "scanner" is the topmost element of the __scan_stack
+    # The "parser" is the topmost element of the __parse_stack
     # which we wish to access a few times
-    if (stk_emptyp(__scan_stack))
-        error("(scan) Scan stack is empty!")
-    scanner = stk_top(__scan_stack)
-    scanner_type = blk_type(scanner)
-    scanner_label = ppf__block_type(scanner_type)
+    if (stk_emptyp(__parse_stack))
+        error("Parse error, Empty parse stack")
+    parser = stk_top(__parse_stack)
+    parser_type = blk_type(parser)
+    parser_label = ppf__block_type(parser_type)
 
     # terminator is a regular expression, and we call
     # match($1, terminator) to see if terminator is seen.
-    terminator = blktab[scanner, 0, "terminator"]
+    terminator = blktab[parser, 0, "terminator"]
     retval = FALSE
 
     while (TRUE) {
-        dbg_print("scan", 4, sprintf("(scan) [%s] TOP OF LOOP: __FILE__ %s __LINE__ %d ________________",
-                                     scanner_label, FILE(), LINE()+1)) # LINE will be +1 after upcoming readline() 
+        dbg_print("parse", 4, sprintf("(parse) [%s] TOP OF LOOP: __FILE__ %s __LINE__ %d ________________",
+                                     parser_label, FILE(), LINE()+1)) # LINE will be +1 after upcoming readline() 
 
-        readstat = readline()   # OKAY, EOF, ERROR
-        if (readstat == ERROR) {
-            # Whatever just happened, the scan didn't finish properly
-            dbg_print("scan", 1, "(scan) [" scanner_label "] readline()=>ERROR")
-            break          # out of entire scanning loop, to then return
+        rstat = readline()   # OKAY, EOF, ERROR
+        if (rstat == ERROR) {
+            # Whatever just happened, the parse didn't finish properly
+            dbg_print("parse", 1, "(parse) [" parser_label "] readline()=>ERROR")
+            break          # out of entire parsing loop, to then return
         }
-        if (readstat == EOF) {
+        if (rstat == EOF) {
             # End of file BLK_FILE is fine, just return a TRUE to say so.
-            # EOF on any other block type means the scan didn't find
+            # EOF on any other block type means the parse didn't find
             # a terminator, so return FALSE.
-            dbg_print("scan", 5, sprintf("(scan) [%s] readline() detected EOF on '%s'",
-                                         scanner_label, blktab[scanner, 0, "filename"]))
-            if ((scanner, 0, "oob_terminator") in blktab &&
-                blktab[scanner, 0, "oob_terminator"] == "EOF")
+            dbg_print("parse", 5, sprintf("(parse) [%s] readline() detected EOF on '%s'",
+                                         parser_label, blktab[parser, 0, "filename"]))
+            if ((parser, 0, "oob_terminator") in blktab &&
+                blktab[parser, 0, "oob_terminator"] == "EOF")
                 retval = TRUE
-            break          # out of entire scanning loop, to then return
+            break          # out of entire parsing loop, to then return
         }
-        dbg_print("scan", 5, "(scan) [" scanner_label "] readline() okay; $0='" $0 "'")
+        dbg_print("parse", 5, "(parse) [" parser_label "] readline() okay; $0='" $0 "'")
 
         # Maybe short-circuit and ship line out now
         if (curr_atmode() == MODE_AT_LITERAL || index($0, TOK_AT) == IDX_NOT_FOUND) {
-            dbg_print("scan", 3, sprintf("(scan) [%s, short circuit] CALLING ship_out(OBJ_TEXT, '%s')",
-                                         scanner_label, $0))
+            dbg_print("parse", 3, sprintf("(parse) [%s, short circuit] CALLING ship_out(OBJ_TEXT, '%s')",
+                                         parser_label, $0))
             ship_out(OBJ_TEXT, $0)
-            dbg_print("scan", 3, "(scan) [" scanner_label ", short circuit] RETURNED FROM ship_out()")
+            dbg_print("parse", 3, "(parse) [" parser_label ", short circuit] RETURNED FROM ship_out()")
             continue           # text shipped out, continue to next line
         }
 
@@ -1660,7 +1660,7 @@ function scan(              code, terminator, readstat, name, retval, new_block,
             for (i = 2; substr($0, i, 1) ~ /[A-Za-z#_0-9]/; i++)
                 ;
             name = substr($0, 2, i-2)
-            dbg_print("scan", 7, "(scan) [" scanner_label "] name now '" name "'")
+            dbg_print("parse", 7, "(parse) [" parser_label "] name now '" name "'")
             
             # See if it's a built-in command
             if (nam_ll_in(name, GLOBAL_NAMESPACE) &&
@@ -1675,168 +1675,171 @@ function scan(              code, terminator, readstat, name, retval, new_block,
                     if (name == "break" || name == "continue") {
                         # @break and @continue are hybrid commands, with
                         # both immediate and regular components.  The
-                        # scan_stack check for a FOR or WHILE must be
-                        # done immediately because the scan_stack is
+                        # parse_stack check for a FOR or WHILE must be
+                        # done immediately because the parse_stack is
                         # gone by the time the command is shipped out.
                         # But the actual effect of @break or @continue
                         # is not seen until run-time, so the command
                         # must also be shipped out like a normal command
                         # would have been.
                         found = FALSE
-                        for (i = stk_depth(__scan_stack); i > 0; i--) {
-                            scnt = blk_type(__scan_stack[i])
+                        for (i = stk_depth(__parse_stack); i > 0; i--) {
+                            scnt = blk_type(__parse_stack[i])
                             if (scnt == BLK_FOR || scnt == BLK_WHILE) {
                                 found = TRUE
                                 break
                             }
                         }
                         if (! found)
-                            error("@break/@continue: Did not find a @for or @while loop")
-                        dbg_print("scan", 3, sprintf("(scan) [%s] CALLING ship_out(OBJ_CMD, '%s')", scanner_label, $0))
+                            error(sprintf("[@%s] Parse error, Missing parser; wanted FOR or WHILE but found %s",
+                                          name, parser_label))
+                        dbg_print("parse", 3, sprintf("(parse) [%s] CALLING ship_out(OBJ_CMD, '%s')", parser_label, $0))
                         ship_out(OBJ_CMD, $0)
-                        dbg_print("scan", 3, "(scan) [" scanner_label "] RETURNED FROM ship_out()")
+                        dbg_print("parse", 3, "(parse) [" parser_label "] RETURNED FROM ship_out()")
 
                     } else if (name == "case") {
-                        dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__case(dstblk=" curr_dstblk() ")"))
-                        new_block = scan__case()
-                        dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__case() : new_block => " new_block))
-                        dbg_print("scan", 5, sprintf("(scan) [" scanner_label "] CALLING ship_out(OBJ_BLKNUM, %d)", new_block))
+                        dbg_print("parse", 5, ("(parse) [" parser_label "] CALLING parse__case(dstblk=" curr_dstblk() ")"))
+                        new_block = parse__case()
+                        dbg_print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__case() : new_block => " new_block))
+                        dbg_print("parse", 5, sprintf("(parse) [" parser_label "] CALLING ship_out(OBJ_BLKNUM, %d)", new_block))
                         ship_out(OBJ_BLKNUM, new_block)
-                        dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM ship_out()"))
+                        dbg_print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM ship_out()"))
 
                     } else if (name == "else") {
-                        dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__else(dstblk=" curr_dstblk() ")"))
-                        scan__else()
-                        dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__else() : dstblk => " curr_dstblk()))
+                        dbg_print("parse", 5, ("(parse) [" parser_label "] CALLING parse__else(dstblk=" curr_dstblk() ")"))
+                        parse__else()
+                        dbg_print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__else() : dstblk => " curr_dstblk()))
 
                     } else if (name == "endcase" || name == "esac") {
-                        dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__endcase(dstblk=" curr_dstblk() ")"))
-                        scan__endcase()
-                        dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__endcase() : dstblk => " curr_dstblk()))
+                        dbg_print("parse", 5, ("(parse) [" parser_label "] CALLING parse__endcase(dstblk=" curr_dstblk() ")"))
+                        parse__endcase()
+                        dbg_print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__endcase() : dstblk => " curr_dstblk()))
                         if (match($1, terminator)) {
-                            dbg_print("scan", 5, "(scan) [" scanner_label "] END; @endcase matched terminator => TRUE")
+                            dbg_print("parse", 5, "(parse) [" parser_label "] END; @endcase matched terminator => TRUE")
                             return TRUE
                         }
-                        error("(scan) [" scanner_label "] Found @endcase but expecting '" terminator "'")
+                        error(sprintf("[@%s] Parse error, Missing terminator; wanted '%s' but found '@endcase'",
+                                      name, terminator))
 
                     } else if (name == "endcmd") {
-                        dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__endcmd(dstblk=" curr_dstblk() ")"))
-                        new_block = scan__endcmd()
-                        dbg_print_block("scan", 7, new_block, sprintf("newcmd block returned from scan__endcmd"))
-                        dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__endcmd() : dstblk => " curr_dstblk()))
+                        dbg_print("parse", 5, ("(parse) [" parser_label "] CALLING parse__endcmd(dstblk=" curr_dstblk() ")"))
+                        new_block = parse__endcmd()
+                        dbg_print_block("parse", 7, new_block, sprintf("newcmd block returned from parse__endcmd"))
+                        dbg_print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__endcmd() : dstblk => " curr_dstblk()))
 
                         if (match($1, terminator)) {
-                            dbg_print("scan", 5, "(scan) [" scanner_label "] END; @endcmd matched terminator => TRUE")
+                            dbg_print("parse", 5, "(parse) [" parser_label "] END; @endcmd matched terminator => TRUE")
 
                             # Create an entry for the new command name.
-                            # We do this at Scan time so that future
+                            # We do this at Parse time so that future
                             # invocations of new command @FOO will
                             # immediately be recognized as an available
                             # user command.  All we need to do is create
-                            # a namtab entry with correct TYPE_USER.  NB
-                            # - we don't have an entry in the cmdtab
+                            # a namtab entry with correct TYPE_USER.
+                            # NOTE - we don't have an entry in the cmdtab
                             # yet.  That's okay because the command is
                             # only being declared, not defined, and it's
                             # not ready to run yet.  (That next bit
                             # happens in xeq__BLK_USER.)
                             if (! nam_ll_in(name, __namespace)) {
                                 new_cmd_name = blktab[new_block, 0, "name"]
-                                dbg_print("scan", 3, sprintf("Declaring new user command '%s' at level %d",
+                                dbg_print("parse", 3, sprintf("Declaring new user command '%s' at level %d",
                                                              new_cmd_name, __namespace))
                                 nam_ll_write(new_cmd_name, __namespace, TYPE_USER)
                             }
                             return TRUE
                         }
-                        error("(scan) [" scanner_label "] Found @endcmd but expecting '" terminator "'")
+                        error(sprintf("[@%s] Parse error; Missing terminator; wanted '%s' but found '@endcmd'",
+                                      name, terminator))
 
                     } else if (name == "endif" || name == "fi") {
-                        dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__endif(dstblk=" curr_dstblk() ")"))
-                        scan__endif()
-                        dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__endif() : dstblk => " curr_dstblk()))
+                        dbg_print("parse", 5, ("(parse) [" parser_label "] CALLING parse__endif(dstblk=" curr_dstblk() ")"))
+                        parse__endif()
+                        dbg_print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__endif() : dstblk => " curr_dstblk()))
                         if (match($1, terminator)) {
-                            dbg_print("scan", 5, "(scan) [" scanner_label "] END; @endif matched terminator => TRUE")
+                            dbg_print("parse", 5, "(parse) [" parser_label "] END; @endif matched terminator => TRUE")
                             return TRUE
                         }
-                        error("(scan) [" scanner_label "] Found @endif but expecting '" terminator "'")
+                        error("(parse) [" parser_label "] Found @endif but expecting '" terminator "'")
 
                     } else if (name == "endlong" || name == "endlongdef") {
-                        dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__endlongdef(dstblk=" curr_dstblk() ")"))
-                        scan__endlongdef()
-                        dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__endlongdef() : dstblk => " curr_dstblk()))
+                        dbg_print("parse", 5, ("(parse) [" parser_label "] CALLING parse__endlongdef(dstblk=" curr_dstblk() ")"))
+                        parse__endlongdef()
+                        dbg_print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__endlongdef() : dstblk => " curr_dstblk()))
                         if (match($1, terminator)) {
-                            dbg_print("scan", 5, "(scan) [" scanner_label "] END; @endlongdef matched terminator => TRUE")
+                            dbg_print("parse", 5, "(parse) [" parser_label "] END; @endlongdef matched terminator => TRUE")
                             return TRUE
                         }
-                        error("(scan) [" scanner_label "] Found @endlongdef but expecting '" terminator "'")
+                        error("(parse) [" parser_label "] Found @endlongdef but expecting '" terminator "'")
 
                     } else if (name == "endwhile") {
-                        dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__endwhile(dstblk=" curr_dstblk() ")"))
-                        scan__endwhile()
-                        dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__endwhile() : dstblk => " curr_dstblk()))
+                        dbg_print("parse", 5, ("(parse) [" parser_label "] CALLING parse__endwhile(dstblk=" curr_dstblk() ")"))
+                        parse__endwhile()
+                        dbg_print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__endwhile() : dstblk => " curr_dstblk()))
                         if (match($1, terminator)) {
-                            dbg_print("scan", 5, "(scan) [" scanner_label "] END; @endwhile matched terminator => TRUE")
+                            dbg_print("parse", 5, "(parse) [" parser_label "] END; @endwhile matched terminator => TRUE")
                             return TRUE
                         }
-                        error("(scan) [" scanner_label "] Found @endwhile but expecting '" terminator "'")
+                        error("(parse) [" parser_label "] Found @endwhile but expecting '" terminator "'")
 
                     } else if (name == "for" || name == "foreach") {
-                        dbg_print("scan", 5, sprintf("(scan) [%s] curr_dstblk()=%d CALLING scan__for()",
-                                                     scanner_label, curr_dstblk()))
-                        new_block = scan__for()
-                        dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__for() : new_block is " new_block))
-                        dbg_print("scan", 5, sprintf("(scan) [" scanner_label "] CALLING ship_out(OBJ_BLKNUM, %d)", new_block))
+                        dbg_print("parse", 5, sprintf("(parse) [%s] curr_dstblk()=%d CALLING parse__for()",
+                                                     parser_label, curr_dstblk()))
+                        new_block = parse__for()
+                        dbg_print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__for() : new_block is " new_block))
+                        dbg_print("parse", 5, sprintf("(parse) [" parser_label "] CALLING ship_out(OBJ_BLKNUM, %d)", new_block))
                         ship_out(OBJ_BLKNUM, new_block)
-                        dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM ship_out()"))
+                        dbg_print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM ship_out()"))
 
                     } else if (name == "if" || name == "unless") {
-                        dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__if(dstblk=" curr_dstblk() ")"))
-                        new_block = scan__if()
-                        dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__if() : new_block => " new_block))
-                        dbg_print("scan", 5, sprintf("(scan) [" scanner_label "] CALLING ship_out(OBJ_BLKNUM, %d)", new_block))
+                        dbg_print("parse", 5, ("(parse) [" parser_label "] CALLING parse__if(dstblk=" curr_dstblk() ")"))
+                        new_block = parse__if()
+                        dbg_print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__if() : new_block => " new_block))
+                        dbg_print("parse", 5, sprintf("(parse) [" parser_label "] CALLING ship_out(OBJ_BLKNUM, %d)", new_block))
                         ship_out(OBJ_BLKNUM, new_block)
-                        dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM ship_out()"))
+                        dbg_print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM ship_out()"))
 
                     } else if (name == "longdef") {
-                        dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__longdef(dstblk=" curr_dstblk() ")"))
-                        new_block = scan__longdef()
-                        dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__longdef() : new_block => " new_block))
-                        dbg_print("scan", 5, sprintf("(scan) [" scanner_label "] CALLING ship_out(OBJ_BLKNUM, %d)", new_block))
+                        dbg_print("parse", 5, ("(parse) [" parser_label "] CALLING parse__longdef(dstblk=" curr_dstblk() ")"))
+                        new_block = parse__longdef()
+                        dbg_print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__longdef() : new_block => " new_block))
+                        dbg_print("parse", 5, sprintf("(parse) [" parser_label "] CALLING ship_out(OBJ_BLKNUM, %d)", new_block))
                         ship_out(OBJ_BLKNUM, new_block)
-                        dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM ship_out()"))
+                        dbg_print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM ship_out()"))
 
                     } else if (name == "newcmd") {
-                        dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__newcmd(dstblk=" curr_dstblk() ")"))
-                        new_block = scan__newcmd()
-                        dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__newcmd() : new_block => " new_block))
-                        dbg_print("scan", 5, sprintf("(scan) [" scanner_label "] CALLING ship_out(OBJ_BLKNUM, %d)", new_block))
+                        dbg_print("parse", 5, ("(parse) [" parser_label "] CALLING parse__newcmd(dstblk=" curr_dstblk() ")"))
+                        new_block = parse__newcmd()
+                        dbg_print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__newcmd() : new_block => " new_block))
+                        dbg_print("parse", 5, sprintf("(parse) [" parser_label "] CALLING ship_out(OBJ_BLKNUM, %d)", new_block))
                         ship_out(OBJ_BLKNUM, new_block)
-                        dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM ship_out()"))
+                        dbg_print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM ship_out()"))
 
                     } else if (name == "next") {
-                        dbg_print("scan", 5, sprintf("(scan) [%s] dstblk=%d; CALLING scan__next()",
-                                                     scanner_label, curr_dstblk()))
-                        scan__next()
-                        dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__next() : dstblk => " curr_dstblk()))
+                        dbg_print("parse", 5, sprintf("(parse) [%s] dstblk=%d; CALLING parse__next()",
+                                                     parser_label, curr_dstblk()))
+                        parse__next()
+                        dbg_print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__next() : dstblk => " curr_dstblk()))
                         if (match($1, terminator)) {
-                            dbg_print("scan", 5, "(scan) [" scanner_label "] END Matched terminator => TRUE")
+                            dbg_print("parse", 5, "(parse) [" parser_label "] END Matched terminator => TRUE")
                             return TRUE
                         }
-                        error("(scan) [" scanner_label "] Found @next but expecting '" terminator "'")
+                        error("(parse) [" parser_label "] Found @next but expecting '" terminator "'")
 
                     } else if (name == "of") {
-                        dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__of(dstblk=" curr_dstblk() ")"))
-                        scan__of()
-                        dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__of() : dstblk => " curr_dstblk()))
+                        dbg_print("parse", 5, ("(parse) [" parser_label "] CALLING parse__of(dstblk=" curr_dstblk() ")"))
+                        parse__of()
+                        dbg_print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__of() : dstblk => " curr_dstblk()))
 
                     } else if (name == "otherwise") {
-                        dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__otherwise(dstblk=" curr_dstblk() ")"))
-                        scan__otherwise()
-                        dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__otherwise() : dstblk => " curr_dstblk()))
+                        dbg_print("parse", 5, ("(parse) [" parser_label "] CALLING parse__otherwise(dstblk=" curr_dstblk() ")"))
+                        parse__otherwise()
+                        dbg_print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__otherwise() : dstblk => " curr_dstblk()))
 
                     } else if (name == "return") {
                         found = FALSE
-                        for (i = stk_depth(__scan_stack); i > 0; i--) {
-                            scnt = blk_type(__scan_stack[i])
+                        for (i = stk_depth(__parse_stack); i > 0; i--) {
+                            scnt = blk_type(__parse_stack[i])
                             if (scnt == BLK_USER) {
                                 found = TRUE
                                 break
@@ -1844,33 +1847,33 @@ function scan(              code, terminator, readstat, name, retval, new_block,
                         }
                         if (! found)
                             error("@return: Not executing a user command")
-                        dbg_print("scan", 3, sprintf("(scan) [%s] CALLING ship_out(OBJ_CMD, '%s')", scanner_label, $0))
+                        dbg_print("parse", 3, sprintf("(parse) [%s] CALLING ship_out(OBJ_CMD, '%s')", parser_label, $0))
                         ship_out(OBJ_CMD, $0)
-                        dbg_print("scan", 3, "(scan) [" scanner_label "] RETURNED FROM ship_out()")
+                        dbg_print("parse", 3, "(parse) [" parser_label "] RETURNED FROM ship_out()")
 
                     } else if (name == "while" || name == "until") {
-                        dbg_print("scan", 5, ("(scan) [" scanner_label "] CALLING scan__while(dstblk=" curr_dstblk() ")"))
-                        new_block = scan__while()
-                        dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM scan__while() : new_block => " new_block))
-                        dbg_print("scan", 5, sprintf("(scan) [" scanner_label "] CALLING ship_out(OBJ_BLKNUM, %d)", new_block))
+                        dbg_print("parse", 5, ("(parse) [" parser_label "] CALLING parse__while(dstblk=" curr_dstblk() ")"))
+                        new_block = parse__while()
+                        dbg_print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__while() : new_block => " new_block))
+                        dbg_print("parse", 5, sprintf("(parse) [" parser_label "] CALLING ship_out(OBJ_BLKNUM, %d)", new_block))
                         ship_out(OBJ_BLKNUM, new_block)
-                        dbg_print("scan", 5, ("(scan) [" scanner_label "] RETURNED FROM ship_out()"))
+                        dbg_print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM ship_out()"))
 
                     } else
-                        error("(scan) [" scanner_label "] Found immediate command " name " but no handler")
+                        error("(parse) [" parser_label "] Found immediate command " name " but no handler")
 
                 } else {
                     # It's a non-immediate built-in command -- ship it
                     # out as a command to be executed later.
-                    dbg_print("scan", 3, sprintf("(scan) [%s] CALLING ship_out(OBJ_CMD, '%s')", scanner_label, $0))
+                    dbg_print("parse", 3, sprintf("(parse) [%s] CALLING ship_out(OBJ_CMD, '%s')", parser_label, $0))
                     ship_out(OBJ_CMD, $0)
-                    dbg_print("scan", 3, "(scan) [" scanner_label "] RETURNED FROM ship_out()")
+                    dbg_print("parse", 3, "(parse) [" parser_label "] RETURNED FROM ship_out()")
                 }
                 continue
             } else {
                 # Look up user command
-                if (nam_parse(name, info) == ERROR)
-                    error("(scan) [" scanner_label "] Parse error on '" name "'")
+                if (nam__scan(name, info) == ERROR)
+                    error("Scan error; " __m2_msg)
                 if ((level = nam_lookup(info)) != ERROR) {
                     # An ERROR here simply means not found, in which case
                     # name is definitely not a user command, so we do nothing
@@ -1878,10 +1881,10 @@ function scan(              code, terminator, readstat, name, retval, new_block,
                     # But it's not an ERROR, so something was found at "level".
                     # See if it's a user command and ship it out if so.
                     if (flag_1true_p((code = nam_ll_read(name, level)), TYPE_USER)) {
-                        cmdline = scan_user_invocation()
-                        dbg_print("scan", 3, sprintf("(scan) [%s] CALLING ship_out(OBJ_USER, '%s')", scanner_label, cmdline))
+                        cmdline = scan__usercmd_call()
+                        dbg_print("parse", 3, sprintf("(parse) [%s] CALLING ship_out(OBJ_USER, '%s')", parser_label, cmdline))
                         ship_out(OBJ_USER, cmdline)
-                        dbg_print("scan", 3, "(scan) [" scanner_label "] RETURNED FROM ship_out()")
+                        dbg_print("parse", 3, "(parse) [" parser_label "] RETURNED FROM ship_out()")
                         continue
                     }
                 }
@@ -1889,11 +1892,11 @@ function scan(              code, terminator, readstat, name, retval, new_block,
             # It's okay to reach here with no actions taken.  In this
             # case, just process the line as normal text.
         } # doesn't look like a command - ship it out as text
-        dbg_print("scan", 3, sprintf("(scan) [%s] CALLING ship_out(OBJ_TEXT, '%s')", scanner_label, $0))
+        dbg_print("parse", 3, sprintf("(parse) [%s] CALLING ship_out(OBJ_TEXT, '%s')", parser_label, $0))
         ship_out(OBJ_TEXT, $0)
-        dbg_print("scan", 3, "(scan) [" scanner_label "] RETURNED FROM ship_out()")
+        dbg_print("parse", 3, "(parse) [" parser_label "] RETURNED FROM ship_out()")
     } # continue loop again, reading next line
-    dbg_print("scan", 5, "(scan) END => " ppf__bool(retval))
+    dbg_print("parse", 5, "(parse) END => " ppf__bool(retval))
     return retval
 }
 
@@ -1904,32 +1907,31 @@ function scan(              code, terminator, readstat, name, retval, new_block,
 #       @mycmd{Title}{A very very very
 #       very long title}
 # Call readline() repeatedly until braces are closed properly.
-function scan_user_invocation(    s, name, obj, i, oldi, c, nc, narg, nlbr,
+function scan__usercmd_call(    s, name, obj, i, oldi, c, nc, narg, nlbr,
                                   readstat)
 {
     s = $0
     narg = 0
-    dbg_print("scan", 5, "(scan_user_cmdline) s='" s "'")
+    dbg_print("parse", 5, "(scan__usercmd_call) s='" s "'")
 
     i = 1
     c = substr(s, i, 1)
     if (c != TOK_AT)
-        error(sprintf("(scan_user_invocation) Doesn't start with @: s-'%s'", s))
+        error(sprintf("(scan__usercmd_call) Doesn't start with @: s-'%s'", s))
 
     # Read cmd name
     c = substr(s, (oldi = ++i), 1)
     while (c != "" && c != TOK_LBRACE) {
-        # print_stderr(sprintf("(scan_user_invocation) LOOP: i=%d, c='%s', nam='%s'",
+        # print_stderr(sprintf("(scan__usercmd_call) LOOP: i=%d, c='%s', nam='%s'",
         #                      i, c, substr(s, 2, i-2)))
         c = substr(s, ++i, 1)
     }
     name = substr(s, oldi, i-oldi)
-    dbg_print("scan", 3, sprintf("(scan_user_invocation) OUT: name='%s'", name))
+    dbg_print("parse", 3, sprintf("(scan__usercmd_call) OUT: name='%s'", name))
 
     if (c != TOK_LBRACE) {
-        # It's just @Foo, no braces, no parsing needed
-        # Soon, return name 0 SUBSEP
-        dbg_print("scan", 1, sprintf("(scan_user_invocation) END 1: narg=%d, name='%s', s='%s'", narg, name, s))
+        # It's just @Foo, no braces, no scanning needed
+        dbg_print("parse", 1, sprintf("(scan__usercmd_call) END 1: narg=%d, name='%s', s='%s'", narg, name, s))
         return s
     }
 
@@ -1938,38 +1940,38 @@ function scan_user_invocation(    s, name, obj, i, oldi, c, nc, narg, nlbr,
     oldi = ++i
     c = substr(s, i, 1)
     while (nlbr >= 0) {
-        #print_stderr(sprintf("(scan_user_invocation) TOP, i=%d, c='%s', nlbr now=%d", i, c, nlbr))
+        #print_stderr(sprintf("(scan__usercmd_call) TOP, i=%d, c='%s', nlbr now=%d", i, c, nlbr))
         if (i > 255)
-            error(sprintf("(scan_user_invocation) ERROR, i too big: i=%d, c='%s'", i, c))
+            error(sprintf("(scan__usercmd_call) ERROR, i too big: i=%d, c='%s'", i, c))
         else if (c == "") {
             if (nlbr == 0) {
-                dbg_print("scan", 1, sprintf("(scan_user_invocation) END 2 (eos, {} bal): narg=%d, s='%s'", narg, s))
+                dbg_print("parse", 1, sprintf("(scan__usercmd_call) END 2 (eos, {} bal): narg=%d, s='%s'", narg, s))
                 return s
             }
             # We ran out of characters looking for a }
             # Try reading some more lines to fill our need
             readstat = readline()
             if (readstat <= 0)
-                error(sprintf("(scan_user_invocation) ERROR, missing '}': i=%d, c='%s'", i, c))
+                error(sprintf("(scan__usercmd_call) ERROR, missing '}': i=%d, c='%s'", i, c))
             #print_stderr("just read = >" $0 "<")
             s = s TOK_NEWLINE $0
             c = substr(s, i, 1)
-            dbg_print("scan", 7, sprintf("(scan_user_invocation) INFO, After readline, i=%d, c='%s', nlbr now=%d, s='%s'", i, c, nlbr, s))
+            dbg_print("parse", 7, sprintf("(scan__usercmd_call) INFO, After readline, i=%d, c='%s', nlbr now=%d, s='%s'", i, c, nlbr, s))
             continue
         } else if (c == TOK_LBRACE) {
             nlbr++
             narg++
-            dbg_print("scan", 5, sprintf("(scan_user_invocation) INFO, found '{': i=%d, c='%s', nlbr now=%d", i, c, nlbr))
+            dbg_print("parse", 5, sprintf("(scan__usercmd_call) INFO, found '{': i=%d, c='%s', nlbr now=%d", i, c, nlbr))
             oldi = i+1
         } else if (c == TOK_RBRACE) {
             nlbr--
-            dbg_print("scan", 5, sprintf("(scan_user_invocation) INFO, found '}': i=%d, c='%s', nlbr now=%d", i, c, nlbr))
-            dbg_print("scan", 3, sprintf("(scan_user_invocation) Arg[%d]='%s'", narg, substr(s, oldi, i-oldi)))
+            dbg_print("parse", 5, sprintf("(scan__usercmd_call) INFO, found '}': i=%d, c='%s', nlbr now=%d", i, c, nlbr))
+            dbg_print("parse", 3, sprintf("(scan__usercmd_call) Arg[%d]='%s'", narg, substr(s, oldi, i-oldi)))
         }
         # else normal character
         c = substr(s, ++i, 1)
     }
-    dbg_print("scan", 1, sprintf("(scan_user_invocation) END 3: narg=%d, s='%s'", narg, s))
+    dbg_print("parse", 1, sprintf("(scan__usercmd_call) END 3: narg=%d, s='%s'", narg, s))
     return s
 }
 
@@ -2019,7 +2021,7 @@ function ppf__BLK_FILE(blknum)
 #
 #       Other flags, all optional:
 #           FLAG_DEFERRED       D : Deferred means value will be defined later
-#           FLAG_IMMEDIATE      ! : scan() will immediately execute command
+#           FLAG_IMMEDIATE      ! : parse() will immediately execute command
 #           FLAG_SYSTEM         Y : Internal variable, level 0, usually
 #                                   (but not always) read-only.  Also,
 #                                   system symbols cannot be shadowed.
@@ -2168,15 +2170,15 @@ function ppf__flags(code,
 
 #*****************************************************************************
 #
-# This code parses random string "text" into either NAME or NAME[KEY].
+# This code scans random string "text" into either NAME or NAME[KEY].
 # Rudimentary error checking is done.
 #
 # Return value:
 #    -1 (ERROR)
-#       Text does not pass simple parsing test.  Even so, it still
+#       Text does not pass simple scan test.  Even so, it still
 #       may be invalid depending strict, etc).
 #    1 or 2
-#       Text parsed.  1 is returned if it's a simple NAME,
+#       Text scanned.  1 is returned if it's a simple NAME,
 #       2 indicates a NAME[KEY] format.
 #
 # Info is an array with following entries:
@@ -2192,10 +2194,10 @@ function ppf__flags(code,
 #       nparts     : 1 or 2 depending if text is NAME or NAME[KEY]
 #      #text       : original text string
 #*****************************************************************************
-function nam_parse(text, info,
+function nam__scan(text, info,
                     name, key, nparts, part, count, i)
 {
-    dbg_print("nam", 5, sprintf("(nam_parse) START text='%s'", text))
+    dbg_print("nam", 5, sprintf("(nam__scan) START text='%s'", text))
     #info["text"] = text
 
     # Simple test for CHARS or CHARS[CHARS]
@@ -2206,9 +2208,10 @@ function nam_parse(text, info,
     # We carefully construct CHARS with about regexp
     # to exclude ! [ \ ] { | }
     if (text !~ /^["-Z^-z~]+(\[["-Z^-z~]+\])?$/) {
-        warn("(nam_parse) Name '" text "' not valid")
-        dbg_print("nam", 2, sprintf("(nam_parse(%s) => %d", text, ERROR))
-        return ERROR
+        #warn("(nam__scan) Name '" text "' not valid")
+        dbg_print("nam", 2, sprintf("(nam__scan(%s) => %d", text, ERROR))
+        __m2_msg = "Invalid name: '" text "'"
+        return ERROR            # interpret as ERR_SCAN_INVALID_NAME
     }
 
     count = split(text, part, "(\\[|\\])")
@@ -2227,7 +2230,7 @@ function nam_parse(text, info,
     info["keyvalid"]   = nam_valid_with_strict_as(key, FALSE)
     info["namevalid"]  = nam_valid_with_strict_as(name, strictp("symbol"))
     info["nparts"]     = nparts = (count == 1) ? 1 : 2
-    dbg_print("nam", 4, sprintf("(nam_parse) '%s' => %d", text, nparts))
+    dbg_print("nam", 4, sprintf("(nam__scan) '%s' => %d", text, nparts))
     return nparts
 }
 
@@ -2540,7 +2543,7 @@ function DIVNUM()
 
 # Inject (i.e., ship out to current stream) the contents of a different
 # stream.  Negative streams and current diversion are silently ignored.
-# Buffer text is not re-parsed for macros, and buffer is cleared after
+# Buffer text is not re-scanned for macros, and buffer is cleared after
 # injection into target stream.
 function undivert(stream,
                   count, i, dstblk)
@@ -2634,9 +2637,11 @@ function sym_valid_p(sym,
 {
     dbg_print("sym", 5, sprintf("(sym_valid_p) sym='%s' START", sym))
 
-    # Parse sym => name, key
-    if ((nparts = nam_parse(sym, info)) == ERROR) {
-        error("(sym_valid_p) ERROR nam_parse('" sym "') failed")
+    # Scan sym => name, key
+    if ((nparts = nam__scan(sym, info)) == ERROR) {
+        __msg_m2 = "Invalid name: '" sym "'"
+        #error("(sym_valid_p) ERROR nam__scan('" sym "') failed")
+        return FALSE
     }
     # nparts must be either 1 or 2
     retval = (nparts == 1) ?  info["namevalid"] \
@@ -2652,9 +2657,9 @@ function sym_valid_p(sym,
 # {
 #     dbg_print("sym", 4, sprintf("sym_create: START (sym=%s, code=%s)", sym, code))
 #
-#     # Parse sym => name, key
-#     if ((nparts = nam_parse(sym, info)) == ERROR) {
-#         error("ERROR because nam_parse failed")
+#     # Scan sym => name, key
+#     if ((nparts = nam__scan(sym, info)) == ERROR) {
+#         error("ERROR because nam__scan failed")
 #     }
 #     name = info["name"]
 #     key  = info["key"]
@@ -2728,7 +2733,7 @@ function sym_destroy(name, key, level)
     dbg_print("sym", 5, sprintf("(sym_destroy) START; name='%s', key='%s', level=%d",
                                  name, key, level))
 
-    # Parse sym => name, key
+    # Scan sym => name, key
     # if nam_system_p(name)          level = 0
     # Error if name does not exist at that level
     # Error if nam_system_p(name)
@@ -2850,9 +2855,10 @@ function sym_defined_p(sym,
 {
     dbg_print("sym", 5, sprintf("(sym_defined_p) sym='%s' START", sym))
 
-    # Parse sym => name, key
-    if ((nparts = nam_parse(sym, info)) == ERROR) {
-        dbg_print("sym", 2, sprintf("(sym_defined_p) END nam_parse('%s') failed => %s", sym, ppf__bool(FALSE)))
+    # Scan sym => name, key
+    if ((nparts = nam__scan(sym, info)) == ERROR) {
+        dbg_print("sym", 2, sprintf("(sym_defined_p) END nam__scan('%s') failed => %s", sym, ppf__bool(FALSE)))
+        __m2_msg = "Scan error, " __m2_msg
         return FALSE
     }
     name = info["name"]
@@ -2900,7 +2906,7 @@ function sym_defined_p(sym,
 }
 
 
-# Caller MUST have previously called nam_parse().
+# Caller MUST have previously called nam__scan().
 # It's the only way to get the `info' parameter value.
 #
 # The caller is responsible for inquiring about nam_system_p(name),
@@ -2958,9 +2964,10 @@ function sym_store(sym, new_val,
     if (dbg5)
         print_stderr(sprintf("(sym_store) START sym='%s'", sym))
 
-    # Parse sym => name, key
-    if ((nparts = nam_parse(sym, info)) == ERROR) {
-        error("(sym_store) nam_parse failed")
+    # Scan sym => name, key
+    if ((nparts = nam__scan(sym, info)) == ERROR) {
+        #error("(sym_store) Scan error; bad characters in '" sym "'")
+        error("Scan error, " __m2_msg)
     }
     name = info["name"]
     key  = info["key"]
@@ -3115,10 +3122,9 @@ function sym_fetch(sym,
 {
     dbg_print("sym", 5, sprintf("(sym_fetch) START; sym='%s'", sym))
 
-    # Parse sym => name, key
-    if ((nparts = nam_parse(sym, info)) == ERROR) {
-        error("(sym_fetch) nam_parse failed")
-    }
+    # Scan sym => name, key
+    if ((nparts = nam__scan(sym, info)) == ERROR)
+        error("(sym_fetch) Scan error, '" sym "'")
     name = info["name"]
     key  = info["key"]
 
@@ -3214,7 +3220,7 @@ function sym_increment(sym, incr,
     if (incr == EMPTY)
         incr = 1
 
-    # Parse sym => name, key
+    # Scan sym => name, key
     # Compute level
     # if nam_system_p(name)          level = 0
     # Error if name does not exist at that level
@@ -3237,10 +3243,9 @@ function sym_protected_p(sym,
 {
     dbg_print("sym", 5, sprintf("(sym_protected_p) START sym='%s'", sym))
 
-    # Parse sym => name, key
-    if ((nparts = nam_parse(sym, info)) == ERROR) {
-        error("sym_protected_p: nam_parse failed")
-    }
+    # Scan sym => name, key
+    if ((nparts = nam__scan(sym, info)) == ERROR)
+        error("(sym_protected_p) Scan error, '" sym "'")
     name = info["name"]
     key  = info["key"]
 
@@ -3409,7 +3414,7 @@ function evaluate_boolean(text, negate,
         negate = FALSE
     bool__tokenize_string(text)
     __bf = 1
-    condval = bool__parse_expr(text)
+    condval = bool__scan_expr(text)
     if (negate)
         condval = !condval
     return condval
@@ -3559,75 +3564,75 @@ function bool__tokenize_string(s,
 }
 
 
-function bool__parse_expr(    e, f, r)           # term   | term || term
+function bool__scan_expr(    e, f, r)           # term   | term || term
 {
-    # print_stderr(sprintf("(bool__parse_expr) __bf=%d, __btoken[]=%s, e='%s'", __bf, __btoken[__bf], e))
-    e = bool__parse_term()
+    # print_stderr(sprintf("(bool__scan_expr) __bf=%d, __btoken[]=%s, e='%s'", __bf, __btoken[__bf], e))
+    e = bool__scan_term()
     if (e == ERROR) {
-        warn("(bool__parse_expr) Initial e returned ERROR, propagating")
+        warn("(bool__scan_expr) Initial e returned ERROR, propagating")
         return e
     }
 
-    # print_stderr(sprintf("(bool__parse_expr) After bool__parse_term, __bf=%d, __btoken[%d]=%s, e='%s'(%s)", __bf, __bf, __btoken[__bf], e, ppf__bool(e)))
+    # print_stderr(sprintf("(bool__scan_expr) After bool__scan_term, __bf=%d, __btoken[%d]=%s, e='%s'(%s)", __bf, __bf, __btoken[__bf], e, ppf__bool(e)))
     while (__btoken[__bf] == TOK_OR) {
         __bf++
-        f = bool__parse_term()
+        f = bool__scan_term()
         r = e || f
         #print_stderr("Found TOK_OR, __bf now " __bf++)
-        dbg_print("bool", 5, sprintf("(bool__parse_expr) TOK_OR, e'%s' || f'%s' => %s", e, f, ppf__bool(r)))
+        dbg_print("bool", 5, sprintf("(bool__scan_expr) TOK_OR, e'%s' || f'%s' => %s", e, f, ppf__bool(r)))
         e = r
     }
     return e
 }
 
 
-function bool__parse_term(    e, f, r)           # factor | factor && factor
+function bool__scan_term(    e, f, r)           # factor | factor && factor
 {
-    e = bool__parse_factor()
+    e = bool__scan_factor()
     if (e == ERROR) {
-        warn("(bool__parse_term) Initial e returned ERROR, propagating")
+        warn("(bool__scan_term) Initial e returned ERROR, propagating")
         return e
     }
-    # print_stderr(sprintf("(bool__parse_term) After bool__parse_factor, __bf=%d, __btoken[]=%s, e='%s'(%s)", __bf, __btoken[__bf], e, ppf__bool(e)))
+    # print_stderr(sprintf("(bool__scan_term) After bool__scan_factor, __bf=%d, __btoken[]=%s, e='%s'(%s)", __bf, __btoken[__bf], e, ppf__bool(e)))
     while (__btoken[__bf] == TOK_AND) {
         __bf++
-        f = bool__parse_factor()
+        f = bool__scan_factor()
         if (f == ERROR) {
-            warn("(bool__parse_term) f returned ERROR, propagating")
+            warn("(bool__scan_term) f returned ERROR, propagating")
             return f
         }
         r = e && f
-        dbg_print("bool", 5, sprintf("(bool__parse_term) TOK_AND, e'%s' && f'%s' => %s", e, f, ppf__bool(r)))
+        dbg_print("bool", 5, sprintf("(bool__scan_term) TOK_AND, e'%s' && f'%s' => %s", e, f, ppf__bool(r)))
         e = r
     }
     return e
 }
 
 
-function bool__parse_factor(    e, r,         # ! factor | variable | ( expression )
+function bool__scan_factor(    e, r,         # ! factor | variable | ( expression )
                                 name)
 {
-    dbg_print("bool", 5, sprintf("(bool__parse_factor) __bf=%d, __btoken[]=%s, e='%s'", __bf, __btoken[__bf], e))
+    dbg_print("bool", 5, sprintf("(bool__scan_factor) __bf=%d, __btoken[]=%s, e='%s'", __bf, __btoken[__bf], e))
     if (__btoken[__bf] ~ /^[01]$/) {
-        dbg_print("bool", 5, "(bool__parse_factor) Match regexp 1")
+        dbg_print("bool", 5, "(bool__scan_factor) Match regexp 1")
         return 0+__btoken[__bf++]
 
     } else if (__btoken[__bf] == TOK_LPAREN) {
         __bf++
-        e = bool__parse_expr()
+        e = bool__scan_expr()
         if (__btoken[__bf++] != TOK_RPAREN)
-            error("(bool__parse_factor) Missing ')' at " __btoken[__bf])
-        dbg_print("bool", 5, "(bool__parse_factor) Found parens, returning " ppf__bool(e))
+            error("(bool__scan_factor) Missing ')' at " __btoken[__bf])
+        dbg_print("bool", 5, "(bool__scan_factor) Found parens, returning " ppf__bool(e))
         return e
 
     } else if (__btoken[__bf] == TOK_NOT) {
         __bf++
-        e = bool__parse_factor()
+        e = bool__scan_factor()
         if (e == ERROR) {
-            dbg_print("bool", 5, "(bool__parse_factor): NOT: parse_factor => ERROR, propagating")
+            dbg_print("bool", 5, "(bool__scan_factor): NOT: scan_factor => ERROR, propagating")
             return ERROR
         } else {
-            dbg_print("bool", 5, "(bool__parse_factor) NOT: Just read " e ", so returning " ppf__bool(!e))
+            dbg_print("bool", 5, "(bool__scan_factor) NOT: Just read " e ", so returning " ppf__bool(!e))
             return !e
         }
 
@@ -3636,7 +3641,7 @@ function bool__parse_factor(    e, r,         # ! factor | variable | ( expressi
         if (name == EMPTY) return ERROR
         assert_sym_valid_name(name)
         r = sym_defined_p(name)
-        dbg_print("bool", 5, "(bool__parse_factor): DEFINED; name='" name "', returning " ppf__bool(r))
+        dbg_print("bool", 5, "(bool__scan_factor): DEFINED; name='" name "', returning " ppf__bool(r))
         __bf++
         return r
 
@@ -3645,7 +3650,7 @@ function bool__parse_factor(    e, r,         # ! factor | variable | ( expressi
         if (name == EMPTY) return ERROR
         assert_valid_env_var_name(name)
         r = name in ENVIRON
-        dbg_print("bool", 5, "(bool__parse_factor): ENV; name='" name "', returning " ppf__bool(r))
+        dbg_print("bool", 5, "(bool__scan_factor): ENV; name='" name "', returning " ppf__bool(r))
         __bf++
         return r
 
@@ -3653,24 +3658,24 @@ function bool__parse_factor(    e, r,         # ! factor | variable | ( expressi
         name = __btoken[++__bf]
         if (name == EMPTY) return ERROR
         r = path_exists_p(name)
-        dbg_print("bool", 5, "(bool__parse_factor) EXISTS; name='" name "', returning " ppf__bool(r))
+        dbg_print("bool", 5, "(bool__scan_factor) EXISTS; name='" name "', returning " ppf__bool(r))
         __bf++
         return r
 
     } else if (__btoken[__bf] ~ /^[A-Za-z#_][A-Za-z#_0-9]*$/) { # symbol?
         r = sym_true_p(__btoken[__bf])
-        dbg_print("bool", 5, "(bool__parse_factor): SYM; just read '" __btoken[__bf] "', so returning " ppf__bool(r))
+        dbg_print("bool", 5, "(bool__scan_factor): SYM; just read '" __btoken[__bf] "', so returning " ppf__bool(r))
         __bf++
         return r
 
     } else {
         # Boolean evaluation would normally fail here, but we'll pass it along to 'evaluate_condition'
-        #print_stderr(sprintf("bool__parse_factor: Did not match __bf=%d, __btoken[]=%s, e='%s'", __bf, __btoken[__bf], e))
+        #print_stderr(sprintf("bool__scan_factor: Did not match __bf=%d, __btoken[]=%s, e='%s'", __bf, __btoken[__bf], e))
         r = evaluate_condition(__btoken[__bf], FALSE) 
         if (r == ERROR)
-            warn("(bool__parse_factor): evaluate_condition('" __btoken[__bf] "') returned ERROR")
+            warn("(bool__scan_factor): evaluate_condition('" __btoken[__bf] "') returned ERROR")
         else
-            dbg_print("bool", 5, "(bool__parse_factor) evaluate_condition('" __btoken[__bf] "') returned " ppf__bool(r))
+            dbg_print("bool", 5, "(bool__scan_factor) evaluate_condition('" __btoken[__bf] "') returned " ppf__bool(r))
         return r
     }
 }
@@ -3730,17 +3735,18 @@ function xeq_cmd__break(name, cmdline,
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
 #*****************************************************************************
-function scan__case(                case_block, preamble_block, scanstat)
+# @case
+function parse__case(                case_block, preamble_block, pstat)
 {
-    dbg_print("case", 3, sprintf("(scan__case) START dstblk=%d, $0='%s'", curr_dstblk(), $0))
+    dbg_print("case", 3, sprintf("(parse__case) START dstblk=%d, $0='%s'", curr_dstblk(), $0))
 
     raise_namespace()
 
     # Create a new block for case_block
     case_block = blk_new(BLK_CASE)
-    dbg_print("case", 5, "(scan__case) New block # " case_block " type " ppf__block_type(blk_type(case_block)))
+    dbg_print("case", 5, "(parse__case) New block # " case_block " type " ppf__block_type(blk_type(case_block)))
     preamble_block = blk_new(BLK_AGG)
-    dbg_print("case", 5, "(scan__case) New block # " case_block " type " ppf__block_type(blk_type(preamble_block)))
+    dbg_print("case", 5, "(parse__case) New block # " case_block " type " ppf__block_type(blk_type(preamble_block)))
 
     $1 = ""
     blktab[case_block, 0, "casevar"]        = $2
@@ -3748,27 +3754,27 @@ function scan__case(                case_block, preamble_block, scanstat)
     blktab[case_block, 0, "seen_otherwise"] = FALSE
     blktab[case_block, 0, "dstblk"]         = preamble_block
     blktab[case_block, 0, "valid"]          = FALSE
-    dbg_print_block("case", 7, case_block, "(scan__case) case_block")
-    stk_push(__scan_stack, case_block) # Push it on to the scan_stack
+    dbg_print_block("case", 7, case_block, "(parse__case) case_block")
+    stk_push(__parse_stack, case_block) # Push it on to the parse_stack
 
-    dbg_print("case", 5, "(scan__case) CALLING scan()")
-    scanstat = scan() # scan() should return after it encounters @endcase
-    dbg_print("case", 5, "(scan__case) RETURNED FROM scan() => " ppf__bool(scanstat))
-    if (!scanstat)
-        error("(scan__case) Scan failed")
+    dbg_print("case", 5, "(parse__case) CALLING parse()")
+    pstat = parse() # parse() should return after it encounters @endcase
+    dbg_print("case", 5, "(parse__case) RETURNED FROM parse() => " ppf__bool(pstat))
+    if (!pstat)
+        error("[@case] Parse error")
 
-    dbg_print("case", 5, "(scan__case) END; => " case_block)
+    dbg_print("case", 5, "(parse__case) END; => " case_block)
     return case_block
 }
 
 
-function scan__of(                case_block, of_block, of_val)
+function parse__of(                case_block, of_block, of_val)
 {
-    dbg_print("case", 3, sprintf("(scan__of) START dstblk=%d, mode=%s, $0='%s'",
+    dbg_print("case", 3, sprintf("(parse__of) START dstblk=%d, mode=%s, $0='%s'",
                                  curr_dstblk(), ppf__mode(curr_atmode()), $0))
-    if (assert_scan_stack_okay(BLK_CASE) != 0)
-        error("(scan__of) Scan error")
-    case_block = stk_top(__scan_stack)
+    if (check__parse_stack(BLK_CASE) != 0)
+        error("[@of] Parse error; " __m2_msg)
+    case_block = stk_top(__parse_stack)
 
     lower_namespace()           # trigger name/symbol purge
     raise_namespace()
@@ -3778,7 +3784,7 @@ function scan__of(                case_block, of_block, of_val)
     sub(/^@of[ \t]+/, "")
     of_val = $0
     if ((case_block, of_val, "of_block") in blktab)
-        error("(scan__of) Duplicate '@of' values not allowed:@of " $0)
+        error("(parse__of) Duplicate '@of' values not allowed:@of " $0)
 
     blktab[case_block, of_val, "of_block"] = of_block
     blktab[case_block, 0, "dstblk"]  = of_block
@@ -3786,17 +3792,17 @@ function scan__of(                case_block, of_block, of_val)
 }
 
 
-function scan__otherwise(                case_block, otherwise_block)
+function parse__otherwise(                case_block, otherwise_block)
 {
-    dbg_print("case", 3, sprintf("(scan__otherwise) START dstblk=%d, mode=%s",
+    dbg_print("case", 3, sprintf("(parse__otherwise) START dstblk=%d, mode=%s",
                                curr_dstblk(), ppf__mode(curr_atmode())))
-    if (assert_scan_stack_okay(BLK_CASE) != 0)
-        error("(scan__otherwise) Scan error")
-    case_block = stk_top(__scan_stack)
+    if (check__parse_stack(BLK_CASE) != 0)
+        error("[@otherwise] Parse error; " __m2_msg)
+    case_block = stk_top(__parse_stack)
 
     # Check if already seen @else
     if (blktab[case_block, 0, "seen_otherwise"] == TRUE)
-        error("(scan__otherwise) Cannot have more than one @otherwise")
+        error("(parse__otherwise) Cannot have more than one @otherwise")
 
     lower_namespace()           # trigger name/symbol purge
     raise_namespace()
@@ -3810,17 +3816,17 @@ function scan__otherwise(                case_block, otherwise_block)
 }
 
 
-function scan__endcase(                case_block)
+# @endcase
+function parse__endcase(                case_block) # OK
 {
-    dbg_print("case", 3, sprintf("(scan__endcase) START dstblk=%d, mode=%s",
+    dbg_print("case", 3, sprintf("(parse__endcase) START dstblk=%d, mode=%s",
                                curr_dstblk(), ppf__mode(curr_atmode())))
-    if (assert_scan_stack_okay(BLK_CASE) != 0)
-        error("(scan__endcase) Scan error")
-    case_block = stk_pop(__scan_stack)
+    if (check__parse_stack(BLK_CASE) != 0)
+        error("[@endcase] Parse error; " __m2_msg)
 
+    case_block = stk_pop(__parse_stack)
     blktab[case_block, 0, "valid"] = TRUE
     lower_namespace()
-
     return case_block
 }
 
@@ -4368,21 +4374,21 @@ function xeq_cmd__exit(name, cmdline,
 #*****************************************************************************
 # @for     VAR START END [INCR]
 # @foreach VAR ARRAY
-function scan__for(                  for_block, body_block, scanstat, incr, info, nparts, level)
+function parse__for(                  for_block, body_block, pstat, incr, info, nparts, level)
 {
-    dbg_print("for", 5, sprintf("(scan__for) START dstblk=%d, mode=%s, $0='%s'",
+    dbg_print("for", 5, sprintf("(parse__for) START dstblk=%d, mode=%s, $0='%s'",
                                 curr_dstblk(), ppf__mode(curr_atmode()), $0))
     if (NF < 3)
-        error("(scan__for) Bad parameters")
+        error("(parse__for) Bad parameters")
 
     raise_namespace()
 
     # Create two new blocks: "for_block" for loop control (for_block),
     # and "body_block" for the loop code definition.
     for_block = blk_new(BLK_FOR)
-    dbg_print("for", 5, "(scan__for) for_block # " for_block " type " ppf__block_type(blk_type(for_block)))
+    dbg_print("for", 5, "(parse__for) for_block # " for_block " type " ppf__block_type(blk_type(for_block)))
     body_block = blk_new(BLK_AGG)
-    dbg_print("for", 5, "(scan__for) body_block # " body_block " type " ppf__block_type(blk_type(body_block)))
+    dbg_print("for", 5, "(parse__for) body_block # " body_block " type " ppf__block_type(blk_type(body_block)))
 
     blktab[for_block, 0, "body_block"] = body_block
     blktab[for_block, 0, "dstblk"] = body_block
@@ -4390,61 +4396,61 @@ function scan__for(                  for_block, body_block, scanstat, incr, info
     blktab[for_block, 0, "loop_var"] = $2
 
     if ($1 == "@for") {
-        #print_stderr("(scan__for) Found FOR: " $0)
+        #print_stderr("(parse__for) Found FOR: " $0)
         blktab[for_block, 0, "loop_type"] = "iter"
         blktab[for_block, 0, "loop_start"] = $3 + 0
         blktab[for_block, 0, "loop_end"] = $4 + 0
         blktab[for_block, 0, "loop_incr"] = incr = NF >= 5 ? ($5 + 0) : 1
         if (incr == 0)
-            error("(scan__for) Increment value cannot be zero!")
+            error("(parse__for) Increment value cannot be zero!")
 
     } else if ($1 == "@foreach") {
-        #print_stderr("(scan__for) Found FOREACH: " $0)
-        if ((nparts = nam_parse($3, info)) != 1)
-            error("(scan__for) Parse error: " $3)
+        #print_stderr("(parse__for) Found FOREACH: " $0)
+        if ((nparts = nam__scan($3, info)) != 1)
+            error("[@for] Scan error, " __m2_msg)
         level = nam_lookup(info)
         if (level == ERROR)
-            error(sprintf("(scan__for) Name '%s' not found", info["name"]))
+            error(sprintf("(parse__for) Name '%s' not found", info["name"]))
         if (! info["isarray"])
-            error(sprintf("(scan__for) Name '%s' is not an array", info["name"]))
+            error(sprintf("(parse__for) Name '%s' is not an array", info["name"]))
         blktab[for_block, 0, "loop_type"] = "each"
         blktab[for_block, 0, "loop_array_name"] = $3
         blktab[for_block, 0, "level"] = level
 
     } else
-        error("(scan__for) How did I get here?")
+        error("(parse__for) How did I get here?")
 
-    dbg_print_block("for", 7, for_block, "(scan__for) for_block")
-    stk_push(__scan_stack, for_block) # Push it on to the scan_stack
+    dbg_print_block("for", 7, for_block, "(parse__for) for_block")
+    stk_push(__parse_stack, for_block) # Push it on to the parse_stack
 
-    dbg_print("for", 5, "(scan__for) CALLING scan()")
-    scanstat = scan() # scan() should return after it encounters @next
-    dbg_print("for", 5, "(scan__for) RETURNED FROM scan() => " ppf__bool(scanstat))
-    if (!scanstat)
-        error("(scan__for) Scan failed")
+    dbg_print("for", 5, "(parse__for) CALLING parse()")
+    pstat = parse() # parse() should return after it encounters @next
+    dbg_print("for", 5, "(parse__for) RETURNED FROM parse() => " ppf__bool(pstat))
+    if (!pstat)
+        error("[@for] Parse error")
 
-    dbg_print("for", 5, "(scan__for) END => " for_block)
+    dbg_print("for", 5, "(parse__for) END => " for_block)
     return for_block
 }
 
 
 # @next VAR                       # end normal FOR loop
-function scan__next(                   for_block)
+function parse__next(                   for_block)
 {
-    dbg_print("for", 3, sprintf("(scan__next) START dstblk=%d, mode=%s, $0='%s'",
+    dbg_print("for", 3, sprintf("(parse__next) START dstblk=%d, mode=%s, $0='%s'",
                                 curr_dstblk(), ppf__mode(curr_atmode()), $0))
-    if (assert_scan_stack_okay(BLK_FOR) != 0)
-        error("(scan__next) Scan error")
-    for_block = stk_pop(__scan_stack)
+    if (check__parse_stack(BLK_FOR) != 0)
+        error("[@next] Parse error; " __m2_msg)
+    for_block = stk_pop(__parse_stack)
 
     if (blktab[for_block, 0, "loop_var"] != $2)
-        error(sprintf("(scan__next) Variable mismatch; '%s' specified, but '%s' was expected",
+        error(sprintf("(parse__next) Variable mismatch; '%s' specified, but '%s' was expected",
                       $2, blktab[for_block, 0, "loop_var"]))
     blktab[for_block, 0, "valid"] = TRUE
 
     lower_namespace()
 
-    dbg_print("for", 3, sprintf("(scan__next) END => %d", for_block))
+    dbg_print("for", 3, sprintf("(parse__next) END => %d", for_block))
     return for_block
 }
 
@@ -4596,9 +4602,9 @@ function ppf__BLK_FOR(blknum)
 #
 #*****************************************************************************
 # @if CONDITION
-function scan__if(                 name, if_block, true_block, scanstat)
+function parse__if(                 name, if_block, true_block, pstat)
 {
-    dbg_print("if", 3, sprintf("(scan__if) START dstblk=%d, $0='%s'", curr_dstblk(), $0))
+    dbg_print("if", 3, sprintf("(parse__if) START dstblk=%d, $0='%s'", curr_dstblk(), $0))
     name = $1
     $1 = ""
     sub("^[ \t]*", "")
@@ -4607,9 +4613,9 @@ function scan__if(                 name, if_block, true_block, scanstat)
 
     # Create two new blocks: one for if_block, other for true branch
     if_block = blk_new(BLK_IF)
-    dbg_print("if", 5, "(scan__if) New block # " if_block " type " ppf__block_type(blk_type(if_block)))
+    dbg_print("if", 5, "(parse__if) New block # " if_block " type " ppf__block_type(blk_type(if_block)))
     true_block = blk_new(BLK_AGG)
-    dbg_print("if", 5, "(scan__if) New block # " true_block " type " ppf__block_type(blk_type(true_block)))
+    dbg_print("if", 5, "(parse__if) New block # " true_block " type " ppf__block_type(blk_type(true_block)))
 
     blktab[if_block, 0, "condition"]   = $0
     blktab[if_block, 0, "init_negate"] = (name == "@unless")
@@ -4617,32 +4623,32 @@ function scan__if(                 name, if_block, true_block, scanstat)
     blktab[if_block, 0, "true_block"]  = true_block
     blktab[if_block, 0, "dstblk"]      = true_block
     blktab[if_block, 0, "valid"]       = FALSE
-    dbg_print_block("if", 7, if_block, "(scan__if) if_block")
-    stk_push(__scan_stack, if_block) # Push it on to the scan_stack
+    dbg_print_block("if", 7, if_block, "(parse__if) if_block")
+    stk_push(__parse_stack, if_block) # Push it on to the parse_stack
 
-    dbg_print("if", 5, "(scan__if) CALLING scan()")
-    scanstat = scan() # scan() should return after it encounters @endif
-    dbg_print("if", 5, "(scan__if) RETURNED FROM scan() => " ppf__bool(scanstat))
-    if (!scanstat)
-        error("(scan__if) Scan failed")
+    dbg_print("if", 5, "(parse__if) CALLING parse()")
+    pstat = parse() # parse() should return after it encounters @endif
+    dbg_print("if", 5, "(parse__if) RETURNED FROM parse() => " ppf__bool(pstat))
+    if (!pstat)
+        error("[@if] Parse error")
 
-    dbg_print("if", 5, "(scan__if) END; => " if_block)
+    dbg_print("if", 5, "(parse__if) END; => " if_block)
     return if_block
 }
 
 
 # @else
-function scan__else(                   if_block, false_block)
+function parse__else(                   if_block, false_block)
 {
-    dbg_print("if", 3, sprintf("(scan__else) START dstblk=%d, mode=%s",
+    dbg_print("if", 3, sprintf("(parse__else) START dstblk=%d, mode=%s",
                                curr_dstblk(), ppf__mode(curr_atmode())))
-    if (assert_scan_stack_okay(BLK_IF) != 0)
-        error("(scan__else) Scan error")
-    if_block = stk_top(__scan_stack)
+    if (check__parse_stack(BLK_IF) != 0)
+        error("[@else] Parse error; " __m2_msg)
+    if_block = stk_top(__parse_stack)
 
     # Check if already seen @else
     if (blktab[if_block, 0, "seen_else"] == TRUE)
-        error("(scan__else) Cannot have more than one @else")
+        error("(parse__else) Cannot have more than one @else")
 
     lower_namespace()           # trigger name/symbol purge
     raise_namespace()
@@ -4657,13 +4663,14 @@ function scan__else(                   if_block, false_block)
 
 
 # @endif
-function scan__endif(                    if_block)
+function parse__endif(                    if_block)
 {
-    dbg_print("if", 3, sprintf("(scan__endif) START dstblk=%d, mode=%s",
+    dbg_print("if", 3, sprintf("(parse__endif) START dstblk=%d, mode=%s",
                                curr_dstblk(), ppf__mode(curr_atmode())))
-    if (assert_scan_stack_okay(BLK_IF) != 0)
-        error("(scan__endif) Scan error")
-    if_block = stk_pop(__scan_stack)
+    if (check__parse_stack(BLK_IF) != 0)
+        error("[@endif] Parse error; " __m2_msg)
+
+    if_block = stk_pop(__parse_stack)
     blktab[if_block, 0, "valid"] = TRUE
     lower_namespace()
     return if_block
@@ -4766,8 +4773,8 @@ function evaluate_condition(cond, negate,
         arr = substr(cond, RSTART+3)
         dbg_print("if", 5, sprintf("key='%s', op='%s', arr='%s'", key, "IN", arr))
 
-        if (nam_parse(arr, info) == ERROR)
-            error("Name '" arr "' not found")
+        if (nam__scan(arr, info) == ERROR)
+            error("Scan error, " __m2_msg)
         level = nam_lookup(info)
         if (level == ERROR)
             error("Name '" arr "' lookup failed")
@@ -4864,21 +4871,21 @@ function ppf__BLK_IF(blknum)
 #*****************************************************************************
 # @ignore    DELIM
 function xeq_cmd__ignore(name, cmdline,
-                         readstat)
+                         rstat)
 {
-    dbg_print("scan", 5, sprintf("(xeq_cmd__ignore) START dstblk=%d, mode=%s, $0='%s'",
+    dbg_print("parse", 5, sprintf("(xeq_cmd__ignore) START dstblk=%d, mode=%s, $0='%s'",
                                 curr_dstblk(), ppf__mode(curr_atmode()), $0))
 
     $0 = cmdline
     if (NF == 0)
         error("Bad parameters:" $0)
 
-    dbg_print("scan", 5, "(xeq_cmd__ignore) CALLING read_lines_until()")
-    readstat = read_lines_until(cmdline, DISCARD)
-    dbg_print("scan", 5, "(xeq_cmd__ignore) RETURNED FROM read_lines_until() => " ppf__bool(readstat))
-    if (!readstat)
-        error("(xeq_cmd__ignore) Scan failed")
-    dbg_print("scan", 5, "(xeq_cmd__ignore) END")
+    dbg_print("parse", 5, "(xeq_cmd__ignore) CALLING read_lines_until()")
+    rstat = read_lines_until(cmdline, DISCARD)
+    dbg_print("parse", 5, "(xeq_cmd__ignore) RETURNED FROM read_lines_until() => " ppf__bool(rstat))
+    if (!rstat)
+        error("[@ignore] Read error")
+    dbg_print("parse", 5, "(xeq_cmd__ignore) END")
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -4895,7 +4902,7 @@ function xeq_cmd__ignore(name, cmdline,
 function xeq_cmd__include(name, cmdline,
                           error_text, filename, silent, file_block, rc)
 {
-    dbg_print("scan", 5, sprintf("(xeq_cmd__include) name='%s', cmdline='%s'",
+    dbg_print("parse", 5, sprintf("(xeq_cmd__include) name='%s', cmdline='%s'",
                                  name, cmdline))
     if (cmdline == EMPTY)
         error("Bad parameters:" $0)
@@ -4909,14 +4916,14 @@ function xeq_cmd__include(name, cmdline,
     blktab[file_block, 0, "dstblk"] = curr_dstblk()
     blktab[file_block, 0, "atmode"] = substr(name, length(name)-4) == "paste" \
                                       ? MODE_AT_LITERAL : MODE_AT_PROCESS
-    # prep_file doesn't push the BLK_FILE onto the __scan_stack,
+    # prep_file doesn't push the BLK_FILE onto the __parse_stack,
     # so we have to do that ourselves due to customization
-    dbg_print("scan", 7, sprintf("(xeq_cmd__include) Pushing file block %d (%s) onto scan_stack", file_block, filename))
-    stk_push(__scan_stack, file_block)
+    dbg_print("parse", 7, sprintf("(xeq_cmd__include) Pushing file block %d (%s) onto parse_stack", file_block, filename))
+    stk_push(__parse_stack, file_block)
 
-    dbg_print("scan", 5, "(xeq_cmd__include) CALLING scan__file()")
-    rc = scan__file()
-    dbg_print("scan", 5, "(xeq_cmd__include) RETURNED FROM scan__file()")
+    dbg_print("parse", 5, "(xeq_cmd__include) CALLING parse__file()")
+    rc = parse__file()
+    dbg_print("parse", 5, "(xeq_cmd__include) RETURNED FROM parse__file()")
     if (!rc) {
         if (silent) return
         error_text = "File '" filename "' does not exist:" $0
@@ -5005,7 +5012,7 @@ function xeq_cmd__local(name, cmdline,
     sym = $1
     # check for valid name
     if (!nam_valid_with_strict_as(sym, strictp("symbol")))
-        error("@local: Invalid name")
+        error("@local: Invalid name '" sym "'")
     assert_sym_okay_to_define(sym)
     if (nam_ll_in(sym, __namespace))
         error("Symbol '" sym "' already defined")
@@ -5023,15 +5030,15 @@ function xeq_cmd__local(name, cmdline,
 #
 #*****************************************************************************
 # @longdef              NAME
-function scan__longdef(    sym, sym_block, body_block, scanstat)
+function parse__longdef(    sym, sym_block, body_block, pstat)
 {
-    dbg_print("sym", 5, "(scan__longdef) START dstblk=" curr_dstblk() ", mode=" ppf__mode(curr_atmode()) "; $0='" $0 "'")
+    dbg_print("sym", 5, "(parse__longdef) START dstblk=" curr_dstblk() ", mode=" ppf__mode(curr_atmode()) "; $0='" $0 "'")
 
     # Create two new blocks: one for the "longdef" block, other for definition body
     sym_block = blk_new(BLK_LONGDEF)
-    dbg_print("sym", 5, "(scan__longdef) New block # " sym_block " type " ppf__block_type(blk_type(sym_block)))
+    dbg_print("sym", 5, "(parse__longdef) New block # " sym_block " type " ppf__block_type(blk_type(sym_block)))
     body_block = blk_new(BLK_AGG)
-    dbg_print("sym", 5, "(scan__longdef) New block # " body_block " type " ppf__block_type(blk_type(body_block)))
+    dbg_print("sym", 5, "(parse__longdef) New block # " body_block " type " ppf__block_type(blk_type(body_block)))
 
     $1 = ""
     sym = $2
@@ -5040,30 +5047,30 @@ function scan__longdef(    sym, sym_block, body_block, scanstat)
     blktab[sym_block, 0, "body_block"] = body_block
     blktab[sym_block, 0, "dstblk"] = body_block
     blktab[sym_block, 0, "valid"] = FALSE
-    dbg_print_block("sym", 7, sym_block, "(scan__longdef) sym_block")
-    stk_push(__scan_stack, sym_block) # Push it on to the scan_stack
+    dbg_print_block("sym", 7, sym_block, "(parse__longdef) sym_block")
+    stk_push(__parse_stack, sym_block) # Push it on to the parse_stack
 
-    dbg_print("sym", 5, "(scan__longdef) CALLING scan()")
-    scanstat = scan() # scan() should return after it encounters @endcmd
-    dbg_print("sym", 5, "(scan__longdef) RETURNED FROM scan() => " ppf__bool(scanstat))
-    if (!scanstat)
-        error("(scan__longdef) Scan failed")
+    dbg_print("sym", 5, "(parse__longdef) CALLING parse()")
+    pstat = parse() # parse() should return after it encounters @endcmd
+    dbg_print("sym", 5, "(parse__longdef) RETURNED FROM parse() => " ppf__bool(pstat))
+    if (!pstat)
+        error("[@longdef] Parse error")
 
-    dbg_print("sym", 5, "(scan__longdef) END => " sym_block)
+    dbg_print("sym", 5, "(parse__longdef) END => " sym_block)
     return sym_block
 }
 
 
-function scan__endlongdef(    sym_block)
+function parse__endlongdef(    sym_block)
 {
-    dbg_print("sym", 3, sprintf("(scan__endlongdef) START dstblk=%d, mode=%s",
+    dbg_print("sym", 3, sprintf("(parse__endlongdef) START dstblk=%d, mode=%s",
                                  curr_dstblk(), ppf__mode(curr_atmode())))
-    if (assert_scan_stack_okay(BLK_LONGDEF) != 0)
-        error("(scan__endlongdef) Scan error")
-    sym_block = stk_pop(__scan_stack)
+    if (check__parse_stack(BLK_LONGDEF) != 0)
+        error("[@endlongdef] Parse error; " __m2_msg)
+    sym_block = stk_pop(__parse_stack)
 
     blktab[sym_block, 0, "valid"] = TRUE
-    dbg_print("sym", 3, sprintf("(scan__endlongdef) END => %d", sym_block))
+    dbg_print("sym", 3, sprintf("(parse__endlongdef) END => %d", sym_block))
     return sym_block
 }
 
@@ -5119,8 +5126,8 @@ function ppf__BLK_LONGDEF(longdef_block)
 #
 #       @m2ctl clear_debugging          Clear debugging
 #       @m2ctl dbg_namespace            Debug namespaces
-#       @m2ctl dump_scan_stack          Dump scan stack
-#       @m2ctl booltest                 Parse boolean expr from user
+#       @m2ctl dump_parse_stack         Dump parse stack
+#       @m2ctl booltest                 Scan boolean expr from user
 #       @m2ctl set_dbg DSYS LEVEL       Set debug level directly
 #       @m2ctl dump_block BLOCK         Raw dump block #
 #       @m2ctl debug_ship_out
@@ -5153,12 +5160,12 @@ function xeq_cmd__m2ctl(name, cmdline,
         clear_debugging()
         dbg_set_level("ship_out",   3)
 
-    } else if ($1 == "dump_scan_stack") {
-        dump_scan_stack()
+    } else if ($1 == "dump_parse_stack") {
+        dump_parse_stack()
 
     } else if ($1 == "booltest") { # Interactively evaluate boolean expressions
         do {
-            print_stderr("Enter line to parse as boolean expr (RETURN to end):")
+            print_stderr("Enter line to scan as boolean expr (RETURN to end):")
             getstat = getline input < "/dev/tty"
             #print("just read '" input "'")
             if (input == EMPTY) {
@@ -5168,9 +5175,9 @@ function xeq_cmd__m2ctl(name, cmdline,
 
             bool__tokenize_string(input)
             __bf = 1
-            e = bool__parse_expr(input)
+            e = bool__scan_expr(input)
             if (e == ERROR)
-                warn(sprintf("(xeq_cmd__m2ctl) bool__parse_expr('%s') returned ERROR - should exit?", input))
+                warn(sprintf("(xeq_cmd__m2ctl) bool__scan_expr('%s') returned ERROR - should exit?", input))
             else
                 print_stderr(sprintf("(xeq_cmd__m2ctl) __bf=%d,__bnf=%d; FINAL ANSWER: %d == %s", __bf, __bnf, e, ppf__bool(e)))
         } while (TRUE)
@@ -5199,25 +5206,25 @@ function xeq_cmd__m2ctl(name, cmdline,
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
 #*****************************************************************************
-function scan__newcmd(                     name, newcmd_block, body_block, scanstat, nparam, p, pname)
+function parse__newcmd(                     name, newcmd_block, body_block, pstat, nparam, p, pname)
 {
     nparam = 0
-    dbg_print("cmd", 5, "(scan__newcmd) START dstblk=" curr_dstblk() ", mode=" ppf__mode(curr_atmode()) "; $0='" $0 "'")
+    dbg_print("cmd", 5, "(parse__newcmd) START dstblk=" curr_dstblk() ", mode=" ppf__mode(curr_atmode()) "; $0='" $0 "'")
 
     raise_namespace()
 
     # Create two new blocks: one for the "new command" block, other for command body
     newcmd_block = blk_new(BLK_USER)
-    dbg_print("cmd", 5, "(scan__newcmd) New block # " newcmd_block " type " ppf__block_type(blk_type(newcmd_block)))
+    dbg_print("cmd", 5, "(parse__newcmd) New block # " newcmd_block " type " ppf__block_type(blk_type(newcmd_block)))
     body_block = blk_new(BLK_AGG)
-    dbg_print("cmd", 5, "(scan__newcmd) New block # " body_block " type " ppf__block_type(blk_type(body_block)))
+    dbg_print("cmd", 5, "(parse__newcmd) New block # " body_block " type " ppf__block_type(blk_type(body_block)))
 
     $1 = ""
     name = $2
     while (match(name, "{[^}]*}")) {
         p = ++nparam
         pname = substr(name, RSTART+1, RLENGTH-2)
-        dbg_print("cmd", 5, sprintf("(scan__newcmd) Parameter %d : %s",
+        dbg_print("cmd", 5, sprintf("(parse__newcmd) Parameter %d : %s",
                                      p, pname))
         blktab[newcmd_block, p, "param_name"] = pname
         name = substr(name, 1, RSTART-1) substr(name, RSTART+RLENGTH)
@@ -5229,33 +5236,33 @@ function scan__newcmd(                     name, newcmd_block, body_block, scans
     blktab[newcmd_block, 0, "dstblk"] = body_block
     blktab[newcmd_block, 0, "valid"] = FALSE
     blktab[newcmd_block, 0, "nparam"] = nparam
-    dbg_print_block("cmd", 7, newcmd_block, "(scan__newcmd) newcmd_block")
-    stk_push(__scan_stack, newcmd_block) # Push it on to the scan_stack
+    dbg_print_block("cmd", 7, newcmd_block, "(parse__newcmd) newcmd_block")
+    stk_push(__parse_stack, newcmd_block) # Push it on to the parse_stack
 
-    dbg_print("cmd", 5, "(scan__newcmd) CALLING scan()")
-    scanstat = scan() # scan() should return after it encounters @endcmd
-    dbg_print("cmd", 5, "(scan__newcmd) RETURNED FROM scan() => " ppf__bool(scanstat))
-    if (!scanstat)
-        error("(scan__newcmd) Scan failed")
+    dbg_print("cmd", 5, "(parse__newcmd) CALLING parse()")
+    pstat = parse() # parse() should return after it encounters @endcmd
+    dbg_print("cmd", 5, "(parse__newcmd) RETURNED FROM parse() => " ppf__bool(pstat))
+    if (!pstat)
+        error("[@newcmd] Parse error")
 
-    dbg_print("cmd", 5, "(scan__newcmd) END => " newcmd_block)
+    dbg_print("cmd", 5, "(parse__newcmd) END => " newcmd_block)
     return newcmd_block
 }
 
 
-function scan__endcmd(                     newcmd_block)
+function parse__endcmd(                     newcmd_block)
 {
-    dbg_print("cmd", 3, sprintf("(scan__endcmd) START dstblk=%d, mode=%s",
+    dbg_print("cmd", 3, sprintf("(parse__endcmd) START dstblk=%d, mode=%s",
                                  curr_dstblk(), ppf__mode(curr_atmode())))
-    if (assert_scan_stack_okay(BLK_USER) != 0)
-        error("(scan__endcmd) Scan error")
-    newcmd_block = stk_pop(__scan_stack)
+    if (check__parse_stack(BLK_USER) != 0)
+        error("[@endcmd] Parse error; " __m2_msg)
+    newcmd_block = stk_pop(__parse_stack)
 
     blktab[newcmd_block, 0, "valid"] = TRUE
     lower_namespace()
 
-    dbg_print("cmd", 3, sprintf("(scan__endcmd) END => %d", newcmd_block))
-    dbg_print_block("scan", 7, newcmd_block, sprintf("newcmd block just scanned:"))
+    dbg_print("cmd", 3, sprintf("(parse__endcmd) END => %d", newcmd_block))
+    dbg_print_block("parse", 7, newcmd_block, sprintf("newcmd block:"))
     return newcmd_block
 }
 
@@ -5298,8 +5305,9 @@ function execute__user(name, cmdline,
 
     old_level = __namespace
 
-    if (nam_parse(name, info) == ERROR)
-        error("(execute__user) Parse error on '" name "' -- should not happen")
+    if (nam__scan(name, info) == ERROR)
+        #error("(execute__user) Scan error on '" name "' -- should not happen")
+        error("Scan error, " __m2_msg)
     if ((level = nam_lookup(info)) == ERROR)
         error("(execute__user) nam_lookup failed -- should not happen")
 
@@ -5317,8 +5325,8 @@ function execute__user(name, cmdline,
     while (match(cmdline, "{[^}]*}")) {
         arg = ++narg
         argval = substr(cmdline, RSTART+1, RLENGTH-2)
-        dbg_print("scan", 5, sprintf("(scan) Arg %d : %s",
-                                     arg, argval))
+        dbg_print("parse", 5, sprintf("[@%s] Scan arg %d : %s",
+                                      name, arg, argval))
         #print_stderr("args[" arg "] = " argval)
         args[arg] = argval
         cmdline = substr(cmdline, 1, RSTART-1) substr(cmdline, RSTART+RLENGTH)
@@ -5407,17 +5415,17 @@ function ppf__BLK_USER(blknum,
 #*****************************************************************************
 # @nextfile
 function xeq_cmd__nextfile(name, cmdline,
-                           readstat)
+                           rstat)
 {
-    dbg_print("scan", 5, sprintf("(xeq_cmd__nextfile) START dstblk=%d, mode=%s, $0='%s'",
+    dbg_print("parse", 5, sprintf("(xeq_cmd__nextfile) START dstblk=%d, mode=%s, $0='%s'",
                                 curr_dstblk(), ppf__mode(curr_atmode()), $0))
 
-    dbg_print("scan", 5, "(xeq_cmd__nextfile) CALLING read_lines_until()")
-    readstat = read_lines_until("", DISCARD)
-    dbg_print("scan", 5, "(xeq_cmd__nextfile) RETURNED FROM read_lines_until() => " ppf__bool(readstat))
-    if (!readstat)
-        error("(xeq_cmd__nextfile) Scan failed")
-    dbg_print("scan", 5, "(xeq_cmd__nextfile) END")
+    dbg_print("parse", 5, "(xeq_cmd__nextfile) CALLING read_lines_until()")
+    rstat = read_lines_until("", DISCARD)
+    dbg_print("parse", 5, "(xeq_cmd__nextfile) RETURNED FROM read_lines_until() => " ppf__bool(rstat))
+    if (!rstat)
+        error("[@nextfile] Read error")
+    dbg_print("parse", 5, "(xeq_cmd__nextfile) END")
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -5454,8 +5462,8 @@ function xeq_cmd__readarray(name, cmdline,
     filename = $2
 
     # Check that arr is really an ARRAY and that it's writable
-    if ((nparts = nam_parse(arr, info)) == ERROR)
-        error(sprintf("(xeq_cmd__readarray) nam_parse('%s') failed", arr))
+    if ((nparts = nam__scan(arr, info)) == ERROR)
+        error("[@readarry] Scan error, " __m2_msg)
     if (nparts == 2)
         error(sprintf("(xeq_cmd__readarray) Array name cannot have subscripts: '%s'", arr))
 
@@ -5481,21 +5489,21 @@ function xeq_cmd__readarray(name, cmdline,
 
     # create a new Agg block
     agg_block = blk_new(BLK_AGG)
-    dbg_print("scan", 5, sprintf("symtab['%s','%s',%d,'agg_block'] = %d",
+    dbg_print("parse", 5, sprintf("symtab['%s','%s',%d,'agg_block'] = %d",
                                  arr, key, level, agg_block))
     symtab[arr, key, level, "agg_block"] = agg_block
 
-    # create a new file scanner : dstblk = agg, mode=literal
+    # create a new file parser : dstblk = agg, mode=literal
     file_block = prep_file(filename)
     blktab[file_block, 0, "dstblk"] = agg_block
     blktab[file_block, 0, "atmode"] = MODE_AT_LITERAL
-    # Push scanner manually because prep_file doesn't do that
-    dbg_print("scan", 7, sprintf("(xeq_cmd__readarray) Pushing file block %d (%s) onto scan_stack", file_block, filename))
-    stk_push(__scan_stack, file_block)
+    # Push parser manually because prep_file doesn't do that
+    dbg_print("parse", 7, sprintf("(xeq_cmd__readarray) Pushing file block %d (%s) onto parse_stack", file_block, filename))
+    stk_push(__parse_stack, file_block)
 
-    dbg_print("scan", 5, "(xeq_cmd__readarray) CALLING scan__file()")
-    rc = scan__file()
-    dbg_print("scan", 5, "(xeq_cmd__readarray) RETURNED FROM scan__file()")
+    dbg_print("parse", 5, "(xeq_cmd__readarray) CALLING parse__file()")
+    rc = parse__file()
+    dbg_print("parse", 5, "(xeq_cmd__readarray) RETURNED FROM parse__file()")
     if (!rc) {
         if (silent) return
         error_text = "File '" filename "' does not exist:" $0
@@ -5581,10 +5589,9 @@ function xeq_cmd__readonly(cmd, cmdline,
         error("(xeq_cmd__readonly) Bad parameters:" $0)
     sym = $1
 
-    # Parse sym => name, key
-    if ((nparts = nam_parse(sym, info)) == ERROR) {
-        error("(xeq_cmd__readonly) nam_parse failed")
-    }
+    # Scan sym => name, key
+    if ((nparts = nam__scan(sym, info)) == ERROR)
+        error("[@readonly] Scan error, " __m2_msg)
     name = info["name"]
     key  = info["key"]
 
@@ -5768,7 +5775,7 @@ function xeq_cmd__shell(name, cmdline,
     }
 
     shell_text_in = blk_to_string(shell_data_blk)
-    dbg_print("scan", 5, sprintf("(xeq_cmd__shell) shell_text_in='%s'", shell_text_in))
+    dbg_print("parse", 5, sprintf("(xeq_cmd__shell) shell_text_in='%s'", shell_text_in))
     
     path_fmt    = sprintf("%sm2-%d.shell-%%s", tmpdir(), sym_fetch("__PID__"))
     input_file  = sprintf(path_fmt, "in")
@@ -5808,23 +5815,23 @@ function xeq_cmd__shell(name, cmdline,
 #*****************************************************************************
 # @typeout
 function xeq_cmd__typeout(name, cmdline,
-                          i, scanner)
+                          i, parser)
 {
-    if (stk_emptyp(__scan_stack))
-        error("(xeq_cmd__typeout) Scan stack is empty")
+    if (stk_emptyp(__parse_stack))
+        error("(xeq_cmd__typeout) Parse stack is empty")
 
-    for (i = stk_depth(__scan_stack); i > 0; i--) {
-        dbg_print_block("scan", 6, __scan_stack[i], sprintf("(xeq_cmd__typeout) __scan_stack[%d]", i))
-        scanner = __scan_stack[i]
-        if (blk_type(scanner) == BLK_FILE) {
-            dbg_print_block("scan", 7, scanner, "(xeq_cmd__typeout) scanner")
-            dbg_print("scan", 5, sprintf("(xeq_cmd__typeout) Changing block %d file '%s' mode to Literal",
-                                         scanner, blktab[scanner, 0, "filename"]))
-            blktab[scanner, 0, "atmode"] = MODE_AT_LITERAL
+    for (i = stk_depth(__parse_stack); i > 0; i--) {
+        dbg_print_block("parse", 6, __parse_stack[i], sprintf("(xeq_cmd__typeout) __parse_stack[%d]", i))
+        parser = __parse_stack[i]
+        if (blk_type(parser) == BLK_FILE) {
+            dbg_print_block("parse", 7, parser, "(xeq_cmd__typeout) parser")
+            dbg_print("parse", 5, sprintf("(xeq_cmd__typeout) Changing block %d file '%s' mode to Literal",
+                                         parser, blktab[parser, 0, "filename"]))
+            blktab[parser, 0, "atmode"] = MODE_AT_LITERAL
             return
         }
     }
-    error("(xeq_cmd__typeout) Could not find FILE scanner")
+    error("(xeq_cmd__typeout) Could not find FILE parser")
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -5865,10 +5872,9 @@ function xeq_cmd__undefine(name, cmdline,
     # }
 
     # A better way:
-    # Parse sym => name, key
-    if ((nparts = nam_parse(sym, info)) == ERROR) {
-        error("(xeq_cmd__undefine) ERROR nam_parse('" sym "') failed")
-    }
+    # Scan sym => name, key
+    if ((nparts = nam__scan(sym, info)) == ERROR)
+        error("[@undefine] Scan error, " __m2_msg)
     if ((level = nam_lookup(info)) == ERROR) {
         error("(xeq_cmd__undefine) '" sym "' not found")
     }
@@ -5928,9 +5934,9 @@ function xeq_cmd__undivert(name, cmdline,
 #*****************************************************************************
 # @while CONDITION
 # @until CONDITION
-function scan__while(                 name, while_block, body_block, scanstat)
+function parse__while(                 name, while_block, body_block, pstat)
 {
-    dbg_print("while", 3, sprintf("(scan__while) START dstblk=%d, $0='%s'", curr_dstblk(), $0))
+    dbg_print("while", 3, sprintf("(parse__while) START dstblk=%d, $0='%s'", curr_dstblk(), $0))
     name = $1
     $1 = ""
     sub("^[ \t]*", "")
@@ -5939,37 +5945,37 @@ function scan__while(                 name, while_block, body_block, scanstat)
 
     # Create two new blocks: one for while_block, other for true branch
     while_block = blk_new(BLK_WHILE)
-    dbg_print("while", 5, "(scan__while) New block # " while_block " type " ppf__block_type(blk_type(while_block)))
+    dbg_print("while", 5, "(parse__while) New block # " while_block " type " ppf__block_type(blk_type(while_block)))
     body_block = blk_new(BLK_AGG)
-    dbg_print("while", 5, "(scan__while) New block # " body_block " type " ppf__block_type(blk_type(body_block)))
+    dbg_print("while", 5, "(parse__while) New block # " body_block " type " ppf__block_type(blk_type(body_block)))
 
     blktab[while_block, 0, "condition"] = $0
     blktab[while_block, 0, "init_negate"] = (name == "@until")
     blktab[while_block, 0, "body_block"] = body_block
     blktab[while_block, 0, "dstblk"] = body_block
     blktab[while_block, 0, "valid"]      = FALSE
-    dbg_print_block("while", 7, while_block, "(scan__while) while_block")
-    stk_push(__scan_stack, while_block) # Push it on to the scan_stack
+    dbg_print_block("while", 7, while_block, "(parse__while) while_block")
+    stk_push(__parse_stack, while_block) # Push it on to the parse_stack
 
-    dbg_print("while", 5, "(scan__while) CALLING scan()")
-    scanstat = scan() # scan() should return after it encounters @endif
-    dbg_print("while", 5, "(scan__while) RETURNED FROM scan() => " ppf__bool(scanstat))
-    if (!scanstat)
-        error("(scan__while) Scan failed")
+    dbg_print("while", 5, "(parse__while) CALLING parse()")
+    pstat = parse() # parse() should return after it encounters @endif
+    dbg_print("while", 5, "(parse__while) RETURNED FROM parse() => " ppf__bool(pstat))
+    if (!pstat)
+        error("[@while) Parse error")
 
-    dbg_print("while", 5, "(scan__while) END; => " while_block)
+    dbg_print("while", 5, "(parse__while) END; => " while_block)
     return while_block
 }
 
 
 # @endwhile
-function scan__endwhile(                    while_block)
+function parse__endwhile(                    while_block)
 {
-    dbg_print("while", 3, sprintf("(scan__endwhile) START dstblk=%d, mode=%s",
+    dbg_print("while", 3, sprintf("(parse__endwhile) START dstblk=%d, mode=%s",
                                curr_dstblk(), ppf__mode(curr_atmode())))
-    if (assert_scan_stack_okay(BLK_WHILE) != 0)
-        error("(scan__endwhile) Scan error")
-    while_block = stk_pop(__scan_stack)
+    if (check__parse_stack(BLK_WHILE) != 0)
+        error("[@endwhile] Parse error; " __m2_msg)
+    while_block = stk_pop(__parse_stack)
 
     blktab[while_block, 0, "valid"] = TRUE
     lower_namespace()
@@ -6986,6 +6992,17 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     BLK_USER                    = "U"; __blk_label[BLK_USER]     = "USER"
     BLK_WHILE                   = "W"; __blk_label[BLK_WHILE]    = "WHILE"
 
+    # Errors                          # ERRORS  
+    ERR_OKAY                    =   0
+
+    ERR_PARSE                   = 100
+    ERR_PARSE_STACK             = 101
+    ERR_PARSE_MISMATCH          = 102
+    ERR_PARSE_DEPTH             = 103
+
+    ERR_SCAN                    = 200
+    ERR_SCAN_INVALID_NAME       = 201
+
     # Various modes
     MODE_AT_LITERAL             = "L" # atmode - scan literally
     MODE_AT_PROCESS             = "P" # atmode - scan with "@" macro processing
@@ -7030,7 +7047,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     __ord_initialized           = FALSE # Becomes True in initialize_ord()
     __print_mode                = MODE_TEXT_PRINT
     __rot13_initialized         = FALSE # Becomes True in initialize_rot13()
-    __scan_stack[0]             = 0
+    __parse_stack[0]             = 0
     __xeq_ctl                   = XEQ_NORMAL
 
     srand()                     # Seed random number generator
@@ -7369,12 +7386,12 @@ BEGIN {
     }
 
     # Under normal execution, all blocks should have been popped from
-    # the scan stack, so check that.  I can't move this check into
+    # the parse stack, so check that.  I can't move this check into
     # end_program(), because that routine might be called during
-    # execution with scanners still present on the stack.
-    if (! stk_emptyp(__scan_stack)) {
-        warn("(main) Scan stack is not empty!")
-        dump_scan_stack()
+    # execution with parsers still present on the stack.
+    if (! stk_emptyp(__parse_stack)) {
+        warn("(main) Parse stack is not empty!")
+        dump_parse_stack()
     }
 
     end_program(MODE_STREAMS_SHIP_OUT)
@@ -7393,12 +7410,12 @@ function end_program(diverted_streams_final_disposition,
     # diverted data.  See "STREAMS & DIVERSIONS" documentation above
     # to see how the user can prevent this, if desired.
     if (diverted_streams_final_disposition == MODE_STREAMS_SHIP_OUT) {
-        # Regardless of whether the scan stack is empty or not, streams
+        # Regardless of whether the parse stack is empty or not, streams
         # which ship out when m2 ends must go to standard output.  So
         # always create a TERMINAL block to receive this data.  Since
         # the program is about to terminate anyway, we don't care about
-        # managing the scan stack from here on out.
-        stk_push(__scan_stack, blk_new(BLK_TERMINAL))
+        # managing the parse stack from here on out.
+        stk_push(__parse_stack, blk_new(BLK_TERMINAL))
         sym_ll_write("__DIVNUM__", "", GLOBAL_NAMESPACE, TERMINAL)
         undivert_all()
     }

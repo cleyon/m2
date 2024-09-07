@@ -3,6 +3,7 @@
 Begin
 @case FOO
 Preamble
+Of clauses may print in different order - that's okay
 @of 1
 One
 @of 2

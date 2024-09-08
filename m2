@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-09-07 13:45:32 cleyon>
+#  Time-stamp:  <2024-09-08 16:04:52 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -858,16 +858,14 @@ function initialize_debugging()
     dbg_set_level("while",      5)
     dbg_set_level("xeq",        5)
 
-    sym_ll_write("__STRICT__", "cmd", GLOBAL_NAMESPACE, TRUE)
     sym_ll_write("__SYNC__",      "", GLOBAL_NAMESPACE, SYNC_LINE)
 }
 
 
 function clear_debugging(    dsys)
 {
-    for (dsys in _dbg_sys_array)
+    for (dsys in __dbg_sysnames)
         sym_ll_write("__DBG__", dsys, GLOBAL_NAMESPACE, 0)
-    # sym_ll_write("__STRICT__", "cmd", GLOBAL_NAMESPACE, FALSE)
     # sym_ll_write("__SYNC__",      "", GLOBAL_NAMESPACE, SYNC_FILE)
 }
 
@@ -987,9 +985,9 @@ function blk_new(block_type,
     if (block_type == BLK_AGG)
         blktab[new_blknum, 0, "count"] = 0
     else if (block_type == BLK_CASE)
-        blktab[new_blknum, 0, "terminator"] = "@endcase|@esac"
+        blktab[new_blknum, 0, "terminator"] = "@(endcase|esac)"
     else if (block_type == BLK_IF)
-        blktab[new_blknum, 0, "terminator"] = "@endif|@fi"
+        blktab[new_blknum, 0, "terminator"] = "@(endif|fi)"
     else if (block_type == BLK_FILE) {
         blktab[new_blknum, 0, "open"] = FALSE
         blktab[new_blknum, 0, "terminator"] = ""
@@ -1004,7 +1002,7 @@ function blk_new(block_type,
     } else if (block_type == BLK_USER)
         blktab[new_blknum, 0, "terminator"] = "@endcmd"
     else if (block_type == BLK_WHILE)
-        blktab[new_blknum, 0, "terminator"] = "@endwhile"
+        blktab[new_blknum, 0, "terminator"] = "@(endwhile|wend)"
     else
         error("(blk_new) Uncaught block_type '" block_type "'")
 
@@ -1759,7 +1757,7 @@ function parse(              code, terminator, rstat, name, retval, new_block, f
                         }
                         error("(parse) [" parser_label "] Found @endlongdef but expecting '" terminator "'")
 
-                    } else if (name == "endwhile") {
+                    } else if (name == "endwhile" || name == "wend") {
                         dbg_print("parse", 5, ("(parse) [" parser_label "] CALLING parse__endwhile(dstblk=" curr_dstblk() ")"))
                         parse__endwhile()
                         dbg_print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__endwhile() : dstblk => " curr_dstblk()))
@@ -2405,11 +2403,11 @@ function seq_definition_ppf(name,    buf, TAB)
 {
     buf =         "@sequence " name TOK_TAB "create\n"
     if (seq_ll_read(name) != SEQ_DEFAULT_INIT)
-        buf = buf "@sequence " name TOK_TAB "set " seq_ll_read(name) TOK_NEWLINE
+        buf = buf "@sequence " name TOK_TAB "setval " seq_ll_read(name) TOK_NEWLINE
     if (seqtab[name, "init"] != SEQ_DEFAULT_INIT)
-        buf = buf "@sequence " name TOK_TAB "init " seqtab[name, "init"] TOK_NEWLINE
+        buf = buf "@sequence " name TOK_TAB "setinit " seqtab[name, "init"] TOK_NEWLINE
     if (seqtab[name, "incr"] != SEQ_DEFAULT_INCR)
-        buf = buf "@sequence " name TOK_TAB "incr " seqtab[name, "incr"] TOK_NEWLINE
+        buf = buf "@sequence " name TOK_TAB "setincr " seqtab[name, "incr"] TOK_NEWLINE
     if (seqtab[name, "fmt"] != sym_ll_read("__FMT__", "seq"))
         buf = buf "@sequence " name TOK_TAB "format " seqtab[name, "fmt"] TOK_NEWLINE
     return chop(buf)
@@ -3999,6 +3997,9 @@ function xeq_cmd__define(name, cmdline,
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
+#       Documentation explicitly states: "If argument is not an integer,
+#       no action is taken and no error is thrown.
+#
 #*****************************************************************************
 # @divert               [N]
 function xeq_cmd__divert(name, cmdline,
@@ -4009,7 +4010,8 @@ function xeq_cmd__divert(name, cmdline,
                                    curr_dstblk(), NF, cmdline))
     new_stream = (NF == 0) ? "0" : dosubs($1)
     if (!integerp(new_stream))
-        error(sprintf("Value '%s' must be integer:", new_stream) $0)
+        # error(sprintf("Value '%s' must be integer:", new_stream) $0)
+        return
     if (new_stream > MAX_STREAM)
         error("Bad parameters:" $0)
 
@@ -5684,15 +5686,15 @@ function xeq_cmd__sequence(name, cmdline,
             # cause a crash if printf() fails.
             dbg_print("seq", 2, sprintf("(xeq_cmd__sequence) fmt now '%s'", arg))
             seqtab[id, "fmt"] = arg
-        } else if (action == "incr") {
-            # incr N :: Set increment value to N.
+        } else if (action == "setincr") {
+            # setincr N :: Set increment value to N.
             if (!integerp(arg))
                 error(sprintf("Value '%s' must be numeric:%s", arg, saveline))
             if (arg+0 == 0)
                 error(sprintf("Bad parameters in 'incr':%s", saveline))
             seqtab[id, "incr"] = int(arg)
-        } else if (action == "init") {
-            # init N :: Set initial  value to N.  If current
+        } else if (action == "setinit") {
+            # setinit N :: Set initial  value to N.  If current
             # value == old init value (i.e., never been used), then set
             # the current value to the new init value also.  Otherwise
             # current value remains unchanged.
@@ -5701,8 +5703,8 @@ function xeq_cmd__sequence(name, cmdline,
             if (seq_ll_read(id) == seqtab[id, "init"])
                 seq_ll_write(id, int(arg))
             seqtab[id, "init"] = int(arg)
-        } else if (action == "set") {
-            # set N :: Set counter value directly to N.
+        } else if (action == "setval") {
+            # setval N :: Set counter value directly to N.
             if (!integerp(arg))
                 error(sprintf("Value '%s' must be numeric:%s", arg, saveline))
             seq_ll_write(id, int(arg))
@@ -5900,7 +5902,8 @@ function xeq_cmd__undivert(name, cmdline,
         while (++i <= NF) {
             stream = dosubs($i)
             if (!integerp(stream))
-                error(sprintf("Value '%s' must be numeric:", stream) $0)
+                # error(sprintf("Value '%s' must be numeric:", stream) $0)
+                continue
             if (stream > MAX_STREAM)
                 error("Bad parameters:" $0)
             dbg_print("divert", 5, sprintf("(xeq_cmd__undivert) CALLING undivert(%d)", stream))
@@ -6507,7 +6510,7 @@ function dosubs(s,
             assert_sym_defined(p, fn)
             # basename in Awk, assuming Unix style path separator.
             # Return filename portion of path.  If this is not
-            # adequate, consider using @obasename SYM@.
+            # adequate, consider using @xbasename SYM@.
             expand = rm_quotes(sym_fetch(p))
             sub(/^.*\//, "", expand)
             r = expand r
@@ -6539,7 +6542,7 @@ function dosubs(s,
                     # If not, check if we're in strict mode (error) or not.
                     if (sym_defined_p(p))
                         r = sym_ll_read("__FMT__", sym_true_p(p)) r
-                    else if (strictp("bool"))
+                    else if (strictp("boolval"))
                         error("Name '" p "' not defined [boolval]:" $0)
                     else
                         r = sym_ll_read("__FMT__", FALSE) r
@@ -6593,7 +6596,7 @@ function dosubs(s,
             assert_sym_defined(p, fn)
             # dirname in Awk, assuming Unix style path separator.
             # Return directory portion of path.  If this is not
-            # adequate, consider using @odirname SYM@.
+            # adequate, consider using @xdirname SYM@.
             y = rm_quotes(sym_fetch(p))
             expand = (sub(/\/[^\/]*$/, "", y)) ? y : "."
             r = expand r
@@ -6725,33 +6728,6 @@ function dosubs(s,
                 r = substr(sym_fetch(p), x, y) r
             }
 
-        # obasename SYM: Base (i.e., file name) of path, using external program
-        } else if (fn == "obasename") {
-            if (secure_level() >= 2)
-                error("(obasename) Security violation")
-            if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[1 + off_by]
-            assert_sym_valid_name(p)
-            assert_sym_defined(p, fn)
-            cmdline = build_prog_cmdline(fn, rm_quotes(sym_fetch(p)), MODE_IO_CAPTURE)
-            cmdline | getline expand
-            close(cmdline)
-            r = expand r
-
-        # odirname SYM: Directory name of path, using external program
-        } else if (fn == "odirname") {
-            if (secure_level() >= 2)
-
-                error("(odirname) Security violation")
-            if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[1 + off_by]
-            assert_sym_valid_name(p)
-            assert_sym_defined(p, fn)
-            cmdline = build_prog_cmdline(fn, rm_quotes(sym_fetch(p)), MODE_IO_CAPTURE)
-            cmdline | getline expand
-            close(cmdline)
-            r = expand r
-
         # ord SYM: Output character with ASCII code SYM
         #   @define B *Nothing of interest*
         #   @ord A@ => 65
@@ -6839,6 +6815,33 @@ function dosubs(s,
         } else if (fn == "uuid") {
             r = uuid() r
 
+        # xbasename SYM: Base (i.e., file name) of path, using external program
+        } else if (fn == "xbasename") {
+            if (secure_level() >= 2)
+                error("(xbasename) Security violation")
+            if (nparam != 1) error("Bad parameters in '" m "':" $0)
+            p = param[1 + off_by]
+            assert_sym_valid_name(p)
+            assert_sym_defined(p, fn)
+            cmdline = build_prog_cmdline(fn, rm_quotes(sym_fetch(p)), MODE_IO_CAPTURE)
+            cmdline | getline expand
+            close(cmdline)
+            r = expand r
+
+        # xdirname SYM: Directory name of path, using external program
+        } else if (fn == "xdirname") {
+            if (secure_level() >= 2)
+
+                error("(xdirname) Security violation")
+            if (nparam != 1) error("Bad parameters in '" m "':" $0)
+            p = param[1 + off_by]
+            assert_sym_valid_name(p)
+            assert_sym_defined(p, fn)
+            cmdline = build_prog_cmdline(fn, rm_quotes(sym_fetch(p)), MODE_IO_CAPTURE)
+            cmdline | getline expand
+            close(cmdline)
+            r = expand r
+
         # Old code for macro processing
         # <SOMETHING ELSE> : Call a user-defined macro, handles arguments
         } else if (sym_valid_p(fn) && (sym_defined_p(fn) || sym_deferred_p(fn))) {
@@ -6847,16 +6850,10 @@ function dosubs(s,
             j = MAX_PARAM   # but don't go overboard with params
             # Count backwards to get around $10 problem.
             while (j-- >= 0) {
-                if (index(expand, "${" j "}") > 0) {
-                    if (j > nparam)
-                        error("Parameter " j " not supplied in '" m "':" $0)
-                    gsub("\\$\\{" j "\\}", param[j + off_by], expand)
-                 }
-                if (index(expand, "$" j) > 0) {
-                    if (j > nparam)
-                        error("Parameter " j " not supplied in '" m "':" $0)
-                    gsub("\\$" j, param[j + off_by], expand)
-                }
+                if (index(expand, "${" j "}") > 0)
+                    gsub("\\$\\{" j "\\}", (j <= nparam) ? param[j + off_by] : "", expand)
+                if (index(expand, "$" j) > 0)
+                    gsub("\\$"    j      , (j <= nparam) ? param[j + off_by] : "", expand)
             }
             r = expand r
 
@@ -7105,8 +7102,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     sym_ll_fiat("__NFILE__",        "", FLAGS_READONLY_INTEGER, 0)
     sym_ll_fiat("__NLINE__",        "", FLAGS_READONLY_INTEGER, 0)
     sym_ll_fiat("__MAX_STREAM__",   "", FLAGS_READONLY_INTEGER, MAX_STREAM)
-    sym_ll_fiat("__STRICT__",   "bool", "",                     TRUE)
-    sym_ll_fiat("__STRICT__",    "cmd", "",                     FALSE)
+    sym_ll_fiat("__STRICT__","boolval", "",                     TRUE)
     sym_ll_fiat("__STRICT__",    "env", "",                     TRUE)
     sym_ll_fiat("__STRICT__",   "file", "",                     TRUE)
     sym_ll_fiat("__STRICT__", "symbol", "",                     TRUE)
@@ -7116,8 +7112,8 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     # FUNCS
     # Functions cannot be used as symbol or sequence names.
     split("basename boolval chr date dirname epoch expr getenv ifdef ifelse ifndef lc left len" \
-          " ltrim mid obasename odirname ord rem right rot13 rtrim sexpr sgetenv spaces srem strftime" \
-          " substr time trim tz uc uuid",
+          " ltrim mid ord rem right rot13 rtrim sexpr sgetenv spaces srem strftime" \
+          " substr time trim tz uc uuid xbasename xdirname",
           array, TOK_SPACE)
     for (elem in array)
         nam_ll_write(array[elem], GLOBAL_NAMESPACE, TYPE_FUNCTION FLAG_SYSTEM)
@@ -7138,7 +7134,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     # These commands are Immediate
     split("break case continue else endcase endcmd endif endlong" \
           " endlongdef endwhile esac fi for foreach if longdef" \
-          " newcmd next of otherwise return unless until while",
+          " newcmd next of otherwise return unless until wend while",
           array, TOK_SPACE)
     for (elem in array)
         nam_ll_write(array[elem], GLOBAL_NAMESPACE, TYPE_COMMAND FLAG_SYSTEM FLAG_IMMEDIATE)
@@ -7194,7 +7190,7 @@ function initialize_ord(    low, high, i, t)
 
 
 # From the ROT13 page:  http://www.miranda.org/~jkominek/rot13/
-# Maintained ( by Jay Kominek <jkominek-rot13@miranda.org>
+# Maintained by Jay Kominek <jkominek-rot13@miranda.org>
 # https://web.archive.org/web/20090308134550/http://www.miranda.org/~jkominek/rot13/awk/rot13.awk
 # Rot13 in Awk                          Teknovore <tek@wiw.org> 1998
 function initialize_rot13(    from, to, i)
@@ -7313,15 +7309,15 @@ BEGIN {
                 _val = substr(_arg, _eq+1)
                 if (_name == "debug") {
                     _name = "__DEBUG__"
-                } else if (_name == "noinit") {
-                    if (_val == 0) { # `Don't not load the init files''
-                        # This makes it possible to load init files
-                        # without a specifying a command-line file.
-                        load_init_files()
-                    } else {
-                        # Inhibit loading of init files by pretending we
-                        # already did it.
+                } else if (_name == "init") {
+                    if (_val == 0) {
+                        # Do not load the init files.  Inhibit init file
+                        # loading by pretending we already did it.
                         __init_files_loaded = TRUE
+                    } else if (_val > 0) {
+                        # Positive value loads init files without
+                        # providing a command-line file.
+                        load_init_files()
                     }
                     continue
                 } else if (_name == "secure") {
@@ -7329,18 +7325,18 @@ BEGIN {
                 } else if (_name == "strict") {
                     if (_val == 0) {
                         # Turn off strict settings
-                        sym_ll_write("__STRICT__",   "bool", GLOBAL_NAMESPACE, FALSE)
-                        sym_ll_write("__STRICT__",    "cmd", GLOBAL_NAMESPACE, FALSE)
+                        sym_ll_write("__STRICT__","boolval", GLOBAL_NAMESPACE, FALSE)
                         sym_ll_write("__STRICT__",    "env", GLOBAL_NAMESPACE, FALSE)
                         sym_ll_write("__STRICT__",   "file", GLOBAL_NAMESPACE, FALSE)
                         sym_ll_write("__STRICT__", "symbol", GLOBAL_NAMESPACE, FALSE)
                         sym_ll_write("__STRICT__",  "undef", GLOBAL_NAMESPACE, FALSE)
                     } else if (_val > 0)  {
-                        # Positive means more strict, presumably.  But
-                        # the only remaining ssys that doesn't default
-                        # to TRUE is __STRICT__[cmd].  So we turn it on.
-                        # (Note: initialize_debugging also does this.)
-                        sym_ll_write("__STRICT__", "cmd", GLOBAL_NAMESPACE, TRUE)
+                        # Turn on strict settings
+                        sym_ll_write("__STRICT__","boolval", GLOBAL_NAMESPACE, TRUE)
+                        sym_ll_write("__STRICT__",    "env", GLOBAL_NAMESPACE, TRUE)
+                        sym_ll_write("__STRICT__",   "file", GLOBAL_NAMESPACE, TRUE)
+                        sym_ll_write("__STRICT__", "symbol", GLOBAL_NAMESPACE, TRUE)
+                        sym_ll_write("__STRICT__",  "undef", GLOBAL_NAMESPACE, TRUE)
                     }
                     continue
                 }

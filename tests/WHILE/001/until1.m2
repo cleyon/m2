@@ -1,5 +1,5 @@
 @sequence X create
-@sequence X set 10
+@sequence X setval 10
 @until @X@ < 5
 Iteration @X--@
 @endwhile

@@ -110,10 +110,10 @@ Output symbol names & definitions to FILE (stderr).
 Like @dump but include System symbols.
 .It @else
 Switch to the alternate condition branch of an @if block.
-Only one @else statement is allowed per block.
+Only one @else statement is allowed per @if block.
 .It @endcase
 Indicate the end of a @case structure.
-Also called @esac thanks to Algol-60.
+Also called @esac thanks to Algol\ 68.
 .It @endcmd
 Indicate the end of a @newcmd definition.
 .It @endif
@@ -123,6 +123,7 @@ Also called @fi, keeping the dream alive.
 Indicate the end of a multi-line @longdef.
 .It @endwhile
 Indicate the end of a @while or @until loop.
+Also called @wend.
 .It @error [TEXT]
 Send TEXT to standard error; exit code 2
 .It @exit [CODE]
@@ -152,7 +153,9 @@ Add N (1) to an already defined NAME
 .It @initialize NAME VAL
 Like @define, but abort if NAME already defined
 .It @input [NAME]
-Read a single line from keyboard and define NAME
+Read a single line from keyboard to define NAME.
+If NAME is omitted, value is stored in symbol
+.Va __INPUT__ .
 .It @local NAME
 Declare NAME as a symbol local to the current namespace
 .It @longdef NAME ... @endlongdef
@@ -170,9 +173,9 @@ Every branch's TEXT must be unique.
 .It @otherwise
 Begin a new branch of an enclosing @case structure
 which is executed if no @of branch triggers.
-Only only one @otherwise branch is permitted per @case.
+Only only one @otherwise branch is permitted per @case structure.
 .It @paste FILE
-Insert FILE contents literally, no macros
+Insert FILE contents literally, with no changes or macros.
 .Brq #S
 .It @read NAME FILE
 Read FILE contents to define NAME
@@ -275,8 +278,9 @@ supplied when the macro is called.
 The definition should refer to $1, $2, etc.
 ${1} also works, so ${1}1 is distinguishable from $11.
 $0 refers to the name of the macro itself.
-You may supply more parameters than needed, but it is an error if a
-definition refers to a parameter which is not supplied.
+When a definition refers to a parameter which is not supplied, an empty
+string will used as a default value.
+You may supply more parameters than needed.
 .Bd -ragged -offset indent -compact
 .Em WARNING :
 Parameters are parsed by splitting on white space.
@@ -331,7 +335,7 @@ The following definitions are recognized:
 .Pp
 .Bl -tag -width @right_SYM_[N]@ -compact -offset indent
 .It @basename SYM@
-Base (file) name of SYM
+Base (file) name of SYM implemented in Awk
 .It @boolval [SYM]@
 Output "1" if SYM is True, else "0"
 .It @chr SYM@
@@ -340,7 +344,7 @@ Output character with ASCII code SYM
 Current date (format as __FMT__[date])
 .Brq #1
 .It @dirname SYM@
-Directory name of SYM
+Directory name of SYM implemented in Awk.
 .It @epoch@
 Number of seconds since the Epoch, UTC
 .Brq #1
@@ -397,6 +401,10 @@ Time zone name (format as __FMT__[tz])
 Upper case
 .It @uuid@
 Something that resembles a UUID: C3525388-E400-43A7-BC95-9DF5FA3C4A52
+.It @xbasename SYM@
+Base (file) name of SYM determined by external program.
+.It @xdirname SYM@
+Directory name of SYM determined by external program.
 .El
 .Pp
 Symbols can be suffixed with "[<key>]" to form simple arrays.
@@ -503,26 +511,45 @@ Security level (0, 1, or 2).  See
 for further information.
 .It __SHELL_EXIT__
 Exit status of most recent @shell command
-.It __STRICT__[bool]
-True if variables must be defined (def True)
+.It __STRICT__[boolval]
+If True, variables passed to
+.Ql boolval
+must be defined.
+Default is True.
+If non-strict, undefined variables are considered False.
 .Brq #3
-.It __STRICT__[cmd]
-True if @ command must be known (def False)
-.Brq #3
+.\" .It __STRICT__[cmd]
+.\" True if @ command must be known.  Def False)
+.\" .Brq #3
 .It __STRICT__[env]
-True if environment variable must be defined (def True)
+If True, environment variables must be defined.
+Default is True.
+If non-strict, unknown environment variables expand to an empty string.
 .Brq #3
 .It __STRICT__[file]
-True if reading non-existent file causes error (def True)
+If True, reading a non-existent file with
+.Ql @include
+causes an error.
+Default is True.
+If non-strict, attempts to read non-existent files are silently ignored.
+This behavior can also be accomplished with @sinclude.
 .Brq #3
-.It __STRICT__[func]
-True if functions must be defined (def True)
-.Brq #3
+.\" .It __STRICT__[func]
+.\" If True, functions must be defined (def True)
+.\" .Brq #3
 .It __STRICT__[symbol]
-True if symbol names are limited (def True)
+If True, symbol names are limited
+to the following syntax for names:
+.Dl /^[A-Za-z#_][A-Za-z#_0-9]*$/
+Default is True.
+If non-strict, symbol names are much more liberal!
 .Brq #3
 .It __STRICT__[undef]
-True if symbols must be defind (def True)
+If True, symbols inside @ signs must be defined.
+Default is True.
+If non-strict,
+.Ql @XLERB@
+or other unrecognized name will silently expand to an empty string.
 .Brq #3
 .It __SYNC__
 Frequency to flush output (0..2).
@@ -631,6 +658,8 @@ Inject only the numbered diversion into current stream.
 Inject all specified diversions (in argument order, not numerical
 order), if legal, into current stream.
 .El
+.Pp
+After a stream has been undiverted, it is implicitly cleared.
 .It Em End-of-Data Processing :
 There is an implicit
 .Ql @divert 0
@@ -681,17 +710,17 @@ Create a new sequence named ID
 Destroy sequence named ID
 .It ID format STR
 Format string used to print value (%d)
-.It ID incr N
-Set increment to N (1)
-.It ID init N
-Set initial value to N (0)
 .It ID next
 Increment value (no output)
 .It ID prev
 Decrement value (no output)
 .It ID restart
 Set current value to initial value
-.It ID set N
+.It ID setincr N
+Set increment to N (1)
+.It ID setinit N
+Set initial value to N (0)
+.It ID setval N
 Set value directly to N
 .El
 .Pp
@@ -719,7 +748,7 @@ command actions
 .Ic prev ,
 .Ic restart ,
 and
-.Ic set
+.Ic setval
 will change the value as specified without generating any output.
 .It
 Used inline,
@@ -935,8 +964,12 @@ If environment variable
 exists, its file is read instead of
 .Pa $HOME/.m2rc .
 To inhibit automatically loading these init files, specify
-.Ar noinit=1
+.Ar init=0
 on the command line.
+Specifying
+.Ar init=1
+causes the init files to be loaded (if not done so already)
+without the need to specify an input file.
 .It Xo
 .Pa /dev/stdin ,
 .Pa /dev/stdout ,
@@ -1123,11 +1156,6 @@ Image:  @my_image@
 .\" .It
 .\" Indicates a "finishing" command was seen without a starter.
 .\" .El
-.\" .It Parameter N not supplied in 'XXX'
-.\" .Bl -dash -offset indent -compact
-.\" .It
-.\" A macro referred to a parameter (such as $1) for which no value was supplied.
-.\" .El
 .\" .It Symbol 'XXX' already defined
 .\" .Bl -dash -offset indent -compact
 .\" .It
@@ -1157,10 +1185,19 @@ Image:  @my_image@
 .Sh SEE ALSO
 .Xr cpp 1 ,
 .Xr m4 1
-.Bl -hang -compact
+.Bl -hang
 .It Lk http://www.drdobbs.com/open-source/m1-a-mini-macro-processor/200001791
 .It Lk https://docstore.mik.ua/orelly/unix3/sedawk/ch13_10.htm
 .El
+.Rs
+.%A Alfred V. Aho
+.%A Brian W. Kernighan
+.%A Peter J. Weinberger
+.%B The AWK Programming Language
+.%I Addison-Wesley
+.%D 1988
+.%O ISBN\ 0-201-07981-X
+.Re
 .Ss "Other Ms"
 .Bl -tag -width M8___ -offset indent
 .It M

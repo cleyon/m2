@@ -1,5 +1,5 @@
 @sequence bar	create
 @sequence foo	create
-@sequence foo	set 1
+@sequence foo	setval 1
 @sequence quux	create
 @sequence quux	format %x

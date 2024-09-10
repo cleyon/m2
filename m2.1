@@ -232,6 +232,10 @@ Send TEXT to standard error; continue.  Also called @echo, @stderr
 .It @while EXPR ... @endwhile
 Repeatedly evaluate input lines while boolean expression is True
 and stop when it becomes False.
+.It @wrap TEXT
+Defer TEXT until m2 has processed all files and is about to exit.
+Wrapped text will be output after diverted streams, if any.
+Wrapped text will not be processed if @error or @exit commands are encountered.
 .El
 .Pp
 Short macros can be defined on the command line by using the form
@@ -659,6 +663,11 @@ order), if legal, into current stream.
 .El
 .Pp
 After a stream has been undiverted, it is implicitly cleared.
+Diverted text will not be processed if m2 exits due to
+.Ql @error
+or
+.Ql @exit
+commands.
 .It Em End-of-Data Processing :
 There is an implicit
 .Ql @divert 0

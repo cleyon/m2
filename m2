@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-09-08 18:20:37 cleyon>
+#  Time-stamp:  <2024-09-10 18:11:33 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -6090,11 +6090,11 @@ function xeq_cmd__wrap(name, cmdline,
 #
 #*****************************************************************************
 function ship_out(obj_type, obj,
-                  dstblk, name, dsc)
+                  dstblk, name)
 {
     dstblk = curr_dstblk()
     dbg_print("ship_out", 3, sprintf("(ship_out) START dstblk=%d, obj_type=%s, obj='%s'",
-                                     dstblk, obj, obj_type))
+                                     dstblk, __blk_label[obj_type], obj))
     if (dstblk < 0) {
         dbg_print("ship_out", 3, "(ship_out) END, because dstblk <0")
         return
@@ -6116,10 +6116,13 @@ function ship_out(obj_type, obj,
     } else if (obj_type == OBJ_CMD) {
         name = extract_cmd_name(obj)
         sub(/^[ \t]*[^ \t]+[ \t]*/, "", obj)
-        dsc = dosubs(obj)
+        # Unlike every other command, @wrap ships out its line literally here.
+        # Function end_program(), which handles wrapped text, calls dosubs().
+        if (name != "wrap")
+            obj = dosubs(obj)
         dbg_print("ship_out", 3, sprintf("(ship_out) CALLING execute__command('%s', '%s')",
-                                         name, dsc))
-        execute__command(name, dsc)
+                                         name, obj))
+        execute__command(name, obj)
         dbg_print("ship_out", 3, sprintf("(ship_out) RETURNED FROM execute__command('%s', ...)",
                                          name))
 
@@ -6131,10 +6134,10 @@ function ship_out(obj_type, obj,
     } else if (obj_type == OBJ_USER) {
         name = extract_cmd_name(obj)
         #sub(/^[ \t]*[^ \t]+[ \t]*/, "", obj)   # OBJ_CMD does this but not here, ???
-        dsc = dosubs(obj)
+        obj = dosubs(obj)
         dbg_print("ship_out", 3, sprintf("(ship_out) CALLING execute__user('%s', '%s')",
-                                         name, dsc))
-        execute__user(name, dsc)
+                                         name, obj))
+        execute__user(name, obj)
         dbg_print("ship_out", 3, sprintf("(ship_out) RETURNED FROM execute__user('%s', ...)",
                                          name))
 

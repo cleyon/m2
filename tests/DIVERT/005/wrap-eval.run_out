@@ -1,0 +1,4 @@
+Hello
+X=2
+Wrapped text follows:
+Wrapped text here...  X should be 2, but actually 1

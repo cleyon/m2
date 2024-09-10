@@ -690,9 +690,9 @@ function format_message(text, file, line,    s)
     # guard still necessary?  Ah, because this function might get invoked
     # very early in m2 execution, before the symbol table is populated.
     # The defaults are therefore empty, resulting in superfluous ":"s.
-              s =   "m2" ":"
-    if (file) s = s file ":"
-    if (line) s = s line ":"
+              s =   "m2" TOK_COLON
+    if (file) s = s file TOK_COLON
+    if (line) s = s line TOK_COLON
     if (text) s = s text
     return s
 }
@@ -1392,7 +1392,7 @@ function execute__command(name, cmdline,
     else if (name ~   /dump(all)?/)     xeq_cmd__dump(name, cmdline)
     else if (name ~ /s?echo/)           xeq_cmd__error(name, cmdline)
     else if (name ==  "error")          xeq_cmd__error(name, cmdline)
-    else if (name ~ /s?exit/)           xeq_cmd__exit(name, cmdline)
+    else if (name ==  "exit")           xeq_cmd__exit(name, cmdline)
     else if (name ==  "ignore")         xeq_cmd__ignore(name, cmdline)
     else if (name ~ /s?include/)        xeq_cmd__include(name, cmdline)
     else if (name ==  "incr")           xeq_cmd__incr(name, cmdline)
@@ -1413,6 +1413,7 @@ function execute__command(name, cmdline,
     else if (name ==  "undefine")       xeq_cmd__undefine(name, cmdline)
     else if (name ==  "undivert")       xeq_cmd__undivert(name, cmdline)
     else if (name ==  "warn")           xeq_cmd__error(name, cmdline)
+    else if (name ==  "wrap")           xeq_cmd__wrap(name, cmdline)
     else
         error("(execute__command) Unrecognized command '" name "' in '" cmdline "'")
 
@@ -3292,7 +3293,7 @@ function assert_sym_defined(sym, hint,    s)
         return TRUE
     s = sprintf("Name '%s' not defined%s%s",  sym,
                 ((hint != EMPTY) ? " [" hint "]" : ""),
-                ((!emptyp($0)) ? ":" $0 : ""))
+                ((!emptyp($0)) ? TOK_COLON $0 : ""))
     error(s)
 }
 
@@ -4343,12 +4344,16 @@ function xeq_cmd__error(name, cmdline,
 #
 #*****************************************************************************
 # @exit                 [CODE]
-function xeq_cmd__exit(name, cmdline,
-                       silent)
+function xeq_cmd__exit(name, cmdline)
 {
-    silent = substr(name, 2, 1) == "s" # silent discards any pending streams
     __exit_code = (!emptyp(cmdline) && integerp(cmdline)) ? cmdline+0 : EX_OK
-    end_program(silent ? MODE_STREAMS_DISCARD : MODE_STREAMS_SHIP_OUT)
+
+    # For full portability, exit values should be between 0 and 126, inclusive.
+    # Negative values, and values of 127 or greater, may not produce
+    # consistent results across different operating systems.
+    if (__exit_code < 0 || __exit_code >= 127)
+        __exit_code = 1
+    end_program(MODE_STREAMS_DISCARD)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -6049,6 +6054,38 @@ function ppf__BLK_WHILE(blknum)
 
 #*****************************************************************************
 #
+#       @  W R A P
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#*****************************************************************************
+# @wrap      TEXT
+function xeq_cmd__wrap(name, cmdline,
+                       rstat)
+{
+    dbg_print("parse", 5, sprintf("(xeq_cmd__wrap) START dstblk=%d, mode=%s, $0='%s'",
+                                curr_dstblk(), ppf__mode(curr_atmode()), $0))
+
+    # dbg_print("parse", 5, "(xeq_cmd__ignore) CALLING read_lines_until()")
+    # rstat = read_lines_until(cmdline, DISCARD)
+    # dbg_print("parse", 5, "(xeq_cmd__ignore) RETURNED FROM read_lines_until() => " ppf__bool(rstat))
+    # if (!rstat)
+    #     error("[@ignore] Read error")
+    # dbg_print("parse", 5, "(xeq_cmd__ignore) END")}
+
+    $0 = cmdline
+    if (NF == 0)
+        error("Bad parameters:" $0)
+
+    __wrap_text[++__wrap_cnt] = $0
+    dbg_print("parse", 5, sprintf("(xeq_cmd__wrap) END; text='%s'",$0))
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
 #       G E N E R I C   S H I P  -  O U T
 #
 #*****************************************************************************
@@ -6138,7 +6175,7 @@ function calc3_eval(s,
     if (_c3__f <= length(_c3__Sexpr))
         error(sprintf("Math expression error at '%s':", substr(_c3__Sexpr, _c3__f)) $0)
     else if (match(e, /^[-+]?(nan|inf)/))
-        error(sprintf("Math expression error:'%s' returned \"%s\":", s, e) $0)
+        error(sprintf("Math expression error:'%s' returned \"%s\": ", s, e) $0)
     else
         return e
 }
@@ -7005,6 +7042,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     # Tokens used in boolean expression evaluation
     TOK_AND                     = "&&"
     TOK_AT                      = "@"
+    TOK_COLON                   = ":"
     TOK_DEFINED_P               = "?D"
     TOK_ENV_P                   = "?E"
     TOK_EXISTS_P                = "?X"
@@ -7031,7 +7069,8 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     __ord_initialized           = FALSE # Becomes True in initialize_ord()
     __print_mode                = MODE_TEXT_PRINT
     __rot13_initialized         = FALSE # Becomes True in initialize_rot13()
-    __parse_stack[0]             = 0
+    __parse_stack[0]            = 0
+    __wrap_cnt                  = 0
     __xeq_ctl                   = XEQ_NORMAL
 
     srand()                     # Seed random number generator
@@ -7122,10 +7161,10 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     # Built-in commands
     # Also need to add entry in execute__command()  [search: DISPATCH]
     split("append array cleardivert debug decr default define divert dump dumpall" \
-          " echo error exit ignore" \
-          " include incr initialize input local m2ctl nextfile paste readfile" \
-          " readarray readonly secho sequence sexit shell sinclude" \
-          " spaste sreadfile sreadarray stderr typeout undefine undivert warn", array, TOK_SPACE)
+          " echo error exit ignore include incr initialize input local m2ctl" \
+          " nextfile paste readfile readarray readonly secho sequence shell" \
+          " sinclude spaste sreadfile sreadarray stderr typeout undefine" \
+          " undivert warn wrap", array, TOK_SPACE)
     for (elem in array)
         nam_ll_write(array[elem], GLOBAL_NAMESPACE, TYPE_COMMAND FLAG_SYSTEM)
 
@@ -7387,12 +7426,15 @@ BEGIN {
 # diverted data is dropped.  Standard output is always flushed, and
 # program exits with value from global variable __exit_code.
 function end_program(diverted_streams_final_disposition,
-                     stream)
+                     i)
 {
-    # In the normal case of MODE_STREAMS_SHIP_OUT, ship out any remaining
-    # diverted data.  See "STREAMS & DIVERSIONS" documentation above
-    # to see how the user can prevent this, if desired.
-    if (diverted_streams_final_disposition == MODE_STREAMS_SHIP_OUT) {
+    if (__exit_code == EX_OK  &&
+        diverted_streams_final_disposition == MODE_STREAMS_SHIP_OUT) {
+
+        # In the normal case of MODE_STREAMS_SHIP_OUT, ship out any remaining
+        # diverted data.  See "STREAMS & DIVERSIONS" documentation above
+        # to see how the user can prevent this, if desired.
+        #
         # Regardless of whether the parse stack is empty or not, streams
         # which ship out when m2 ends must go to standard output.  So
         # always create a TERMINAL block to receive this data.  Since
@@ -7401,6 +7443,12 @@ function end_program(diverted_streams_final_disposition,
         stk_push(__parse_stack, blk_new(BLK_TERMINAL))
         sym_ll_write("__DIVNUM__", "", GLOBAL_NAMESPACE, TERMINAL)
         undivert_all()
+
+        # Execute any wrapped text/commands
+        if (__wrap_cnt > 0)
+            for (i = 1; i <= __wrap_cnt; i++) {
+                ship_out(OBJ_TEXT, dosubs(__wrap_text[i]))
+            }
     }
 
     flush_stdout(SYNC_FORCE)

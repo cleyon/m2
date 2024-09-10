@@ -125,10 +125,14 @@ Indicate the end of a multi-line @longdef.
 Indicate the end of a @while or @until loop.
 Also called @wend.
 .It @error [TEXT]
-Send TEXT to standard error; exit code 2
-.It @exit [CODE]
-Immediately stop parsing; exit CODE (default 0)
-.Brq #S
+Send TEXT to standard error; exit code 2.
+Diverted streams and wrapped text are discarded.
+.It @exit [N]
+Immediately stop parsing; exit with status N.
+If N is omitted, the default value is zero.
+Negative values or values greater than 126 are changed to 1.
+If N is equal to zero, diverted streams and wrapped text are shipped out
+as normal; otherwise (N non-zero), they are discarded.
 .It @for VAR START END [INCR] ... @next VAR
 Execute a loop with VAR taking on successive
 integer values specified by START and END.
@@ -447,14 +451,6 @@ Value from most recent @expr ...@ result
 Current file name
 .It __FILE_UUID__
 UUID unique to this file
-.It __FMT__[0]          \" bracket 0
-Text output when @boolval@ is False.
-Default is "0".
-.Brq #3
-.It __FMT__[1]          \" bracket 1
-Text output when @boolval@ is True.
-Default is "1".
-.Brq #3
 .It __FMT__[date]
 Date format for @date@.
 Default is "%Y-%m-%d".
@@ -473,6 +469,14 @@ Default is "%H:%M:%S".
 .It __FMT__[tz]
 Time format for @tz@.
 Default is "%Z".
+.Brq #3
+.It __FMT__[0]          \" bracket 0
+Text output when @boolval@ is False.
+Default is "0".
+.Brq #3
+.It __FMT__[1]          \" bracket 1
+Text output when @boolval@ is True.
+Default is "1".
 .Brq #3
 .It __GID__
 Group id (effective gid)
@@ -518,9 +522,6 @@ must be defined.
 Default is True.
 If non-strict, undefined variables are considered False.
 .Brq #3
-.\" .It __STRICT__[cmd]
-.\" True if @ command must be known.  Def False)
-.\" .Brq #3
 .It __STRICT__[env]
 If True, environment variables must be defined.
 Default is True.
@@ -535,9 +536,6 @@ Default is True.
 If non-strict, attempts to read non-existent files are silently ignored.
 This behavior can also be accomplished with @sinclude.
 .Brq #3
-.\" .It __STRICT__[func]
-.\" If True, functions must be defined (def True)
-.\" .Brq #3
 .It __STRICT__[symbol]
 If True, symbol names are limited
 to the following syntax for names:

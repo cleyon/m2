@@ -7106,7 +7106,9 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
         }
         if ("hostname" in PROG) {
             sym_deferred_symbol("__HOST__",     FLAGS_READONLY_SYMBOL,  "hostname", "-s")
-            sym_deferred_symbol("__HOSTNAME__", FLAGS_READONLY_SYMBOL,  "hostname", "-f")
+            # OpenBSD's hostname(1) does not support the `-f' flag;
+            # since it is already the default on FreeBSD, I just removed it.
+            sym_deferred_symbol("__HOSTNAME__", FLAGS_READONLY_SYMBOL,  "hostname", "")
         }
         if ("uname" in PROG) {
             sym_deferred_symbol("__OSNAME__",   FLAGS_READONLY_SYMBOL,  "uname", "-s")

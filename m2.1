@@ -94,7 +94,7 @@ Continue next iteration of enclosing loop.
 .It @debug [TEXT]
 If debugging, send TEXT to standard error.
 .It @decr NAME [N]
-Subtract N (default 1) from an already defined NAME.
+Subtract N (default 1) from an already defined NAME.  See note at @incr.
 .It @default NAME VAL
 Like @define, but no-op if NAME already defined.
 .It @define NAME TEXT
@@ -153,7 +153,8 @@ Ignore input until line that begins with DELIM
 Read and process contents of FILE
 .Brq #S
 .It @incr NAME [N]
-Add N (1) to an already defined NAME
+Add N (1) to an already defined NAME.
+Note: Unlike m4, @incr modifies the named symbol and produces no expansion output.
 .It @initialize NAME VAL
 Like @define, but abort if NAME already defined
 .It @input [NAME]
@@ -200,7 +201,7 @@ section.
 .It @shell DELIM [PROG] ... DELIM
 Evaluate input until DELIM and send raw data to PROG.
 Output stream is captured; shell exit status will be stored in
-.Va __SHELL_EXIT__ .
+.Va __SYSVAL__ .
 If PROG is not specified, the value of symbol
 .Va M2_SHELL
 will be used if defined; if not, the value of environment variable
@@ -518,8 +519,6 @@ m2 process id
 Security level (0, 1, or 2).  See
 .Sx SECURITY CONSIDERATIONS
 for further information.
-.It __SHELL_EXIT__
-Exit status of most recent @shell command
 .It __STRICT__[boolval]
 If True, variables passed to
 .Ql boolval
@@ -559,6 +558,8 @@ or other unrecognized name will silently expand to an empty string.
 Frequency to flush output (0..2).
 0=end only, 1=every file (default), 2=every line.
 .Brq #3
+.It __SYSVAL__
+Exit status of most recent @shell command
 .It __TIME__
 m2 run start time as HHMMSS (eg 053000)
 .Brq #1

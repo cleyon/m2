@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-09-16 21:03:07 cleyon>
+#  Time-stamp:  <2024-09-16 21:39:25 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -5781,7 +5781,7 @@ function xeq_cmd__shell(name, cmdline,
     # here.  But it suffices to run /bin/sh, which is enough for now.
     shell_cmdline = sprintf("%s < %s > %s", sendto, input_file, output_file)
     flush_stdout(SYNC_FORCE)     # force flush stdout
-    sym_ll_write("__SHELL_EXIT__", "", GLOBAL_NAMESPACE, system(shell_cmdline))
+    sym_ll_write("__SYSVAL__", "", GLOBAL_NAMESPACE, system(shell_cmdline))
     while (TRUE) {
         getstat = getline line < output_file
         if (getstat == ERROR)

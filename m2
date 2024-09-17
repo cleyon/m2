@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-09-16 21:39:25 cleyon>
+#  Time-stamp:  <2024-09-17 10:35:47 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -1409,6 +1409,7 @@ function execute__command(name, cmdline,
     else if (name ==  "sequence")       xeq_cmd__sequence(name, cmdline)
     else if (name ==  "shell")          xeq_cmd__shell(name, cmdline)
     else if (name ==  "stderr")         xeq_cmd__error(name, cmdline)
+    else if (name ==  "syscmd")         xeq_cmd__syscmd(name, cmdline)
     else if (name ==  "typeout")        xeq_cmd__typeout(name, cmdline)
     else if (name ==  "undefine")       xeq_cmd__undefine(name, cmdline)
     else if (name ==  "undivert")       xeq_cmd__undivert(name, cmdline)
@@ -5780,7 +5781,7 @@ function xeq_cmd__shell(name, cmdline,
     # Don't tell me how fragile this is, we're whistling past the graveyard
     # here.  But it suffices to run /bin/sh, which is enough for now.
     shell_cmdline = sprintf("%s < %s > %s", sendto, input_file, output_file)
-    flush_stdout(SYNC_FORCE)     # force flush stdout
+    flush_stdout(SYNC_FORCE)    # force flush stdout
     sym_ll_write("__SYSVAL__", "", GLOBAL_NAMESPACE, system(shell_cmdline))
     while (TRUE) {
         getstat = getline line < output_file
@@ -5795,6 +5796,31 @@ function xeq_cmd__shell(name, cmdline,
     exec_prog_cmdline("rm", ("-f " input_file))
     exec_prog_cmdline("rm", ("-f " output_file))
     ship_out(OBJ_TEXT, chomp(output_text))
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  S Y S C M D
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#*****************************************************************************
+# @syscmd CMDLINE ...
+function xeq_cmd__syscmd(name, cmdline,
+                        rc)
+{
+    if (secure_level() >= 2)
+        error("@syscmd: Security violation")
+    cmdline = cmdline " >/dev/null 2>/dev/null"
+    dbg_print("cmd", 3, sprintf("(xeq_cmd__syscmd) START; cmdline='%s'", cmdline))
+
+    flush_stdout(SYNC_FORCE)
+    rc = system(cmdline)
+    sym_ll_write("__SYSVAL__", "", GLOBAL_NAMESPACE, rc)
+    dbg_print("cmd", 3, sprintf("(xeq_cmd__syscmd) END; rc=%d", rc))
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -7155,6 +7181,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     sym_ll_fiat("__STRICT__", "symbol", "",                     TRUE)
     sym_ll_fiat("__STRICT__",  "undef", "",                     TRUE)
     sym_ll_fiat("__SYNC__",         "", FLAGS_WRITABLE_INTEGER, SYNC_FILE)
+    sym_ll_fiat("__SYSVAL__",       "", FLAGS_READONLY_INTEGER, 0)
 
     # FUNCS
     # Functions cannot be used as symbol or sequence names.
@@ -7171,7 +7198,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     split("append array cleardivert debug decr default define divert dump dumpall" \
           " echo error exit ignore include incr initialize input local m2ctl" \
           " nextfile paste readfile readarray readonly secho sequence shell" \
-          " sinclude spaste sreadfile sreadarray stderr typeout undefine" \
+          " sinclude spaste sreadfile sreadarray stderr syscmd typeout undefine" \
           " undivert warn wrap", array, TOK_SPACE)
     for (elem in array)
         nam_ll_write(array[elem], GLOBAL_NAMESPACE, TYPE_COMMAND FLAG_SYSTEM)

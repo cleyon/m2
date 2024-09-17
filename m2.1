@@ -210,6 +210,11 @@ will be used.
 If also not defined, the value of
 .Va __PROG__[sh]
 will be used.
+.It @syscmd CMDLINE...
+Execute CMDLINE using Awk's system() function.
+Standard output and standard error are both discarded.
+The command's exit code is saved in
+.Va __SYSVAL__ .
 .It @typeout
 Print remainder of input file literally, no macro processing will be done.
 .It @undefine NAME
@@ -559,7 +564,7 @@ Frequency to flush output (0..2).
 0=end only, 1=every file (default), 2=every line.
 .Brq #3
 .It __SYSVAL__
-Exit status of most recent @shell command
+Exit status of most recent @shell or @syscmd command
 .It __TIME__
 m2 run start time as HHMMSS (eg 053000)
 .Brq #1
@@ -1396,18 +1401,21 @@ In particular, this allows the
 command to attempt execution of any program the user specifies.
 At secure level 1, the
 .Ql @shell
-command is disabled entirely.
+and
+.Ql @syscmd
+commands are disabled entirely.
 However, programs required for
 .Nm Ap s
 operation (as defined in the
 .Va PROG
-array) are still permitted, since the user cannot modify them.
+array) are still permitted, since the user cannot modify them and they
+are presumably safe to invoke.
 At level 2, all external programs are prohibited, including those
 normally considered safe, such as
 .Xr date 1
 or
 .Xr hostname 1 .
-This level will have a detrimental affect on
+This level will have a detrimental effect on
 .Nm Ap s
 capabilities, such as disabling
 .Ql @time@

@@ -286,6 +286,7 @@ supplied when the macro is called.
 The definition should refer to $1, $2, etc.
 ${1} also works, so ${1}1 is distinguishable from $11.
 $0 refers to the name of the macro itself.
+$# is replaced with the actual number of parameters provided.
 When a definition refers to a parameter which is not supplied, an empty
 string will used as a default value.
 You may supply more parameters than needed.

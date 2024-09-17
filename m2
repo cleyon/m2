@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-09-10 18:11:33 cleyon>
+#  Time-stamp:  <2024-09-16 21:03:07 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -6886,6 +6886,9 @@ function dosubs(s,
         # <SOMETHING ELSE> : Call a user-defined macro, handles arguments
         } else if (sym_valid_p(fn) && (sym_defined_p(fn) || sym_deferred_p(fn))) {
             expand = sym_fetch(fn)
+            # Expand $# => nparam
+            if (index(expand, "$#") > 0)
+                gsub("\\$#", nparam, expand)
             # Expand $N parameters (includes $0 for macro name)
             j = MAX_PARAM   # but don't go overboard with params
             # Count backwards to get around $10 problem.

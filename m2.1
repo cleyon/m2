@@ -59,7 +59,7 @@ The following table lists control commands to
 evaluate, control, or define macros for subsequent processing:
 .Pp
 .\" This table could use a little formatting TLC...
-.Bl -tag -width @if(_not)_defined -compact -offset indent
+.Bl -tag -width @if(_not)_defined -offset indent
 .It @append NAME TEXT
 Add TEXT to an already defined macro NAME
 .It @array ARR
@@ -348,7 +348,7 @@ characters, so
 is correct.
 The following definitions are recognized:
 .Pp
-.Bl -tag -width @right_SYM_[N]@ -compact -offset indent
+.Bl -tag -width @right_SYM_[N]@ -offset indent
 .It @basename SYM@
 Base (file) name of SYM implemented in Awk
 .It @boolval [SYM]@
@@ -381,6 +381,13 @@ If SYMBOL is
 .Em not
 defined, return TRUE_TEXT, else return FALSE_TEXT.
 The {FALSE_TEXT} clause is optional, and defaults to the empty string.
+.It @index SYM SUBSTR@
+Return the position of SUBSTR within the value of SYM.
+Note that
+.Nm
+follows the Awk convention of numbering characters in a string from one;
+this is different from m4.
+If SUBSTRING is not found, the returned value is zero.
 .It @lc SYM@
 Lower case
 .It @left SYM [N]@
@@ -390,7 +397,7 @@ Number of characters in SYM's value
 .It @ltrim SYM@
 Remove leading whitespace
 .It @mid SYM BEG [LEN]@
-Substring of SYM from BEG, LEN chars long
+Substring of SYM from BEG, LEN chars long.
 .It @ord SYM@
 Output ASCII code of first character in SYM
 .It @rem COMMENT@
@@ -438,7 +445,7 @@ symbols.
 Except for certain writable symbols, they cannot be modified by the user.
 The following are pre-defined; example values, defaults, or types are shown:
 .Pp
-.Bl -tag -width __FMT__[number]___ -compact -offset indent
+.Bl -tag -width __FMT__[number]___ -offset indent
 .It __CWD__
 Current working directory, including trailing slash.
 .It __DATE__

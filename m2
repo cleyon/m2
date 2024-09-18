@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-09-17 20:18:13 cleyon>
+#  Time-stamp:  <2024-09-18 16:23:39 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -6767,6 +6767,16 @@ function dosubs(s,
 
             r = dosubs(evaluate_boolean(ifcond, init_negate) ? true_text : false_text) r
 
+        # index: Location of substring
+        } else if (fn == "index") {
+            if (nparam != 2)
+                error("Bad parameters in '" m "':" $0)
+            p = param[1 + off_by]
+            assert_sym_valid_name(p)
+            assert_sym_defined(p, fn)
+            x = param[2 + off_by]
+            r = index(sym_fetch(p), x) r
+
         # lc : Lower case
         # len: Length
         # uc : Upper case
@@ -7213,8 +7223,9 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
 
     # FUNCS
     # Functions cannot be used as symbol or sequence names.
-    split("basename boolval chr date dirname epoch expr getenv ifdef ifx ifndef lc left len" \
-          " ltrim mid ord rem right rot13 rtrim sexpr sgetenv spaces srem strftime" \
+    split("basename boolval chr date dirname epoch expr getenv" \
+          " ifdef ifx ifndef index lc left len ltrim mid ord rem" \
+          " right rot13 rtrim sexpr sgetenv spaces srem strftime" \
           " substr time trim tz uc uuid xbasename xdirname",
           array, TOK_SPACE)
     for (elem in array)

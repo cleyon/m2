@@ -170,7 +170,7 @@ Create a user command NAME (lines until @endcmd)
 .It @next VAR
 Continue execution of next iteration of enclosing @for or @foreach loop.
 .It @nextfile
-Ignore remainder of file, continue processing
+Ignore remainder of current file, continue processing
 .It @of TEXT
 Begin a new branch of an enclosing @case structure
 matching TEXT at run time.
@@ -371,14 +371,16 @@ Get environment variable
 .Brq #2
 .It @ifdef{SYMBOL}{TRUE_TEXT}{FALSE_TEXT}@
 If SYMBOL is defined, return TRUE_TEXT, else return FALSE_TEXT.
-.It @ifelse{CONDITION}{TRUE_TEXT}{FALSE_TEXT}@
-Evaluate CONDITION; if True, return TRUE_TEXT else return FALSE_TEXT.
+The {FALSE_TEXT} clause is optional, and defaults to the empty string.
+.It @ifx{BOOL_EXP}{TRUE_TEXT}{FALSE_TEXT}@
+Evaluate BOOL_EXP; if True, return TRUE_TEXT else return FALSE_TEXT.
 All three brace-enclosed clauses must be present.
 Resulting text is again processed for macro substitutions.
 .It @ifndef{SYMBOL}{TRUE_TEXT}{FALSE_TEXT}@
 If SYMBOL is
 .Em not
 defined, return TRUE_TEXT, else return FALSE_TEXT.
+The {FALSE_TEXT} clause is optional, and defaults to the empty string.
 .It @lc SYM@
 Lower case
 .It @left SYM [N]@

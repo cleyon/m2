@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-09-17 10:35:47 cleyon>
+#  Time-stamp:  <2024-09-17 20:18:13 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -6478,7 +6478,7 @@ function _c3_advance(    tmp)
 function dosubs(s,
                 expand, i, j, l, m, nparam, p, param, r, fn, cmdline, c,
                 at_brace, x, y, inc_dec, pre_post, subcmd, silent, off_by,
-                br, ifelse_condition, true_text, false_text, init_negate)
+                br, ifcond, true_text, false_text, init_negate)
 {
     dbg_print("dosubs", 5, sprintf("(dosubs) START s='%s'", s))
     l = ""                   # Left of current pos  - ready for output
@@ -6695,49 +6695,77 @@ function dosubs(s,
             else if (strictp("env") && !silent)
                 error("Environment variable '" p "' not defined:" $0)
 
-        # ifelse: Choice of text to processing
-        #   A and B are @ifelse{A == B}{Equal}{Not equal}@
-        } else if (fn == "ifelse" || fn == "ifdef" || fn == "ifndef") {
-            if (!match(m, "^if(else|n?def){[^}]+}{[^}]*}{[^}]*}$"))
-                error("(dosubs) Bad ifelse in '" m "':" $0)
-            m = substr(m, index(m, TOK_LBRACE)) # strip fn name
-            init_negate = FALSE
+        # ifdef/ifndef: Expand text if symbol is defined
+        #   @ifdef{FOO}{True text}{False text}@
+        } else if (fn == "ifdef" || fn == "ifndef") {
+            if (match(m, "^ifn?def{[^}]+}{[^}]*}{[^}]*}$"))
+                ;          # @ifdef{FOO}{True text}{False text}@ is well-formed
+            else if (match(m, "^ifn?def{[^}]+}{[^}]*}$"))
+                m = m "{}" # @ifdef{FOO}{True text}@ will use empty FALSE string
+            else
+                error("(dosubs) Bad ifdef in '" m "':" $0)
 
-            # Get if_clause
+            # Get symbol name (x) which will be handed to defined()
+            m = substr(m, index(m, TOK_LBRACE)) # strip fn name
             if (!match(m, "^{[^}]*}"))
-                error("(dosubs) Bad ifelse_condition in '" m "':" $0)
-            ifelse_condition = substr(m, RSTART+1, RLENGTH-2)
-            # For ifn?def, ifelse_condition should be a symbol name
-            # which will be handed to defined().
-            # For ifelse, it's an expression passed to evaluate_boolean().
-            if (fn == "ifdef") {
-                assert_sym_valid_name(ifelse_condition)
-                ifelse_condition = "defined(" ifelse_condition ")"
-            } else if (fn == "ifndef") {
-                assert_sym_valid_name(ifelse_condition)
-                init_negate = TRUE
-                ifelse_condition = "defined(" ifelse_condition ")"
-            }
-            dbg_print("dosubs", 7, "(dosubs) ifelse: ifelse_condition='" ifelse_condition "'")
+                error("(dosubs) Bad ifdef symbol in '" m "':" $0)
+            x = substr(m, RSTART+1, RLENGTH-2)
+            assert_sym_valid_name(x)
+            ifcond = "defined(" x ")"
+            init_negate = fn == "ifndef"
+            dbg_print("dosubs", 7, "(dosubs) ifdef: ifcond='" ifcond "'")
             m = substr(m, RSTART+RLENGTH)
 
             # Get true_text
             if (!match(m, "^{[^}]*}"))
                 error("(dosubs) Bad true_text in '" m "':" $0)
             true_text = substr(m, RSTART+1, RLENGTH-2)
-            dbg_print("dosubs", 7, "(dosubs) ifelse: true_text='" true_text "'")
+            dbg_print("dosubs", 7, "(dosubs) ifdef: true_text='" true_text "'")
             m = substr(m, RSTART+RLENGTH)
 
             # Get false_text
             if (!match(m, "^{[^}]*}"))
                 error("(dosubs) Bad false_text in '" m "':" $0)
             false_text = substr(m, RSTART+1, RLENGTH-2)
-            dbg_print("dosubs", 7, "(dosubs) ifelse: if_false='" false_text "'")
+            dbg_print("dosubs", 7, "(dosubs) ifdef: if_false='" false_text "'")
             m = substr(m, RSTART+RLENGTH)
             if (!emptyp(m))
-                error("(dosubs) Extra text in ifelse: m='" m "'")
+                error("(dosubs) Extra text in ifdef: m='" m "'")
 
-            r = dosubs(evaluate_boolean(ifelse_condition, init_negate) ? true_text : false_text) r
+            r = dosubs(evaluate_boolean(ifcond, init_negate) ? true_text : false_text) r
+
+        # ifx: Choice of text to processing
+        #   A and B are @ifx{A == B}{Equal}{Not equal}@
+        } else if (fn == "ifx") {
+            if (!match(m, "^ifx{[^}]+}{[^}]*}{[^}]*}$"))
+                error("(dosubs) Bad ifx in '" m "':" $0)
+            m = substr(m, index(m, TOK_LBRACE)) # strip fn name
+            init_negate = FALSE
+
+            # Get if_clause
+            if (!match(m, "^{[^}]*}"))
+                error("(dosubs) Bad ifcond in '" m "':" $0)
+            ifcond = substr(m, RSTART+1, RLENGTH-2)
+            dbg_print("dosubs", 7, "(dosubs) ifx: ifcond='" ifcond "'")
+            m = substr(m, RSTART+RLENGTH)
+
+            # Get true_text
+            if (!match(m, "^{[^}]*}"))
+                error("(dosubs) Bad true_text in '" m "':" $0)
+            true_text = substr(m, RSTART+1, RLENGTH-2)
+            dbg_print("dosubs", 7, "(dosubs) ifx: true_text='" true_text "'")
+            m = substr(m, RSTART+RLENGTH)
+
+            # Get false_text
+            if (!match(m, "^{[^}]*}"))
+                error("(dosubs) Bad false_text in '" m "':" $0)
+            false_text = substr(m, RSTART+1, RLENGTH-2)
+            dbg_print("dosubs", 7, "(dosubs) ifx: if_false='" false_text "'")
+            m = substr(m, RSTART+RLENGTH)
+            if (!emptyp(m))
+                error("(dosubs) Extra text in ifx: m='" m "'")
+
+            r = dosubs(evaluate_boolean(ifcond, init_negate) ? true_text : false_text) r
 
         # lc : Lower case
         # len: Length
@@ -7185,7 +7213,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
 
     # FUNCS
     # Functions cannot be used as symbol or sequence names.
-    split("basename boolval chr date dirname epoch expr getenv ifdef ifelse ifndef lc left len" \
+    split("basename boolval chr date dirname epoch expr getenv ifdef ifx ifndef lc left len" \
           " ltrim mid ord rem right rot13 rtrim sexpr sgetenv spaces srem strftime" \
           " substr time trim tz uc uuid xbasename xdirname",
           array, TOK_SPACE)

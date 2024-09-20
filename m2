@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-09-18 16:23:39 cleyon>
+#  Time-stamp:  <2024-09-19 09:23:03 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -4352,9 +4352,10 @@ function xeq_cmd__exit(name, cmdline)
     # For full portability, exit values should be between 0 and 126, inclusive.
     # Negative values, and values of 127 or greater, may not produce
     # consistent results across different operating systems.
-    if (__exit_code < 0 || __exit_code >= 127)
+    if (__exit_code < 0 || __exit_code > 126)
         __exit_code = 1
-    end_program(MODE_STREAMS_DISCARD)
+    end_program(__exit_code == 0 ? MODE_STREAMS_SHIP_OUT \
+                                 : MODE_STREAMS_DISCARD)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -6734,7 +6735,7 @@ function dosubs(s,
 
             r = dosubs(evaluate_boolean(ifcond, init_negate) ? true_text : false_text) r
 
-        # ifx: Choice of text to processing
+        # ifx: If Expression : Evaluate boolean expression to choose result text
         #   A and B are @ifx{A == B}{Equal}{Not equal}@
         } else if (fn == "ifx") {
             if (!match(m, "^ifx{[^}]+}{[^}]*}{[^}]*}$"))
@@ -6768,6 +6769,7 @@ function dosubs(s,
             r = dosubs(evaluate_boolean(ifcond, init_negate) ? true_text : false_text) r
 
         # index: Location of substring
+        #   NB - Awk index() returns 1 and so do we.  Different from m4.
         } else if (fn == "index") {
             if (nparam != 2)
                 error("Bad parameters in '" m "':" $0)
@@ -6953,7 +6955,15 @@ function dosubs(s,
             # Expand $# => nparam
             if (index(expand, "$#") > 0)
                 gsub("\\$#", nparam, expand)
+            # Expand $* to all parameters, space separated
+            if (index(expand, "$*") > 0) {
+                x = ""
+                for (j = 1; j <= nparam; j++)
+                    x = x  param[j + off_by]  TOK_SPACE
+                gsub("\\$\\*", chop(x), expand)
+            }
             # Expand $N parameters (includes $0 for macro name)
+            # Re-using j, excuse me
             j = MAX_PARAM   # but don't go overboard with params
             # Count backwards to get around $10 problem.
             while (j-- >= 0) {

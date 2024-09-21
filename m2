@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-09-19 09:23:03 cleyon>
+#  Time-stamp:  <2024-09-21 08:07:34 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -1894,6 +1894,7 @@ function parse(              code, terminator, rstat, name, retval, new_block, f
 #       @mycmd{Title}{A very very very
 #       very long title}
 # Call readline() repeatedly until braces are closed properly.
+# This function returns its command line, possibly appended to by readline().
 function scan__usercmd_call(    s, name, obj, i, oldi, c, nc, narg, nlbr,
                                   readstat)
 {
@@ -6479,7 +6480,7 @@ function _c3_advance(    tmp)
 function dosubs(s,
                 expand, i, j, l, m, nparam, p, param, r, fn, cmdline, c,
                 at_brace, x, y, inc_dec, pre_post, subcmd, silent, off_by,
-                br, ifcond, true_text, false_text, init_negate)
+                br, ifcond, true_text, false_text, init_negate, arg)
 {
     dbg_print("dosubs", 5, sprintf("(dosubs) START s='%s'", s))
     l = ""                   # Left of current pos  - ready for output
@@ -6734,6 +6735,74 @@ function dosubs(s,
                 error("(dosubs) Extra text in ifdef: m='" m "'")
 
             r = dosubs(evaluate_boolean(ifcond, init_negate) ? true_text : false_text) r
+
+        # ifelse: Evaluate argument pairs for equality.
+        #
+        # @ifelse@ has three or more arguments.
+        # If the first argument is equal to the second,
+        #    then the value is the third argument.
+        # If not, and if there are more than four arguments,
+        #    the process is repeated with arguments 4, 5, 6, and 7.
+        # Otherwise, the value is either the fourth argument, or null if omitted.
+        } else if (fn == "ifelse") {
+            # NOTE: All of the {} clauses must be on the same line,
+            # since dosubs CANNOT call readline().
+            m = substr(m, 7)    # strip away "ifelse"
+            arg[1] = arg[2] = arg[3] = ""
+            while (TRUE) {
+                dbg_print("dosubs", 5, "(dosubs) [@ifelse@] TOP; m=" m)
+
+                # Check that at least three pairs of braces are present,
+                # and whatever remains are also well-formed brace pairs.
+                # Pathological syntax (like {..\}..} will cause problems.
+                if (! match(m, "^{[^}]+}{[^}]*}{[^}]*}({[^}]*})*$"))
+                    error("(ifelse) Bad parameters in '" m "':" $0)
+
+                # Grab the first three arguments
+                for (j = 1; j <= 3; j++) {
+                    match(m, "{[^}]*}")
+                    arg[j] = substr(m, RSTART+1, RLENGTH-2)
+                    m = substr(m, RSTART+RLENGTH)
+                    dbg_print("dosubs", 7, sprintf("(dosubs) [@ifelse@] arg%d='%s'",
+                                                   j, arg[j]))
+                }
+
+                # Check arg1 & arg2 for equality...  TODO integer check -> 0+n
+                # If the first argument is equal to the second,
+                #    then the value is the third argument.
+                if (arg[1] == arg[2]) {
+                    expand = arg[3]
+                    break
+                }
+                # At this point, the three required args have been
+                # stripped out of m.  What remains in m could be:
+                # 1. Empty - no fourth argument, so use empty string.
+                if (m == EMPTY) {
+                    expand = ""
+                    break
+                }
+                # 2. Exactly one brace clause remains; it is the fourth
+                # (last) argument, so use it.
+                if (match(m, "^{[^}]*}$")) {
+                    # expand = "cc:<" substr(m, 2, length(m) - 2) ">"
+                    expand = substr(m, 2, length(m) - 2)
+                    break
+                }
+                # 3. If there are more than four args, there have to be a
+                # minimum number to allow the cycle to continue.
+                # You need  {1}{2}{3}  ||  {4}{5}{6} [ {7} ]
+                #                      ||  {1}{2}{3}
+                # which means that just one or two pairs of braces
+                # constitute invalid syntax.  The one pair case was
+                # caught in choice 2 just above, so we check for two pairs
+                if (match(m, "^{[^}]+}{[^}]*}$"))
+                    error("(ifelse) Bad parameters in '" m "':" $0)
+
+                # # If not, and if there are more than four arguments,
+                #    the process is repeated with arguments 4, 5, 6, and 7.
+            }
+
+            r = dosubs(expand) r
 
         # ifx: If Expression : Evaluate boolean expression to choose result text
         #   A and B are @ifx{A == B}{Equal}{Not equal}@
@@ -7234,7 +7303,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     # FUNCS
     # Functions cannot be used as symbol or sequence names.
     split("basename boolval chr date dirname epoch expr getenv" \
-          " ifdef ifx ifndef index lc left len ltrim mid ord rem" \
+          " ifdef ifelse ifndef ifx index lc left len ltrim mid ord rem" \
           " right rot13 rtrim sexpr sgetenv spaces srem strftime" \
           " substr time trim tz uc uuid xbasename xdirname",
           array, TOK_SPACE)

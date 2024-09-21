@@ -376,10 +376,24 @@ Get environment variable
 .It @ifdef{SYMBOL}{TRUE_TEXT}{FALSE_TEXT}@
 If SYMBOL is defined, return TRUE_TEXT, else return FALSE_TEXT.
 The {FALSE_TEXT} clause is optional, and defaults to the empty string.
+.It @ifelse{arg1}{arg2}{arg3}{arg4}...@
+@ifelse@ has three or more arguments.
+If the first argument is equal to the second, then the value is the
+third argument.
+If not, and if there are more than four arguments, the process is
+repeated with arguments 4, 5, 6, and 7.
+Otherwise, the value is either the fourth argument, or null if omitted.
+This baroque arrangement is modeled after
+.Xr m4 1 .
+For a saner syntax, try the @case or @if commands.
+However, @ifelse@ is a function, not a command, so it can be used
+in-line with other text, which @if and @case cannot do.
+All arguments must appear on the same physical line.
 .It @ifx{BOOL_EXP}{TRUE_TEXT}{FALSE_TEXT}@
 Evaluate BOOL_EXP; if True, return TRUE_TEXT else return FALSE_TEXT.
 All three brace-enclosed clauses must be present.
 Resulting text is again processed for macro substitutions.
+@ifx stands for "IF <eXpression>".
 .It @ifndef{SYMBOL}{TRUE_TEXT}{FALSE_TEXT}@
 If SYMBOL is
 .Em not

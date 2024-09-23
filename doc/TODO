@@ -1,0 +1,58 @@
+#                                               -*- Org -*-
+
+* MAYBE Implement syscmd/esyscmd
+  - [X] syscmd : no output is captured (stdout & stderr > /dev/null)
+  - [ ] esyscmd
+
+* MAYBE Implement traceon/traceoff
+  With no arguments, trace all macros (including built-ins).  With args,
+  only trace the specified macros.
+
+* MAYBE Debug options (a la "m4 -d")
+  The `-d' option to m4 controls the amount of details presented, when
+  using the macros described in the preceding sections.
+
+  The flags following the option can be one or more of the following:
+
+  - a :: * Show the actual arguments in each macro call.  This applies
+    to all macro calls if the `t' flag is used, otherwise only the
+    macros covered by calls of traceon.
+  - c :: Show several trace lines for each macro call.  A line is shown
+    when the macro is seen, but before the arguments are collected; a
+    second line when the arguments have been collected and a third line
+    after the call has completed.
+  - e :: * Show the expansion of each macro call, if it is not void.
+    This applies to all macro calls if the `t' flag is used, otherwise
+    only the macros covered by calls of traceon.
+  - i :: Print a message each time the current input file is changed,
+    giving file name and input line number.
+  - f :: Show the name of the current input file in each trace output line.
+  - l :: Show the the current input line number in each trace output line.
+  - p :: Print a message when a named file is found through the path
+    search mechanism, giving the actual filename used.
+  - q :: * Quote actual arguments and macro expansions in the display
+    with the current quotes.
+  - t :: Trace all macro calls made in this invocation of m4.
+  - x :: Add a unique `macro call id' to each line of the trace output.
+    This is useful in connection with the `c' flag above.
+  - V :: A shorthand for all of the above flags.
+
+  If no flags are specified with the `-d' option, the default is `aeq'.
+
+  There is a builtin macro debugmode, which allows on-the-fly control of
+  the debugging output format:
+        debugmode(opt flags)
+
+  The argument flags should be a subset of the letters listed above.  As
+  special cases, if the argument starts with a `+', the flags are added
+  to the current debug flags, and if it starts with a `-', they are
+  removed.  If no argument is present, the debugging flags are set to
+  zero (as if no `-d' was given), and with an empty argument the flags
+  are reset to the default.
+
+* MAYBE Implement debugfile
+
+* MAYBE Implement @dumpdef SYM
+  Dumps just one symbol, not entire table
+
+* [EOF]

@@ -105,7 +105,7 @@ See the
 .Sx Streams and Diversions
 section.
 .It @dump WHAT [FILE]
-Output symbol names & definitions to FILE (stderr).
+Output symbol names & definitions to FILE (standard error).
 .It @dumpall WHAT [FILE]
 Like @dump but include System symbols.
 .It @else
@@ -240,7 +240,7 @@ below.
 Repeatedly evaluate input lines while boolean expression is False
 and stop when it becomes True.
 .It @warn [TEXT]
-Send TEXT to standard error; continue.  Also called @echo, @stderr
+Send TEXT to standard error; continue.  Also called @echo, @errprint
 .It @while EXPR ... @endwhile
 Repeatedly evaluate input lines while boolean expression is True
 and stop when it becomes False.
@@ -386,12 +386,13 @@ Get environment variable
 If SYMBOL is defined, return TRUE_TEXT, else return FALSE_TEXT.
 The {FALSE_TEXT} clause is optional, and defaults to the empty string.
 .It @ifelse{arg1}{arg2}{arg3}{arg4}...@
-@ifelse@ has three or more arguments.
+@ifelse@ takes three or more arguments.
 If the first argument is equal to the second, then the value is the
 third argument.
-If not, and if there are more than four arguments, the process is
-repeated with arguments 4, 5, 6, and 7.
-Otherwise, the value is either the fourth argument, or null if omitted.
+If not equal, and if there are more than four arguments, then the
+process repeats with arguments 4, 5, 6, and 7.
+Otherwise, the value is either the fourth argument if present, or null
+if omitted.
 This baroque arrangement is modeled after
 .Xr m4 1 .
 For a saner syntax, try the @case or @if commands.
@@ -424,7 +425,7 @@ Number of characters in SYM's value
 .It @ltrim SYM@
 Remove leading whitespace
 .It @mid SYM BEG [LEN]@
-Substring of SYM from BEG, LEN chars long.
+Substring of SYM from BEG, LEN chars long.  Also @substr
 .It @ord SYM@
 Output ASCII code of first character in SYM
 .It @rem COMMENT@
@@ -719,7 +720,7 @@ and
 performed when
 .Nm
 reaches the end of its input.
-If you want to avoid this and discard any diverted data that hasn't
+If you want to avoid this and discard any diverted data that has not
 shipped out yet, add the following to the end of your input data:
 .Bd -literal -offset indent -compact
 @divert -1

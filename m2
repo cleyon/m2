@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-09-23 10:08:10 cleyon>
+#  Time-stamp:  <2024-09-23 19:44:50 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -1392,6 +1392,7 @@ function execute__command(name, cmdline,
     else if (name ~   /dump(all)?/)     xeq_cmd__dump(name, cmdline)
     else if (name ~ /s?echo/)           xeq_cmd__error(name, cmdline)
     else if (name ==  "error")          xeq_cmd__error(name, cmdline)
+    else if (name ==  "errprint")       xeq_cmd__error(name, cmdline)
     else if (name ==  "exit")           xeq_cmd__exit(name, cmdline)
     else if (name ==  "ignore")         xeq_cmd__ignore(name, cmdline)
     else if (name ~ /s?include/)        xeq_cmd__include(name, cmdline)
@@ -1408,7 +1409,6 @@ function execute__command(name, cmdline,
     else if (name ==  "return")         xeq_cmd__return(name, cmdline)
     else if (name ==  "sequence")       xeq_cmd__sequence(name, cmdline)
     else if (name ==  "shell")          xeq_cmd__shell(name, cmdline)
-    else if (name ==  "stderr")         xeq_cmd__error(name, cmdline)
     else if (name ==  "syscmd")         xeq_cmd__syscmd(name, cmdline)
     else if (name ==  "typeout")        xeq_cmd__typeout(name, cmdline)
     else if (name ==  "undefine")       xeq_cmd__undefine(name, cmdline)
@@ -4299,22 +4299,23 @@ function dump__cmdtab(type, include_sys,
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
 #*****************************************************************************
-# @debug, @echo, @error, @stderr, @warn TEXT
-# debug, error and warn format the message with file & line, etc.
-# echo and stderr do no additional formatting.
+# @debug, @echo, @error, @errprint, @warn TEXT
 #
-# @debug only prints its message if debugging is enabled.  The user can
-# control this since __DEBUG__ is an unprotected symbol.  @debug is
-# purposefully not given access to the various dbg() keys and levels.
+# debug, error and warn "format" the message, adorning it with with
+# current file name, line number, etc.  echo and errprint do no
+# additional formatting.  @debug only prints its message if debugging is
+# enabled.  The user can control this since __DEBUG__ is an unprotected
+# symbol.  @debug is purposefully not given access to the various dbg()
+# keys and levels.
 #
-#       | Cmd    | Format? | Exit? | Notes              |
-#       |--------+---------+-------+--------------------|
-#       | debug  | Format  | No    | Only if __DEBUG __ |
-#       | echo   | Raw     | No    | Same as @stderr    |
-#       | error  | Format  | Yes   |                    |
-#       | secho  | Raw     | No    | No newline         |
-#       | stderr | Raw     | No    | Same as @echo      |
-#       | warn   | Format  | No    |                    |
+#       | Cmd      | Format? | Exit? | Notes              |
+#       |----------+---------+-------+--------------------|
+#       | debug    | Format  | No    | Only if __DEBUG __ |
+#       | echo     | Raw     | No    | Same as @errprint  |
+#       | error    | Format  | Yes   |                    |
+#       | errprint | Raw     | No    | Same as @echo      |
+#       | secho    | Raw     | No    | No newline         |
+#       | warn     | Format  | No    |                    |
 function xeq_cmd__error(name, cmdline,
                        m2_will_exit, do_format, do_print, message)
 {
@@ -7333,9 +7334,9 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     # Built-in commands
     # Also need to add entry in execute__command()  [search: DISPATCH]
     split("append array cleardivert debug decr default define divert dump dumpall" \
-          " echo error exit ignore include incr initialize input local m2ctl" \
+          " echo error errprint exit ignore include incr initialize input local m2ctl" \
           " nextfile paste readfile readarray readonly secho sequence shell" \
-          " sinclude spaste sreadfile sreadarray stderr syscmd typeout undefine" \
+          " sinclude spaste sreadfile sreadarray syscmd typeout undefine" \
           " undivert warn wrap", array, TOK_SPACE)
     for (elem in array)
         nam_ll_write(array[elem], GLOBAL_NAMESPACE, TYPE_COMMAND FLAG_SYSTEM)

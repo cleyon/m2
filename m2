@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-09-21 08:07:34 cleyon>
+#  Time-stamp:  <2024-09-23 10:08:10 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -4904,11 +4904,17 @@ function xeq_cmd__include(name, cmdline,
     if (cmdline == EMPTY)
         error("Bad parameters:" $0)
     # paste does not process macros
-    silent   = (first(name) == "s") # silent mutes file errors, even in strict mode
+    silent = (first(name) == "s") # silent mutes file errors, even in strict mode
 
-    # $1 = ""
-    # sub("^[ \t]*", "")
-    filename = rm_quotes(cmdline) # dosubs($0)
+    filename = search_file(cmdline)
+    if (emptyp(filename)) {
+        if (silent) return
+        error_text = "File '" cmdline "' does not exist:" $0
+        if (strictp("file"))
+            error(error_text)
+        else
+            warn(error_text)
+    }
     file_block = prep_file(filename)
     blktab[file_block, 0, "dstblk"] = curr_dstblk()
     blktab[file_block, 0, "atmode"] = substr(name, length(name)-4) == "paste" \
@@ -4929,6 +4935,21 @@ function xeq_cmd__include(name, cmdline,
         else
             warn(error_text)
     }
+}
+
+
+function search_file(f,
+                     count, ip, p, i)
+{
+    f = rm_quotes(dosubs(f))
+    count = split(__inc_path, ip, TOK_COLON)
+    ip[0] = "."
+    for (i = 0; i <= count; i++) {
+        p = with_trailing_slash(ip[i]) f
+        if (path_exists_p(p))
+            return p
+    }
+    return EMPTY
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -5121,13 +5142,13 @@ function ppf__BLK_LONGDEF(longdef_block)
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
+#       @m2ctl booltest                 Scan boolean expr from user
 #       @m2ctl clear_debugging          Clear debugging
 #       @m2ctl dbg_namespace            Debug namespaces
-#       @m2ctl dump_parse_stack         Dump parse stack
-#       @m2ctl booltest                 Scan boolean expr from user
-#       @m2ctl set_dbg DSYS LEVEL       Set debug level directly
+#       @m2ctl dbg_ship_out
 #       @m2ctl dump_block BLOCK         Raw dump block #
-#       @m2ctl debug_ship_out
+#       @m2ctl dump_parse_stack         Dump parse stack
+#       @m2ctl set_dbg DSYS LEVEL       Set debug level directly
 #
 #*****************************************************************************
 
@@ -5142,25 +5163,7 @@ function xeq_cmd__m2ctl(name, cmdline,
     if (NF == 0)
         error("Bad parameters:" $0)
 
-    if ($1 == "clear_debugging") {
-        clear_debugging()
-
-    } else if ($1 == "dbg_namespace") {
-        # Debug namespaces
-        dbg_set_level("for",       5)
-        dbg_set_level("namespace", 5)
-        dbg_set_level("cmd",       5)
-        dbg_set_level("nam",       3)
-        dbg_set_level("sym",       5)
-
-    } else if ($1 == "dbg_ship_out") {
-        clear_debugging()
-        dbg_set_level("ship_out",   3)
-
-    } else if ($1 == "dump_parse_stack") {
-        dump_parse_stack()
-
-    } else if ($1 == "booltest") { # Interactively evaluate boolean expressions
+    if ($1 == "booltest") { # Interactively evaluate boolean expressions
         do {
             print_stderr("Enter line to scan as boolean expr (RETURN to end):")
             getstat = getline input < "/dev/tty"
@@ -5179,15 +5182,36 @@ function xeq_cmd__m2ctl(name, cmdline,
                 print_stderr(sprintf("(xeq_cmd__m2ctl) __bf=%d,__bnf=%d; FINAL ANSWER: %d == %s", __bf, __bnf, e, ppf__bool(e)))
         } while (TRUE)
 
+    } else if ($1 == "clear_debugging") {
+        clear_debugging()
+
+    } else if ($1 == "dbg_namespace") {
+        # Debug namespaces
+        dbg_set_level("for",       5)
+        dbg_set_level("namespace", 5)
+        dbg_set_level("cmd",       5)
+        dbg_set_level("nam",       3)
+        dbg_set_level("sym",       5)
+
+    } else if ($1 == "dbg_ship_out") {
+        clear_debugging()
+        dbg_set_level("ship_out",   3)
+
+    } else if ($1 == "dump_block") {
+        blk = $2 + 0
+        blk_dump_block_raw(blk)
+
+    } else if ($1 == "dump_parse_stack") {
+        dump_parse_stack()
+
+    } else if ($1 == "incpath") {
+        print_stderr("__inc_path = " __inc_path)
+
     } else if ($1 == "set_dbg") { # Set __DBG__[dsys] level directly
         dsys = $2                 # Note, does not affect __DEBUG__
         lev = $3
         print_stderr(sprintf("Setting __DBG__[%s] to %d", dsys, lev))
         dbg_set_level(dsys, lev)
-
-    } else if ($1 == "dump_block") {
-        blk = $2 + 0
-        blk_dump_block_raw(blk)
 
     } else
         error("Unrecognized parameter " $1) 
@@ -5529,14 +5553,8 @@ function xeq_cmd__readarray(name, cmdline,
 function xeq_cmd__readfile(name, cmdline,
                            sym, filename, line, val, getstat, silent)
 {
-    # This is not intended to be a full-blown file inputter (use @readarray
-    # for that) but rather just to read short snippets like a file path
-    # or username.  As usual, multi-line values are accepted but the final
-    # trailing newline, if any, is stripped.
-    #
     # We could play games and use fancy file blocks and literal atmode, but we
     # really just want to read in a file and assign its contents to a symbol.
-
     $0 = cmdline
     if (NF < 2)
         error("(xeq_cmd__readfile) Bad parameters:" $0)
@@ -7224,6 +7242,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
 
     srand()                     # Seed random number generator
     initialize_prog_paths()
+    __inc_path = "M2PATH" in ENVIRON ? ENVIRON["M2PATH"] : ""
 
     if (secure_level() < 2) {
         # Set up some symbols that depend on external programs
@@ -7501,6 +7520,11 @@ BEGIN {
                 _val = substr(_arg, _eq+1)
                 if (_name == "debug") {
                     _name = "__DEBUG__"
+                } else if (_name == "I") {
+                    # Include-path elements on command-line are prepended
+                    # to M2PATH so they override env variable values.
+                    __inc_path = _val (emptyp(__inc_path) ? "" : ":" __inc_path)
+                    continue
                 } else if (_name == "init") {
                     if (_val == 0) {
                         # Do not load the init files.  Inhibit init file

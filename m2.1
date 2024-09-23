@@ -183,8 +183,13 @@ Only only one @otherwise branch is permitted per @case structure.
 .It @paste FILE
 Insert FILE contents literally, with no changes or macros.
 .Brq #S
-.It @read NAME FILE
-Read FILE contents to define NAME
+.It @readfile NAME FILE
+Read FILE contents to define NAME.
+This is not intended to be a full-blown file inputter (use @readarray
+for that) but rather just to read short snippets like a file path
+or username.
+As usual, multi-line values are accepted but the final
+trailing newline, if any, is stripped.
 .Brq #S
 .It @readarray ARR FILE
 Read each line from FILE into array ARR
@@ -304,7 +309,7 @@ You may supply more parameters than needed.
 .Em WARNING :
 Parameters are parsed by splitting on white space.
 This means that in:
-.Dl @foo \[dq]a b\[dq] c
+.Dl @foo \[dq]a b\[dq] c@
 .Va foo
 is given three arguments: '"a', 'b"', and 'c' -- not two!
 .Ed
@@ -335,6 +340,10 @@ variants
 .Ql @spaste
 .Pc
 are used, no message is printed.
+If @include or @paste cannot find the specified FILE in the current directory,
+it will consult the include path which is initialized from the
+.Va M2PATH
+environment variable.
 .Pp
 To alleviate scanning ambiguities, any characters enclosed in
 at-sign braces will be recursively scanned and expanded.
@@ -388,7 +397,7 @@ This baroque arrangement is modeled after
 For a saner syntax, try the @case or @if commands.
 However, @ifelse@ is a function, not a command, so it can be used
 in-line with other text, which @if and @case cannot do.
-All arguments must appear on the same physical line.
+All arguments must appear on the same line.
 .It @ifx{BOOL_EXP}{TRUE_TEXT}{FALSE_TEXT}@
 Evaluate BOOL_EXP; if True, return TRUE_TEXT else return FALSE_TEXT.
 All three brace-enclosed clauses must be present.
@@ -983,11 +992,18 @@ Used to access your
 file.
 Available through symbol
 .Va __HOME__ .
+.It Ev M2PATH
+A colon-separated list of directories to try (if necessary) for the
+.Ql @include
+and
+.Ql @paste
+commands.
+Note: M2PATH does not apply to the @readfile or @readarray commands.
 .It Ev M2RC
-If exists, overrides
+Specifies a file which, if it exists, overrides
 .Pa $HOME/.m2rc
 .It Ev PWD
-If exists, assumed to be user's current directory; otherwise, retrieved
+If defined, assumed to be user's current directory; otherwise, retrieved
 by invoking
 .Xr pwd 1 .
 Available through symbol

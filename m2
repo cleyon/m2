@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-09-23 19:44:50 cleyon>
+#  Time-stamp:  <2024-09-24 20:17:51 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -448,19 +448,25 @@ function default_shell()
 }
 
 
-function curr_atmode(    top_block)
+# ATMODE is a property of the source.  If there is no source, we're probably
+# in the process of undiverting some streams after the program ends.  Streams
+# are not processed for macros, so the default mode in this case is literal.
+function curr_atmode(    src_block)
 {
-    if (stk_emptyp(__parse_stack))
-        error("(curr_atmode) Parse stack is empty!")
-    top_block = stk_top(__parse_stack)
-    dbg_print_block("ship_out", 7, top_block, "(curr_atmode) top_block [top of __parse_stack]")
-    if (! ((top_block, 0, "atmode") in blktab)) {
-        error("(curr_atmode) Top block " top_block " does not have 'atmode'")
+    if (stk_emptyp(__source_stack))
+        return MODE_AT_LITERAL
+    src_block = stk_top(__source_stack)
+    dbg_print_block("ship_out", 7, src_block, "(curr_atmode) src_block [top of __source_stack]")
+    if (! ((src_block, 0, "atmode") in blktab)) {
+        error("(curr_atmode) Top block " src_block " does not have 'atmode'")
     }
-    return blktab[top_block, 0, "atmode"]
+    return blktab[src_block, 0, "atmode"]
 }
 
 
+# DSTBLK is a property of the parser.  There should always be at least a
+# pass-through TERMINAL parser because initialize() creates it and it
+# gets popped at the end of main().
 function curr_dstblk(    top_block)
 {
     if (stk_emptyp(__parse_stack))
@@ -980,15 +986,13 @@ function blk_new(block_type,
     new_blknum = ++__block_cnt
     blktab[new_blknum, 0, "depth"] = stk_depth(__parse_stack)
     blktab[new_blknum, 0, "type"] = block_type
-    blktab[new_blknum, 0, "atmode"] = stk_emptyp(__parse_stack)           \
-                                      ? MODE_AT_PROCESS : curr_atmode()
     if (block_type == BLK_AGG)
         blktab[new_blknum, 0, "count"] = 0
     else if (block_type == BLK_CASE)
         blktab[new_blknum, 0, "terminator"] = "@(endcase|esac)"
     else if (block_type == BLK_IF)
         blktab[new_blknum, 0, "terminator"] = "@(endif|fi)"
-    else if (block_type == BLK_FILE) {
+    else if (block_type == SRC_FILE) {
         blktab[new_blknum, 0, "open"] = FALSE
         blktab[new_blknum, 0, "terminator"] = ""
         blktab[new_blknum, 0, "oob_terminator"] = "EOF"
@@ -997,8 +1001,8 @@ function blk_new(block_type,
     else if (block_type == BLK_LONGDEF)
         blktab[new_blknum, 0, "terminator"] = "@endlong(def)?"
     else if (block_type == BLK_TERMINAL) {
-        blktab[new_blknum, 0, "atmode"] = MODE_AT_LITERAL
         blktab[new_blknum, 0, "dstblk"] = TERMINAL
+        blktab[new_blknum, 0, "terminator"] = ""
     } else if (block_type == BLK_USER)
         blktab[new_blknum, 0, "terminator"] = "@endcmd"
     else if (block_type == BLK_WHILE)
@@ -1143,8 +1147,7 @@ function ppf__block(blknum,
 
     if      (block_type == BLK_AGG)       buf = ppf__agg(blknum)
     else if (block_type == BLK_CASE)      buf = ppf__case(blknum)
-   #else if (block_type == BLK_FILE)      buf = ppf__file(blknum) # does not exist yet
-    else if (block_type == BLK_FILE)      buf = EMPTY
+    else if (block_type == SRC_FILE)      buf = EMPTY
     else if (block_type == BLK_FOR)       buf = ppf__for(blknum)
     else if (block_type == BLK_IF)        buf = ppf__if(blknum)
     else if (block_type == BLK_LONGDEF)   buf = ppf__longdef(blknum)
@@ -1164,14 +1167,15 @@ function ppf__BLK(blknum,
     dbg_print("xeq", 3, sprintf("(ppf__BLK) START blknum=%d, type=%s",
                                 blknum, ppf__block_type(block_type)))
 
-    if      (block_type == BLK_AGG)     text = ppf__BLK_AGG(blknum)
-    else if (block_type == BLK_CASE)    text = ppf__BLK_CASE(blknum)
-    else if (block_type == BLK_FILE)    text = ppf__BLK_FILE(blknum)
-    else if (block_type == BLK_FOR)     text = ppf__BLK_FOR(blknum)
-    else if (block_type == BLK_IF)      text = ppf__BLK_IF(blknum)
-    else if (block_type == BLK_LONGDEF) text = ppf__BLK_LONGDEF(blknum)
-    else if (block_type == BLK_USER)    text = ppf__BLK_USER(blknum)
-    else if (block_type == BLK_WHILE)   text = ppf__BLK_WHILE(blknum)
+    if      (block_type == BLK_AGG)      text = ppf__BLK_AGG(blknum)
+    else if (block_type == BLK_CASE)     text = ppf__BLK_CASE(blknum)
+    else if (block_type == SRC_FILE)     text = ppf__SRC_FILE(blknum)
+    else if (block_type == BLK_FOR)      text = ppf__BLK_FOR(blknum)
+    else if (block_type == BLK_IF)       text = ppf__BLK_IF(blknum)
+    else if (block_type == BLK_LONGDEF)  text = ppf__BLK_LONGDEF(blknum)
+    else if (block_type == BLK_TERMINAL) text = ""
+    else if (block_type == BLK_USER)     text = ppf__BLK_USER(blknum)
+    else if (block_type == BLK_WHILE)    text = ppf__BLK_WHILE(blknum)
     else
         error(sprintf("(ppf__BLK) Can't handle type '%s' for block %d",
                       block_type, blknum))
@@ -1194,8 +1198,6 @@ function execute__block(blknum,
     old_level = __namespace
     if      (block_type == BLK_AGG)       xeq__BLK_AGG(blknum)
     else if (block_type == BLK_CASE)      xeq__BLK_CASE(blknum)
-    else if (block_type == BLK_FILE)      error("(execute__block) Cannot execute block # %d (%s)",
-                                                blknum, ppf__block_type(block_type))
     else if (block_type == BLK_FOR)       xeq__BLK_FOR(blknum)
     else if (block_type == BLK_IF)        xeq__BLK_IF(blknum)
     else if (block_type == BLK_LONGDEF)   xeq__BLK_LONGDEF(blknum)
@@ -1467,12 +1469,11 @@ function prep_file(filename,
                    file_block, retval)
 {
     dbg_print("parse", 7, "(prep_file) START filename='" filename "'")
-    # create and return a BLK_FILE set up for the terminal
-    file_block = blk_new(BLK_FILE)
+    # create and return a SRC_FILE set up for the terminal
+    file_block = blk_new(SRC_FILE)
     if (filename == "-")
         filename = "/dev/stdin"
     blktab[file_block, 0, "filename"] = filename
-    blktab[file_block, 0, "dstblk"] = TERMINAL
     blktab[file_block, 0, "atmode"] = MODE_AT_PROCESS
 
     dbg_print("parse", 7, "(prep_file) END; file_block => " file_block)
@@ -1481,17 +1482,25 @@ function prep_file(filename,
 
 
 function dofile(filename,
-                file_block, retval)
+                file_block, term2, retval)
 {
     dbg_print("parse", 5, "(dofile) START filename='" filename "'")
-    # create and return a BLK_FILE set up for the terminal
-    file_block = prep_file(filename)
 
-    dbg_print("parse", 7, sprintf("(dofile) Pushing file block %d (%s) onto parse_stack", file_block, filename))
-    stk_push(__parse_stack, file_block)
+    # Prepare to read filename; set up a SRC_FILE block to manage input
+    # and a BLK_TERMINAL to receive output
+    file_block = prep_file(filename)
+    dbg_print("parse", 7, sprintf("(dofile) Pushing file block %d (%s) onto source_stack", file_block, filename))
+    stk_push(__source_stack, file_block)
+    term2 = blk_new(BLK_TERMINAL)
+    stk_push(__parse_stack, term2)
+
     dbg_print("parse", 5, "(dofile) CALLING parse__file()")
     retval = parse__file()
     dbg_print("parse", 5, "(dofile) RETURNED FROM parse__file()")
+
+    # Clean up
+    # (parse_file() pops the source stack)
+    stk_pop(__parse_stack)
 
     dbg_print("parse", 5, "(dofile) END => " ppf__bool(retval))
     return retval
@@ -1512,18 +1521,18 @@ function dofile(filename,
 # Caller is responsible for removing potential quotes from filename.
 function parse__file(    filename, file_block1, file_block2, pstat, d)
 {
-    if (check__parse_stack(BLK_FILE) != 0)
-        error("Parse error, " __m2_msg)
-    file_block1 = stk_top(__parse_stack)
+    if (stk_emptyp(__source_stack))
+        error("(parse__file) Source stack empty")
+    file_block1 = stk_top(__source_stack)
 
     filename = blktab[file_block1, 0, "filename"]
     dbg_print("parse", 1, sprintf("(parse__file) filename='%s', dstblk=%d, mode=%s",
-                                 filename, blktab[file_block1, 0, "dstblk"],
-                                 ppf__mode(blktab[file_block1, 0, "atmode"])))
+                                  filename, curr_dstblk(),
+                                  ppf__mode(blktab[file_block1, 0, "atmode"])))
     if (!path_exists_p(filename)) {
         dbg_print("parse", 1, sprintf("(parse__file) END File '%s' does not exist => %s",
                                      filename, ppf__bool(FALSE)))
-        stk_pop(__parse_stack)  # Remove BLK_FILE for non-existent file
+        stk_pop(__source_stack) # Remove SRC_FILE for non-existent file
         return FALSE
     }
     if (filename in __active_files)
@@ -1557,10 +1566,9 @@ function parse__file(    filename, file_block1, file_block2, pstat, d)
     blktab[file_block1, 0, "open"] = FALSE
     delete __active_files[filename]
 
-    if (check__parse_stack(BLK_FILE) != 0)
-        error("Parse error, " __m2_msg)
-    file_block2 = stk_pop(__parse_stack)
-
+    file_block2 = stk_pop(__source_stack)
+    if (file_block1 != file_block2)
+        error("(parse__file) File block mismatch")
     __buffer = blktab[file_block2, 0, "old.buffer"]
     sym_ll_write("__FILE__",      "", GLOBAL_NAMESPACE, blktab[file_block2, 0, "old.file"])
     sym_ll_write("__LINE__",      "", GLOBAL_NAMESPACE, blktab[file_block2, 0, "old.line"])
@@ -1573,9 +1581,9 @@ function parse__file(    filename, file_block1, file_block2, pstat, d)
 
 
 # PARSE
-function parse(              code, terminator, rstat, name, retval, new_block, fc,
-                            info, level, parser, parser_type, parser_label, i, scnt, found,
-                            new_cmd_name, clevel, cmdline)
+function parse(    code, terminator, rstat, name, retval, new_block, fc,
+                   info, level, parser, parser_type, parser_label, i, scnt, found,
+                   new_cmd_name, clevel, cmdline, src_block)
 {
     dbg_print("parse", 3, "(parse) START dstblk=" curr_dstblk() ", mode=" ppf__mode(curr_atmode()))
 
@@ -1586,6 +1594,10 @@ function parse(              code, terminator, rstat, name, retval, new_block, f
     parser = stk_top(__parse_stack)
     parser_type = blk_type(parser)
     parser_label = ppf__block_type(parser_type)
+
+    if (stk_emptyp(__source_stack))
+        error("Parse error, Empty source stack")
+    src_block = stk_top(__source_stack)
 
     # terminator is a regular expression, and we call
     # match($1, terminator) to see if terminator is seen.
@@ -1603,13 +1615,13 @@ function parse(              code, terminator, rstat, name, retval, new_block, f
             break          # out of entire parsing loop, to then return
         }
         if (rstat == EOF) {
-            # End of file BLK_FILE is fine, just return a TRUE to say so.
+            # End of file SRC_FILE is fine, just return a TRUE to say so.
             # EOF on any other block type means the parse didn't find
             # a terminator, so return FALSE.
             dbg_print("parse", 5, sprintf("(parse) [%s] readline() detected EOF on '%s'",
-                                         parser_label, blktab[parser, 0, "filename"]))
-            if ((parser, 0, "oob_terminator") in blktab &&
-                blktab[parser, 0, "oob_terminator"] == "EOF")
+                                         parser_label, blktab[src_block, 0, "filename"]))
+            if ((src_block, 0, "oob_terminator") in blktab &&
+                blktab[src_block, 0, "oob_terminator"] == "EOF")
                 retval = TRUE
             break          # out of entire parsing loop, to then return
         }
@@ -1826,6 +1838,8 @@ function parse(              code, terminator, rstat, name, retval, new_block, f
                     } else if (name == "return") {
                         found = FALSE
                         for (i = stk_depth(__parse_stack); i > 0; i--) {
+                            dbg_print("parse", 2, sprintf("i=%d, __parse_stack[i])=%d", i, __parse_stack[i]))
+                            dbg_print_block("parse", 2, __parse_stack[i], "Parsing @return:")
                             scnt = blk_type(__parse_stack[i])
                             if (scnt == BLK_USER) {
                                 found = TRUE
@@ -1964,7 +1978,7 @@ function scan__usercmd_call(    s, name, obj, i, oldi, c, nc, narg, nlbr,
 }
 
 
-function ppf__BLK_FILE(blknum)
+function ppf__SRC_FILE(blknum)
 {
     return sprintf("  filename: %s\n"             \
                    "  open    : %s\n"             \
@@ -4917,13 +4931,12 @@ function xeq_cmd__include(name, cmdline,
             warn(error_text)
     }
     file_block = prep_file(filename)
-    blktab[file_block, 0, "dstblk"] = curr_dstblk()
     blktab[file_block, 0, "atmode"] = substr(name, length(name)-4) == "paste" \
                                       ? MODE_AT_LITERAL : MODE_AT_PROCESS
-    # prep_file doesn't push the BLK_FILE onto the __parse_stack,
+    # prep_file doesn't push the SRC_FILE onto the __source_stack,
     # so we have to do that ourselves due to customization
-    dbg_print("parse", 7, sprintf("(xeq_cmd__include) Pushing file block %d (%s) onto parse_stack", file_block, filename))
-    stk_push(__parse_stack, file_block)
+    dbg_print("parse", 7, sprintf("(xeq_cmd__include) Pushing file block %d (%s) onto source_stack", file_block, filename))
+    stk_push(__source_stack, file_block)
 
     dbg_print("parse", 5, "(xeq_cmd__include) CALLING parse__file()")
     rc = parse__file()
@@ -5514,18 +5527,22 @@ function xeq_cmd__readarray(name, cmdline,
     dbg_print("parse", 5, sprintf("symtab['%s','%s',%d,'agg_block'] = %d",
                                  arr, key, level, agg_block))
     symtab[arr, key, level, "agg_block"] = agg_block
+    blktab[agg_block, 0, "dstblk"] = agg_block
+    stk_push(__parse_stack, agg_block)
 
-    # create a new file parser : dstblk = agg, mode=literal
+    # create a new literal file parser
     file_block = prep_file(filename)
-    blktab[file_block, 0, "dstblk"] = agg_block
     blktab[file_block, 0, "atmode"] = MODE_AT_LITERAL
-    # Push parser manually because prep_file doesn't do that
-    dbg_print("parse", 7, sprintf("(xeq_cmd__readarray) Pushing file block %d (%s) onto parse_stack", file_block, filename))
-    stk_push(__parse_stack, file_block)
+    # Push file block manually because prep_file doesn't do that
+    dbg_print("parse", 7, sprintf("(xeq_cmd__readarray) Pushing file block %d (%s) onto source_stack", file_block, filename))
+    stk_push(__source_stack, file_block)
 
     dbg_print("parse", 5, "(xeq_cmd__readarray) CALLING parse__file()")
     rc = parse__file()
     dbg_print("parse", 5, "(xeq_cmd__readarray) RETURNED FROM parse__file()")
+    # parse__file pops the source stack
+    stk_pop(__parse_stack)
+
     if (!rc) {
         if (silent) return
         error_text = "File '" filename "' does not exist:" $0
@@ -5856,23 +5873,14 @@ function xeq_cmd__syscmd(name, cmdline,
 #*****************************************************************************
 # @typeout
 function xeq_cmd__typeout(name, cmdline,
-                          i, parser)
+#                          i, parser)
+                          src_block)
 {
-    if (stk_emptyp(__parse_stack))
-        error("(xeq_cmd__typeout) Parse stack is empty")
+    if (stk_emptyp(__source_stack))
+        error("(xeq_cmd__typeout) Source stack is empty")
 
-    for (i = stk_depth(__parse_stack); i > 0; i--) {
-        dbg_print_block("parse", 6, __parse_stack[i], sprintf("(xeq_cmd__typeout) __parse_stack[%d]", i))
-        parser = __parse_stack[i]
-        if (blk_type(parser) == BLK_FILE) {
-            dbg_print_block("parse", 7, parser, "(xeq_cmd__typeout) parser")
-            dbg_print("parse", 5, sprintf("(xeq_cmd__typeout) Changing block %d file '%s' mode to Literal",
-                                         parser, blktab[parser, 0, "filename"]))
-            blktab[parser, 0, "atmode"] = MODE_AT_LITERAL
-            return
-        }
-    }
-    error("(xeq_cmd__typeout) Could not find FILE parser")
+    src_block = stk_top(__source_stack)
+    blktab[src_block, 0, "atmode"] = MODE_AT_LITERAL
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -7173,13 +7181,13 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
       OBJ_TEXT                  = "t"; __blk_label[OBJ_TEXT]     = "TEXT"
       OBJ_USER                  = "u"; __blk_label[OBJ_USER]     = "USER"
     BLK_CASE                    = "C"; __blk_label[BLK_CASE]     = "CASE"
-    BLK_FILE                    = "F"; __blk_label[BLK_FILE]     = "FILE"
     BLK_IF                      = "I"; __blk_label[BLK_IF]       = "IF"
     BLK_FOR                     = "R"; __blk_label[BLK_FOR ]     = "FOR"
     BLK_LONGDEF                 = "L"; __blk_label[BLK_LONGDEF]  = "LONGDEF"
     BLK_TERMINAL                = "T"; __blk_label[BLK_TERMINAL] = "TERMINAL"
     BLK_USER                    = "U"; __blk_label[BLK_USER]     = "USER"
     BLK_WHILE                   = "W"; __blk_label[BLK_WHILE]    = "WHILE"
+    SRC_FILE                    = "F"; __blk_label[SRC_FILE]     = "FILE"
 
     # Errors                          # ERRORS  
     ERR_OKAY                    =   0
@@ -7238,6 +7246,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     __print_mode                = MODE_TEXT_PRINT
     __rot13_initialized         = FALSE # Becomes True in initialize_rot13()
     __parse_stack[0]            = 0
+    __source_stack[0]           = 0
     __wrap_cnt                  = 0
     __xeq_ctl                   = XEQ_NORMAL
 
@@ -7372,6 +7381,10 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     # Zero stream buffers
     for (i = 1; i <= MAX_STREAM; i++)
         blk_new(BLK_AGG)       # initialize to empty agg block
+
+    # Set up terminal to receive output
+    terminal = blk_new(BLK_TERMINAL)
+    stk_push(__parse_stack, terminal)
 }
 
 
@@ -7586,10 +7599,13 @@ BEGIN {
     }
 
     # Under normal execution, all blocks should have been popped from
-    # the parse stack, so check that.  I can't move this check into
-    # end_program(), because that routine might be called during
-    # execution with parsers still present on the stack.
-    if (! stk_emptyp(__parse_stack)) {
+    # the parse stack, so check that.  There should only be the terminal
+    # block (created in initialize) remaining but we can't remove it
+    # because we might need it in end_program to ship out diversions and
+    # wraps.  I also can't move this check into end_program(), because
+    # that routine might be called during execution with parsers still
+    # present on the stack.
+    if (stk_depth(__parse_stack) != 1) {
         warn("(main) Parse stack is not empty!")
         dump_parse_stack()
     }
@@ -7618,7 +7634,6 @@ function end_program(diverted_streams_final_disposition,
         # always create a TERMINAL block to receive this data.  Since
         # the program is about to terminate anyway, we don't care about
         # managing the parse stack from here on out.
-        stk_push(__parse_stack, blk_new(BLK_TERMINAL))
         sym_ll_write("__DIVNUM__", "", GLOBAL_NAMESPACE, TERMINAL)
         undivert_all()
 

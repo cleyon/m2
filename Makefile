@@ -1,4 +1,4 @@
-.PHONY:	all man callgraph-full callgraph-sane callgraph-io vars funcs lint tags check test quiet-test test-quiet quiet-check check-quiet m2
+.PHONY:	all man callgraph-full callgraph-sane callgraph-io vars funcs clean lint tags check test quiet-test test-quiet quiet-check check-quiet m2
 
 GOOD_M2=/Users/cleyon/bin-n.yuuko/m2
 AWK=/usr/bin/awk
@@ -53,6 +53,9 @@ funcs:
 vars:
 	@rm -f awkvars.out
 	$(GAWK) -d -f m2 /dev/null >/dev/null
+
+clean:
+	rm tests/*/*/*.run_out tests/*/*/*.run_err
 
 lint:
 	$(GAWK) --lint --posix -f m2 /dev/null

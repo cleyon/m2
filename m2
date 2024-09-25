@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-09-25 10:35:55 cleyon>
+#  Time-stamp:  <2024-09-25 15:07:11 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -1154,7 +1154,7 @@ function ppf__block(blknum,
     else if (block_type == BLK_FOR)       buf = ppf__for(blknum)
     else if (block_type == BLK_IF)        buf = ppf__if(blknum)
     else if (block_type == BLK_LONGDEF)   buf = ppf__longdef(blknum)
-    else if (block_type == BLK_TERMINAL)  buf = "@rem Block " blknum " is Terminal@"
+    else if (block_type == BLK_TERMINAL)  buf = EMPTY
     else if (block_type == BLK_USER)      buf = ppf__user(blknum)
     else if (block_type == BLK_WHILE)     buf = ppf__while(blknum)
     else
@@ -1487,7 +1487,7 @@ function prep_file(filename,
 
 
 function dofile(filename,
-                file_block, term2, retval)
+                file_block, retval)
 {
     dbg_print("parse", 5, "(dofile) START filename='" filename "'")
 
@@ -1496,8 +1496,7 @@ function dofile(filename,
     file_block = prep_file(filename)
     dbg_print("parse", 7, sprintf("(dofile) Pushing file block %d (%s) onto source_stack", file_block, filename))
     stk_push(__source_stack, file_block)
-    term2 = blk_new(BLK_TERMINAL)
-    stk_push(__parse_stack, term2)
+    stk_push(__parse_stack, __terminal)
 
     dbg_print("parse", 5, "(dofile) CALLING parse__file()")
     retval = parse__file()
@@ -4382,16 +4381,14 @@ function dostring(str,
 {
     dbg_print("parse", 5, "(dostring) START str='" str "'")
 
-    # Set up a SRC_STRING block to read str
+    # Set up a SRC_STRING block to read str and a BLK_TERMINAL to
+    # receive output.
     string_block = blk_new(SRC_STRING)
     blktab[string_block, 0, "str"]    = str
     blktab[string_block, 0, "atmode"] = MODE_AT_PROCESS
     dbg_print("parse", 7, sprintf("(dostring) Pushing string block %d onto source_stack", file_block))
     stk_push(__source_stack, string_block)
-
-    # Configure a BLK_TERMINAL to receive output
-    term2 = blk_new(BLK_TERMINAL)
-    stk_push(__parse_stack, term2)
+    stk_push(__parse_stack, __terminal)
 
     dbg_print("parse", 5, "(dostring) CALLING parse__string()")
     retval = parse__string()
@@ -7471,8 +7468,8 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
         blk_new(BLK_AGG)       # initialize to empty agg block
 
     # Set up terminal to receive output
-    terminal = blk_new(BLK_TERMINAL)
-    stk_push(__parse_stack, terminal)
+    __terminal = blk_new(BLK_TERMINAL)
+    stk_push(__parse_stack, __terminal)
 }
 
 

@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-09-24 20:17:51 cleyon>
+#  Time-stamp:  <2024-09-25 10:35:55 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -996,6 +996,9 @@ function blk_new(block_type,
         blktab[new_blknum, 0, "open"] = FALSE
         blktab[new_blknum, 0, "terminator"] = ""
         blktab[new_blknum, 0, "oob_terminator"] = "EOF"
+    } else if (block_type == SRC_STRING) {
+        blktab[new_blknum, 0, "terminator"] = ""
+        blktab[new_blknum, 0, "oob_terminator"] = "EOS"
     } else if (block_type == BLK_FOR)
         blktab[new_blknum, 0, "terminator"] = "@next"
     else if (block_type == BLK_LONGDEF)
@@ -1151,6 +1154,7 @@ function ppf__block(blknum,
     else if (block_type == BLK_FOR)       buf = ppf__for(blknum)
     else if (block_type == BLK_IF)        buf = ppf__if(blknum)
     else if (block_type == BLK_LONGDEF)   buf = ppf__longdef(blknum)
+    else if (block_type == BLK_TERMINAL)  buf = "@rem Block " blknum " is Terminal@"
     else if (block_type == BLK_USER)      buf = ppf__user(blknum)
     else if (block_type == BLK_WHILE)     buf = ppf__while(blknum)
     else
@@ -1173,8 +1177,8 @@ function ppf__BLK(blknum,
     else if (block_type == BLK_FOR)      text = ppf__BLK_FOR(blknum)
     else if (block_type == BLK_IF)       text = ppf__BLK_IF(blknum)
     else if (block_type == BLK_LONGDEF)  text = ppf__BLK_LONGDEF(blknum)
-    else if (block_type == BLK_TERMINAL) text = ""
     else if (block_type == BLK_USER)     text = ppf__BLK_USER(blknum)
+    else if (block_type == BLK_TERMINAL) text = EMPTY
     else if (block_type == BLK_WHILE)    text = ppf__BLK_WHILE(blknum)
     else
         error(sprintf("(ppf__BLK) Can't handle type '%s' for block %d",
@@ -1395,6 +1399,7 @@ function execute__command(name, cmdline,
     else if (name ~ /s?echo/)           xeq_cmd__error(name, cmdline)
     else if (name ==  "error")          xeq_cmd__error(name, cmdline)
     else if (name ==  "errprint")       xeq_cmd__error(name, cmdline)
+    else if (name ==  "eval")           xeq_cmd__eval(name, cmdline)
     else if (name ==  "exit")           xeq_cmd__exit(name, cmdline)
     else if (name ==  "ignore")         xeq_cmd__ignore(name, cmdline)
     else if (name ~ /s?include/)        xeq_cmd__include(name, cmdline)
@@ -4051,7 +4056,7 @@ function xeq_cmd__divert(name, cmdline,
 #       @<command>  SPACE  <name>  TAB  <stuff includes spaces...>
 function xeq_cmd__dump(name, cmdline,
                        buf, cnt, definition, dumpfile, i, key, keys, sym_name, all_flag,
-                       what, what_type, block_type, blk_label)
+                       what, what_type, block_type, blk_label, desc)
 {
     all_flag = name == "dumpall"
     dumpfile = EMPTY
@@ -4093,8 +4098,10 @@ function xeq_cmd__dump(name, cmdline,
         block_type = blk_type(what)
         blk_label = ppf__block_type(block_type)
         # print_stderr("(xeq_cmd__dump) block_type = " block_type)
-        buf = sprintf("Block # %d, Type=%s:\n", what, blk_label) \
-              ppf__BLK(what)
+        desc = ppf__BLK(what)
+        buf = sprintf("Block # %d, Type=%s:\n", what, blk_label)
+        if (!emptyp(desc))
+            buf += ppf__BLK(what)
         if (all_flag)
             buf = buf "\nCode:\n" ppf__block(what)
     } else
@@ -4348,6 +4355,86 @@ function xeq_cmd__error(name, cmdline,
         __exit_code = EX_USER_REQUEST
         end_program(MODE_STREAMS_DISCARD)
     }
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  E V A L
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#*****************************************************************************
+# @eval                 [CODE]
+function xeq_cmd__eval(name, cmdline)
+{
+    $1 = ""
+    sub("^[ \t]*", "")
+    # print_stderr("@eval: '" $0 "'")
+    dostring($0)
+}
+
+
+function dostring(str,
+                file_block, term2, retval)
+{
+    dbg_print("parse", 5, "(dostring) START str='" str "'")
+
+    # Set up a SRC_STRING block to read str
+    string_block = blk_new(SRC_STRING)
+    blktab[string_block, 0, "str"]    = str
+    blktab[string_block, 0, "atmode"] = MODE_AT_PROCESS
+    dbg_print("parse", 7, sprintf("(dostring) Pushing string block %d onto source_stack", file_block))
+    stk_push(__source_stack, string_block)
+
+    # Configure a BLK_TERMINAL to receive output
+    term2 = blk_new(BLK_TERMINAL)
+    stk_push(__parse_stack, term2)
+
+    dbg_print("parse", 5, "(dostring) CALLING parse__string()")
+    retval = parse__string()
+    dbg_print("parse", 5, "(dostring) RETURNED FROM parse__string()")
+
+    # Clean up (NG, parse_string() pops the source stack)
+    stk_pop(__parse_stack)
+    
+    dbg_print("parse", 5, "(dostring) END => " ppf__bool(retval))
+    return retval
+}
+
+
+function parse__string(    str, string_block1, string_block2, pstat, d)
+{
+    if (stk_emptyp(__source_stack))
+        error("(parse__string) Source stack empty")
+    string_block1 = stk_top(__source_stack)
+    str = blktab[string_block1, 0, "str"]
+
+    dbg_print("parse", 1, sprintf("(parse__string) str='%s', dstblk=%d, mode=%s",
+                                  str, curr_dstblk(),
+                                  ppf__mode(blktab[string_block1, 0, "atmode"])))
+
+    blktab[string_block1, 0, "old.buffer"]    = __buffer
+    dbg_print_block("ship_out", 7, string_block1, "(parse__string) string_block1")
+
+    # Set up new file context
+    __buffer = str
+
+    # Read the file and process each line
+    dbg_print("parse", 5, "(parse__string) CALLING parse()")
+    pstat = parse()
+    dbg_print("parse", 5, "(parse__string) RETURNED FROM parse() => " ppf__bool(pstat))
+
+    string_block2 = stk_pop(__source_stack)
+    if (string_block1 != string_block2)
+        error("(parse__string) String block mismatch")
+    __buffer = blktab[string_block2, 0, "old.buffer"]
+
+    dbg_print("parse", 1, sprintf("(parse__string) END '%s' => %s",
+                                 str, ppf__bool(pstat)))
+    return pstat
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -7188,6 +7275,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     BLK_USER                    = "U"; __blk_label[BLK_USER]     = "USER"
     BLK_WHILE                   = "W"; __blk_label[BLK_WHILE]    = "WHILE"
     SRC_FILE                    = "F"; __blk_label[SRC_FILE]     = "FILE"
+    SRC_STRING                  = "S"; __blk_label[SRC_STRING]   = "STRING"
 
     # Errors                          # ERRORS  
     ERR_OKAY                    =   0
@@ -7343,7 +7431,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     # Built-in commands
     # Also need to add entry in execute__command()  [search: DISPATCH]
     split("append array cleardivert debug decr default define divert dump dumpall" \
-          " echo error errprint exit ignore include incr initialize input local m2ctl" \
+          " echo error errprint eval exit ignore include incr initialize input local m2ctl" \
           " nextfile paste readfile readarray readonly secho sequence shell" \
           " sinclude spaste sreadfile sreadarray syscmd typeout undefine" \
           " undivert warn wrap", array, TOK_SPACE)

@@ -132,13 +132,13 @@ run_test()
 
     TESTNAME=`echo "$M2_FILE" | sed 's,^.*/,,;s,\.m2$,,'`   # remove CATEGORY and ext
     [ $debug = "true" ] && echo "TESTNAME is $TESTNAME"
-    [ -f ${TESTNAME}.out ] || { framework_error "run_test: ${test_id}/${TESTNAME}.out does not exist!"; return; }
 
     printf "*** $test_id/$TESTNAME ... "
 
     [ -f ${TESTNAME}.disabled ] && { echo "SKIP - Test disabled"; return; }
-    [ -r "$M2_FILE" ] || { echo "SKIP - Unreadable test file"; return; }
     [ -s "$M2_FILE" ] || { echo "SKIP - Empty test file"; return; }
+    [ -r "$M2_FILE" ] || { echo "FAIL - Unreadable test file"; fail=127; return; }
+    [ -f ${TESTNAME}.out ] || { echo "FAIL - ${TESTNAME}.out does not exist!"; fail=127; return; }
 
     rm -f ${TESTNAME}.expected_out ${TESTNAME}.expected_err ${TESTNAME}.expected_exit
     rm -f ${TESTNAME}.run_out      ${TESTNAME}.run_err      ${TESTNAME}.run_exit

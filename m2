@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-09-26 09:30:40 cleyon>
+#  Time-stamp:  <2024-09-26 19:12:18 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -3212,7 +3212,7 @@ function sym_fetch(sym,
         val = sym_ll_read(name, key, level)
     }
 
-        dbg_print("sym", 2, sprintf("(sym_fetch) END sym='%s', level=%d => %s", sym, level, ppf__bool(TRUE)))
+    dbg_print("sym", 2, sprintf("(sym_fetch) END sym='%s', level=%d => %s", sym, level, ppf__bool(TRUE)))
     if (flag_1true_p(code, FLAG_INTEGER))
         return 0 + val
     else if (flag_1true_p(code, FLAG_NUMERIC))
@@ -5019,7 +5019,7 @@ function xeq_cmd__include(name, cmdline,
     filename = search_file(cmdline)
     if (emptyp(filename)) {
         if (silent) return
-        error_text = "File '" cmdline "' does not exist:" $0
+        error_text = "File '" cmdline "' not found:" $0
         if (strictp("file"))
             error(error_text)
         else
@@ -5048,13 +5048,17 @@ function xeq_cmd__include(name, cmdline,
 
 
 function search_file(f,
-                     count, ip, p, i)
+                     pe, icount, paths, p, i)
 {
     f = rm_quotes(dosubs(f))
-    count = split(__inc_path, ip, TOK_COLON)
-    ip[0] = "."
-    for (i = 0; i <= count; i++) {
-        p = with_trailing_slash(ip[i]) f
+    pe = path_exists_p(f)
+    if (first(f) == "/")
+        return pe ? f : EMPTY
+    if (pe)
+        return f
+    icount = split(__inc_path, paths, TOK_COLON)
+    for (i = 1; i <= icount; i++) {
+        p = with_trailing_slash(paths[i]) f
         if (path_exists_p(p))
             return p
     }
@@ -7677,8 +7681,9 @@ BEGIN {
             # Otherwise load a file
             } else {
                 load_init_files()
-                if (! dofile(rm_quotes(_arg))) {
-                    warn("File '" _arg "' does not exist", "ARGV", _i)
+                _loadfile = search_file(_arg)
+                if (_loadfile == EMPTY || !dofile(_loadfile)) {
+                    warn("File '" _arg "' not found", "ARGV", _i)
                     __exit_code = EX_NOINPUT
                 }
             }

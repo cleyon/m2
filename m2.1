@@ -146,7 +146,7 @@ values of keys to an array.
 NOTE: Different Awk implementations may return keys in differing order.
 .It @if EXPR ... [@else ...] @endif
 Include subsequent lines of text if boolean expression is True.
-If EXR is a simple NAME, check if NAME is True.
+If EXPR is a simple NAME, check if NAME is True.
 See
 .Sx Boolean expressions
 below.
@@ -346,6 +346,13 @@ If @include or @paste cannot find the specified FILE in the current directory,
 it will consult the include path which is initialized from the
 .Va M2PATH
 environment variable.
+Directories can be inserted into the include path by specifying
+.Ql I=<directory>
+on the command line.
+Paths specified this way are examined before entries from M2PATH,
+to allow run-specific overrides.
+The include path is also used, if needed, for file names passed on the
+command line.
 .Pp
 To alleviate scanning ambiguities, any characters enclosed in
 at-sign braces will be recursively scanned and expanded.
@@ -1447,7 +1454,9 @@ may invoke subprocesses.
 The default is zero which signifies no restrictions.
 In particular, this allows the
 .Ql @shell
-command to attempt execution of any program the user specifies.
+and
+.Ql @syscmd
+commands to attempt execution of any program the user specifies.
 At secure level 1, the
 .Ql @shell
 and
@@ -1469,3 +1478,4 @@ This level will have a detrimental effect on
 capabilities, such as disabling
 .Ql @time@
 et al.
+The user may raise the security level, but it cannot be lowered.

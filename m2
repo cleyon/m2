@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-09-25 15:07:11 cleyon>
+#  Time-stamp:  <2024-09-26 09:30:40 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -757,7 +757,14 @@ function readline(    getstat, i)
             $0 = substr(__buffer, 1, i-1)
             __buffer = substr(__buffer, i+1)
         }
+
+    } else if (blk_type(stk_top(__source_stack)) == SRC_STRING) {
+        dbg_print("io", 6, "(readline) [STRING] RETURNING EOF")
+        return EOF
+
     } else {
+        dbg_print("io", 8, "source_stack count = " stk_depth(__source_stack))
+        dbg_print_block("io", 7, stk_top(__source_stack), "In readline:")
         getstat = getline < FILE()
         if (getstat == ERROR) {
             warn("(readline) getline=>Error reading file '" FILE() "'")
@@ -766,7 +773,7 @@ function readline(    getstat, i)
             sym_increment("__NLINE__", 1)
         }
     }
-    dbg_print("io", 6, sprintf("(readline) returns %d, $0='%s'", getstat, $0))
+    dbg_print("io", 6, sprintf("(readline) RETURNING %d, $0='%s'", getstat, $0))
     return getstat
 }
 
@@ -1174,6 +1181,7 @@ function ppf__BLK(blknum,
     if      (block_type == BLK_AGG)      text = ppf__BLK_AGG(blknum)
     else if (block_type == BLK_CASE)     text = ppf__BLK_CASE(blknum)
     else if (block_type == SRC_FILE)     text = ppf__SRC_FILE(blknum)
+    else if (block_type == SRC_STRING)   text = ppf__SRC_STRING(blknum)
     else if (block_type == BLK_FOR)      text = ppf__BLK_FOR(blknum)
     else if (block_type == BLK_IF)       text = ppf__BLK_IF(blknum)
     else if (block_type == BLK_LONGDEF)  text = ppf__BLK_LONGDEF(blknum)
@@ -1984,14 +1992,11 @@ function scan__usercmd_call(    s, name, obj, i, oldi, c, nc, narg, nlbr,
 
 function ppf__SRC_FILE(blknum)
 {
-    return sprintf("  filename: %s\n"             \
-                   "  open    : %s\n"             \
-                   "  atmode  : %s\n"             \
-                   "  dstblk  : %d",
+    return sprintf("  filename: %s (%s)\n" \
+                   "  atmode  : %s",
                    blktab[blknum, 0, "filename"],
-                   ppf__bool(blktab[blknum, 0, "open"]),
-                   ppf__mode(blktab[blknum, 0, "atmode"]),
-                   blktab[blknum, 0, "dstblk"])
+                   blktab[blknum, 0, "open"] ? "OPEN" : "CLOSED",
+                   ppf__mode(blktab[blknum, 0, "atmode"]))
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -2215,7 +2220,7 @@ function nam__scan(text, info,
     # to exclude ! [ \ ] { | }
     if (text !~ /^["-Z^-z~]+(\[["-Z^-z~]+\])?$/) {
         #warn("(nam__scan) Name '" text "' not valid")
-        dbg_print("nam", 2, sprintf("(nam__scan(%s) => %d", text, ERROR))
+        dbg_print("nam", 2, sprintf("(nam__scan) '%s' => %d", text, ERROR))
         __m2_msg = "Invalid name: '" text "'"
         return ERROR            # interpret as ERR_SCAN_INVALID_NAME
     }
@@ -4377,25 +4382,22 @@ function xeq_cmd__eval(name, cmdline)
 
 
 function dostring(str,
-                file_block, term2, retval)
+                string_block, term2, retval)
 {
     dbg_print("parse", 5, "(dostring) START str='" str "'")
 
-    # Set up a SRC_STRING block to read str and a BLK_TERMINAL to
-    # receive output.
+    # Set up a SRC_STRING parser for str, and the __terminal
     string_block = blk_new(SRC_STRING)
-    blktab[string_block, 0, "str"]    = str
+    blktab[string_block, 0, "str"]    = dosubs(str) # str
     blktab[string_block, 0, "atmode"] = MODE_AT_PROCESS
-    dbg_print("parse", 7, sprintf("(dostring) Pushing string block %d onto source_stack", file_block))
+    dbg_print("parse", 7, sprintf("(dostring) Pushing string block %d onto source_stack", string_block))
     stk_push(__source_stack, string_block)
-    stk_push(__parse_stack, __terminal)
 
+    stk_push(__parse_stack, __terminal)
     dbg_print("parse", 5, "(dostring) CALLING parse__string()")
     retval = parse__string()
     dbg_print("parse", 5, "(dostring) RETURNED FROM parse__string()")
-
-    # Clean up (NG, parse_string() pops the source stack)
-    stk_pop(__parse_stack)
+    stk_pop(__parse_stack) # Pop the terminal parser; parse_string() pops the source stack
     
     dbg_print("parse", 5, "(dostring) END => " ppf__bool(retval))
     return retval
@@ -4432,6 +4434,15 @@ function parse__string(    str, string_block1, string_block2, pstat, d)
     dbg_print("parse", 1, sprintf("(parse__string) END '%s' => %s",
                                  str, ppf__bool(pstat)))
     return pstat
+}
+
+
+function ppf__SRC_STRING(blknum)
+{
+    return sprintf("  str     : %s\n"             \
+                   "  atmode  : %s",
+                   blktab[blknum, 0, "str"],
+                   ppf__mode(blktab[blknum, 0, "atmode"]))
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -6217,7 +6228,7 @@ function xeq_cmd__wrap(name, cmdline,
         error("Bad parameters:" $0)
 
     __wrap_text[++__wrap_cnt] = $0
-    dbg_print("parse", 5, sprintf("(xeq_cmd__wrap) END; text='%s'",$0))
+    dbg_print("parse", 5, sprintf("(xeq_cmd__wrap) END; text='%s'", $0))
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -7725,7 +7736,7 @@ function end_program(diverted_streams_final_disposition,
         # Execute any wrapped text/commands
         if (__wrap_cnt > 0)
             for (i = 1; i <= __wrap_cnt; i++) {
-                ship_out(OBJ_TEXT, dosubs(__wrap_text[i]))
+                dostring(dosubs(__wrap_text[i]))
             }
     }
 

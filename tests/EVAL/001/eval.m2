@@ -1,8 +1,7 @@
-@longdef showme
+@newcmd showme
 @for i 1 3
 And a @i@
 @next i
-@endlong
-@showme@
-@showme@
-@@  @eval @showme@
+@endcmd
+@define myfunc showme
+@eval @@{myfunc}

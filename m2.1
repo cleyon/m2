@@ -127,6 +127,8 @@ Also called @wend.
 .It @error [TEXT]
 Send TEXT to standard error; exit code 2.
 Diverted streams and wrapped text are discarded.
+.It @eval TEXT
+Parse and evaluate string TEXT as a command.
 .It @exit [N]
 Immediately stop parsing; exit with status N.
 If N is omitted, the default value is zero.
@@ -246,9 +248,9 @@ Repeatedly evaluate input lines while boolean expression is True
 and stop when it becomes False.
 .It @wrap TEXT
 Defer TEXT until m2 has processed all files and is about to exit.
-Wrapped text will be output after diverted streams, if any.
-Wrapped text will not be processed if @error or @exit commands with
-non-zero status are encountered.
+Wrapped text will be evaluated as a command; output will occur after diverted streams, if any.
+Wraps are not processed if @error or @exit commands (with
+non-zero status) are encountered.
 .El
 .Pp
 .Nm

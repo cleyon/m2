@@ -1,0 +1,7 @@
+Start of file
+In main, X=222
+End of file
+In stream 1, X is 222
+In stream 3, X is 111
+We are leaving now, X=333
+That's all folks!

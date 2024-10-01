@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-10-01 12:40:50 cleyon>
+#  Time-stamp:  <2024-10-01 18:03:16 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -704,14 +704,28 @@ function format_message(text, file, line,    s)
 }
 
 
-function flush_stdout(flushlev)
+function flush_stdout(flushlev,
+                      flushstat)
 {
     if (flushlev <= sym_ll_read("__SYNC__", "", GLOBAL_NAMESPACE)) {
         # One of these is bound to work, right?
-        fflush("/dev/stdout")
+        flushstat = fflush("/dev/stdout")
         # Reputed to be more portable:
         #    system("")
         # Also, fflush("") will flush ALL files and pipes.  (gawk-specific?)
+        # ----------------
+        # From https://wiki.alpinelinux.org/wiki/Awk
+        #    "This page compares BusyBox's implementation of awk with
+        #    gawk (versions >= 3.1.8) and FreeBSD 9's nawk, which is
+        #    based on Bell Labs/Brian Kernighan's 2007 version of awk."
+        #
+        #    fflush(output "file" or "pipe command")
+        #      ~~> 0 if all requested buffers successfully flushed, else -1
+        #        # not in gawk --posix
+        #        # if no argument is supplied, flushes stdout
+        #        # if "" is supplied, flushes all open output files and pipes
+        if (flushstat != 0)
+            warn("(flush_stdout) Warning: fflush() returned " flushstat)
     }
 }
 
@@ -5097,18 +5111,27 @@ function search_file(f,
 #*****************************************************************************
 # @decr, @incr          NAME [N]
 function xeq_cmd__incr(name, cmdline,
-                       sym, incr)
+                       sym, incr, hint)
 {
     $0 = cmdline
     if (NF == 0)
         error("Bad parameters:" $0)
     sym = $1
+    hint = name
     assert_sym_okay_to_define(sym)
-    assert_sym_defined(sym, "incr")
+    #assert_sym_defined(sym, "incr")
     if (NF >= 2 && ! integerp($2))
         error("Value '" $2 "' must be numeric:" $0)
     incr = (NF >= 2) ? $2 : 1
-    sym_increment(sym, (name == "incr") ? incr : -incr)
+    incr = (name == "incr") ? incr : -incr
+    if (sym_defined_p(sym))
+        sym_increment(sym, incr)
+    else if (seq_defined_p(sym))
+        seq_ll_incr(sym, incr)
+    else
+        error(sprintf("Name '%s' not defined%s%s",  sym,
+                      ((hint != EMPTY) ? " [" hint "]" : ""),
+                      ((!emptyp($0)) ? TOK_COLON $0 : "")))
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 

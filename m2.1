@@ -48,6 +48,7 @@ Use
 for a multi-line comment.
 .It
 Manage multiple output data streams with diversions.
+Different streams may be saved to different files.
 .El
 .Pp
 .Nm
@@ -76,11 +77,12 @@ No white space is allowed between
 .Qq @
 and the name, so a lone at-sign does not trigger macro processing in any way.
 Thus, a line like
-.Dl 100 dollars @ 5% annual interest
+.Dl 100 dollars @ 5% annual interest.
 is completely benign.
 .Ss Commands
-Control commands such as 
+Control commands
 .Po
+such as
 .Ql @if ,
 .Ql @define ,
 etc
@@ -169,16 +171,16 @@ Indicate the end of a @while or @until loop.
 Also called @wend.
 .It @error [TEXT]
 Send TEXT to standard error; exit code 2.
-Diverted streams and wrapped text are discarded.
+Any diverted streams are discarded.
 .It @eval TEXT
 Parse and evaluate string TEXT as a command.
 .It @exit [N]
 Immediately stop parsing; exit with status N.
 If N is omitted, the default value is zero.
 Negative values or values greater than 126 are changed to 1.
-If N is equal to zero, diverted streams and wrapped text are shipped out
-as normal; otherwise (N non-zero), they are discarded.
-If it is desired to discard any diverted streams, use @cleardivert.
+If N is non-zero, diverted streams are discarded.
+(If it is desired to discard any diverted streams, use @cleardivert.)
+Commands deferred with @wrap are processed regardless of N value.
 .It @for VAR START END [INCR] ... @next VAR
 Execute a loop with VAR taking on successive
 integer values specified by START and END.
@@ -202,6 +204,7 @@ Variant
 does not print an error message if FILE does not exist.
 .It @incr NAME [N]
 Add N (1) to an already defined NAME.
+@incr and @decr may be used on both symbols and sequences.
 Note: Unlike m4, @incr modifies the named symbol and produces no expansion output.
 .It @initialize NAME VAL
 Like @define, but abort if NAME already defined
@@ -210,7 +213,7 @@ Read a single line from keyboard to define NAME.
 If NAME is omitted, value is stored in symbol
 .Va __INPUT__ .
 .It @local NAME
-Declare NAME as a symbol local to the current namespace
+Declare NAME as a symbol local to the current frame.
 .It @longdef NAME ... @endlongdef
 Set NAME to <...> (all lines until @endlongdef)
 .It @newcmd NAME ... @endcmd
@@ -218,7 +221,7 @@ Create a user command NAME (lines until @endcmd)
 .It @next VAR
 Continue execution of next iteration of enclosing @for or @foreach loop.
 .It @nextfile
-Ignore remainder of current file, continue processing
+Ignore remainder of current file, continue processing with the... next file.
 .It @of TEXT
 Begin a new branch of an enclosing @case structure
 matching TEXT at run time.
@@ -232,6 +235,11 @@ Insert FILE contents literally, with no changes or macros.
 Variant
 .Ql @spaste
 does not print an error message if FILE does not exist.
+.It @readarray ARR FILE
+Read each line from FILE into array ARR.
+Variant
+.Ql @sreadarry
+does not print an error message if FILE does not exist.
 .It @readfile NAME FILE
 Read FILE contents to define NAME.
 This is not intended to be a full-blown file inputter (use @readarray
@@ -241,11 +249,6 @@ As usual, multi-line values are accepted but the final
 trailing newline, if any, is stripped.
 Variant
 .Ql @sreadfile
-does not print an error message if FILE does not exist.
-.It @readarray ARR FILE
-Read each line from FILE into array ARR.
-Variant
-.Ql @sreadarry
 does not print an error message if FILE does not exist.
 .It @readonly NAME
 Make NAME unchangeable -- cannot be undone
@@ -259,7 +262,7 @@ See the
 section.
 .It @shell DELIM [PROG] ... DELIM
 Evaluate input until DELIM and send raw data to PROG.
-Output stream is captured; shell exit status will be stored in
+Output stream is captured; shell exit status is stored in
 .Va __SYSVAL__ .
 If PROG is not specified, the value of symbol
 .Va M2_SHELL
@@ -299,10 +302,9 @@ Send TEXT to standard error; continue.  Also called @echo, @errprint
 Repeatedly evaluate input lines while boolean expression is True
 and stop when it becomes False.
 .It @wrap TEXT
-Defer TEXT until m2 has processed all files and is about to exit.
+Defer TEXT until m2 has processed all files and diversions and is about to exit.
 Wrapped text will be evaluated as a command; output will occur after diverted streams, if any.
-Wraps are not processed if @error or @exit commands (with
-non-zero status) are encountered.
+Wraps are always processed, even if @error or @exit commands are encountered.
 .El
 .Pp
 .Nm
@@ -466,7 +468,7 @@ Substring of SYM from BEG, LEN chars long.  Also
 Output ASCII code of first character in SYM.
 .It @rem COMMENT@
 Embedded comment text is ignored.
-In addition, variant
+Variant
 .Ql @srem COMMENT@
 also discards preceding whitespace.
 .It @right SYM [N]@
@@ -512,7 +514,7 @@ like
 are called
 .Qq system
 symbols.
-Except for certain writable symbols, they cannot be modified by the user.
+Except for certain writable symbols, they cannot be created or modified by the user.
 The following are pre-defined; example values, defaults, or types are shown:
 .Pp
 .Bl -tag -width __FMT__[number]___ -offset indent
@@ -1482,6 +1484,7 @@ At secure level 1, the
 and
 .Ql @syscmd
 commands are disabled entirely.
+Undiverting a stream to an output file is also prohibited.
 However, programs required for
 .Nm Ap s
 operation (as defined in the

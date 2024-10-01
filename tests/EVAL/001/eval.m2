@@ -4,4 +4,4 @@ And a @i@
 @next i
 @endcmd
 @define myfunc showme
-@eval @@{myfunc}
+@eval @showme

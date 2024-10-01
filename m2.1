@@ -22,6 +22,11 @@ Define and expand macros.
 Macros have two parts, a name and a body.
 All occurrences of a macro's name are replaced with the macro's body.
 Macro expansion may include parameters.
+Short macros can be defined on the command line by using the form
+.Ql NAME=VAL ,
+or
+.Ql NAME=
+to define with empty value.
 .It
 Include files.  Special include directives in a file are
 replaced with the contents of the named file.
@@ -45,7 +50,36 @@ for a multi-line comment.
 Manage multiple output data streams with diversions.
 .El
 .Pp
-Control commands
+.Nm
+does not scan tokens or replace unadorned text: macro
+substitution must be explicitly requested by enclosing the macro
+name in
+.Qq @
+characters.
+Thus, any occurrence of
+.Ql @name@
+in the input is replaced in the output by the corresponding value.
+To compensate for the burden of manually invoking macro expansion,
+there is no need to
+.Qq quote
+identifiers to protect against unwanted or inadvertent replacement.
+Substitutions can occur multiple times in a single line.
+.Pp
+.Em Example :
+.Bd -literal -offset indent -compact
+@define Condition under
+You are clearly @Condition@worked.
+\ \ \ => You are clearly underworked.
+.Ed
+.Pp
+No white space is allowed between
+.Qq @
+and the name, so a lone at-sign does not trigger macro processing in any way.
+Thus, a line like
+.Dl 100 dollars @ 5% annual interest
+is completely benign.
+.Ss Commands
+Control commands such as 
 .Po
 .Ql @if ,
 .Ql @define ,
@@ -55,6 +89,15 @@ are distinguished by a
 .Qq @
 as the first character at the beginning of a line.
 They consume the entire line.
+Some commands have a
+.Qq silent
+alternative form which prints fewer error messages.
+This form is distinguished by a leading 
+.Qq s
+in the command name.
+For example, the silent variant to include a file is
+.Ql @sinclude .
+.Pp
 The following table lists control commands to
 evaluate, control, or define macros for subsequent processing:
 .Pp
@@ -153,8 +196,10 @@ below.
 .It @ignore DELIM
 Ignore input until line that begins with DELIM
 .It @include FILE
-Read and process contents of FILE
-.Brq #S
+Read and process contents of FILE.
+Variant
+.Ql @sinclude
+does not print an error message if FILE does not exist.
 .It @incr NAME [N]
 Add N (1) to an already defined NAME.
 Note: Unlike m4, @incr modifies the named symbol and produces no expansion output.
@@ -184,7 +229,9 @@ which is executed if no @of branch triggers.
 Only only one @otherwise branch is permitted per @case structure.
 .It @paste FILE
 Insert FILE contents literally, with no changes or macros.
-.Brq #S
+Variant
+.Ql @spaste
+does not print an error message if FILE does not exist.
 .It @readfile NAME FILE
 Read FILE contents to define NAME.
 This is not intended to be a full-blown file inputter (use @readarray
@@ -192,10 +239,14 @@ for that) but rather just to read short snippets like a file path
 or username.
 As usual, multi-line values are accepted but the final
 trailing newline, if any, is stripped.
-.Brq #S
+Variant
+.Ql @sreadfile
+does not print an error message if FILE does not exist.
 .It @readarray ARR FILE
-Read each line from FILE into array ARR
-.Brq #S
+Read each line from FILE into array ARR.
+Variant
+.Ql @sreadarry
+does not print an error message if FILE does not exist.
 .It @readonly NAME
 Make NAME unchangeable -- cannot be undone
 .It @return
@@ -227,8 +278,9 @@ The command's exit code is saved in
 Print remainder of input file literally, no macro processing will be done.
 .It @undefine NAME
 Remove definition of NAME
-.It @undivert [N...]
+.It @undivert [N...] | N FILE
 Inject stream N... (default all) into current stream.
+With second form, stream N is output to FILE.
 See the
 .Sx Streams and Diversions
 section.
@@ -252,76 +304,6 @@ Wrapped text will be evaluated as a command; output will occur after diverted st
 Wraps are not processed if @error or @exit commands (with
 non-zero status) are encountered.
 .El
-.Pp
-.Nm
-does not scan tokens or replace unadorned text: macro
-substitution must be explicitly requested by enclosing the macro
-name in
-.Qq @
-characters.
-Thus, any occurrence of
-.Ql @name@
-in the input is replaced in the output by the corresponding value.
-To compensate for the burden of manually invoking macro expansion,
-there is no need to
-.Qq quote
-identifiers to protect against unwanted or inadvertent replacement.
-Substitutions can occur multiple times in a single line.
-.Pp
-.Em Example :
-.Bd -literal -offset indent -compact
-@define Condition under
-You are clearly @Condition@worked.
-\ \ \ => You are clearly underworked.
-.Ed
-.Pp
-No white space is allowed between
-.Qq @
-and the name, so a lone at-sign does not trigger macro processing in any way.
-Thus, a line like
-.Dl 100 dollars @ 5% annual interest
-is completely benign.
-.Pp
-Short macros can be defined on the command line by using the form
-.Ql NAME=VAL ,
-or
-.Ql NAME=
-to define with empty value
-.Po
-.Va NAME
-will be defined but false
-.Pc .
-.Pp
-Specifying more than one word between
-.Qq @
-characters, as in
-.Dl @xxxx AAA BBB CCC@
-is used as a crude form of function invocation.
-Macros can expand positional parameters whose actual values will be
-supplied when the macro is called.
-The definition should refer to $1, $2, etc.
-${1} also works, so ${1}1 is distinguishable from $11.
-When a definition refers to a parameter which is not supplied, an empty
-string will used as a default value.
-$0 refers to the name of the macro itself.
-$# is replaced with the actual number of parameters provided.
-$* expands to each given parameter, separated by a space character.
-You may supply more parameters than needed.
-.Bd -ragged -offset indent -compact
-.Em WARNING :
-Parameters are parsed by splitting on white space.
-This means that in:
-.Dl @foo \[dq]a b\[dq] c@
-.Va foo
-is given three arguments: '"a', 'b"', and 'c' -- not two!
-.Ed
-.Pp
-.Em Example :
-.Bd -literal -offset indent -compact
-@define greet Hello, $1!  m2 sends you $0ings.
-@greet world@
-\ \ \ => Hello, world!  m2 sends you greetings.
-.Ed
 .Pp
 .Nm
 can incorporate the contents of files into its data stream.
@@ -353,6 +335,35 @@ Paths specified this way are examined before entries from M2PATH,
 to allow run-specific overrides.
 The include path is also used, if needed, for file names passed on the
 command line.
+.Ss Functions
+Specifying more than one word between
+.Qq @
+characters, as in
+.Dl @xxxx AAA BBB CCC@
+is used as a crude form of function invocation.
+Macros can expand positional parameters whose actual values will be
+supplied when the macro is called.
+The definition should refer to $1, $2, etc.
+${1} also works, so ${1}1 is distinguishable from $11.
+When a definition refers to a parameter which is not supplied, an empty
+string will used as a default value.
+$0 refers to the name of the macro itself.
+$# is replaced with the actual number of parameters provided.
+$* expands to each given parameter, separated by a space character.
+You may supply more parameters than needed.
+.Em WARNING :
+Parameters are parsed by splitting on white space.
+This means that in:
+.Dl @foo \[dq]a b\[dq] c@
+.Va foo
+is given three arguments: '"a', 'b"', and 'c' -- not two!
+.Pp
+.Em Example :
+.Bd -literal -offset indent -compact
+@define greet Hello, $1!  m2 sends you $0ings.
+@greet world@
+\ \ \ => Hello, world!  m2 sends you greetings.
+.Ed
 .Pp
 To alleviate scanning ambiguities, any characters enclosed in
 at-sign braces will be recursively scanned and expanded.
@@ -368,29 +379,44 @@ were surrounded by
 characters, so
 .Ql @{SYMBOL}
 is correct.
+.Pp
 The following definitions are recognized:
 .Pp
 .Bl -tag -width @right_SYM_[N]@ -offset indent
 .It @basename SYM@
-Base (file) name of SYM implemented in Awk
+Base (file) name of SYM implemented in Awk.
 .It @boolval [SYM]@
-Output "1" if SYM is True, else "0"
+Output "1" if SYM is True, else "0".
 .It @chr SYM@
-Output character with ASCII code SYM
+Output character with ASCII code SYM.
 .It @date@
-Current date (format as __FMT__[date])
-.Brq #1
+Current date (format as __FMT__[date]).
+See
+.Sx Dates and Times
+below.
 .It @dirname SYM@
 Directory name of SYM implemented in Awk.
 .It @epoch@
-Number of seconds since the Epoch, UTC
-.Brq #1
+Number of seconds since the Epoch, UTC.
+See
+.Sx Dates and Times
+below.
 .It @expr MATH@
-Evaluate mathematical expression
-.Brq #S
+Evaluate mathematical expression.
+Variant
+.Ql @sexpr
+performs the same calculations but does not output the result.
+However, assignments are still performed and in particular
+.Va __EXPR__
+is still set.
 .It @getenv VAR@
-Get environment variable
-.Brq #2
+Get value of environment variable
+.Va VAR .
+An error is thrown if
+.Va VAR
+is not defined.
+To ignore error and continue with empty string, disable
+.Va __STRICT__[env] .
 .It @ifdef{SYMBOL}{TRUE_TEXT}{FALSE_TEXT}@
 If SYMBOL is defined, return TRUE_TEXT, else return FALSE_TEXT.
 The {FALSE_TEXT} clause is optional, and defaults to the empty string.
@@ -402,12 +428,12 @@ If not equal, and if there are more than four arguments, then the
 process repeats with arguments 4, 5, 6, and 7.
 Otherwise, the value is either the fourth argument if present, or null
 if omitted.
+All arguments must appear on the same line.\" Unfortunately!
 This baroque arrangement is modeled after
 .Xr m4 1 .
 For a saner syntax, try the @case or @if commands.
 However, @ifelse@ is a function, not a command, so it can be used
 in-line with other text, which @if and @case cannot do.
-All arguments must appear on the same line.
 .It @ifx{BOOL_EXP}{TRUE_TEXT}{FALSE_TEXT}@
 Evaluate BOOL_EXP; if True, return TRUE_TEXT else return FALSE_TEXT.
 All three brace-enclosed clauses must be present.
@@ -426,40 +452,47 @@ follows the Awk convention of numbering characters in a string from one;
 this is different from m4.
 If SUBSTRING is not found, the returned value is zero.
 .It @lc SYM@
-Lower case
+Lower case.
 .It @left SYM [N]@
-Substring of SYM from 1 to Nth character
+Substring of SYM from 1 to Nth character.
 .It @len SYM@
-Number of characters in SYM's value
+Number of characters in SYM's value.
 .It @ltrim SYM@
-Remove leading whitespace
+Remove leading whitespace.
 .It @mid SYM BEG [LEN]@
-Substring of SYM from BEG, LEN chars long.  Also @substr
+Substring of SYM from BEG, LEN chars long.  Also
+.Ql @substr .
 .It @ord SYM@
-Output ASCII code of first character in SYM
+Output ASCII code of first character in SYM.
 .It @rem COMMENT@
-Embedded comment text is ignored
-.Brq #S
+Embedded comment text is ignored.
+In addition, variant
+.Ql @srem COMMENT@
+also discards preceding whitespace.
 .It @right SYM [N]@
-Substring of SYM from N to last character
+Substring of SYM from N to last character.
 .It @rot13 SYM@
 Output value of SYM (or literal string if SYM not defined) with rot13 text.
 .It @rtrim SYM@
-Remove trailing whitespace
+Remove trailing whitespace.
 .It @spaces [N]@
-Output N space characters  (default 1)
+Output N space characters  (default 1).
 .It @strftime FMT@
-Current date/time in user-specified format
+Current date/time in user-specified format.
 .It @time@
-Current time (format as __FMT__[time])
-.Brq #1
+Current time (format as __FMT__[time]).
+See
+.Sx Dates and Times
+below.
 .It @trim SYM@
-Remove both leading and trailing whitespace
+Remove both leading and trailing whitespace.
 .It @tz@
-Time zone name (format as __FMT__[tz])
-.Brq #1
+Time zone name (format as __FMT__[tz]).
+See
+.Sx Dates and Times
+below.
 .It @uc SYM@
-Upper case
+Upper case.
 .It @uuid@
 Something that resembles a UUID: C3525388-E400-43A7-BC95-9DF5FA3C4A52
 .It @xbasename SYM@
@@ -469,7 +502,7 @@ Directory name of SYM determined by external program.
 .El
 .Pp
 Symbols can be suffixed with "[<key>]" to form simple arrays.
-.Pp
+.Ss System Symbols
 Symbols that start and end with
 .Qq __
 .Po
@@ -486,13 +519,14 @@ The following are pre-defined; example values, defaults, or types are shown:
 .It __CWD__
 Current working directory, including trailing slash.
 .It __DATE__
-m2 run start date as YYYYMMDD (eg: 19450716)
-.Brq #1
+m2 run start date as YYYYMMDD (eg: 19450716).
+See
+.Sx Dates and Times
+below.
 .It __DBG__[<id>]
-Levels for internal debugging systems (integer)
+Levels for internal debugging systems (integer).
 .It __DEBUG__
-Debugging enabled? (boolean, default FALSE)
-.Brq #3
+Debugging enabled? (boolean, user modifiable, default FALSE).
 .It __DIVNUM__
 Current stream number.
 Zero, the default value, indicates output to the terminal (standard output).
@@ -500,54 +534,49 @@ Integer values between 0 and
 .Va __MAX_STREAM__
 are valid.
 .It __EPOCH__
-Seconds since Epoch at m2 run start time
-.Brq #1
+Seconds since Epoch at m2 run start time.
+See
+.Sx Dates and Times
+below.
 .It __EXPR__
-Value from most recent @expr ...@ result
+Value from most recent @expr ...@ result.
 .It __FILE__
-Current file name
+Current file name.
 .It __FILE_UUID__
-UUID unique to this file
+UUID unique to this file.
 .It __FMT__[date]
 Date format for @date@.
-Default is "%Y-%m-%d".
-.Brq #3
+Default is "%Y-%m-%d"; user modifiable.
 .It __FMT__[number]
-Format for printing numbers (sync w/CONVFMT)
-.Brq #3
+Format for printing numbers (sync w/CONVFMT); user modifiable.
 .It __FMT__[seq]
 Format for printing sequence values.
-Default is "%d".
-.Brq #3
+Default is "%d"; user modifiable.
 .It __FMT__[time]
 Time format for @time@.
-Default is "%H:%M:%S".
-.Brq #3
+Default is "%H:%M:%S"; user modifiable.
 .It __FMT__[tz]
 Time format for @tz@.
-Default is "%Z".
-.Brq #3
+Default is "%Z"; user modifiable.
 .It __FMT__[0]          \" bracket 0
 Text output when @boolval@ is False.
-Default is "0".
-.Brq #3
+Default is "0"; user modifiable.
 .It __FMT__[1]          \" bracket 1
 Text output when @boolval@ is True.
-Default is "1".
-.Brq #3
+Default is "1"; user modifiable.
 .It __GID__
-Group id (effective gid)
+Group id (effective gid).
 .It __HOME__
-User's home directory, including trailing slash
+User's home directory, including trailing slash.
 .It __HOST__
-Short host name (eg myhost)
+Short host name (eg myhost).
 .It __HOSTNAME__
-FQDN host name (eg myhost.example.com)
+FQDN host name (eg myhost.example.com).
 .It __INPUT__
-The data read by @input
-.Brq #3
+The data read by @input; user modifiable.
 .It __LINE__
-Current line number inside __FILE__
+Current line number inside
+.Va __FILE__ .
 .It __MAX_STREAM__
 The largest valid stream number, used in
 .Ql @divert
@@ -555,19 +584,20 @@ and
 .Ql @undivert .
 Default is 9.
 .It __M2_UUID__
-UUID unique to this m2 run
+UUID unique to this m2 run.
 .It __M2_VERSION__
-m2 version
+m2 version.
 .It __NFILE__
-Number of files processed so far (eg 2)
+Number of files processed so far (e.g., 2).
 .It __NLINE__
-Number of lines read so far from all files
+Number of lines read so far from all files.
 .It __OSNAME__
-Operating system name
+Operating system name.
 .It __PID__
-m2 process id
+m2 process id.
 .It __SECURE__
-Security level (0, 1, or 2).  See
+Security level (0, 1, or 2).
+See
 .Sx SECURITY CONSIDERATIONS
 for further information.
 .It __STRICT__[boolval]
@@ -576,13 +606,13 @@ If True, variables passed to
 must be defined.
 Default is True.
 If non-strict, undefined variables are considered False.
-.Brq #3
+User modifiable.
 .It __STRICT__[env]
 If True, environment variables must be defined.
 Default is True.
 If non-strict, unknown environment variables expand to an empty string.
 This action can also be accomplished with @sgetenv.
-.Brq #3
+User modifiable.
 .It __STRICT__[file]
 If True, reading a non-existent file with
 .Ql @include
@@ -590,58 +620,51 @@ causes an error.
 Default is True.
 If non-strict, attempts to read non-existent files are silently ignored.
 This behavior can also be accomplished with @sinclude.
-.Brq #3
+User modifiable.
 .It __STRICT__[symbol]
-If True, symbol names are limited
-to the following syntax for names:
+If True, symbol names are limited to the following syntax for names:
 .Dl /^[A-Za-z#_][A-Za-z#_0-9]*$/
 Default is True.
 If non-strict, symbol names are much more liberal!
-.Brq #3
+User modifiable.
 .It __STRICT__[undef]
 If True, symbols inside @ signs must be defined.
 Default is True.
 If non-strict,
 .Ql @XLERB@
 or other unrecognized name will silently expand to an empty string.
-.Brq #3
+User modifiable.
 .It __SYNC__
 Frequency to flush output (0..2).
 0=end only, 1=every file (default), 2=every line.
-.Brq #3
+User modifiable.
 .It __SYSVAL__
-Exit status of most recent @shell or @syscmd command
+Exit status of most recent @shell or @syscmd command.
 .It __TIME__
-m2 run start time as HHMMSS (eg 053000)
-.Brq #1
+m2 run start time as HHMMSS (eg 053000).
+See
+.Sx Dates and Times
+below.
 .It __TIMESTAMP__
 ISO 8601 timestamp, with "T" separator.
 Example: "1945-07-16T05:30:00-0600".
-.Brq #1
+See
+.Sx Dates and Times
+below.
 .It __TMPDIR__
 Location for temporary files.
-Default is /tmp/.
-.Brq #3
+Default is /tmp/; user modifiable.
 .It __TZ__
-Time zone numeric offset from UTC (-0400)
-.Brq #1
+Time zone numeric offset from UTC (-0400).
+See
+.Sx Dates and Times
+below.
 .It __UID__
-User id (effective uid)
+User id (effective uid).
 .It __USER__
-User name
+User name.
 .El
-.Bl -inset
-.It Em Note S :
-When the command is prefixed with
-.Qq s
-.Po
-e.g.,
-.Ql @sinclude
-.Pc ,
-denotes a
-.Qq silent
-variant which prints fewer error messages.
-.It Em Note #1 :
+.Ss Dates and Times
 .Va __DATE__ ,
 .Va __EPOCH__ ,
 .Va __TIME__ ,
@@ -656,7 +679,7 @@ and
 .Ql @tz@
 do change, so you could define timestamp as:
 .Dl @define timestamp @date@T@time@@__TZ__@
-to generate up-to-date timestamps.
+to generate a current timestamp.
 Of course, time zones don't normally change; the point is that
 .Ql @__TZ__@
 prints
@@ -665,27 +688,15 @@ while
 .Ql @tz@
 prints
 .Qq PST .
-.It Em Note #2 :
-.Ql @getenv VAR@
-will be replaced by the value of the environment variable
-.Va VAR .
-An error is thrown if
-.Va VAR
-is not defined.
-To ignore error and continue with empty string, disable
-.Va __STRICT__[env] .
-.It Em Note #3 :
-Denotes a user-modifiable system symbol.
-.El
 .Ss Streams and Diversions
 .Nm
 attempts to follow m4 in its use of
 .Ql @divert
 and
 .Ql @undivert .
-If argument is not an integer, no action is taken and no error is thrown.
 .Bl -inset
 .It Em Divert :
+No error message or action if argument is not an integer.
 .Bl -tag -width @undivert_-1____ -compact -offset indent
 .It @divert
 Same as
@@ -701,6 +712,7 @@ All subsequent output is sent to stream N (1 \*(Le N \*(Le 9)
 Error!  Multiple arguments are not allowed.
 .El
 .It Em Undivert :
+After a stream has been undiverted, it is implicitly cleared.
 .Bl -tag -width @undivert_-1____ -compact -offset indent
 .It @undivert
 Inject all diversions, in numerical order, into current stream.
@@ -713,14 +725,22 @@ Inject only the numbered diversion into current stream.
 .It @undivert N1 N2...
 Inject all specified diversions (in argument order, not numerical
 order), if legal, into current stream.
+.It @undivert N FILE
+As an extension to m4's undivert, m2 allows you to
+output a stream's collected text directly to a file.
+Only one stream number may be specified this way.
+This form is only available at security level zero.
 .El
-.Pp
-After a stream has been undiverted, it is implicitly cleared.
-Diverted text will not be processed if m2 exits due to
-.Ql @error
-or
-.Ql @exit
-commands.
+.It Em Example :
+.br
+.Bd -literal -offset indent -compact
+@divert 1
+world!
+@divert
+Hello,
+\ \ \ => Hello,
+\ \ \ => world!
+.Ed
 .It Em End-of-Data Processing :
 There is an implicit
 .Ql @divert 0
@@ -744,16 +764,16 @@ command which performs a similar operation.
 Like
 .Ql @undivert ,
 with no arguments, it clears all diverted streams.
-.It Em Example :
-.br
-.Bd -literal -offset indent -compact
-@divert 1
-world!
-@divert
-Hello,
-\ \ \ => Hello,
-\ \ \ => world!
-.Ed
+.Pp
+Diverted text will not be processed if m2 exits due to
+.Ql @error
+or
+.Ql @exit
+commands.
+However, commands specified with
+.Ql @wrap
+.Em are
+still processed, regardless of exit status.
 .El
 .Ss Sequences
 .Nm
@@ -829,7 +849,7 @@ modify the sequence while outputting the desired value.
 \ \ \ => # 1=First header
 \ \ \ => # 2=Second header
 .Ed
-.Ss Mathematical expressions
+.Ss Mathematical Expressions
 The
 .Ql @expr ...@
 function evaluates mathematical expressions and
@@ -936,7 +956,7 @@ assigns the value 5 to
 and also outputs the result.
 To assign a value to a variable without printing, use
 .Ql @define .
-.Ss Boolean expressions
+.Ss Boolean Expressions
 Boolean expressions are used in the
 .Ql @if
 and

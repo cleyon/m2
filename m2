@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-09-26 19:12:18 cleyon>
+#  Time-stamp:  <2024-10-01 12:40:50 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -2598,6 +2598,25 @@ function undivert_all(    stream)
 }
 
 
+# Print stream to a file
+# Inject (i.e., ship out to current stream) the contents of a different
+# stream.  Negative streams and current diversion are silently ignored.
+# Buffer text is not re-scanned for macros, and buffer is cleared after
+# injection into target stream.
+function undivert_file(stream, file,
+                       count, i)
+{
+    dbg_print("divert", 1, sprintf("(undivert_file) START; stream=%d, file='%s'", stream, file))
+    if (blk_type(stream) != BLK_AGG)
+        error(sprintf("(undivert_file) Block %d has type %s, not AGG",
+                      stream, ppf__block_type(blk_type(stream))))
+    if ((count = blktab[stream, 0, "count"]) > 0) {
+        ship_out_file(stream, file)
+        cleardivert(stream)
+    }
+}
+
+
 # Remove all slots from an AGG block and return its count to zero.
 function cleardivert(stream,
                      count, i)
@@ -4388,7 +4407,8 @@ function dostring(str,
 
     # Set up a SRC_STRING parser for str, and the __terminal
     string_block = blk_new(SRC_STRING)
-    blktab[string_block, 0, "str"]    = dosubs(str) # str
+    blktab[string_block, 0, "str"]    = str # was dosubs(str), but that loses if you say:
+                                            #   @wrap @syscmd rm @TEMPFILES@
     blktab[string_block, 0, "atmode"] = MODE_AT_PROCESS
     dbg_print("parse", 7, sprintf("(dostring) Pushing string block %d onto source_stack", string_block))
     stk_push(__source_stack, string_block)
@@ -6054,9 +6074,13 @@ function xeq_cmd__undivert(name, cmdline,
     dbg_print("divert", 1, sprintf("(xeq_cmd__undivert) START dstblk=%d, cmdline='%s'",
                                    curr_dstblk(), cmdline))
     dbg_print_block("divert", 8, curr_dstblk(), "(xeq_cmd__undivert) curr_dstblk()")
-    if (NF == 0)
+    if (NF == 0) {
         undivert_all()
-    else {
+        return
+    }
+
+    if (cmdline ~ "^[0-9 \t]+$") {
+        # @undivert N1 N2... : process one or more streams
         i = 0
         while (++i <= NF) {
             stream = dosubs($i)
@@ -6068,6 +6092,18 @@ function xeq_cmd__undivert(name, cmdline,
             dbg_print("divert", 5, sprintf("(xeq_cmd__undivert) CALLING undivert(%d)", stream))
             undivert(stream)
         }
+    } else if (cmdline ~ "^[0-9]+[ \t]+.*[^0-9]") {
+        # @undivert N FILE : process one stream, output to FILE
+        if (secure_level() >= 1)
+            error("@undivert: Security violation")
+        stream = $1
+        if (stream > MAX_STREAM)
+            error("Bad parameters:" $0)
+        sub(/^[^ \t]+[ \t]+/, "", cmdline) # a + this time because ARG is required
+        dbg_print("divert", 5, sprintf("(xeq_cmd__undivert) CALLING undivert_file(%d,'%s')", stream, cmdline))
+        undivert_file(stream, cmdline)
+    } else {
+        error("@undivert: Bad form")
     }
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
@@ -6299,6 +6335,28 @@ function ship_out(obj_type, obj,
         error("(ship_out) Unrecognized obj_type '" obj_type "'")
 
     dbg_print("ship_out", 3, sprintf("(ship_out) END"))
+}
+
+
+function ship_out_file(block, file,
+                       i, lim, slot_type, value)
+{
+    dbg_print("ship_out", 3, sprintf("(ship_out_file) START; block=%d, file='%s'",
+                                     block, file))
+    if (blk_type(block) != BLK_AGG)
+        error(sprintf("(ship_out_file) Block %d has type %s, not AGG",
+                      block, ppf__block_type(blk_type(block))))
+
+    lim = blktab[block, 0, "count"]
+    for (i = 1; i <= lim; i++) {
+        slot_type = blk_ll_slot_type(block, i)
+        if (slot_type != OBJ_TEXT)
+            error(sprintf("(ship_out_file) Block %d slot %d has type %s, not TEXT",
+                          block, i, ppf__block_type(slot_type)))
+
+        value = blk_ll_slot_value(block, i)
+        print value > file
+    }
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -6797,10 +6855,7 @@ function dosubs(s,
 
         # expr ...: Evaluate mathematical epxression, store in __EXPR__
         } else if (fn == "expr" || fn == "sexpr") {
-            # "silent" expr performs the same calculations but does not
-            # output the result.  However, assignments are still
-            # performed and in particular __EXPR__ is still set.
-            silent = first(fn) == "s"
+            silent = first(fn) == "s"   # don't automatically print result
             sub(/^s?expr[ \t]*/, "", m) # clean up expression to evaluate
             x = calc3_eval(m)
             dbg_print("expr", 1, sprintf("expr{%s} = %s", m, x))
@@ -7723,7 +7778,7 @@ BEGIN {
 function end_program(diverted_streams_final_disposition,
                      i)
 {
-    if (__exit_code == EX_OK  &&
+    if (__exit_code                        == EX_OK &&
         diverted_streams_final_disposition == MODE_STREAMS_SHIP_OUT) {
 
         # In the normal case of MODE_STREAMS_SHIP_OUT, ship out any remaining
@@ -7737,13 +7792,12 @@ function end_program(diverted_streams_final_disposition,
         # managing the parse stack from here on out.
         sym_ll_write("__DIVNUM__", "", GLOBAL_NAMESPACE, TERMINAL)
         undivert_all()
-
-        # Execute any wrapped text/commands
-        if (__wrap_cnt > 0)
-            for (i = 1; i <= __wrap_cnt; i++) {
-                dostring(dosubs(__wrap_text[i]))
-            }
     }
+
+    # Regardless of exit status, execute any wrapped text/commands
+    if (__wrap_cnt > 0)
+        for (i = 1; i <= __wrap_cnt; i++)
+            dostring(__wrap_text[i])
 
     flush_stdout(SYNC_FORCE)
     if (debugp())

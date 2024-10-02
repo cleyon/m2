@@ -38,7 +38,8 @@
 # TESTNAME.expected_out     Copy of desired output text, if any, default blank
 
 
-debug="false"   # "true"
+debug="false"		# "true"
+busybox_awk="false"	# "true"
 
 LC_ALL=C
 export LC_ALL
@@ -60,7 +61,9 @@ framework_error()
     exit 1
 }
 
-[ -f "${new_M2}" -a -x "${new_M2}" ] || framework_error "${new_M2}: Cannot execute"
+if [ ! $busybox_awk = "true" ]; then
+    [ -f "${new_M2}" -a -x "${new_M2}" ] || framework_error "${new_M2}: Cannot execute"
+fi
 
 # cat "${testdir}"/test.txt > test.txt || framework_error
 fail=0
@@ -157,7 +160,11 @@ run_test()
         cp /dev/null ${TESTNAME}.expected_err
     fi
 
-    "${new_M2}" $M2_FILE > ${TESTNAME}.run_out 2> ${TESTNAME}.run_err
+    if [ $busybox_awk = "true" ]; then
+        busybox awk -f $new_M2 $M2_FILE > ${TESTNAME}.run_out 2> ${TESTNAME}.run_err
+    else
+        $new_M2 $M2_FILE > ${TESTNAME}.run_out 2> ${TESTNAME}.run_err
+    fi
     echo $? >${TESTNAME}.run_exit
 
     if ! cmp -s ${TESTNAME}.run_exit ${TESTNAME}.expected_exit; then

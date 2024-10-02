@@ -704,12 +704,11 @@ function format_message(text, file, line,    s)
 }
 
 
-function flush_stdout(flushlev,
-                      flushstat)
+function flush_stdout(flushlev)
 {
     if (flushlev <= sym_ll_read("__SYNC__", "", GLOBAL_NAMESPACE)) {
         # One of these is bound to work, right?
-        flushstat = fflush("/dev/stdout")
+        fflush("/dev/stdout")
         # Reputed to be more portable:
         #    system("")
         # Also, fflush("") will flush ALL files and pipes.  (gawk-specific?)
@@ -724,8 +723,6 @@ function flush_stdout(flushlev,
         #        # not in gawk --posix
         #        # if no argument is supplied, flushes stdout
         #        # if "" is supplied, flushes all open output files and pipes
-        if (flushstat != 0)
-            warn("(flush_stdout) Warning: fflush() returned " flushstat)
     }
 }
 
@@ -6904,10 +6901,12 @@ function dosubs(s,
         # ifdef/ifndef: Expand text if symbol is defined
         #   @ifdef{FOO}{True text}{False text}@
         } else if (fn == "ifdef" || fn == "ifndef") {
-            if (match(m, "^ifn?def{[^}]+}{[^}]*}{[^}]*}$"))
-                ;          # @ifdef{FOO}{True text}{False text}@ is well-formed
-            else if (match(m, "^ifn?def{[^}]+}{[^}]*}$"))
-                m = m "{}" # @ifdef{FOO}{True text}@ will use empty FALSE string
+            if (match(m, "^ifdef{[^}][^}]*}{[^}]*}{[^}]*}$") \
+             || match(m, "^ifndef{[^}][^}]*}{[^}]*}{[^}]*}$"))
+                ;            # Three-brace expr is well-formed
+            else if (match(m, "^ifdef{[^}][^}]*}{[^}]*}$") \
+                  || match(m, "^ifndef{[^}][^}]*}{[^}]*}$"))
+                m = m "{}"   # Two-brace expr can be fixed to use empty FALSE string
             else
                 error("(dosubs) Bad ifdef in '" m "':" $0)
 
@@ -6959,7 +6958,7 @@ function dosubs(s,
                 # Check that at least three pairs of braces are present,
                 # and whatever remains are also well-formed brace pairs.
                 # Pathological syntax (like {..\}..} will cause problems.
-                if (! match(m, "^{[^}]+}{[^}]*}{[^}]*}({[^}]*})*$"))
+                if (! match(m, "^{[^}][^}]*}{[^}]*}{[^}]*}")) # used to include ({[^}]*})*$ at end of regexp but Busybox Awk doesn't like that
                     error("(ifelse) Bad parameters in '" m "':" $0)
 
                 # Grab the first three arguments
@@ -6999,7 +6998,7 @@ function dosubs(s,
                 # which means that just one or two pairs of braces
                 # constitute invalid syntax.  The one pair case was
                 # caught in choice 2 just above, so we check for two pairs
-                if (match(m, "^{[^}]+}{[^}]*}$"))
+                if (match(m, "^{[^}][^}]*}{[^}]*}$"))   # Busybox Awk does not support +
                     error("(ifelse) Bad parameters in '" m "':" $0)
 
                 # # If not, and if there are more than four arguments,
@@ -7011,7 +7010,7 @@ function dosubs(s,
         # ifx: If Expression : Evaluate boolean expression to choose result text
         #   A and B are @ifx{A == B}{Equal}{Not equal}@
         } else if (fn == "ifx") {
-            if (!match(m, "^ifx{[^}]+}{[^}]*}{[^}]*}$"))
+            if (!match(m, "^ifx{[^}][^}]*}{[^}]*}{[^}]*}$"))   # Busybox Awk does not support +
                 error("(dosubs) Bad ifx in '" m "':" $0)
             m = substr(m, index(m, TOK_LBRACE)) # strip fn name
             init_negate = FALSE

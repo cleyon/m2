@@ -71,12 +71,9 @@ framework_error()
 
 summarize_tests()
 {
-    local pctpass=0
-    local pctfail=0
-    [ $npass -ne 0 ] && pctpass=`expr \( $ntest \* 100 \) / $npass`
-    [ $nfail -ne 0 ] && pctfail=`expr \( $ntest \* 100 \) / $nfail`
-    printf "!!! SUMMARY - %d total tests: %d passed (%.0f%%), %d failed (%.0f%%)\n" \
-           $ntest $npass $pctpass $nfail $pctfail
+    printf "!!! SUMMARY - %d total tests: %d passed (%.1f%%), %d failed (%.1f%%)\n" \
+           $ntest $npass `echo "scale=3; $npass*100/$ntest" | bc` \
+                  $nfail `echo "scale=3; $nfail*100/$ntest" | bc`
 }
 
 
@@ -162,14 +159,25 @@ run_test()
 
     [ -f ${TESTNAME}.disabled ] && { echo "SKIP - Test disabled"; return; }
     [ -s "$M2_FILE" ] || { echo "SKIP - Empty test file"; return; }
-    [ -r "$M2_FILE" ] || { echo "FAIL - Unreadable test file"; rc=127; return; }
-    [ -f ${TESTNAME}.out ] || { echo "FAIL - ${TESTNAME}.out does not exist!"; rc=127; return; }
 
     rm -f ${TESTNAME}.expected_out ${TESTNAME}.expected_err ${TESTNAME}.expected_exit
     rm -f ${TESTNAME}.run_out      ${TESTNAME}.run_err      ${TESTNAME}.run_exit
     trap 'rm -f ${TESTNAME}.expected_out ${TESTNAME}.expected_err ${TESTNAME}.expected_exit ${TESTNAME}.run_out ${TESTNAME}.run_err ${TESTNAME}.run_exit; summarize_tests; exit' \
          1 2 3 15
     ntest=$(expr $ntest + 1)
+
+    if [ ! -r "$M2_FILE" ]; then
+        echo "FAIL - Unreadable test file"
+        nfail=$(expr $nfail + 1)
+        rc=127
+        return
+    fi
+    if [ ! -f ${TESTNAME}.out ]; then
+        echo "FAIL - ${TESTNAME}.out does not exist!"
+        nfail=$(expr $nfail + 1)
+        rc=127
+        return
+    fi
 
     cp ${TESTNAME}.out ${TESTNAME}.expected_out
     if [ -f ${TESTNAME}.exit ]; then

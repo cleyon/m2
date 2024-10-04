@@ -68,6 +68,6 @@ test check:
 
 quiet-test quiet-check test-quiet check-quiet:
 	@date
-	@echo "Beginning test run..."
+	@echo "!!! BEGIN - Starting test runs"
 	@time ./check.sh | grep -v 'PASS$$'
 	@date

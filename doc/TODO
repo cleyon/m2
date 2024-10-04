@@ -1,9 +1,5 @@
 #                                               -*- Org -*-
 
-* MAYBE Implement syscmd/esyscmd
-  - [X] syscmd : no output is captured (stdout & stderr > /dev/null)
-  - [ ] esyscmd
-
 * MAYBE Implement traceon/traceoff
   With no arguments, trace all macros (including built-ins).  With args,
   only trace the specified macros.

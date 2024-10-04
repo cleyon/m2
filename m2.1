@@ -172,6 +172,12 @@ Also called @wend.
 .It @error [TEXT]
 Send TEXT to standard error; exit code 2.
 Any diverted streams are discarded.
+.It @esyscmd CMDLINE...
+Execute CMDLINE in a subshell.
+Standard output is captured into the output stream as normal;
+standard error is not modified.
+The command's exit code is saved in
+.Va __SYSVAL__ .
 .It @eval TEXT
 Parse and evaluate string TEXT as a command.
 .It @exit [N]
@@ -1327,15 +1333,12 @@ contains an integer storing the security level, which controls how
 may invoke subprocesses.
 The default is zero which signifies no restrictions.
 In particular, this allows the
-.Ql @shell
+.Ql @shell ,
+.Ql @syscmd ,
 and
-.Ql @syscmd
+.Ql @esyscmd
 commands to attempt execution of any program the user specifies.
-At secure level 1, the
-.Ql @shell
-and
-.Ql @syscmd
-commands are disabled entirely.
+At secure level 1, those commands are disabled entirely.
 Undiverting a stream to an output file is also prohibited.
 However, programs required for
 .Nm Ap s

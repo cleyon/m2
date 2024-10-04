@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-10-04 15:59:59 cleyon>
+#  Time-stamp:  <2024-10-04 16:56:34 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -1418,6 +1418,7 @@ function execute__command(name, cmdline,
     else if (name ~ /s?echo/)           xeq_cmd__error(name, cmdline)
     else if (name ==  "error")          xeq_cmd__error(name, cmdline)
     else if (name ==  "errprint")       xeq_cmd__error(name, cmdline)
+    else if (name ==  "esyscmd")        xeq_cmd__esyscmd(name, cmdline)
     else if (name ==  "eval")           xeq_cmd__eval(name, cmdline)
     else if (name ==  "exit")           xeq_cmd__exit(name, cmdline)
     else if (name ==  "ignore")         xeq_cmd__ignore(name, cmdline)
@@ -4400,6 +4401,52 @@ function xeq_cmd__error(name, cmdline,
 
 #*****************************************************************************
 #
+#       @  E S Y S C M D
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#*****************************************************************************
+# @esyscmd      CMDLINE ...
+function xeq_cmd__esyscmd(name, cmdline,
+                          rc, shell_cmdline, output_file, getstat, line, output_text)
+{
+    dbg_print("cmd", 3, sprintf("(xeq_cmd__esyscmd) START; cmdline='%s'", cmdline))
+    if (secure_level() >= 1) {
+        warn("(@esyscmd) Security violation")
+        return
+    }
+
+    output_file = sprintf("%sm2-%d.esyscmd-%s",
+                          tmpdir(), sym_fetch("__PID__"), "out")
+    shell_cmdline = sprintf("%s -c '%s' < /dev/null > %s",
+                            default_shell(), cmdline, output_file)
+    flush_stdout(SYNC_FORCE)
+    rc = system(shell_cmdline)
+    sym_ll_write("__SYSVAL__", "", GLOBAL_NAMESPACE, rc)
+
+    while (TRUE) {
+        getstat = getline line < output_file
+        if (getstat == ERROR)
+            warn("Error reading file '" output_file "' [esyscmd]")
+        if (getstat != OKAY)
+            break
+        output_text = output_text line TOK_NEWLINE # Read a line
+    }
+    close(output_file)
+    exec_prog_cmdline("rm", ("-f " output_file))
+
+    output_text = chomp(output_text)
+    dbg_print("cmd", 5, sprintf("(xeq_cmd__esyscmd) output_text='%s'", output_text))
+    if (!emptyp(output_text))
+        ship_out(OBJ_TEXT, output_text)
+    dbg_print("cmd", 3, sprintf("(xeq_cmd__esyscmd) END; rc=%d", rc))
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
 #       @  E V A L
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -5973,10 +6020,13 @@ function xeq_cmd__shell(name, cmdline,
         output_text = output_text line TOK_NEWLINE # Read a line
     }
     close(output_file)
-
     exec_prog_cmdline("rm", ("-f " input_file))
     exec_prog_cmdline("rm", ("-f " output_file))
-    ship_out(OBJ_TEXT, chomp(output_text))
+
+    output_text = chomp(output_text)
+    dbg_print("cmd", 5, sprintf("(xeq_cmd__shell) output_text='%s'", output_text))
+    if (!emptyp(output_text))
+        ship_out(OBJ_TEXT, output_text)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -5989,7 +6039,7 @@ function xeq_cmd__shell(name, cmdline,
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
 #*****************************************************************************
-# @syscmd CMDLINE ...
+# @syscmd       CMDLINE ...
 function xeq_cmd__syscmd(name, cmdline,
                         rc)
 {
@@ -7533,11 +7583,11 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     # CMDS
     # Built-in commands
     # Also need to add entry in execute__command()  [search: DISPATCH]
-    split("append array cleardivert debug decr default define divert dump dumpall" \
-          " echo error errprint eval exit ignore include incr initialize input local m2ctl" \
-          " nextfile paste readfile readarray readonly secho sequence shell" \
-          " sinclude spaste sreadfile sreadarray syscmd typeout undef undefine" \
-          " undivert warn wrap", array, TOK_SPACE)
+    split("append array cleardivert debug decr default define divert dump" \
+          " dumpall echo error errprint esyscmd eval exit ignore include incr" \
+          " initialize input local m2ctl nextfile paste readfile readarray" \
+          " readonly secho sequence shell sinclude spaste sreadfile sreadarray" \
+          " syscmd typeout undef undefine undivert warn wrap", array, TOK_SPACE)
     for (elem in array)
         nam_ll_write(array[elem], GLOBAL_NAMESPACE, TYPE_COMMAND FLAG_SYSTEM)
 

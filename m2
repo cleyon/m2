@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-10-01 18:03:16 cleyon>
+#  Time-stamp:  <2024-10-04 15:59:59 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -1437,7 +1437,7 @@ function execute__command(name, cmdline,
     else if (name ==  "shell")          xeq_cmd__shell(name, cmdline)
     else if (name ==  "syscmd")         xeq_cmd__syscmd(name, cmdline)
     else if (name ==  "typeout")        xeq_cmd__typeout(name, cmdline)
-    else if (name ==  "undefine")       xeq_cmd__undefine(name, cmdline)
+    else if (name ~   "undef(ine)?")    xeq_cmd__undefine(name, cmdline)
     else if (name ==  "undivert")       xeq_cmd__undivert(name, cmdline)
     else if (name ==  "warn")           xeq_cmd__error(name, cmdline)
     else if (name ==  "wrap")           xeq_cmd__wrap(name, cmdline)
@@ -4041,7 +4041,7 @@ function xeq_cmd__define(name, cmdline,
     if ($0 == EMPTY) $0 = "1"
     # XXX No checking, dangerous!!
     sym_store(sym, append_flag ? sym_fetch(sym) $0 \
-                                : $0)
+                               : $0)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -4097,6 +4097,10 @@ function xeq_cmd__dump(name, cmdline,
 
     $0 = cmdline
     if (NF > 1) {
+        if (secure_level() >= 1) {
+            warn("(@dump) Security violation: Dumpfile not allowed")
+            return
+        }
         warn("(xeq_cmd__dump) Dumpfile is not supported yet")
         what = $1
         $1 = ""
@@ -5942,7 +5946,7 @@ function xeq_cmd__shell(name, cmdline,
     # Don't check security level until now so we can properly read to
     # the delimiter.
     if (secure_level() >= 1) {
-        warn("(xeq_cmd__shell) @shell - Security violation")
+        warn("(@shell) Security violation")
         return
     }
 
@@ -5989,10 +5993,12 @@ function xeq_cmd__shell(name, cmdline,
 function xeq_cmd__syscmd(name, cmdline,
                         rc)
 {
-    if (secure_level() >= 2)
-        error("@syscmd: Security violation")
     cmdline = cmdline " >/dev/null 2>/dev/null"
     dbg_print("cmd", 3, sprintf("(xeq_cmd__syscmd) START; cmdline='%s'", cmdline))
+    if (secure_level() >= 1) {
+        warn("@syscmd: Security violation")
+        return
+    }
 
     flush_stdout(SYNC_FORCE)
     rc = system(cmdline)
@@ -6066,9 +6072,16 @@ function xeq_cmd__undefine(name, cmdline,
     if ((level = nam_lookup(info)) == ERROR) {
         error("(xeq_cmd__undefine) '" sym "' not found")
     }
-    if ((type = info["type"]) == TYPE_SYMBOL)
-        sym_destroy(info["name"], info["key"], info["level"])
-    else if (type == TYPE_SEQUENCE)
+    if ((type = info["type"]) == TYPE_SYMBOL) {
+        sym = info["name"]
+        assert_sym_unprotected(sym)
+        # System symbols, even unprotected ones -- despite being subject
+        # to user modification -- cannot be undefined.
+        if (nam_system_p(sym))
+            error("Name '" sym "' not available:" $0)
+        dbg_print("sym", 3, ("About to sym_destroy('" sym "')"))
+        sym_destroy(sym, info["key"], info["level"])
+    } else if (type == TYPE_SEQUENCE)
         seq_destroy(sym)
     else if (type == TYPE_USER)
         cmd_destroy(sym)
@@ -6114,8 +6127,10 @@ function xeq_cmd__undivert(name, cmdline,
         }
     } else if (cmdline ~ "^[0-9]+[ \t]+.*[^0-9]") {
         # @undivert N FILE : process one stream, output to FILE
-        if (secure_level() >= 1)
-            error("@undivert: Security violation")
+        if (secure_level() >= 1) {
+            warn("@undivert: Security violation")
+            return
+        }
         stream = $1
         if (stream > MAX_STREAM)
             error("Bad parameters:" $0)
@@ -7209,7 +7224,6 @@ function dosubs(s,
         # xdirname SYM: Directory name of path, using external program
         } else if (fn == "xdirname") {
             if (secure_level() >= 2)
-
                 error("(xdirname) Security violation")
             if (nparam != 1) error("Bad parameters in '" m "':" $0)
             p = param[1 + off_by]
@@ -7522,7 +7536,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     split("append array cleardivert debug decr default define divert dump dumpall" \
           " echo error errprint eval exit ignore include incr initialize input local m2ctl" \
           " nextfile paste readfile readarray readonly secho sequence shell" \
-          " sinclude spaste sreadfile sreadarray syscmd typeout undefine" \
+          " sinclude spaste sreadfile sreadarray syscmd typeout undef undefine" \
           " undivert warn wrap", array, TOK_SPACE)
     for (elem in array)
         nam_ll_write(array[elem], GLOBAL_NAMESPACE, TYPE_COMMAND FLAG_SYSTEM)
@@ -7711,49 +7725,46 @@ BEGIN {
                 _val = substr(_arg, _eq+1)
                 if (_name == "debug") {
                     _name = "__DEBUG__"
-                } else if (_name == "I") {
+                } else if (_name == "I") {      # I=<path>
                     # Include-path elements on command-line are prepended
                     # to M2PATH so they override env variable values.
                     __inc_path = _val (emptyp(__inc_path) ? "" : ":" __inc_path)
                     continue
-                } else if (_name == "init") {
-                    if (_val == 0) {
-                        # Do not load the init files.  Inhibit init file
-                        # loading by pretending we already did it.
-                        __init_files_loaded = TRUE
-                    } else if (_val > 0) {
+                } else if (_name == "init") {   # init=<VAL>
+                    if (_val > 0)
                         # Positive value loads init files without
                         # providing a command-line file.
                         load_init_files()
-                    }
+                    else
+                        # Do not load the init files.  Inhibit init file
+                        # loading by pretending we already did it.
+                        __init_files_loaded = TRUE
                     continue
                 } else if (_name == "secure") {
                     _name = "__SECURE__"
                 } else if (_name == "strict") {
-                    if (_val == 0) {
-                        # Turn off strict settings
-                        sym_ll_write("__STRICT__","boolval", GLOBAL_NAMESPACE, FALSE)
-                        sym_ll_write("__STRICT__",    "env", GLOBAL_NAMESPACE, FALSE)
-                        sym_ll_write("__STRICT__",   "file", GLOBAL_NAMESPACE, FALSE)
-                        sym_ll_write("__STRICT__", "symbol", GLOBAL_NAMESPACE, FALSE)
-                        sym_ll_write("__STRICT__",  "undef", GLOBAL_NAMESPACE, FALSE)
-                    } else if (_val > 0)  {
+                    if (_val > 0)  {
                         # Turn on strict settings
                         sym_ll_write("__STRICT__","boolval", GLOBAL_NAMESPACE, TRUE)
                         sym_ll_write("__STRICT__",    "env", GLOBAL_NAMESPACE, TRUE)
                         sym_ll_write("__STRICT__",   "file", GLOBAL_NAMESPACE, TRUE)
                         sym_ll_write("__STRICT__", "symbol", GLOBAL_NAMESPACE, TRUE)
                         sym_ll_write("__STRICT__",  "undef", GLOBAL_NAMESPACE, TRUE)
+                    } else {
+                        # Turn off strict settings
+                        sym_ll_write("__STRICT__","boolval", GLOBAL_NAMESPACE, FALSE)
+                        sym_ll_write("__STRICT__",    "env", GLOBAL_NAMESPACE, FALSE)
+                        sym_ll_write("__STRICT__",   "file", GLOBAL_NAMESPACE, FALSE)
+                        sym_ll_write("__STRICT__", "symbol", GLOBAL_NAMESPACE, FALSE)
+                        sym_ll_write("__STRICT__",  "undef", GLOBAL_NAMESPACE, FALSE)
                     }
                     continue
+                } else if (_name == "U") {      # U=<name>
+                    # Undefine name, like @undef
+                    xeq_cmd__undefine("undefine", _val)
+                    continue
                 }
-                if (!sym_valid_p(_name))
-                    error("Name '" _name "' not valid:" _arg, "ARGV", _i)
-                if (sym_protected_p(_name))
-                    error("Symbol '" _name "' protected:" _arg, "ARGV", _i)
-                if (!nam_ll_in(_name, GLOBAL_NAMESPACE))
-                    error("Name '" _name "' not available:" _arg, "ARGV", _i)
-                sym_store(_name, _val)
+                xeq_cmd__define("define", _name TOK_SPACE _val)
 
             # Otherwise load a file
             } else {

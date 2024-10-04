@@ -26,6 +26,7 @@
 # TESTNAME.out              Expected m2 standard output.  Required to exist even if empty
 #                           This catches random .m2 files being interpreted as tests, and
 #                           also requires a test to positively specify "no output expected".
+# TESTNAME.sh               If present, this script will be invoked with sh to run the test.
 # TESTNAME.showdiff         If present, show diff of expected/actual output on failure
 #
 # Temporary working files, deleted after test run:
@@ -182,7 +183,11 @@ run_test()
         cp /dev/null ${TESTNAME}.expected_err
     fi
 
-    if [ $busybox_awk = "true" ]; then
+    if [ -r ${TESTNAME}.sh ]; then
+        # Since we set up stdout and stderr here,
+        # don't try to change them in TESTNAME.sh
+        /bin/sh ${TESTNAME}.sh "$new_M2" "$M2_FILE" > ${TESTNAME}.run_out 2> ${TESTNAME}.run_err
+    elif [ $busybox_awk = "true" ]; then
         busybox awk -f $new_M2 $M2_FILE > ${TESTNAME}.run_out 2> ${TESTNAME}.run_err
     else
         $new_M2 $M2_FILE > ${TESTNAME}.run_out 2> ${TESTNAME}.run_err

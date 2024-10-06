@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-10-04 16:56:34 cleyon>
+#  Time-stamp:  <2024-10-06 15:34:09 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -3252,6 +3252,13 @@ function sym_fetch(sym,
         return !! (0 + val)
     else
         return val
+}
+
+
+function sym_value_or_literal(s)
+{
+    return (sym_valid_p(s) && sym_defined_p(s)) \
+        ? sym_fetch(s) : s
 }
 
 
@@ -6749,7 +6756,7 @@ function _c3_advance(    tmp)
 function dosubs(s,
                 expand, i, j, l, m, nparam, p, param, r, fn, cmdline, c,
                 at_brace, x, y, inc_dec, pre_post, subcmd, silent, off_by,
-                br, ifcond, true_text, false_text, init_negate, arg)
+                br, ifcond, true_text, false_text, init_negate, arg, fmt)
 {
     dbg_print("dosubs", 5, sprintf("(dosubs) START s='%s'", s))
     l = ""                   # Left of current pos  - ready for output
@@ -6947,6 +6954,21 @@ function dosubs(s,
             sym_ll_write("__EXPR__", "", GLOBAL_NAMESPACE, x+0)
             if (!silent)
                 r = x r
+
+        # format: Format value(s) according for sprintf format string
+        } else if (fn == "format") {
+            if (nparam < 1 || nparam > 6) error("Bad parameters in '" m "':" $0)
+            fmt = sym_value_or_literal(param[1 + off_by])
+            for (j = 2; j <= 6; j++)
+                arg[j] = sym_value_or_literal(param[j + off_by])
+            if      (nparam == 1) expand = sprintf(fmt)
+            else if (nparam == 2) expand = sprintf(fmt, arg[2])
+            else if (nparam == 3) expand = sprintf(fmt, arg[2], arg[3])
+            else if (nparam == 4) expand = sprintf(fmt, arg[2], arg[3], arg[4])
+            else if (nparam == 5) expand = sprintf(fmt, arg[2], arg[3], arg[4], arg[5])
+            else if (nparam == 6) expand = sprintf(fmt, arg[2], arg[3], arg[4], arg[5], arg[6])
+
+            r = expand r
 
         # getenv: Get environment variable
         # sgetenv
@@ -7572,7 +7594,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
 
     # FUNCS
     # Functions cannot be used as symbol or sequence names.
-    split("basename boolval chr date dirname epoch expr getenv" \
+    split("basename boolval chr date dirname epoch expr format getenv" \
           " ifdef ifelse ifndef ifx index lc left len ltrim mid ord rem" \
           " right rot13 rtrim sexpr sgetenv spaces srem strftime" \
           " substr time trim tz uc uuid xbasename xdirname",

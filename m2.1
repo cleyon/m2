@@ -419,6 +419,12 @@ performs the same calculations but does not output the result.
 However, assignments are still performed and in particular
 .Va __EXPR__
 is still set.
+.It @format FMT ARG ...@
+Print arguments two up to six, using argument one as a format
+specification string for
+.Fn sprintf .
+Arguments must be compatible with format string, otherwise you get to
+keep all the pieces.
 .It @getenv VAR@
 Get value of environment variable
 .Va VAR .
@@ -458,7 +464,7 @@ The {FALSE_TEXT} clause is optional, and defaults to the empty string.
 Return the position of SUBSTR within the value of SYM.
 Note that
 .Nm
-follows the Awk convention of numbering characters in a string from one;
+follows the Awk convention of numbering characters in a string from 1;
 this is different from m4.
 If SUBSTRING is not found, the returned value is zero.
 .It @lc SYM@
@@ -470,8 +476,10 @@ Number of characters in SYM's value.
 .It @ltrim SYM@
 Remove leading whitespace.
 .It @mid SYM BEG [LEN]@
-Substring of SYM from BEG, LEN chars long.  Also
+Substring of SYM from BEG, LEN chars long.
+Also called
 .Ql @substr .
+BEG begins the string at position 1.
 .It @ord SYM@
 Output ASCII code of first character in SYM.
 .It @rem COMMENT@

@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-10-06 15:34:09 cleyon>
+#  Time-stamp:  <2024-10-07 23:40:22 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -2126,26 +2126,25 @@ function flag_anyfalse_p(code, multi_fs)
 # Return a new code string (NB - old one is NOT updated in place!)
 # with corresponding flags either set or cleared.
 function flag_set_clear(code, set_fs, clear_fs,
-                        l, sf_arr, cf_arr, flag, _idx, x)
+                        flag, idx, x)
 {
     # First, clear flags listed in clear_fs
-    if ((l = length(clear_fs)) > 0)
-        for (x = 1; x <= l; x++) {
-            flag = substr(clear_fs, x, 1)
-            if (flag_1true_p(code, flag)) {
-                _idx = index(code, flag)
-                code = substr(code, 1, _idx-1) \
-                       substr(code, _idx+1)
-            }
+    for (x = 1; x <= length(clear_fs); x++) {
+        flag = substr(clear_fs, x, 1)
+        if (flag_1true_p(code, flag)) {
+            idx = index(code, flag)
+            code = substr(code, 1, idx-1) \
+                   substr(code, idx+1)
         }
+    }
         
     # Now set the ones in set_fs
-    if ((l = length(set_fs)) > 0)
-        for (x = 1; x <= l; x++) {
-            flag = substr(set_fs, x, 1)
-            if (flag_1false_p(code, flag))
-                code = code flag
+    for (x = 1; x <= length(set_fs); x++) {
+        flag = substr(set_fs, x, 1)
+        if (flag_1false_p(code, flag)) {
+            code = code flag
         }
+    }
 
     return code
 }
@@ -2578,8 +2577,8 @@ function undivert(stream,
         dbg_print("divert", 3, "(undivert) END because dstblk <0")
         return
     }
-    if (stream < 0 || stream == DIVNUM()) {
-        dbg_print("divert", 3, "(undivert) END because stream <0 or ==DIVNUM")
+    if (stream <= 0 || stream == DIVNUM()) {
+        dbg_print("divert", 3, "(undivert) END because stream <= 0 or == DIVNUM")
         return
     }
     if (blk_type(stream) != BLK_AGG)
@@ -3428,10 +3427,14 @@ function execute__text(text,
         return
     }
 
+    stream = DIVNUM()
+    if (stream < 0)
+        return
+
     if (curr_atmode() == MODE_AT_PROCESS)
         text = dosubs(text)
 
-    if ((stream = DIVNUM()) > TERMINAL) {
+    if (stream > TERMINAL) {
         dbg_print("ship_out", 5, sprintf("(execute__text) END Appending text to stream %d", stream))
         blk_append(stream, OBJ_TEXT, text)
         return
@@ -6169,7 +6172,10 @@ function xeq_cmd__undivert(name, cmdline,
         return
     }
 
-    if (cmdline ~ "^[0-9 \t]+$") {
+    if (cmdline ~ "^-[0-9 \t]+$")
+        # Docs promise "no effect" for negative values
+        return
+    else if (cmdline ~ "^[0-9 \t]+$") {
         # @undivert N1 N2... : process one or more streams
         i = 0
         while (++i <= NF) {

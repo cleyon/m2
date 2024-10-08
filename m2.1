@@ -127,7 +127,7 @@ The text and commands of the unexpected (@otherwise) instance are expected
 to compensate for the lack of a preamble.)
 .It @cleardivert [N...]
 Clear stream(s) specified by N.
-Similar to @undivert, if no arguments are provided then all streams are cleared.
+If no arguments are provided then all streams are cleared.
 See the
 .Sx Streams and Diversions
 section.
@@ -145,7 +145,9 @@ Like @define, but no-op if NAME already defined.
 .It @define NAME TEXT
 Set NAME to TEXT.
 .It @divert [N]
-Divert output to stream N.  Default 0 means standard out.
+Divert subsequent text to stream N.
+Default 0 resets to standard output.
+If N is negative, text is discarded.
 See the
 .Sx Streams and Diversions
 section.
@@ -185,7 +187,6 @@ Immediately stop parsing; exit with status N.
 If N is omitted, the default value is zero.
 Negative values or values greater than 126 are changed to 1.
 If N is non-zero, diverted streams are discarded.
-(If it is desired to discard any diverted streams, use @cleardivert.)
 Commands deferred with @wrap are processed regardless of N value.
 .It @for VAR START END [INCR] ... @next VAR
 Execute a loop with VAR taking on successive
@@ -291,7 +292,9 @@ Symbols can also be removed from the command line with
 .Ql U=<symName>
 .It @undivert [N...] | N FILE
 Inject stream N... (default all) into current stream.
+If no arguments are provided then all streams are injected.
 With second form, stream N is output to FILE.
+Undiverted streams are automatically cleared.
 See the
 .Sx Streams and Diversions
 section.
@@ -721,12 +724,13 @@ No error message or action if argument is not an integer.
 Same as
 .Ql @divert 0
 .It @divert -1
-All subsequent output in this diversion is discarded.
+All subsequent output is discarded.
 .It @divert 0
 Resume normal output: all subsequent output is sent
 to standard output (aka stream # 0)
 .It @divert N
-All subsequent output is sent to stream N (1 \*(Le N \*(Le 9)
+All subsequent output is sent to stream N (1 \*(Le N \*(Le
+.Va __MAX_STREAM__ )
 .It @divert N1 N2...
 Error!  Multiple arguments are not allowed.
 .El
@@ -741,6 +745,8 @@ No effect.
 No effect.
 .It @undivert N
 Inject only the numbered diversion into current stream.
+(1 \*(Le N \*(Le
+.Va __MAX_STREAM__ )
 .It @undivert N1 N2...
 Inject all specified diversions (in argument order, not numerical
 order), if legal, into current stream.
@@ -788,7 +794,7 @@ Diverted text will not be processed if m2 exits due to
 .Ql @error
 or
 .Ql @exit
-commands.
+(non-zero status) commands.
 However, commands specified with
 .Ql @wrap
 .Em are

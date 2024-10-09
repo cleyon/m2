@@ -6172,16 +6172,13 @@ function xeq_cmd__undivert(name, cmdline,
         return
     }
 
-    if (cmdline ~ "^-[0-9 \t]+$")
-        # Docs promise "no effect" for negative values
-        return
-    else if (cmdline ~ "^[0-9 \t]+$") {
+    if (cmdline ~ "^[-0-9 \t]+$") {
         # @undivert N1 N2... : process one or more streams
         i = 0
         while (++i <= NF) {
             stream = dosubs($i)
-            if (!integerp(stream))
-                # error(sprintf("Value '%s' must be numeric:", stream) $0)
+            if (!integerp(stream) || stream <= 0)
+                # @undivert -1 or 0 => no effect
                 continue
             if (stream > MAX_STREAM)
                 error("Bad parameters:" $0)

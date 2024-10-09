@@ -421,7 +421,7 @@ Evaluate mathematical expression.
 Variant
 .Ql @sexpr
 performs the same calculations but does not output the result.
-However, assignments are still performed and in particular
+However, assignments are still performed and
 .Va __EXPR__
 is still set.
 .It @format FMT ARG ...@
@@ -516,6 +516,8 @@ See
 below.
 .It @uc SYM@
 Upper case.
+.It @utc@
+Current timestamp in UTC time zone, displayed in ISO\ 8601 format (format as __FMT__[utc]).
 .It @uuid@
 Something that resembles a UUID: C3525388-E400-43A7-BC95-9DF5FA3C4A52
 .It @xbasename SYM@
@@ -581,6 +583,9 @@ Default is "%H:%M:%S"; user modifiable.
 .It __FMT__[tz]
 Time format for @tz@.
 Default is "%Z"; user modifiable.
+.It __FMT__[utc]
+Date format for @utc@.
+Default is "%Y-%m-%dT%H:%M:%S%z"; user modifiable.
 .It __FMT__[0]          \" bracket 0
 Text output when @boolval@ is False.
 Default is "0"; user modifiable.
@@ -679,7 +684,7 @@ below.
 Location for temporary files.
 Default is /tmp/; user modifiable.
 .It __TZ__
-Time zone numeric offset from UTC (-0400).
+Time zone numeric offset from UTC (-0800).
 See
 .Sx Dates and Times
 below.

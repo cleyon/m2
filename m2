@@ -6824,6 +6824,7 @@ function dosubs(s,
 
         nparam = split(m, param) - off_by
         fn = param[0 + off_by]
+        # Handle @foo{...} -- isolate fn better
         if ((br = index(m, TOK_LBRACE)) > 0)
             fn = substr(fn, 1, br-1)
 
@@ -6922,7 +6923,8 @@ function dosubs(s,
                    fn == "epoch" ||
                    fn == "strftime" ||
                    fn == "time" ||
-                   fn == "tz") {
+                   fn == "tz" ||
+                   fn == "utc") {
             if (secure_level() >= 2)
                 error(sprintf("(%s) Security violation", fn))
             if (fn == "strftime" && nparam == 0)
@@ -6931,6 +6933,8 @@ function dosubs(s,
                 : sym_ll_read("__FMT__", fn)
             gsub(/"/, "\\\"", y)
             cmdline = build_prog_cmdline("date", "+\"" y "\"", MODE_IO_CAPTURE)
+            if (fn == "utc")
+                cmdline = "TZ=UTC " cmdline
             cmdline | getline expand
             close(cmdline)
             r = expand r
@@ -7578,6 +7582,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     sym_ll_fiat("__FMT__",       "seq", "",                     "%d")
     sym_ll_fiat("__FMT__",      "time", "",                     "%H:%M:%S")
     sym_ll_fiat("__FMT__",        "tz", "",                     "%Z")
+    sym_ll_fiat("__FMT__",       "utc", "",                     "%Y-%m-%dT%H:%M:%S%z") # ISO 8601
     if ("HOME" in ENVIRON)
       sym_ll_fiat("__HOME__",       "", FLAGS_READONLY_SYMBOL,  with_trailing_slash(ENVIRON["HOME"]))
     sym_ll_fiat("__INPUT__",        "", FLAGS_WRITABLE_SYMBOL,  EMPTY)
@@ -7600,7 +7605,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     split("basename boolval chr date dirname epoch expr format getenv" \
           " ifdef ifelse ifndef ifx index lc left len ltrim mid ord rem" \
           " right rot13 rtrim sexpr sgetenv spaces srem strftime" \
-          " substr time trim tz uc uuid xbasename xdirname",
+          " substr time trim tz uc utc uuid xbasename xdirname",
           array, TOK_SPACE)
     for (elem in array)
         nam_ll_write(array[elem], GLOBAL_NAMESPACE, TYPE_FUNCTION FLAG_SYSTEM)

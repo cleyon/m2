@@ -48,7 +48,11 @@
 
 * MAYBE Implement debugfile
 
-* MAYBE Implement @dumpdef SYM
-  Dumps just one symbol, not entire table
+* MAYBE Implement @dumpdef SYM...
+  Dumps one or more symbols, with no args, same @dump
+
+* MAYBE Implement a "stack" of definitions
+  pushdef() popdef(); in BSD m4, define() replaces top-most def only.
+  How will this work with namespace ?
 
 * [EOF]

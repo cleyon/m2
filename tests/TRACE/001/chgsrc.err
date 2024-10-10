@@ -1,0 +1,4 @@
+m2trace:chgsrc.m2:4: Input file now 'incl1'
+m2trace:incl1:1: Input file now 'chgsrc.m2'
+m2trace:chgsrc.m2:10: Input file now 'incl1'
+m2trace:incl1:1: Input file now 'chgsrc.m2'

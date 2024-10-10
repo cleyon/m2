@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-10-10 08:22:00 cleyon>
+#  Time-stamp:  <2024-10-10 10:45:39 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -1011,20 +1011,30 @@ function tracingp(sym,
 }
 
 
+function trace_prefix(    prefix)
+{
+    prefix = "m2trace:"
+    if (flag_1true_p(__trace_mode, TRACE_SHOW_FILE_NAME))
+        prefix = prefix FILE() ":"
+    if (flag_1true_p(__trace_mode, TRACE_SHOW_LINE_NUM))
+        prefix = prefix LINE() ":"
+    return prefix
+}
+
+
 function trace(event, sym, message,
                prefix)
 {
-    if (flag_1false_p(__trace_mode, event))
+    if (sym_ll_read("__TRACE__", "", GLOBAL_NAMESPACE) == FALSE)
         return
     if (event == TRACE_EXPANSION) {
-        if (flag_1true_p(__trace_mode, TRACE_ALL) || tracingp(sym)) {
-            prefix = "m2trace:"
-            if (flag_1true_p(__trace_mode, TRACE_SHOW_FILE_NAME))
-                prefix = prefix FILE() ":"
-            if (flag_1true_p(__trace_mode, TRACE_SHOW_LINE_NUM))
-                prefix = prefix LINE() ":"
-            print_stderr(prefix " " message)
-        }
+        if ( flag_1true_p(__trace_mode, TRACE_ALL) ||
+            (flag_1true_p(__trace_mode, TRACE_EXPANSION) && tracingp(sym)))
+            print_stderr(trace_prefix() " " message)
+    } else if (event == TRACE_INPUT_FILE_CHG ||
+               event == TRACE_PATH_SEARCH) {
+        if (flag_1true_p(__trace_mode, event))
+            print_stderr(trace_prefix() " " message)
     } else
         error("(trace) Unrecognized trace event " event)
 }
@@ -1576,7 +1586,7 @@ function dofile(filename,
 }
 
 
-# Create a File block  and read the file.
+# Create a File block and read the file.
 # atmode flag overrides and disables any/all processing.
 #
 # The high-level processing happens in the dofile() function, which
@@ -2561,6 +2571,9 @@ function stk_depth(stack)
 
 function stk_push(stack, new_elem)
 {
+    if (stack["name"] == "source_stack")
+        trace(TRACE_INPUT_FILE_CHG, EMPTY,
+              sprintf("Input file now '%s'", blktab[new_elem, 0, "filename"]))
     return stack[++stack[0]] = new_elem
 }
 
@@ -2579,11 +2592,18 @@ function stk_top(stack)
 }
 
 
-function stk_pop(stack)
+function stk_pop(stack,
+                 old_top, new_top)
 {
     if (stk_emptyp(stack))
         error("(stk_pop) Empty stack")
-    return stack[stack[0]--]
+    old_top = stack[stack[0]--]
+    if (!stk_emptyp(stack) && stack["name"] == "source_stack") {
+        new_top = stack[stack[0]]
+        trace(TRACE_INPUT_FILE_CHG, EMPTY,
+              sprintf("Input file now '%s'", blktab[new_top, 0, "filename"]))
+    }
+    return old_top
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -5192,16 +5212,19 @@ function search_file(f,
                      pe, icount, paths, p, i)
 {
     f = rm_quotes(dosubs(f))
-    pe = path_exists_p(f)
-    if (first(f) == "/")
-        return pe ? f : EMPTY
-    if (pe)
+    if ((pe = path_exists_p(f)) == TRUE)
         return f
+    if (first(f) == "/")
+        # If path is absolute, do not invoke path search mechanism
+        return pe ? f : EMPTY
     icount = split(__inc_path, paths, TOK_COLON)
     for (i = 1; i <= icount; i++) {
         p = with_trailing_slash(paths[i]) f
-        if (path_exists_p(p))
+        if (path_exists_p(p)) {
+            trace(TRACE_PATH_SEARCH, EMPTY,
+                  sprintf("Path search for '%s' found '%s'", f, p))
             return p
+        }
     }
     return EMPTY
 }
@@ -7694,8 +7717,8 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     __ord_initialized           = FALSE # becomes True in initialize_ord()
     __print_mode                = MODE_TEXT_PRINT
     __rot13_initialized         = FALSE # becomes True in initialize_rot13()
-    __parse_stack[0]            = 0
-    __source_stack[0]           = 0
+    __parse_stack[0]            = 0;    __parse_stack["name"]  = "parse_stack"
+    __source_stack[0]           = 0;    __source_stack["name"] = "source_stack"
     __trace_mode                = TRACE_DEFAULT_SET
     __wrap_cnt                  = 0
     __xeq_ctl                   = XEQ_NORMAL

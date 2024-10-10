@@ -71,9 +71,16 @@ framework_error()
 
 summarize_tests()
 {
+    local pass_pct
+    local fail_pct
+    pass_pct=0.0
+    fail_pct=0.0
+    if [ $ntest -ne 0 ]; then
+        pass_pct=`echo "scale=3; $npass*100/$ntest" | bc`
+        fail_pct=`echo "scale=3; $nfail*100/$ntest" | bc`
+    fi
     printf "!!! SUMMARY - %d total tests: %d passed (%.1f%%), %d failed (%.1f%%)\n" \
-           $ntest $npass `echo "scale=3; $npass*100/$ntest" | bc` \
-                  $nfail `echo "scale=3; $nfail*100/$ntest" | bc`
+           $ntest $npass $pass_pct $nfail $fail_pct
 }
 
 

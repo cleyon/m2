@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-10-07 23:40:22 cleyon>
+#  Time-stamp:  <2024-10-10 08:22:00 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -73,6 +73,7 @@ BEGIN {
     TYPE_FUNCTION    = "F";             FLAG_INTEGER     = "I"
     TYPE_SEQUENCE    = "Q";             FLAG_NUMERIC     = "N"
     TYPE_SYMBOL      = "S";             FLAG_READONLY    = "R"
+                                        FLAG_TRACING     = "T"
                                         FLAG_WRITABLE    = "W"
                                         FLAG_SYSTEM      = "Y"
 
@@ -845,7 +846,7 @@ BEGIN {
 
     namtab["__DBG__", GLOBAL_NAMESPACE] = TYPE_ARRAY FLAG_SYSTEM
     split("args block bool braces case cmd del divert dosubs dump expr for if io" \
-          " nam namespace parse read seq ship_out stk sym while xeq",
+          " nam namespace parse read seq ship_out stk sym trace while xeq",
           _dbg_sys_array, TOK_SPACE)
     for (_dsys in _dbg_sys_array) {
         __dbg_sysnames[_dbg_sys_array[_dsys]] = TRUE
@@ -879,6 +880,7 @@ function initialize_debugging()
     dbg_set_level("ship_out",   3)
     dbg_set_level("stk",        5)
     dbg_set_level("sym",        3)
+    dbg_set_level("trace",      5)
     dbg_set_level("while",      5)
     dbg_set_level("xeq",        5)
 
@@ -987,6 +989,46 @@ function dbg_print_block(dsys, lev, blknum, description,
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
+
+
+#*****************************************************************************
+#
+#       T R A C E   A P I
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#*****************************************************************************
+function tracingp(sym,
+                  info)
+{
+    dbg_print("trace", 5, sprintf("(tracingp) START; sym='%s'", sym))
+
+    if (nam__scan(sym, info) == ERROR)
+        error("(tracingp) Scan error, '" sym "'")
+    if (nam_lookup(info) == ERROR)
+        error("(sym_fetch) nam_lookup(info) failed")
+    return info["tracing"]
+}
+
+
+function trace(event, sym, message,
+               prefix)
+{
+    if (flag_1false_p(__trace_mode, event))
+        return
+    if (event == TRACE_EXPANSION) {
+        if (flag_1true_p(__trace_mode, TRACE_ALL) || tracingp(sym)) {
+            prefix = "m2trace:"
+            if (flag_1true_p(__trace_mode, TRACE_SHOW_FILE_NAME))
+                prefix = prefix FILE() ":"
+            if (flag_1true_p(__trace_mode, TRACE_SHOW_LINE_NUM))
+                prefix = prefix LINE() ":"
+            print_stderr(prefix " " message)
+        }
+    } else
+        error("(trace) Unrecognized trace event " event)
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
 
 #*****************************************************************************
@@ -1437,6 +1479,9 @@ function execute__command(name, cmdline,
     else if (name ==  "sequence")       xeq_cmd__sequence(name, cmdline)
     else if (name ==  "shell")          xeq_cmd__shell(name, cmdline)
     else if (name ==  "syscmd")         xeq_cmd__syscmd(name, cmdline)
+    else if (name ==  "tracemode")      xeq_cmd__tracemode(name, cmdline)
+    else if (name ==  "traceoff")       xeq_cmd__traceoff(name, cmdline)
+    else if (name ==  "traceon")        xeq_cmd__traceon(name, cmdline)
     else if (name ==  "typeout")        xeq_cmd__typeout(name, cmdline)
     else if (name ~   "undef(ine)?")    xeq_cmd__undefine(name, cmdline)
     else if (name ==  "undivert")       xeq_cmd__undivert(name, cmdline)
@@ -2378,6 +2423,7 @@ function nam_lookup(info,
         if (nam_ll_in(name, level)) {
             info["code"] = code = nam_ll_read(name, level)
             info["isarray"] = flag_1true_p(code, TYPE_ARRAY)
+            info["tracing"] = flag_1true_p(code, FLAG_TRACING)
             info["level"]   = level
             info["type"]    = first(code)
             dbg_print("nam", 2, sprintf("(nam_lookup) END name '%s', level=%d, code=%s=%s Found in namtab => %d",
@@ -2785,6 +2831,9 @@ function sym_destroy(name, key, level)
     # if !A & B         syntax error: NAME is not an array and cannot be deindexed
     # if !A & !B        (normal symbol) delete symtab[name, "", level, "symval"];
     #                                   delete namtab[name]
+    delete symtab[name, key, level, "agg_block"]
+    delete symtab[name, key, level, "deferred_arg"]
+    delete symtab[name, key, level, "deferred_prog"]
     delete symtab[name, key, level, "symval"]
 }
 
@@ -6068,6 +6117,121 @@ function xeq_cmd__syscmd(name, cmdline,
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
 
+#*****************************************************************************
+#
+#       @  T R A C E M O D E
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#*****************************************************************************
+# @tracemode    FLAG...
+function xeq_cmd__tracemode(name, cmdline,
+                            i, flag, add_rem)
+{
+    dbg_print("trace", 3, sprintf("(xeq_cmd__tracemode) START; cmdline='%s'", cmdline))
+    $0 = cmdline
+    if (NF == 0) {
+        # Reset flags to default
+        __trace_mode = TRACE_DEFAULT_SET
+    } else if ($1 ~ /^[aceiflptxV][aceiflptxV]*$/) {
+        __trace_mode = EMPTY
+        for (i = 1; i <= length($1); i++) {
+            flag = substr($1, i, 1)
+            __trace_mode = flag_set_clear(__trace_mode, flag)
+        }
+    } else if ($1 ~ /^[-+][-+aceiflptxV][-+aceiflptxV]*$/) {
+        # add_rem == TRUE  -> Adding flags
+        # add_rem == FALSE -> Removing flags
+        for (i = 1; i <= length($1); i++) {
+            flag = substr($1, i, 1)
+            if (flag == "+")
+                add_rem = TRUE
+            else if (flag == "-")
+                add_rem = FALSE
+            else {
+                if (add_rem)
+                    __trace_mode = flag_set_clear(__trace_mode, flag)
+                else
+                    __trace_mode = flag_set_clear(__trace_mode, "", flag)
+            }
+        }
+    } else
+        error("@tracemode: Bad parameters")
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  T R A C E O F F
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#*****************************************************************************
+# @traceoff     [SYM...]
+function xeq_cmd__traceoff(name, cmdline,
+                           i, info, sym, level, code)
+{
+    dbg_print("trace", 3, sprintf("(xeq_cmd__traceoff) START; cmdline='%s'", cmdline))
+    $0 = cmdline
+    if (NF == 0) {
+        # Clear "t" trace flag
+        __trace_mode = flag_set_clear(__trace_mode, EMPTY, TRACE_ALL)
+        # Set __TRACE__ to False
+        sym_ll_write("__TRACE__", "", GLOBAL_NAMESPACE, FALSE)
+    } else {
+        # Clear FLAG_TRACING for every symbol mentioned
+        i = 0
+        while (++i <= NF) {
+            sym = $i
+            if (nam__scan(sym, info) == ERROR)
+                error("(xeq_cmd__traceoff) Scan error; " __m2_msg)
+            if ((level = nam_lookup(info)) == ERROR)
+                error("(xeq_cmd__traceoff) nam_lookup(info) failed")
+            code = nam_ll_read(sym, level)
+            nam_ll_write(sym, level, flag_set_clear(code, EMPTY, FLAG_TRACING))
+        }
+    }
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  T R A C E O N
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#*****************************************************************************
+# @traceon      [SYM...]
+function xeq_cmd__traceon(name, cmdline,
+                          i, info, sym, level, code)
+{
+    dbg_print("trace", 3, sprintf("(xeq_cmd__traceon) START; cmdline='%s'", cmdline))
+    $0 = cmdline
+    if (NF == 0) {
+        # Set "t" trace flag
+        __trace_mode = flag_set_clear(__trace_mode, TRACE_ALL)
+    } else {
+        # Set FLAG_TRACING for every symbol mentioned
+        i = 0
+        while (++i <= NF) {
+            sym = $i
+            if (nam__scan(sym, info) == ERROR)
+                error("(xeq_cmd__traceon) Scan error; " __m2_msg)
+            if ((level = nam_lookup(info)) == ERROR)
+                error("(xeq_cmd__traceon) nam_lookup(info) failed")
+            code = nam_ll_read(sym, level)
+            nam_ll_write(sym, level, flag_set_clear(code, FLAG_TRACING))
+        }
+    }
+    sym_ll_write("__TRACE__", "", GLOBAL_NAMESPACE, TRUE)
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
 
 #*****************************************************************************
 #
@@ -7337,6 +7501,7 @@ function dosubs(s,
                 if (index(expand, "$" j) > 0)
                     gsub("\\$"    j      , (j <= nparam) ? param[j + off_by] : "", expand)
             }
+            trace(TRACE_EXPANSION, fn, sprintf("'%s' => '%s'", m, expand))
             r = expand r
 
         # Check if it's a sequence
@@ -7501,6 +7666,20 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     TOK_RPAREN                  = ")"
     TOK_TAB                     = "\t"
 
+    # For __trace_mode
+    TRACE_ARGUMENTS             = "a" # show actual arguments in each call
+    TRACE_MULTI_LINE            = "c" # show multiple trace lines for each call
+    TRACE_EXPANSION             = "e" # show macro expansion
+    TRACE_INPUT_FILE_CHG        = "i" # trace when input file changes
+    TRACE_SHOW_FILE_NAME        = "f" # show file name
+    TRACE_SHOW_LINE_NUM         = "l" # show line number
+    TRACE_PATH_SEARCH           = "p" # trace when search path search succeeds
+    TRACE_ALL                   = "t" # trace internal macros too
+    TRACE_SHOW_CALL_ID          = "x" # show unique call id (may not be used)
+    TRACE_WILDCARD_ALL_FLAGS    = "V" # shorthand for all of above options
+    #
+    TRACE_DEFAULT_SET           = TRACE_ARGUMENTS TRACE_EXPANSION
+
     # Execution control states for loops
     XEQ_NORMAL                  = 0
     XEQ_BREAK                   = 1
@@ -7510,13 +7689,14 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     # Global variables
     __block_cnt                 = 0
     __buffer                    = EMPTY
-    __init_files_loaded         = FALSE # Becomes True in load_init_files()
+    __init_files_loaded         = FALSE # becomes True in load_init_files()
     __namespace                 = GLOBAL_NAMESPACE
-    __ord_initialized           = FALSE # Becomes True in initialize_ord()
+    __ord_initialized           = FALSE # becomes True in initialize_ord()
     __print_mode                = MODE_TEXT_PRINT
-    __rot13_initialized         = FALSE # Becomes True in initialize_rot13()
+    __rot13_initialized         = FALSE # becomes True in initialize_rot13()
     __parse_stack[0]            = 0
     __source_stack[0]           = 0
+    __trace_mode                = TRACE_DEFAULT_SET
     __wrap_cnt                  = 0
     __xeq_ctl                   = XEQ_NORMAL
 
@@ -7599,6 +7779,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     sym_ll_fiat("__STRICT__",  "undef", "",                     TRUE)
     sym_ll_fiat("__SYNC__",         "", FLAGS_WRITABLE_INTEGER, SYNC_FILE)
     sym_ll_fiat("__SYSVAL__",       "", FLAGS_READONLY_INTEGER, 0)
+    sym_ll_fiat("__TRACE__",        "", FLAGS_WRITABLE_BOOLEAN, FALSE)
 
     # FUNCS
     # Functions cannot be used as symbol or sequence names.
@@ -7617,7 +7798,8 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
           " dumpall echo error errprint esyscmd eval exit ignore include incr" \
           " initialize input local m2ctl nextfile paste readfile readarray" \
           " readonly secho sequence shell sinclude spaste sreadfile sreadarray" \
-          " syscmd typeout undef undefine undivert warn wrap", array, TOK_SPACE)
+          " syscmd tracemode traceoff traceon typeout undef undefine undivert" \
+          " warn wrap", array, TOK_SPACE)
     for (elem in array)
         nam_ll_write(array[elem], GLOBAL_NAMESPACE, TYPE_COMMAND FLAG_SYSTEM)
 

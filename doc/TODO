@@ -1,5 +1,9 @@
 #                                               -*- Org -*-
 
+* Continue reading next line if last() is backslash
+
+* QUESTION In dosubs, shouldn't we always substitute $1 et al?
+
 * MAYBE Implement traceon/traceoff
   With no arguments, trace all macros (including built-ins).  With args,
   only trace the specified macros.

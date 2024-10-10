@@ -1064,37 +1064,37 @@ implicitly sets
 .Va __TRACE__
 to True.
 .Bl -tag -width @tracemode_FLAGS___ -compact -offset indent
-.It @traceon SYM...
-Calling
-.Ql @traceon
-with one or more symbol names will enable tracing for those symbols: it
-does this by setting a flag in the symbol table.
 .It @traceon
 Called without arguments, bare
 .Ql @traceon
 will trace
-.Em ALL symbols,
-including internal built-ins: it does this by enabling the "t" option in
-the trace mode.
+.Em ALL
+symbols, including internal built-ins: it does this by enabling the "t"
+option in the trace mode.
+.It @traceon SYM...
+Calling
+.Ql @traceon
+with one or more symbol names will enable tracing for those symbols: it
+does this by setting a flag in the name table.
 .El
 .It Em Trace Off :
 .Bl -tag -width @tracemode_FLAGS___ -compact -offset indent
-.It @traceoff SYM...
-Calling
-.Ql @traceoff
-with one or more symbol names will disable tracing for those symbols, by
-clearing the symbol table flag.
-It makes no changes to the "t" trace mode.
-The value of
-.Va __TRACE__
-is not changed.
 .It @traceoff
 Calling
 .Ql @traceoff
 with no arguments will clear the "t" flag from the trace modes and also set
 .Va __TRACE__
 to False.
-No changes are made to the symbol table flags.
+No changes are made to the name table flags.
+.It @traceoff SYM...
+Calling
+.Ql @traceoff
+with one or more symbol names will disable tracing for those symbols, by
+clearing the name table flag.
+It makes no changes to the "t" trace mode.
+The value of
+.Va __TRACE__
+is not changed.
 .El
 .It Em Trace Mode :
 .Ql @tracemode
@@ -1103,8 +1103,10 @@ just one of several.
 It never alters
 .Va __TRACE__ .
 .Pp
-With no arguments, the trace flags are reset to their default values
-(currently "aqe" although that may change and q is likely to be removed).
+With no arguments, the trace flags are reset to their default values.
+.\"     BSD default = eq
+.\"     GNU default = aqe
+.\"  m2 default is currently "ae" although this is subject to change.
 .Pp
 Otherwise, if the argument consists of the various flag letters shown
 below, the value of trace flags is set to the argument, overriding its
@@ -1118,49 +1120,50 @@ These are the only values accepted by
 .Pp
 These help format trace output:
 .Bl -tag -width indent -offset indent
-.It f
+.It f   \" BSD & GNU
 Show the name of the current input file in each trace output line.
-.It l
+.It l   \" BSD & GNU
 Show the the current input line number in each trace output line.
-.It t
+.It t   \" BSD & GNU
 Trace all macro calls made in this invocation of m4.
 .El
 .Pp
 These control macro evaluation tracing:
 .Bl -tag -width indent -offset indent
-.It a
+.It a   \" BSD & GNU
 [DEFAULT] Show the actual arguments in each macro call.
 This applies to all macro calls if the `t' flag is used, otherwise only
 the macros covered by calls of traceon.
-.It c
+.It c   \" BSD & GNU
 Show several trace lines for each macro call.
 A line is shown when the macro is seen, but before the arguments are
 collected; a second line when the arguments have been collected and a
 third line after the call has completed.
-.It e
+.It e   \" BSD & GNU
 [DEFAULT] Show the expansion of each macro call, if it is not void.
 This applies to all macro calls if the `t' flag is used,
 otherwise only the macros covered by calls of traceon.
-.It q
-[DEFAULT] Quote actual arguments and macro expansions in the
-display with the current quotes.
-.It x
+.\" .It q   \" BSD & GNU
+.\" .\"         q option useless to m2 because it has no quote characters
+.\" [DEFAULT] Quote actual arguments and macro expansions in the
+.\" display with the current quotes.
+.It x   \" BSD & GNU
 Add a unique `macro call id' to each line of the trace output.
 This is useful in connection with the `c' flag above.
 .El
 .Pp
 These are for miscellaneous traces:
 .Bl -tag -width indent -offset indent
-.It i
+.It i   \" GNU only
 Print a message each time the current input file is changed, giving file
 name and input line number.
 .\" QUESTION: Changed *how* - by progressing to the next file naturally,
 .\"           because of @include or @paste, or what?
 .\" ANSWER: (for now)  Trace any time source_stack changes (push/pop).
-.It p
+.It p   \" GNU only
 Print a message when a named file is found through the path search
 mechanism, giving the actual filename used.
-.It V
+.It V   \" BSD & GNU
 A shorthand for all of the above flags.
 .El
 .El

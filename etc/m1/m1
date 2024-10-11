@@ -119,7 +119,8 @@ function dosubs(s,  l, r, i, m) {
 
 function dodef(fname,  str, x) {
     name = $2
-    sub(/^[ \t]*[^ \t]+[ \t]+[^ \t]+[ \t]*/, "") # OLD BUG: last * was + str = $0
+    sub(/^[ \t]*[^ \t]+[ \t]+[^ \t]+[ \t]*/, "") # OLD BUG: last * was +
+    str = $0
     while (str ~ /\\$/) {
         if (readline() == EOF)
             error("EOF inside definition")

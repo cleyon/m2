@@ -1,0 +1,1 @@
+m2:getenv.m2:3:Environment variable 'BAR' not defined:BAR is '@getenv BAR@'

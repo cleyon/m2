@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-10-10 10:45:39 cleyon>
+#  Time-stamp:  <2024-10-12 14:04:02 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -6944,15 +6944,13 @@ function _c3_advance(    tmp)
 #             R = "@" R
 #     return L R
 function dosubs(s,
-                expand, i, j, l, m, nparam, p, param, r, fn, cmdline, c,
-                at_brace, x, y, inc_dec, pre_post, subcmd, silent, off_by,
-                br, ifcond, true_text, false_text, init_negate, arg, fmt)
+                expand, i, j, l, m, nparam, p, param, r, fn,
+                x, inc_dec, pre_post, subcmd, br)
 {
     dbg_print("dosubs", 5, sprintf("(dosubs) START s='%s'", s))
     l = ""                   # Left of current pos  - ready for output
     r = s                    # Right of current pos - as yet unexamined
     inc_dec = pre_post = 0   # track ++ or -- on sequences
-    off_by = 1
 
     while (TRUE) {
         # Check entire string for recursive evaluation
@@ -6998,7 +6996,7 @@ function dosubs(s,
         #   param[N+1].  Consider "mid foo 3".  nparam is 2.
         #   The fn is found in the first position, at param [0+1].
         #   The new prefix is at param[1+1] and new count is at param[2+1].
-        #   This offset of one is referred to as `off_by' below.
+        #   This offset of one is referred to as `__param_offset' below.
         # Each function condition eventually executes
         #     r = <SOMETHING> r
         #   which injects <SOMETHING> just before the current value of
@@ -7009,8 +7007,8 @@ function dosubs(s,
         #   words, this injects the result of "invoking" fn.
         # Eventually this big while loop exits and we return "l r".
 
-        nparam = split(m, param) - off_by
-        fn = param[0 + off_by]
+        nparam = split(m, param) - __param_offset
+        fn = param[0 + __param_offset]
         # Handle @foo{...} -- isolate fn better
         if ((br = index(m, TOK_LBRACE)) > 0)
             fn = substr(fn, 1, br-1)
@@ -7037,468 +7035,60 @@ function dosubs(s,
             fn = substr(fn, 1, length(fn) - 2)
         }
 
-        # basename SYM: Base (i.e., file name) of path, in Awk
-        if (fn == "basename") {
-            if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[1 + off_by]
-            assert_sym_valid_name(p)
-            assert_sym_defined(p, fn)
-            # basename in Awk, assuming Unix style path separator.
-            # Return filename portion of path.  If this is not
-            # adequate, consider using @xbasename SYM@.
-            expand = rm_quotes(sym_fetch(p))
-            sub(/^.*\//, "", expand)
-            r = expand r
-
-        # boolval SYM: Print __FMT__[0 or 1], depending on SYM truthiness.
-        #   @boolval SYM@ => <string>
-        # The actual output is taken from __FMT__[].  The defaults are
-        # "1" and "0", but a Fortran programmer might change them to
-        # ".TRUE." and ".FALSE.", while a Lisp programmer might change
-        # them to "t" and "nil".  If the symbol SYM is not defined:
-        #  - In strict mode, throw an error if the symbol is not defined.
-        #  - In non-strict mode, you get a 'false' output if not defined.
-        #  - If it's not a symbol, use its value as a boolean state.
-        } else if (fn == "boolval") {
-            if (nparam == 0)
-                # In an effort to spread a bit more chaos in the universe,
-                # if you don't give an argument to boolval then you get
-                # True 50% of the time and False the other 50%.
-                r = sym_ll_read("__FMT__", rand() < 0.50) r
-            else {
-                p = param[1 + off_by]
-                # Always accept your current representation of True or False
-                # to actually be true or false without further evaluation.
-                if (p == sym_ll_read("__FMT__", TRUE) ||
-                    p == sym_ll_read("__FMT__", FALSE))
-                    r = p r
-                else if (sym_valid_p(p)) {
-                    # It's a valid name -- now see if it's defined or not.
-                    # If not, check if we're in strict mode (error) or not.
-                    if (sym_defined_p(p))
-                        r = sym_ll_read("__FMT__", sym_true_p(p)) r
-                    else if (strictp("boolval"))
-                        error("Name '" p "' not defined [boolval]:" $0)
-                    else
-                        r = sym_ll_read("__FMT__", FALSE) r
-                } else
-                    # It's not a symbol, so use its value interpreted as a boolean
-                    r = sym_ll_read("__FMT__", !!p) r
-            }
-
-        # chr SYM: Output character with ASCII code SYM
-        #   @chr 65@ => A
-        } else if (fn == "chr") {
-            if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[1 + off_by]
-            if (sym_valid_p(p)) {
-                assert_sym_defined(p, fn)
-                x = sprintf("%c", sym_fetch(p)+0)
-                r = x r
-            } else if (integerp(p) && p >= 0 && p <= 255) {
-                x = sprintf("%c", p+0)
-                r = x r
-            } else
-                error("Bad parameters in '" m "':" $0)
-
-        # date    : Current date as YYYY-MM-DD
-        # epoch   : Number of seconds since Epoch
-        # strftime: User-specified date format, see strftime(3)
-        # time    : Current time as HH:MM:SS
-        # tz      : Current time zone name
-        } else if (fn == "date" ||
-                   fn == "epoch" ||
-                   fn == "strftime" ||
-                   fn == "time" ||
-                   fn == "tz" ||
-                   fn == "utc") {
-            if (secure_level() >= 2)
-                error(sprintf("(%s) Security violation", fn))
-            if (fn == "strftime" && nparam == 0)
-                error("Bad parameters in '" m "':" $0)
-            y = fn == "strftime" ? substr(m, length(fn)+2) \
-                : sym_ll_read("__FMT__", fn)
-            gsub(/"/, "\\\"", y)
-            cmdline = build_prog_cmdline("date", "+\"" y "\"", MODE_IO_CAPTURE)
-            if (fn == "utc")
-                cmdline = "TZ=UTC " cmdline
-            cmdline | getline expand
-            close(cmdline)
-            r = expand r
-
-        # dirname SYM: Directory name of path, in Awk
-        } else if (fn == "dirname") {
-            if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[1 + off_by]
-            assert_sym_valid_name(p)
-            assert_sym_defined(p, fn)
-            # dirname in Awk, assuming Unix style path separator.
-            # Return directory portion of path.  If this is not
-            # adequate, consider using @xdirname SYM@.
-            y = rm_quotes(sym_fetch(p))
-            expand = (sub(/\/[^\/]*$/, "", y)) ? y : "."
-            r = expand r
-
-        # expr ...: Evaluate mathematical epxression, store in __EXPR__
-        } else if (fn == "expr" || fn == "sexpr") {
-            silent = first(fn) == "s"   # don't automatically print result
-            sub(/^s?expr[ \t]*/, "", m) # clean up expression to evaluate
-            x = calc3_eval(m)
-            dbg_print("expr", 1, sprintf("expr{%s} = %s", m, x))
-            sym_ll_write("__EXPR__", "", GLOBAL_NAMESPACE, x+0)
-            if (!silent)
-                r = x r
-
-        # format: Format value(s) according for sprintf format string
-        } else if (fn == "format") {
-            if (nparam < 1 || nparam > 6) error("Bad parameters in '" m "':" $0)
-            fmt = sym_value_or_literal(param[1 + off_by])
-            for (j = 2; j <= 6; j++)
-                arg[j] = sym_value_or_literal(param[j + off_by])
-            if      (nparam == 1) expand = sprintf(fmt)
-            else if (nparam == 2) expand = sprintf(fmt, arg[2])
-            else if (nparam == 3) expand = sprintf(fmt, arg[2], arg[3])
-            else if (nparam == 4) expand = sprintf(fmt, arg[2], arg[3], arg[4])
-            else if (nparam == 5) expand = sprintf(fmt, arg[2], arg[3], arg[4], arg[5])
-            else if (nparam == 6) expand = sprintf(fmt, arg[2], arg[3], arg[4], arg[5], arg[6])
-
-            r = expand r
-
-        # getenv: Get environment variable
-        # sgetenv
-        #   @getenv HOME@ => /home/user
-        } else if (fn == "getenv" || fn == "sgetenv") {
-            # "silent" getenv returns empty string for non-existent
-            # variable, regardless of strict setting.
-            silent = first(fn) == "s"
-            if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[1 + off_by]
-            assert_valid_env_var_name(p)
-            if (p in ENVIRON)
-                r = ENVIRON[p] r
-            else if (strictp("env") && !silent)
-                error("Environment variable '" p "' not defined:" $0)
-
-        # ifdef/ifndef: Expand text if symbol is defined
-        #   @ifdef{FOO}{True text}{False text}@
-        } else if (fn == "ifdef" || fn == "ifndef") {
-            if (match(m, "^ifdef{[^}][^}]*}{[^}]*}{[^}]*}$") \
-             || match(m, "^ifndef{[^}][^}]*}{[^}]*}{[^}]*}$"))
-                ;            # Three-brace expr is well-formed
-            else if (match(m, "^ifdef{[^}][^}]*}{[^}]*}$") \
-                  || match(m, "^ifndef{[^}][^}]*}{[^}]*}$"))
-                m = m "{}"   # Two-brace expr can be fixed to use empty FALSE string
-            else
-                error("(dosubs) Bad ifdef in '" m "':" $0)
-
-            # Get symbol name (x) which will be handed to defined()
-            m = substr(m, index(m, TOK_LBRACE)) # strip fn name
-            if (!match(m, "^{[^}]*}"))
-                error("(dosubs) Bad ifdef symbol in '" m "':" $0)
-            x = substr(m, RSTART+1, RLENGTH-2)
-            assert_sym_valid_name(x)
-            ifcond = "defined(" x ")"
-            init_negate = fn == "ifndef"
-            dbg_print("dosubs", 7, "(dosubs) ifdef: ifcond='" ifcond "'")
-            m = substr(m, RSTART+RLENGTH)
-
-            # Get true_text
-            if (!match(m, "^{[^}]*}"))
-                error("(dosubs) Bad true_text in '" m "':" $0)
-            true_text = substr(m, RSTART+1, RLENGTH-2)
-            dbg_print("dosubs", 7, "(dosubs) ifdef: true_text='" true_text "'")
-            m = substr(m, RSTART+RLENGTH)
-
-            # Get false_text
-            if (!match(m, "^{[^}]*}"))
-                error("(dosubs) Bad false_text in '" m "':" $0)
-            false_text = substr(m, RSTART+1, RLENGTH-2)
-            dbg_print("dosubs", 7, "(dosubs) ifdef: if_false='" false_text "'")
-            m = substr(m, RSTART+RLENGTH)
-            if (!emptyp(m))
-                error("(dosubs) Extra text in ifdef: m='" m "'")
-
-            r = dosubs(evaluate_boolean(ifcond, init_negate) ? true_text : false_text) r
-
-        # ifelse: Evaluate argument pairs for equality.
-        #
-        # @ifelse@ has three or more arguments.
-        # If the first argument is equal to the second,
-        #    then the value is the third argument.
-        # If not, and if there are more than four arguments,
-        #    the process is repeated with arguments 4, 5, 6, and 7.
-        # Otherwise, the value is either the fourth argument, or null if omitted.
-        } else if (fn == "ifelse") {
-            # NOTE: All of the {} clauses must be on the same line,
-            # since dosubs CANNOT call readline().
-            m = substr(m, 7)    # strip away "ifelse"
-            arg[1] = arg[2] = arg[3] = ""
-            while (TRUE) {
-                dbg_print("dosubs", 5, "(dosubs) [@ifelse@] TOP; m=" m)
-
-                # Check that at least three pairs of braces are present,
-                # and whatever remains are also well-formed brace pairs.
-                # Pathological syntax (like {..\}..} will cause problems.
-                if (! match(m, "^{[^}][^}]*}{[^}]*}{[^}]*}")) # used to include ({[^}]*})*$ at end of regexp but Busybox Awk doesn't like that
-                    error("(ifelse) Bad parameters in '" m "':" $0)
-
-                # Grab the first three arguments
-                for (j = 1; j <= 3; j++) {
-                    match(m, "{[^}]*}")
-                    arg[j] = substr(m, RSTART+1, RLENGTH-2)
-                    m = substr(m, RSTART+RLENGTH)
-                    dbg_print("dosubs", 7, sprintf("(dosubs) [@ifelse@] arg%d='%s'",
-                                                   j, arg[j]))
-                }
-
-                # Check arg1 & arg2 for equality...  TODO integer check -> 0+n
-                # If the first argument is equal to the second,
-                #    then the value is the third argument.
-                if (arg[1] == arg[2]) {
-                    expand = arg[3]
-                    break
-                }
-                # At this point, the three required args have been
-                # stripped out of m.  What remains in m could be:
-                # 1. Empty - no fourth argument, so use empty string.
-                if (m == EMPTY) {
-                    expand = ""
-                    break
-                }
-                # 2. Exactly one brace clause remains; it is the fourth
-                # (last) argument, so use it.
-                if (match(m, "^{[^}]*}$")) {
-                    # expand = "cc:<" substr(m, 2, length(m) - 2) ">"
-                    expand = substr(m, 2, length(m) - 2)
-                    break
-                }
-                # 3. If there are more than four args, there have to be a
-                # minimum number to allow the cycle to continue.
-                # You need  {1}{2}{3}  ||  {4}{5}{6} [ {7} ]
-                #                      ||  {1}{2}{3}
-                # which means that just one or two pairs of braces
-                # constitute invalid syntax.  The one pair case was
-                # caught in choice 2 just above, so we check for two pairs
-                if (match(m, "^{[^}][^}]*}{[^}]*}$"))   # Busybox Awk does not support +
-                    error("(ifelse) Bad parameters in '" m "':" $0)
-
-                # # If not, and if there are more than four arguments,
-                #    the process is repeated with arguments 4, 5, 6, and 7.
-            }
-
-            r = dosubs(expand) r
-
-        # ifx: If Expression : Evaluate boolean expression to choose result text
-        #   A and B are @ifx{A == B}{Equal}{Not equal}@
-        } else if (fn == "ifx") {
-            if (!match(m, "^ifx{[^}][^}]*}{[^}]*}{[^}]*}$"))   # Busybox Awk does not support +
-                error("(dosubs) Bad ifx in '" m "':" $0)
-            m = substr(m, index(m, TOK_LBRACE)) # strip fn name
-            init_negate = FALSE
-
-            # Get if_clause
-            if (!match(m, "^{[^}]*}"))
-                error("(dosubs) Bad ifcond in '" m "':" $0)
-            ifcond = substr(m, RSTART+1, RLENGTH-2)
-            dbg_print("dosubs", 7, "(dosubs) ifx: ifcond='" ifcond "'")
-            m = substr(m, RSTART+RLENGTH)
-
-            # Get true_text
-            if (!match(m, "^{[^}]*}"))
-                error("(dosubs) Bad true_text in '" m "':" $0)
-            true_text = substr(m, RSTART+1, RLENGTH-2)
-            dbg_print("dosubs", 7, "(dosubs) ifx: true_text='" true_text "'")
-            m = substr(m, RSTART+RLENGTH)
-
-            # Get false_text
-            if (!match(m, "^{[^}]*}"))
-                error("(dosubs) Bad false_text in '" m "':" $0)
-            false_text = substr(m, RSTART+1, RLENGTH-2)
-            dbg_print("dosubs", 7, "(dosubs) ifx: if_false='" false_text "'")
-            m = substr(m, RSTART+RLENGTH)
-            if (!emptyp(m))
-                error("(dosubs) Extra text in ifx: m='" m "'")
-
-            r = dosubs(evaluate_boolean(ifcond, init_negate) ? true_text : false_text) r
-
-        # index: Location of substring
-        #   NB - Awk index() returns 1 and so do we.  Different from m4.
-        } else if (fn == "index") {
-            if (nparam != 2)
-                error("Bad parameters in '" m "':" $0)
-            p = param[1 + off_by]
-            assert_sym_valid_name(p)
-            assert_sym_defined(p, fn)
-            x = param[2 + off_by]
-            r = index(sym_fetch(p), x) r
-
-        # lc : Lower case
-        # len: Length
-        # uc : Upper case
-        #   @len ALPHABET@ => 26
-        } else if (fn == "lc" ||
-                   fn == "len" ||
-                   fn == "uc") {
-            if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[1 + off_by]
-            assert_sym_valid_name(p)
-            assert_sym_defined(p, fn)
-            r = ((fn == "lc")  ? tolower(sym_fetch(p)) : \
-                 (fn == "len") ?  length(sym_fetch(p)) : \
-                 (fn == "uc")  ? toupper(sym_fetch(p)) : \
-                 error("Name '" m "' not defined [can't happen]:" $0)) \
-                r   # ^^^ This error() bit can't happen but I need something
-                    # to the right of the :, and error() will abend.
-
-        # left: Left (substring)
-        #   @left ALPHABET 7@ => ABCDEFG
-        } else if (fn == "left") {
-            if (nparam < 1 || nparam > 2) error("Bad parameters in '" m "':" $0)
-            p = param[1 + off_by]
-            assert_sym_valid_name(p)
-            assert_sym_defined(p, fn)
-            x = 1
-            if (nparam == 2) {
-                x = param[2 + off_by]
-                if (!integerp(x))
-                    error("Value '" x "' must be numeric:" $0)
-            }
-            r = substr(sym_fetch(p), 1, x) r
-
-        # mid: Substring ...  SYMBOL, START[, LENGTH]
-        #   @mid ALPHABET 15 5@ => OPQRS
-        #   @mid FOO 3@
-        #   @mid FOO 2 2@
-        } else if (fn == "mid" || fn == "substr") {
-            if (nparam < 2 || nparam > 3)
-                error("Bad parameters in '" m "':" $0)
-            p = param[1 + off_by]
-            assert_sym_valid_name(p)
-            assert_sym_defined(p, fn)
-            x = param[2 + off_by]
-            if (!integerp(x))
-                error("Value '" x "' must be numeric:" $0)
-            if (nparam == 2) {
-                r = substr(sym_fetch(p), x) r
-            } else if (nparam == 3) {
-                y = param[3 + off_by]
-                if (!integerp(y))
-                    error("Value '" y "' must be numeric:" $0)
-                r = substr(sym_fetch(p), x, y) r
-            }
-
-        # ord SYM: Output character with ASCII code SYM
-        #   @define B *Nothing of interest*
-        #   @ord A@ => 65
-        #   @ord B@ => 42
-        } else if (fn == "ord") {
-            if (! __ord_initialized)
-                initialize_ord()
-            if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[1 + off_by]
-            if (sym_valid_p(p) && sym_defined_p(p))
-                p = sym_fetch(p)
-            r = __ord[first(p)] r
-
-        # rem: Remark
-        #   @rem STUFF@ is considered a comment and ignored
-        #   @srem STUFF@ like @rem, but preceding whitespace is also discarded
-        } else if (fn == "rem" || fn == "srem") {
-            if (first(fn) == "s")
-                sub(/[ \t]+$/, "", l)
-
-        # right: Right (substring)
-        #   @right ALPHABET 20@ => TUVWXYZ
-        } else if (fn == "right") {
-            if (nparam < 1 || nparam > 2) error("Bad parameters in '" m "':" $0)
-            p = param[1 + off_by]
-            assert_sym_valid_name(p)
-            assert_sym_defined(p, fn)
-            x = length(sym_fetch(p))
-            if (nparam == 2) {
-                x = param[2 + off_by]
-                if (!integerp(x))
-                    error("Value '" x "' must be numeric:" $0)
-            }
-            r = substr(sym_fetch(p), x) r
-
-        # rot13 SYM: Output value of symbol with rot13 text
-        #   @define aRealSymbol *With 6, you get value!*
-        #   @rot13 aRealSymbol@    => *Jvgu 6, lbh trg inyhr!*
-        #   @rot13 NotaRealSymbol@ => AbgnErnyFlzoby
-        } else if (fn == "rot13") {
-            if (! __rot13_initialized)
-                initialize_rot13()
-            if (nparam == 0) error("Bad parameters in '" m "':" $0)
-            p = param[1 + off_by]
-            p = (sym_valid_p(p) && sym_defined_p(p)) \
-                ? sym_fetch(p) : substr(m, length(fn)+2)
-            expand = ""
-            for (x = 1; x <= length(p); x++) {
-                c = substr(p, x, 1)
-                expand = expand  (match(c, "[a-zA-Z]") ? __rot13[c] : c)
-            }
-            r = expand r
-
-        # spaces [N]: N spaces
-        } else if (fn == "spaces") {
-            if (nparam > 1) error("Bad parameters in '" m "':" $0)
-            x = 1
-            if (nparam == 1) {
-                x = param[1 + off_by]
-                if (!integerp(x))
-                    error("Value '" x "' must be numeric:" $0)
-            }
-            while (x-- > 0)
-                expand = expand TOK_SPACE
-            r = expand r
-
-        # trim  SYM: Remove both leading and trailing whitespace
-        # ltrim SYM: Remove leading whitespace
-        # rtrim SYM: Remove trailing whitespace
-        } else if (fn == "trim" || fn == "ltrim" || fn == "rtrim") {
-            if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[1 + off_by]
-            assert_sym_valid_name(p)
-            assert_sym_defined(p, fn)
-            expand = sym_fetch(p)
-            if (fn == "trim" || fn == "ltrim")
-                #sub(/^[ \t]+/, "", expand)
-                expand = ltrim(expand)
-            if (fn == "trim" || fn == "rtrim")
-                expand = rtrim(expand)
-            r = expand r
-
-        # uuid: Something that resembles but is not a UUID
-        #   @uuid@ => C3525388-E400-43A7-BC95-9DF5FA3C4A52
-        } else if (fn == "uuid") {
-            r = uuid() r
-
-        # xbasename SYM: Base (i.e., file name) of path, using external program
-        } else if (fn == "xbasename") {
-            if (secure_level() >= 2)
-                error("(xbasename) Security violation")
-            if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[1 + off_by]
-            assert_sym_valid_name(p)
-            assert_sym_defined(p, fn)
-            cmdline = build_prog_cmdline(fn, rm_quotes(sym_fetch(p)), MODE_IO_CAPTURE)
-            cmdline | getline expand
-            close(cmdline)
-            r = expand r
-
-        # xdirname SYM: Directory name of path, using external program
-        } else if (fn == "xdirname") {
-            if (secure_level() >= 2)
-                error("(xdirname) Security violation")
-            if (nparam != 1) error("Bad parameters in '" m "':" $0)
-            p = param[1 + off_by]
-            assert_sym_valid_name(p)
-            assert_sym_defined(p, fn)
-            cmdline = build_prog_cmdline(fn, rm_quotes(sym_fetch(p)), MODE_IO_CAPTURE)
-            cmdline | getline expand
-            close(cmdline)
-            r = expand r
+        # Check if it's a known function
+        if (nam_ll_in(fn, GLOBAL_NAMESPACE) &&
+            flag_1true_p((nam_ll_read(fn, GLOBAL_NAMESPACE)), TYPE_FUNCTION)) {
+            if (fn == "basename")
+                r = xeq_fn__basename(fn, m, nparam, param) r
+            else if (fn == "boolval")
+                r = xeq_fn__boolval(fn, m, nparam, param) r
+            else if (fn == "chr")
+                r = xeq_fn__chr(fn, m, nparam, param) r
+            else if (fn == "date"     || fn == "epoch" ||
+                     fn == "strftime" || fn == "time"  ||
+                     fn == "tz"       || fn == "utc")
+                r = xeq_fn__date(fn, m, nparam, param) r
+            else if (fn == "dirname")
+                r = xeq_fn__dirname(fn, m, nparam, param) r
+            else if (fn == "expr" || fn == "sexpr")
+                r = xeq_fn__expr(fn, m, nparam, param) r
+            else if (fn == "format")
+                r = xeq_fn__format(fn, m, nparam, param) r
+            else if (fn == "getenv" || fn == "sgetenv")
+                r = xeq_fn__getenv(fn, m, nparam, param) r
+            else if (fn == "ifdef" || fn == "ifndef")
+                r = xeq_fn__ifdef(fn, m, nparam, param) r
+            else if (fn == "ifelse")
+                r = xeq_fn__ifelse(fn, m, nparam, param) r
+            else if (fn == "ifx")
+                r = xeq_fn__ifx(fn, m, nparam, param) r
+            else if (fn == "index")
+                r = xeq_fn__index(fn, m, nparam, param) r
+            else if (fn == "lc" || fn == "len" || fn == "uc")
+                r = xeq_fn__generic_string(fn, m, nparam, param) r
+            else if (fn == "left")
+                r = xeq_fn__left(fn, m, nparam, param) r
+            else if (fn == "mid" || fn == "substr")
+                r = xeq_fn__mid(fn, m, nparam, param) r
+            else if (fn == "ord")
+                r = xeq_fn__ord(fn, m, nparam, param) r
+            else if (fn == "rem" || fn == "srem") {
+                # @rem ...@  is considered a comment and ignored
+                # @srem ...@ like @rem, but preceding whitespace is also discarded
+                if (first(fn) == "s")
+                    sub(/[ \t]+$/, "", l)
+            } else if (fn == "right")
+                r = xeq_fn__right(fn, m, nparam, param) r
+            else if (fn == "rot13")
+                r = xeq_fn__rot13(fn, m, nparam, param) r
+            else if (fn == "spaces")
+                r = xeq_fn__spaces(fn, m, nparam, param) r
+            else if (fn == "trim" || fn == "ltrim" || fn == "rtrim")
+                r = xeq_fn__trim(fn, m, nparam, param) r
+            else if (fn == "uuid")
+                r = uuid() r
+            else if (fn == "xbasename" || fn == "xdirname")
+                r = xeq_fn__xname(fn, m, nparam, param) r
 
         # Old code for macro processing
         # <SOMETHING ELSE> : Call a user-defined macro, handles arguments
@@ -7511,7 +7101,7 @@ function dosubs(s,
             if (index(expand, "$*") > 0) {
                 x = ""
                 for (j = 1; j <= nparam; j++)
-                    x = x  param[j + off_by]  TOK_SPACE
+                    x = x  param[j + __param_offset]  TOK_SPACE
                 gsub("\\$\\*", chop(x), expand)
             }
             # Expand $N parameters (includes $0 for macro name)
@@ -7520,9 +7110,9 @@ function dosubs(s,
             # Count backwards to get around $10 problem.
             while (j-- >= 0) {
                 if (index(expand, "${" j "}") > 0)
-                    gsub("\\$\\{" j "\\}", (j <= nparam) ? param[j + off_by] : "", expand)
+                    gsub("\\$\\{" j "\\}", (j <= nparam) ? param[j + __param_offset] : "", expand)
                 if (index(expand, "$" j) > 0)
-                    gsub("\\$"    j      , (j <= nparam) ? param[j + off_by] : "", expand)
+                    gsub("\\$"    j      , (j <= nparam) ? param[j + __param_offset] : "", expand)
             }
             trace(TRACE_EXPANSION, fn, sprintf("'%s' => '%s'", m, expand))
             r = expand r
@@ -7563,7 +7153,7 @@ function dosubs(s,
             } else {
                 if (pre_post != 0)
                     error("Bad parameters in '" m "':" $0)
-                subcmd = param[1 + off_by]
+                subcmd = param[1 + __param_offset]
                 # @ID currval@ and @ID nextval@ are similar to @ID@ and
                 # @++ID@ but {curr,next}val eschew any formatting.
                 if (nparam == 1) {
@@ -7603,6 +7193,762 @@ function dosubs(s,
 
     dbg_print("dosubs", 3, sprintf("(dosubs) END; Out of loop => '%s'", l r))
     return l r
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  B A S E N A M E  @
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#       basename SYM: Base (i.e., file name) of path, in Awk
+#
+#       basename in Awk, assuming Unix style path separator.
+#       Return filename portion of path.  If this is not
+#       adequate, consider using @xbasename SYM@.
+#       
+#*****************************************************************************
+# @basename SYM@
+function xeq_fn__basename(fn, m, nparam, param,
+                          p, result)
+{
+    if (nparam != 1) error("Bad parameters in '" m "':" $0)
+    p = param[1 + __param_offset]
+    assert_sym_valid_name(p)
+    assert_sym_defined(p, fn)
+    result = rm_quotes(sym_fetch(p))
+    sub(/^.*\//, "", result)
+    return result
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  B O O L V A L  @
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#       boolval SYM: Print __FMT__[0 or 1], depending on SYM truthiness.
+#         @boolval SYM@ => <string>
+#       The actual output is taken from __FMT__[].  The defaults are
+#       "1" and "0", but a Fortran programmer might change them to
+#       ".TRUE." and ".FALSE.", while a Lisp programmer might change
+#       them to "t" and "nil".  If the symbol SYM is not defined:
+#        - In strict mode, throw an error if the symbol is not defined.
+#        - In non-strict mode, you get a 'false' output if not defined.
+#        - If it's not a symbol, use its value as a boolean state.
+#       
+#*****************************************************************************
+# @boolval SYM@
+function xeq_fn__boolval(fn, m, nparam, param,
+                         p, result)
+{
+    if (nparam == 0)
+        # In an effort to spread a bit more entropy in the universe,
+        # if you don't give an argument to boolval then you get
+        # True 50% of the time and False the other 50%.
+        result = sym_ll_read("__FMT__", rand() < 0.50)
+    else {
+        p = param[1 + __param_offset]
+        # Always accept your current representation of True or False
+        # to actually be true or false without further evaluation.
+        if (p == sym_ll_read("__FMT__", TRUE) ||
+            p == sym_ll_read("__FMT__", FALSE))
+            result = p
+        else if (sym_valid_p(p)) {
+            # It's a valid name -- now see if it's defined or not.
+            # If not, check if we're in strict mode (error) or not.
+            if (sym_defined_p(p))
+                result = sym_ll_read("__FMT__", sym_true_p(p))
+            else if (strictp("boolval"))
+                error("Name '" p "' not defined [boolval]:" $0)
+            else
+                result = sym_ll_read("__FMT__", FALSE)
+        } else
+            # It's not a symbol, so use its value interpreted as a boolean
+            result = sym_ll_read("__FMT__", !!p)
+    }
+
+    return result
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  C H R  @
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#       chr SYM: Output character with ASCII code SYM
+#         @chr 65@ => A
+#       
+#*****************************************************************************
+# @chr SYM@
+function xeq_fn__chr(fn, m, nparam, param,
+                     p)
+{
+    if (nparam != 1) error("Bad parameters in '" m "':" $0)
+    p = param[1 + __param_offset]
+    if (sym_valid_p(p)) {
+        assert_sym_defined(p)
+        return sprintf("%c", sym_fetch(p)+0)
+    } else if (integerp(p) && p >= 0 && p <= 255)
+        return sprintf("%c", p+0)
+    else
+        error("Bad parameters in '" m "':" $0)
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  D A T E  @
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#       date    : Current date as YYYY-MM-DD
+#       epoch   : Number of seconds since Epoch
+#       strftime: User-specified date format, see strftime(3)
+#       time    : Current time as HH:MM:SS
+#       tz      : Current time zone name
+#       
+#*****************************************************************************
+# @date@
+function xeq_fn__date(fn, m, nparam, param,
+                      y, cmdline, result)
+{
+    if (secure_level() >= 2)
+        error(sprintf("(%s) Security violation", fn))
+    if (fn == "strftime" && nparam == 0)
+        error("Bad parameters in '" m "':" $0)
+    y = fn == "strftime" ? substr(m, length(fn)+2) \
+        : sym_ll_read("__FMT__", fn)
+    gsub(/"/, "\\\"", y)
+    cmdline = build_prog_cmdline("date", "+\"" y "\"", MODE_IO_CAPTURE)
+    if (fn == "utc")
+        cmdline = "TZ=UTC " cmdline
+    cmdline | getline result
+    close(cmdline)
+    return result
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  D I R N A M E  @
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#       dirname SYM: Directory name of path, in Awka
+#
+#       dirname in Awk, assuming Unix style path separator.
+#       Return directory portion of path.  If this is not
+#       adequate, consider using @xdirname SYM@.
+#       
+#*****************************************************************************
+# @dirname SYM@
+function xeq_fn__dirname(fn, m, nparam, param,
+                         p, x)
+{
+    if (nparam != 1) error("Bad parameters in '" m "':" $0)
+    p = param[1 + __param_offset]
+    assert_sym_valid_name(p)
+    assert_sym_defined(p, fn)
+
+    x = rm_quotes(sym_fetch(p))
+    return sub(/\/[^\/]*$/, "", x) ? x : "."
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  E X P R  @
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#       expr ...: Evaluate mathematical epxression, store in __EXPR__
+#       
+#*****************************************************************************
+# @expr ...@
+function xeq_fn__expr(fn, m, nparam, param,
+                      silent, result)
+{
+    silent = first(fn) == "s"   # don't automatically print result
+    sub(/^s?expr[ \t]*/, "", m) # clean up expression to evaluate
+    result = calc3_eval(m)
+    dbg_print("expr", 1, sprintf("expr{%s} = %s", m, result))
+    sym_ll_write("__EXPR__", "", GLOBAL_NAMESPACE, result+0)
+    return silent ? "" : result
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  F O R M A T  @
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#       format: Format value(s) according for sprintf format string
+#       
+#*****************************************************************************
+# @format FMT SYM...@
+function xeq_fn__format(fn, m, nparam, param,
+                        fmt, i, arg, result)
+{
+    if (nparam < 1 || nparam > 6) error("Bad parameters in '" m "':" $0)
+    fmt = sym_value_or_literal(param[1 + __param_offset])
+    for (i = 2; i <= 6; i++)
+        arg[i] = sym_value_or_literal(param[i + __param_offset])
+    if      (nparam == 1) result = sprintf(fmt)
+    else if (nparam == 2) result = sprintf(fmt, arg[2])
+    else if (nparam == 3) result = sprintf(fmt, arg[2], arg[3])
+    else if (nparam == 4) result = sprintf(fmt, arg[2], arg[3], arg[4])
+    else if (nparam == 5) result = sprintf(fmt, arg[2], arg[3], arg[4], arg[5])
+    else if (nparam == 6) result = sprintf(fmt, arg[2], arg[3], arg[4], arg[5], arg[6])
+
+    return result
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  G E T E N V  @
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#       getenv: Get environment variable
+#       sgetenv
+#         @getenv HOME@ => /home/user
+#
+#       "silent" getenv returns empty string for non-existent variable,
+#       regardless of strict setting.
+#       
+#*****************************************************************************
+# @getenv ENV@
+function xeq_fn__getenv(fn, m, nparam, param,
+                        p, silent)
+{
+    silent = first(fn) == "s"
+    if (nparam != 1) error("Bad parameters in '" m "':" $0)
+    p = param[1 + __param_offset]
+    assert_valid_env_var_name(p)
+    if (p in ENVIRON)
+        return ENVIRON[p]
+    if (strictp("env") && !silent)
+        error("Environment variable '" p "' not defined:" $0)
+    return ""
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  I F D E F  @
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#       ifdef/ifndef: Expand text if symbol is defined
+#
+#*****************************************************************************
+# @ifdef{FOO}{True text}{False text}@
+function xeq_fn__ifdef(fn, m, nparam, param,
+                       x, ifcond, init_negate, true_text, false_text)
+{
+    if (   match(m, "^ifdef{[^}][^}]*}{[^}]*}{[^}]*}$") \
+        || match(m, "^ifndef{[^}][^}]*}{[^}]*}{[^}]*}$"))
+        ;          # Three-brace expr is well-formed
+    else if (   match(m, "^ifdef{[^}][^}]*}{[^}]*}$") \
+             || match(m, "^ifndef{[^}][^}]*}{[^}]*}$"))
+        m = m "{}" # Two-brace expr can be fixed to use empty FALSE string
+    else
+        error("(ifdef) Bad ifdef in '" m "':" $0)
+
+    # Get symbol name (x) which will be handed to defined()
+    m = substr(m, index(m, TOK_LBRACE)) # strip fn name
+    if (!match(m, "^{[^}]*}"))
+        error("(ifdef) Bad ifdef symbol in '" m "':" $0)
+    x = substr(m, RSTART+1, RLENGTH-2)
+    assert_sym_valid_name(x)
+    ifcond = "defined(" x ")"
+    init_negate = fn == "ifndef"
+    dbg_print("dosubs", 7, "(ifdef) ifcond='" ifcond "'")
+    m = substr(m, RSTART+RLENGTH)
+
+    # Get true_text
+    if (!match(m, "^{[^}]*}"))
+        error("(ifdef) Bad true_text in '" m "':" $0)
+    true_text = substr(m, RSTART+1, RLENGTH-2)
+    dbg_print("dosubs", 7, "(ifdef) true_text='" true_text "'")
+    m = substr(m, RSTART+RLENGTH)
+
+    # Get false_text
+    if (!match(m, "^{[^}]*}"))
+        error("(ifdef) Bad false_text in '" m "':" $0)
+    false_text = substr(m, RSTART+1, RLENGTH-2)
+    dbg_print("dosubs", 7, "(ifdef) if_false='" false_text "'")
+    m = substr(m, RSTART+RLENGTH)
+    if (!emptyp(m))
+        error("(ifdef) Extra text in ifdef: m='" m "'")
+
+    return dosubs(evaluate_boolean(ifcond, init_negate) ? true_text : false_text)
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  I F E L S E  @
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#       ifelse: Evaluate argument pairs for equality.
+#       
+#       @ifelse@ has three or more arguments.
+#       If the first argument is equal to the second,
+#          then the value is the third argument.
+#       If not, and if there are more than four arguments,
+#          the process is repeated with arguments 4, 5, 6, and 7.
+#       Otherwise, the value is either the fourth argument, or null if omitted.
+#
+#       NOTE: All of the {} clauses must be on the same line,
+#       since dosubs CANNOT call readline().
+#       
+#*****************************************************************************
+# @ifelse{S1}{S2}{True text}{False text}...@
+function xeq_fn__ifelse(fn, m, nparam, param,
+                        arg, j, result)
+{
+    m = substr(m, 7)    # strip away "ifelse"
+    arg[1] = arg[2] = arg[3] = ""
+    while (TRUE) {
+        dbg_print("dosubs", 5, "(ifelse) TOP; m=" m)
+
+        # Check that at least three pairs of braces are present,
+        # and whatever remains are also well-formed brace pairs.
+        # Pathological syntax (like {..\}..} will cause problems.
+        if (! match(m, "^{[^}][^}]*}{[^}]*}{[^}]*}")) # used to include ({[^}]*})*$ at end of regexp but Busybox Awk doesn't like that
+            error("(ifelse) Bad parameters in '" m "':" $0)
+
+        # Grab the first three arguments
+        for (j = 1; j <= 3; j++) {
+            match(m, "{[^}]*}")
+            arg[j] = substr(m, RSTART+1, RLENGTH-2)
+            m = substr(m, RSTART+RLENGTH)
+            dbg_print("dosubs", 7, sprintf("(ifelse) arg[%d]='%s'",
+                                           j, arg[j]))
+        }
+
+        # Check arg1 & arg2 for equality...  TODO integer check -> 0+n
+        # If the first argument is equal to the second,
+        #    then the value is the third argument.
+        if (arg[1] == arg[2]) {
+            result = arg[3]
+            break
+        }
+        # At this point, the three required args have been
+        # stripped out of m.  What remains in m could be:
+        # 1. Empty - no fourth argument, so use empty string.
+        if (m == EMPTY) {
+            result = ""
+            break
+        }
+        # 2. Exactly one brace clause remains; it is the fourth
+        # (last) argument, so use it.
+        if (match(m, "^{[^}]*}$")) {
+            result = substr(m, 2, length(m) - 2)
+            break
+        }
+        # 3. If there are more than four args, there have to be a
+        # minimum number to allow the cycle to continue.
+        # You need  {1}{2}{3}  ||  {4}{5}{6} [ {7} ]
+        #                      ||  {1}{2}{3}
+        # which means that just one or two pairs of braces
+        # constitute invalid syntax.  The one pair case was
+        # caught in choice 2 just above, so we check for two pairs
+        if (match(m, "^{[^}][^}]*}{[^}]*}$"))   # Busybox Awk does not support +
+            error("(ifelse) Bad parameters in '" m "':" $0)
+
+        # # If not, and if there are more than four arguments,
+        #    the process is repeated with arguments 4, 5, 6, and 7.
+    }
+
+    return dosubs(result)
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  I F X  @
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#       ifx: If Expression : Evaluate boolean expression to choose result text
+#         A and B are @ifx{A == B}{Equal}{Not equal}@
+#       
+#*****************************************************************************
+# @ifx{Boolean expr}{True text}{False text}@
+function xeq_fn__ifx(fn, m, nparam, param,
+                     ifcond, init_negate, true_text, false_text, result)
+{
+    if (!match(m, "^ifx{[^}][^}]*}{[^}]*}{[^}]*}$"))   # Busybox Awk does not support +
+        error("(ifx) Bad ifx in '" m "':" $0)
+    m = substr(m, index(m, TOK_LBRACE)) # strip fn name
+    init_negate = FALSE
+
+    # Get if_clause
+    if (!match(m, "^{[^}]*}"))
+        error("(ifx) Bad ifcond in '" m "':" $0)
+    ifcond = substr(m, RSTART+1, RLENGTH-2)
+    dbg_print("dosubs", 7, "(ifx) ifcond='" ifcond "'")
+    m = substr(m, RSTART+RLENGTH)
+
+    # Get true_text
+    if (!match(m, "^{[^}]*}"))
+        error("(ifx) Bad true_text in '" m "':" $0)
+    true_text = substr(m, RSTART+1, RLENGTH-2)
+    dbg_print("dosubs", 7, "(ifx) true_text='" true_text "'")
+    m = substr(m, RSTART+RLENGTH)
+
+    # Get false_text
+    if (!match(m, "^{[^}]*}"))
+        error("(ifx) Bad false_text in '" m "':" $0)
+    false_text = substr(m, RSTART+1, RLENGTH-2)
+    dbg_print("dosubs", 7, "(ifx) if_false='" false_text "'")
+    m = substr(m, RSTART+RLENGTH)
+    if (!emptyp(m))
+        error("(ifx) Extra text in ifx: m='" m "'")
+
+    return dosubs(evaluate_boolean(ifcond, init_negate) ? true_text : false_text)
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  I N D E X  @
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#       index: Location of substring
+#         NB - Awk index() returns 1 and so do we.  Different from m4.
+#       
+#*****************************************************************************
+# @index SYM SUBSTR@
+function xeq_fn__index(fn, m, nparam, param,
+                       p, x)
+{
+    if (nparam != 2)
+        error("Bad parameters in '" m "':" $0)
+    p = param[1 + __param_offset]
+    assert_sym_valid_name(p)
+    assert_sym_defined(p, fn)
+    x = param[2 + __param_offset]
+    return index(sym_fetch(p), x)
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  L E F T  @
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#       left: Left (substring)
+#         @left ALPHABET 7@ => ABCDEFG
+#       
+#*****************************************************************************
+# @left SYMBOL[, LENGTH]@
+function xeq_fn__left(fn, m, nparam, param,
+                      p, x)
+{
+    if (nparam < 1 || nparam > 2) error("Bad parameters in '" m "':" $0)
+    p = param[1 + __param_offset]
+    assert_sym_valid_name(p)
+    assert_sym_defined(p, fn)
+    x = 1
+    if (nparam == 2) {
+        x = param[2 + __param_offset]
+        if (!integerp(x))
+            error("Value '" x "' must be numeric:" $0)
+    }
+    return substr(sym_fetch(p), 1, x)
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  M I D  @
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#       mid: Substring ...  SYMBOL, START[, LENGTH]
+#         @mid ALPHABET 15 5@ => OPQRS
+#         @mid FOO 3@
+#         @mid FOO 2 2@
+#       
+#*****************************************************************************
+# @mid SYMBOL, START[, LENGTH]
+function xeq_fn__mid(fn, m, nparam, param,
+                     p, x, y, result)
+{
+    if (nparam < 2 || nparam > 3)
+        error("Bad parameters in '" m "':" $0)
+    p = param[1 + __param_offset]
+    assert_sym_valid_name(p)
+    assert_sym_defined(p, fn)
+    x = param[2 + __param_offset]
+    if (!integerp(x))
+        error("Value '" x "' must be numeric:" $0)
+    if (nparam == 2) {
+        result = substr(sym_fetch(p), x)
+    } else if (nparam == 3) {
+        y = param[3 + __param_offset]
+        if (!integerp(y))
+            error("Value '" y "' must be numeric:" $0)
+        result = substr(sym_fetch(p), x, y)
+    }
+    return result
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  O R D  @
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#       ord SYM: Output character with ASCII code SYM
+#         @define B *Nothing of interest*
+#         @ord A@ => 65
+#         @ord B@ => 42
+#
+#*****************************************************************************
+# @ord SYM@
+function xeq_fn__ord(fn, m, nparam, param,
+                     p)
+{
+    if (nparam != 1) error("Bad parameters in '" m "':" $0)
+    if (! __ord_initialized)
+        initialize_ord()
+    p = param[1 + __param_offset]
+    if (sym_valid_p(p) && sym_defined_p(p))
+        p = sym_fetch(p)
+    return __ord[first(p)]
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  R I G H T  @
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#       right: Right (substring)
+#         @right ALPHABET 20@ => TUVWXYZ
+#
+#*****************************************************************************
+# @right SYM N@
+function xeq_fn__right(fn, m, nparam, param,
+                       x, p)
+{
+    if (nparam < 1 || nparam > 2) error("Bad parameters in '" m "':" $0)
+    p = param[1 + __param_offset]
+    assert_sym_valid_name(p)
+    assert_sym_defined(p, fn)
+    x = length(sym_fetch(p))
+    if (nparam == 2) {
+        x = param[2 + __param_offset]
+        if (!integerp(x))
+            error("Value '" x "' must be numeric:" $0)
+    }
+    return substr(sym_fetch(p), x)
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  R O T 1 3  @
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#       rot13 SYM: Output value of symbol with rot13 text
+#         @define aRealSymbol *With 6, you get value!*
+#         @rot13 aRealSymbol@    => *Jvgu 6, lbh trg inyhr!*
+#         @rot13 NotaRealSymbol@ => AbgnErnyFlzoby
+#
+#*****************************************************************************
+# @rot13 SYM@
+function xeq_fn__rot13(fn, m, nparam, param,
+                       p, i, c, result)
+{
+    if (! __rot13_initialized)
+        initialize_rot13()
+    if (nparam == 0) error("Bad parameters in '" m "':" $0)
+    p = param[1 + __param_offset]
+    p = (sym_valid_p(p) && sym_defined_p(p)) \
+        ? sym_fetch(p) : substr(m, length(fn)+2)
+    result = ""
+
+    for (i = 1; i <= length(p); i++) {
+        c = substr(p, i, 1)
+        result = result  (match(c, "[a-zA-Z]") ? __rot13[c] : c)
+    }
+    return result
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  S P A C E S  @
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#       spaces [N]: N spaces
+#
+#*****************************************************************************
+# @spaces N@
+function xeq_fn__spaces(fn, m, nparam, param,
+                        x, result)
+{
+    if (nparam > 1) error("Bad parameters in '" m "':" $0)
+    result = ""
+    x = 1
+    if (nparam == 1) {
+        x = param[1 + __param_offset]
+        if (!integerp(x))
+            error("Value '" x "' must be numeric:" $0)
+    }
+    while (x-- > 0)
+        result = result TOK_SPACE
+    return result
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  (generic string func)  @
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#       lc : Lower case
+#       len: Length
+#       uc : Upper case
+#         @len ALPHABET@ => 26
+#
+#*****************************************************************************
+function xeq_fn__generic_string(fn, m, nparam, param,
+                                p, result)
+{
+    if (nparam != 1) error("Bad parameters in '" m "':" $0)
+    p = param[1 + __param_offset]
+    assert_sym_valid_name(p)
+    assert_sym_defined(p, fn)
+    if (fn == "lc")
+        result = tolower(sym_fetch(p))
+    else if (fn == "len")
+        result = length(sym_fetch(p))
+    else if (fn == "uc")
+        result = toupper(sym_fetch(p))
+    else
+        error("Function '" fn "' not defined [can't happen]:" $0)
+
+    return result
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  T R I M  @
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#       trim  SYM: Remove both leading and trailing whitespace
+#       ltrim SYM: Remove leading whitespace
+#       rtrim SYM: Remove trailing whitespace
+#
+#*****************************************************************************
+function xeq_fn__trim(fn, m, nparam, param,
+                      p, result)
+{
+    if (nparam != 1) error("Bad parameters in '" m "':" $0)
+    result = ""
+    p = param[1 + __param_offset]
+    assert_sym_valid_name(p)
+    assert_sym_defined(p, fn)
+    result = sym_fetch(p)
+    if (fn == "trim" || fn == "ltrim")
+        result = ltrim(result)
+    if (fn == "trim" || fn == "rtrim")
+        result = rtrim(result)
+    return result
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  X _ _ _ N A M E  @
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#       xbasename SYM: Base (i.e., file name) of path, using external program
+#       xdirname SYM : Directory name of path, using external program
+#       
+#*****************************************************************************
+# @xbasename SYM@
+# @xdirname SYM@
+function xeq_fn__xname(fn, m, nparam, param,
+                       p, cmdline, expand)
+{
+    if (secure_level() >= 2)
+        error("(" fn ") Security violation")
+    if (nparam != 1) error("(" fn ") Bad parameters in '" m "':" $0)
+    p = param[1 + __param_offset]
+    assert_sym_valid_name(p)
+    assert_sym_defined(p, fn)
+    cmdline = build_prog_cmdline(fn, rm_quotes(sym_fetch(p)), MODE_IO_CAPTURE)
+    cmdline | getline expand
+    close(cmdline)
+
+    return expand
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -7715,6 +8061,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     __init_files_loaded         = FALSE # becomes True in load_init_files()
     __namespace                 = GLOBAL_NAMESPACE
     __ord_initialized           = FALSE # becomes True in initialize_ord()
+    __param_offset              = 1
     __print_mode                = MODE_TEXT_PRINT
     __rot13_initialized         = FALSE # becomes True in initialize_rot13()
     __parse_stack[0]            = 0;    __parse_stack["name"]  = "parse_stack"
@@ -7914,25 +8261,25 @@ function initialize_prog_paths()
 
     nam_ll_write("__PROG__", GLOBAL_NAMESPACE, TYPE_ARRAY FLAG_READONLY FLAG_SYSTEM)
     if ("basename" in PROG)
-        sym_ll_fiat("__PROG__", "basename", FLAGS_READONLY_SYMBOL, PROG["basename"])
+        sym_ll_fiat("__PROG__", "xbasename", FLAGS_READONLY_SYMBOL, PROG["basename"])
     if ("date" in PROG)
-        sym_ll_fiat("__PROG__", "date",     FLAGS_READONLY_SYMBOL, PROG["date"])
+        sym_ll_fiat("__PROG__", "date",      FLAGS_READONLY_SYMBOL, PROG["date"])
     if ("dirname" in PROG)
-        sym_ll_fiat("__PROG__", "dirname",  FLAGS_READONLY_SYMBOL, PROG["dirname"])
+        sym_ll_fiat("__PROG__", "xdirname",  FLAGS_READONLY_SYMBOL, PROG["dirname"])
     if ("hostname" in PROG)
-        sym_ll_fiat("__PROG__", "hostname", FLAGS_READONLY_SYMBOL, PROG["hostname"])
+        sym_ll_fiat("__PROG__", "hostname",  FLAGS_READONLY_SYMBOL, PROG["hostname"])
     if ("id" in PROG)
-        sym_ll_fiat("__PROG__", "id",       FLAGS_READONLY_SYMBOL, PROG["id"])
+        sym_ll_fiat("__PROG__", "id",        FLAGS_READONLY_SYMBOL, PROG["id"])
     if ("pwd" in PROG)
-        sym_ll_fiat("__PROG__", "pwd",      FLAGS_READONLY_SYMBOL, PROG["pwd"])
+        sym_ll_fiat("__PROG__", "pwd",       FLAGS_READONLY_SYMBOL, PROG["pwd"])
     if ("rm" in PROG)
-        sym_ll_fiat("__PROG__", "rm",       FLAGS_READONLY_SYMBOL, PROG["rm"])
+        sym_ll_fiat("__PROG__", "rm",        FLAGS_READONLY_SYMBOL, PROG["rm"])
     if ("sh" in PROG)
-        sym_ll_fiat("__PROG__", "sh",       FLAGS_READONLY_SYMBOL, PROG["sh"])
+        sym_ll_fiat("__PROG__", "sh",        FLAGS_READONLY_SYMBOL, PROG["sh"])
     if ("stat" in PROG)
-        sym_ll_fiat("__PROG__", "stat",     FLAGS_READONLY_SYMBOL, PROG["stat"])
+        sym_ll_fiat("__PROG__", "stat",      FLAGS_READONLY_SYMBOL, PROG["stat"])
     if ("uname" in PROG)
-        sym_ll_fiat("__PROG__", "uname",    FLAGS_READONLY_SYMBOL, PROG["uname"])
+        sym_ll_fiat("__PROG__", "uname",     FLAGS_READONLY_SYMBOL, PROG["uname"])
 }
 
 

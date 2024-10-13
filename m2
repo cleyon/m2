@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-10-12 14:04:02 cleyon>
+#  Time-stamp:  <2024-10-12 23:21:31 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -274,7 +274,7 @@ function path_exists_p(path,
 {
     if (secure_level() < 2)
         return exec_prog_cmdline("stat", path) == EX_OK
-        
+
     # At security level 2+, exec_prog_cmdline() is disallowed,
     # so we'll use this workaround.
     #
@@ -533,7 +533,7 @@ function check__parse_stack(expected_block_type,
 
     btop = stk_top(__parse_stack)
     if (blk_type(btop) != expected_block_type) {
-        __m2_msg = sprintf("Missing parser; wanted %s but found %s", 
+        __m2_msg = sprintf("Missing parser; wanted %s but found %s",
                            ppf__block_type(expected_block_type), ppf__block_type(blk_type(btop)))
         return ERR_PARSE_MISMATCH
     }
@@ -1685,7 +1685,7 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
 
     while (TRUE) {
         dbg_print("parse", 4, sprintf("(parse) [%s] TOP OF LOOP: __FILE__ %s __LINE__ %d ________________",
-                                     parser_label, FILE(), LINE()+1)) # LINE will be +1 after upcoming readline() 
+                                     parser_label, FILE(), LINE()+1)) # LINE will be +1 after upcoming readline()
 
         rstat = readline()   # OKAY, EOF, ERROR
         if (rstat == ERROR) {
@@ -1739,7 +1739,7 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
                 ;
             name = substr($0, 2, i-2)
             dbg_print("parse", 7, "(parse) [" parser_label "] name now '" name "'")
-            
+
             # See if it's a built-in command
             if (nam_ll_in(name, GLOBAL_NAMESPACE) &&
                 flag_1true_p((code = nam_ll_read(name, GLOBAL_NAMESPACE)),
@@ -2192,7 +2192,7 @@ function flag_set_clear(code, set_fs, clear_fs,
                    substr(code, idx+1)
         }
     }
-        
+
     # Now set the ones in set_fs
     for (x = 1; x <= length(set_fs); x++) {
         flag = substr(set_fs, x, 1)
@@ -2317,7 +2317,7 @@ function nam_purge(level,
                     x, k, del_list)
 {
     dbg_print("nam", 7, "(nam_purge) BEGIN")
-    
+
     for (k in namtab) {
         split(k, x, SUBSEP)
         if (x[2]+0 >= level)
@@ -2391,7 +2391,8 @@ function nam_ll_read(name, level)
 
 function nam_ll_in(name, level)
 {
-    if (level == EMPTY) error("(nam_ll_in) LEVEL missing")
+    if (level == EMPTY)
+        error("(nam_ll_in) LEVEL missing")
     if (name != "__LINE__" && name != "__NLINE__")
         dbg_print("sym", 5, sprintf("(nam_ll_in) Looking for '%s' at level %d", name, level))
     return (name, level) in namtab
@@ -2401,7 +2402,8 @@ function nam_ll_in(name, level)
 function nam_ll_write(name, level, code,
                        retval)
 {
-    if (level == EMPTY) error("(nam_ll_write) LEVEL missing")
+    if (level == EMPTY)
+        error("(nam_ll_write) LEVEL missing")
     # It's important to use low-level functions here, and not invoke
     # dbg_* functions in this procedure.  Nasty loops ensue.
     if (sym_ll_in("__DBG__", "nam", GLOBAL_NAMESPACE) &&
@@ -3180,14 +3182,16 @@ function sym_ll_read(name, key, level)
 
 function sym_ll_in(name, key, level)
 {
-    if (level == EMPTY) error("sym_ll_in: LEVEL missing")
+    if (level == EMPTY)
+        error("sym_ll_in: LEVEL missing")
     return (name, key, level, "symval") in symtab
 }
 
 
 function sym_ll_write(name, key, level, val)
 {
-    if (level == EMPTY) error("sym_ll_write: LEVEL missing")
+    if (level == EMPTY)
+        error("sym_ll_write: LEVEL missing")
     if (sym_ll_in("__DBG__", "sym", GLOBAL_NAMESPACE) &&
         sym_ll_read("__DBG__", "sym", GLOBAL_NAMESPACE) >= 5 &&
         !nam_system_p(name))
@@ -3216,7 +3220,8 @@ function sym_ll_write(name, key, level, val)
 function sym_ll_incr(name, key, level, incr)
 {
     if (incr == EMPTY) incr = 1
-    if (level == EMPTY) error("sym_ll_incr: LEVEL missing")
+    if (level == EMPTY)
+        error("sym_ll_incr: LEVEL missing")
     if (sym_ll_in("__DBG__", "sym", GLOBAL_NAMESPACE) &&
         sym_ll_read("__DBG__", "sym", GLOBAL_NAMESPACE) >= 5 &&
         !nam_system_p(name))
@@ -3792,7 +3797,7 @@ function bool__scan_factor(    e, r,         # ! factor | variable | ( expressio
     } else {
         # Boolean evaluation would normally fail here, but we'll pass it along to 'evaluate_condition'
         #print_stderr(sprintf("bool__scan_factor: Did not match __bf=%d, __btoken[]=%s, e='%s'", __bf, __btoken[__bf], e))
-        r = evaluate_condition(__btoken[__bf], FALSE) 
+        r = evaluate_condition(__btoken[__bf], FALSE)
         if (r == ERROR)
             warn("(bool__scan_factor): evaluate_condition('" __btoken[__bf] "') returned ERROR")
         else
@@ -4559,7 +4564,7 @@ function dostring(str,
     retval = parse__string()
     dbg_print("parse", 5, "(dostring) RETURNED FROM parse__string()")
     stk_pop(__parse_stack) # Pop the terminal parser; parse_string() pops the source stack
-    
+
     dbg_print("parse", 5, "(dostring) END => " ppf__bool(retval))
     return retval
 }
@@ -4762,7 +4767,7 @@ function execute__for(for_block,
         error("(execute__for) Start cannot be greater than End")
     if (start < end && incr < 0)
         error("(execute__for) Start cannot be less than End")
-        
+
     while (!done) {
         new_level = raise_namespace()
         nam_ll_write(loopvar, new_level, TYPE_SYMBOL FLAG_INTEGER FLAG_READONLY)
@@ -4865,7 +4870,7 @@ function ppf__BLK_FOR(blknum)
 #*****************************************************************************
 #
 #       @  I F
-#   
+#
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
 #*****************************************************************************
@@ -4992,7 +4997,7 @@ function ppf__if(if_block,
     if (blktab[if_block, 0, "seen_else"])
         buf = buf "@else\n" \
             ppf__block(blktab[if_block, 0, "false_block"]) TOK_NEWLINE
-    return buf "@endif" 
+    return buf "@endif"
 }
 
 
@@ -5048,7 +5053,7 @@ function evaluate_condition(cond, negate,
             error("Name '" arr "' lookup failed")
         if (info["isarray"] == FALSE)
             error(sprintf("'%s' is not an array", arr))
-        
+
         retval = sym_ll_in(arr, key, info["level"])
 
     } else if (match(cond, "[^ ]+ *(<|<=|=|==|!=|>=|>) *[^ ]+")) { # poor regexp, fragile
@@ -5500,7 +5505,7 @@ function xeq_cmd__m2ctl(name, cmdline,
         dbg_set_level(dsys, lev)
 
     } else
-        error("Unrecognized parameter " $1) 
+        error("Unrecognized parameter " $1)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -6081,7 +6086,7 @@ function xeq_cmd__shell(name, cmdline,
 
     shell_text_in = blk_to_string(shell_data_blk)
     dbg_print("parse", 5, sprintf("(xeq_cmd__shell) shell_text_in='%s'", shell_text_in))
-    
+
     path_fmt    = sprintf("%sm2-%d.shell-%%s", tmpdir(), sym_fetch("__PID__"))
     input_file  = sprintf(path_fmt, "in")
     output_file = sprintf(path_fmt, "out")
@@ -6395,7 +6400,7 @@ function xeq_cmd__undivert(name, cmdline,
 #*****************************************************************************
 #
 #       @  W H I L E
-#   
+#
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
 #*****************************************************************************
@@ -6912,37 +6917,38 @@ function _c3_advance(    tmp)
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
+#       The dosubs() function actually performs the macro substitution.  It
+#       processes the line left-to-right, replacing macro names with their
+#       bodies.  The rescanning of the new line is left to the higher-level
+#       logic that is jointly managed by readline() and dofile().  This
+#       version is considerably more efficient than the brute-force approach
+#       used in the m0 programs.
+#
+#       M2 uses a fast substitution function.  The idea is to process the
+#       string from left to right, searching for the first substitution to be
+#       made.  We then make the substitution, and rescan the string starting
+#       at the fresh text.  We implement this idea by keeping two strings: the
+#       text processed so far is in L (for Left), and unprocessed text is in R
+#       (for Right).
+#
+#       Here is the pseudocode for dosubs:
+#
+#               L = Empty
+#               R = Input String
+#               while R contains an "@" sign do
+#                   let R = A @ B; set L = L A and R = B
+#                   if R contains no "@" then
+#                       L = L "@"
+#                       break
+#                   let R = A @ B; set M = A and R = B
+#                   if M is in SymTab then
+#                       R = SymTab[M] R
+#                   else
+#                       L = L "@" M
+#                       R = "@" R
+#               return L R
+#
 #*****************************************************************************
-
-# The dosubs() function actually performs the macro substitution.  It
-# processes the line left-to-right, replacing macro names with their
-# bodies.  The rescanning of the new line is left to the higher-level
-# logic that is jointly managed by readline() and dofile().  This
-# version is considerably more efficient than the brute-force approach
-# used in the m0 programs.
-#
-# M2 uses a fast substitution function.  The idea is to process the
-# string from left to right, searching for the first substitution to be
-# made.  We then make the substitution, and rescan the string starting
-# at the fresh text.  We implement this idea by keeping two strings: the
-# text processed so far is in L (for Left), and unprocessed text is in R
-# (for Right).
-#
-# Here is the pseudocode for dosubs:
-#     L = Empty
-#     R = Input String
-#     while R contains an "@" sign do
-#         let R = A @ B; set L = L A and R = B
-#         if R contains no "@" then
-#             L = L "@"
-#             break
-#         let R = A @ B; set M = A and R = B
-#         if M is in SymTab then
-#             R = SymTab[M] R
-#         else
-#             L = L "@" M
-#             R = "@" R
-#     return L R
 function dosubs(s,
                 expand, i, j, l, m, nparam, p, param, r, fn,
                 x, inc_dec, pre_post, subcmd, br)
@@ -6960,7 +6966,7 @@ function dosubs(s,
         if ((i = index(r, TOK_AT)) == IDX_NOT_FOUND)
             break
 
-        dbg_print("dosubs", 7, (sprintf("(dosubs) Top of loop: l='%s', r='%s', expand='%s'", l, r, expand)))
+        dbg_print("dosubs", 7, (sprintf("(dosubs) Top of loop: l='%s', r='%s'", l, r)))
         l = l substr(r, 1, i-1)
         r = substr(r, i+1)      # Currently scanning @
 
@@ -7013,7 +7019,7 @@ function dosubs(s,
         if ((br = index(m, TOK_LBRACE)) > 0)
             fn = substr(fn, 1, br-1)
 
-        dbg_print("dosubs", 7, sprintf("(dosubs) fn=%s, nparam=%d; l='%s', m='%s', r='%s', expand='%s'", fn, nparam, l, m, r, expand))
+        dbg_print("dosubs", 7, sprintf("(dosubs) fn=%s, nparam=%d; l='%s', m='%s', r='%s'", fn, nparam, l, m, r))
 
         # Check for sequence modifiers.  First one wins, and
         # invalid syntax is silently ignored.
@@ -7041,54 +7047,56 @@ function dosubs(s,
             if (fn == "basename")
                 r = xeq_fn__basename(fn, m, nparam, param) r
             else if (fn == "boolval")
-                r = xeq_fn__boolval(fn, m, nparam, param) r
+                r = xeq_fn__boolval(fn, m, nparam, param)  r
             else if (fn == "chr")
-                r = xeq_fn__chr(fn, m, nparam, param) r
+                r = xeq_fn__chr(fn, m, nparam, param)      r
             else if (fn == "date"     || fn == "epoch" ||
                      fn == "strftime" || fn == "time"  ||
                      fn == "tz"       || fn == "utc")
-                r = xeq_fn__date(fn, m, nparam, param) r
+                r = xeq_fn__date(fn, m, nparam, param)     r
             else if (fn == "dirname")
-                r = xeq_fn__dirname(fn, m, nparam, param) r
+                r = xeq_fn__dirname(fn, m, nparam, param)  r
             else if (fn == "expr" || fn == "sexpr")
-                r = xeq_fn__expr(fn, m, nparam, param) r
+                r = xeq_fn__expr(fn, m, nparam, param)     r
             else if (fn == "format")
-                r = xeq_fn__format(fn, m, nparam, param) r
+                r = xeq_fn__format(fn, m, nparam, param)   r
             else if (fn == "getenv" || fn == "sgetenv")
-                r = xeq_fn__getenv(fn, m, nparam, param) r
+                r = xeq_fn__getenv(fn, m, nparam, param)   r
             else if (fn == "ifdef" || fn == "ifndef")
-                r = xeq_fn__ifdef(fn, m, nparam, param) r
+                r = xeq_fn__ifdef(fn, m, nparam, param)    r
             else if (fn == "ifelse")
-                r = xeq_fn__ifelse(fn, m, nparam, param) r
+                r = xeq_fn__ifelse(fn, m, nparam, param)   r
             else if (fn == "ifx")
-                r = xeq_fn__ifx(fn, m, nparam, param) r
+                r = xeq_fn__ifx(fn, m, nparam, param)      r
             else if (fn == "index")
-                r = xeq_fn__index(fn, m, nparam, param) r
-            else if (fn == "lc" || fn == "len" || fn == "uc")
-                r = xeq_fn__generic_string(fn, m, nparam, param) r
+                r = xeq_fn__index(fn, m, nparam, param)    r
             else if (fn == "left")
-                r = xeq_fn__left(fn, m, nparam, param) r
+                r = xeq_fn__left(fn, m, nparam, param)     r
             else if (fn == "mid" || fn == "substr")
-                r = xeq_fn__mid(fn, m, nparam, param) r
+                r = xeq_fn__mid(fn, m, nparam, param)      r
             else if (fn == "ord")
-                r = xeq_fn__ord(fn, m, nparam, param) r
+                r = xeq_fn__ord(fn, m, nparam, param)      r
             else if (fn == "rem" || fn == "srem") {
-                # @rem ...@  is considered a comment and ignored
-                # @srem ...@ like @rem, but preceding whitespace is also discarded
+                # @rem ...@  is considered an in-line comment and ignored
+                # @srem ...@ like @rem, but preceding whitespace is discarded
                 if (first(fn) == "s")
                     sub(/[ \t]+$/, "", l)
             } else if (fn == "right")
-                r = xeq_fn__right(fn, m, nparam, param) r
+                r = xeq_fn__right(fn, m, nparam, param)    r
             else if (fn == "rot13")
-                r = xeq_fn__rot13(fn, m, nparam, param) r
+                r = xeq_fn__rot13(fn, m, nparam, param)    r
             else if (fn == "spaces")
-                r = xeq_fn__spaces(fn, m, nparam, param) r
+                r = xeq_fn__spaces(fn, m, nparam, param)   r
+            else if (fn == "lc" || fn == "len" || fn == "uc")
+                r = xeq_fn__str_fn(fn, m, nparam, param)   r
             else if (fn == "trim" || fn == "ltrim" || fn == "rtrim")
-                r = xeq_fn__trim(fn, m, nparam, param) r
+                r = xeq_fn__trim(fn, m, nparam, param)     r
             else if (fn == "uuid")
-                r = uuid() r
+                r = uuid()                                 r
             else if (fn == "xbasename" || fn == "xdirname")
-                r = xeq_fn__xname(fn, m, nparam, param) r
+                r = xeq_fn__xname(fn, m, nparam, param)    r
+            else
+                error("(dosubs) Function '" fn "' not handled")
 
         # Old code for macro processing
         # <SOMETHING ELSE> : Call a user-defined macro, handles arguments
@@ -7209,13 +7217,14 @@ function dosubs(s,
 #       basename in Awk, assuming Unix style path separator.
 #       Return filename portion of path.  If this is not
 #       adequate, consider using @xbasename SYM@.
-#       
+#
 #*****************************************************************************
 # @basename SYM@
 function xeq_fn__basename(fn, m, nparam, param,
                           p, result)
 {
-    if (nparam != 1) error("Bad parameters in '" m "':" $0)
+    if (nparam != 1)
+        error("Bad parameters in '" m "':" $0)
     p = param[1 + __param_offset]
     assert_sym_valid_name(p)
     assert_sym_defined(p, fn)
@@ -7242,7 +7251,7 @@ function xeq_fn__basename(fn, m, nparam, param,
 #        - In strict mode, throw an error if the symbol is not defined.
 #        - In non-strict mode, you get a 'false' output if not defined.
 #        - If it's not a symbol, use its value as a boolean state.
-#       
+#
 #*****************************************************************************
 # @boolval SYM@
 function xeq_fn__boolval(fn, m, nparam, param,
@@ -7288,13 +7297,14 @@ function xeq_fn__boolval(fn, m, nparam, param,
 #
 #       chr SYM: Output character with ASCII code SYM
 #         @chr 65@ => A
-#       
+#
 #*****************************************************************************
 # @chr SYM@
 function xeq_fn__chr(fn, m, nparam, param,
                      p)
 {
-    if (nparam != 1) error("Bad parameters in '" m "':" $0)
+    if (nparam != 1)
+        error("Bad parameters in '" m "':" $0)
     p = param[1 + __param_offset]
     if (sym_valid_p(p)) {
         assert_sym_defined(p)
@@ -7319,7 +7329,7 @@ function xeq_fn__chr(fn, m, nparam, param,
 #       strftime: User-specified date format, see strftime(3)
 #       time    : Current time as HH:MM:SS
 #       tz      : Current time zone name
-#       
+#
 #*****************************************************************************
 # @date@
 function xeq_fn__date(fn, m, nparam, param,
@@ -7354,13 +7364,14 @@ function xeq_fn__date(fn, m, nparam, param,
 #       dirname in Awk, assuming Unix style path separator.
 #       Return directory portion of path.  If this is not
 #       adequate, consider using @xdirname SYM@.
-#       
+#
 #*****************************************************************************
 # @dirname SYM@
 function xeq_fn__dirname(fn, m, nparam, param,
                          p, x)
 {
-    if (nparam != 1) error("Bad parameters in '" m "':" $0)
+    if (nparam != 1)
+        error("Bad parameters in '" m "':" $0)
     p = param[1 + __param_offset]
     assert_sym_valid_name(p)
     assert_sym_defined(p, fn)
@@ -7379,7 +7390,7 @@ function xeq_fn__dirname(fn, m, nparam, param,
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
 #       expr ...: Evaluate mathematical epxression, store in __EXPR__
-#       
+#
 #*****************************************************************************
 # @expr ...@
 function xeq_fn__expr(fn, m, nparam, param,
@@ -7403,13 +7414,14 @@ function xeq_fn__expr(fn, m, nparam, param,
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
 #       format: Format value(s) according for sprintf format string
-#       
+#
 #*****************************************************************************
 # @format FMT SYM...@
 function xeq_fn__format(fn, m, nparam, param,
                         fmt, i, arg, result)
 {
-    if (nparam < 1 || nparam > 6) error("Bad parameters in '" m "':" $0)
+    if (nparam < 1 || nparam > 6)
+        error("Bad parameters in '" m "':" $0)
     fmt = sym_value_or_literal(param[1 + __param_offset])
     for (i = 2; i <= 6; i++)
         arg[i] = sym_value_or_literal(param[i + __param_offset])
@@ -7438,14 +7450,15 @@ function xeq_fn__format(fn, m, nparam, param,
 #
 #       "silent" getenv returns empty string for non-existent variable,
 #       regardless of strict setting.
-#       
+#
 #*****************************************************************************
 # @getenv ENV@
 function xeq_fn__getenv(fn, m, nparam, param,
                         p, silent)
 {
     silent = first(fn) == "s"
-    if (nparam != 1) error("Bad parameters in '" m "':" $0)
+    if (nparam != 1)
+        error("Bad parameters in '" m "':" $0)
     p = param[1 + __param_offset]
     assert_valid_env_var_name(p)
     if (p in ENVIRON)
@@ -7520,7 +7533,7 @@ function xeq_fn__ifdef(fn, m, nparam, param,
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
 #       ifelse: Evaluate argument pairs for equality.
-#       
+#
 #       @ifelse@ has three or more arguments.
 #       If the first argument is equal to the second,
 #          then the value is the third argument.
@@ -7530,7 +7543,7 @@ function xeq_fn__ifdef(fn, m, nparam, param,
 #
 #       NOTE: All of the {} clauses must be on the same line,
 #       since dosubs CANNOT call readline().
-#       
+#
 #*****************************************************************************
 # @ifelse{S1}{S2}{True text}{False text}...@
 function xeq_fn__ifelse(fn, m, nparam, param,
@@ -7604,7 +7617,7 @@ function xeq_fn__ifelse(fn, m, nparam, param,
 #
 #       ifx: If Expression : Evaluate boolean expression to choose result text
 #         A and B are @ifx{A == B}{Equal}{Not equal}@
-#       
+#
 #*****************************************************************************
 # @ifx{Boolean expr}{True text}{False text}@
 function xeq_fn__ifx(fn, m, nparam, param,
@@ -7652,7 +7665,7 @@ function xeq_fn__ifx(fn, m, nparam, param,
 #
 #       index: Location of substring
 #         NB - Awk index() returns 1 and so do we.  Different from m4.
-#       
+#
 #*****************************************************************************
 # @index SYM SUBSTR@
 function xeq_fn__index(fn, m, nparam, param,
@@ -7678,13 +7691,14 @@ function xeq_fn__index(fn, m, nparam, param,
 #
 #       left: Left (substring)
 #         @left ALPHABET 7@ => ABCDEFG
-#       
+#
 #*****************************************************************************
 # @left SYMBOL[, LENGTH]@
 function xeq_fn__left(fn, m, nparam, param,
                       p, x)
 {
-    if (nparam < 1 || nparam > 2) error("Bad parameters in '" m "':" $0)
+    if (nparam < 1 || nparam > 2)
+        error("Bad parameters in '" m "':" $0)
     p = param[1 + __param_offset]
     assert_sym_valid_name(p)
     assert_sym_defined(p, fn)
@@ -7710,7 +7724,7 @@ function xeq_fn__left(fn, m, nparam, param,
 #         @mid ALPHABET 15 5@ => OPQRS
 #         @mid FOO 3@
 #         @mid FOO 2 2@
-#       
+#
 #*****************************************************************************
 # @mid SYMBOL, START[, LENGTH]
 function xeq_fn__mid(fn, m, nparam, param,
@@ -7754,7 +7768,8 @@ function xeq_fn__mid(fn, m, nparam, param,
 function xeq_fn__ord(fn, m, nparam, param,
                      p)
 {
-    if (nparam != 1) error("Bad parameters in '" m "':" $0)
+    if (nparam != 1)
+        error("Bad parameters in '" m "':" $0)
     if (! __ord_initialized)
         initialize_ord()
     p = param[1 + __param_offset]
@@ -7780,7 +7795,8 @@ function xeq_fn__ord(fn, m, nparam, param,
 function xeq_fn__right(fn, m, nparam, param,
                        x, p)
 {
-    if (nparam < 1 || nparam > 2) error("Bad parameters in '" m "':" $0)
+    if (nparam < 1 || nparam > 2)
+        error("Bad parameters in '" m "':" $0)
     p = param[1 + __param_offset]
     assert_sym_valid_name(p)
     assert_sym_defined(p, fn)
@@ -7814,7 +7830,8 @@ function xeq_fn__rot13(fn, m, nparam, param,
 {
     if (! __rot13_initialized)
         initialize_rot13()
-    if (nparam == 0) error("Bad parameters in '" m "':" $0)
+    if (nparam == 0)
+        error("Bad parameters in '" m "':" $0)
     p = param[1 + __param_offset]
     p = (sym_valid_p(p) && sym_defined_p(p)) \
         ? sym_fetch(p) : substr(m, length(fn)+2)
@@ -7843,7 +7860,8 @@ function xeq_fn__rot13(fn, m, nparam, param,
 function xeq_fn__spaces(fn, m, nparam, param,
                         x, result)
 {
-    if (nparam > 1) error("Bad parameters in '" m "':" $0)
+    if (nparam > 1)
+        error("Bad parameters in '" m "':" $0)
     result = ""
     x = 1
     if (nparam == 1) {
@@ -7861,7 +7879,7 @@ function xeq_fn__spaces(fn, m, nparam, param,
 
 #*****************************************************************************
 #
-#       @  (generic string func)  @
+#       @  (string function)  @
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
@@ -7871,10 +7889,11 @@ function xeq_fn__spaces(fn, m, nparam, param,
 #         @len ALPHABET@ => 26
 #
 #*****************************************************************************
-function xeq_fn__generic_string(fn, m, nparam, param,
-                                p, result)
+function xeq_fn__str_fn(fn, m, nparam, param,
+                        p, result)
 {
-    if (nparam != 1) error("Bad parameters in '" m "':" $0)
+    if (nparam != 1)
+        error("Bad parameters in '" m "':" $0)
     p = param[1 + __param_offset]
     assert_sym_valid_name(p)
     assert_sym_defined(p, fn)
@@ -7907,7 +7926,8 @@ function xeq_fn__generic_string(fn, m, nparam, param,
 function xeq_fn__trim(fn, m, nparam, param,
                       p, result)
 {
-    if (nparam != 1) error("Bad parameters in '" m "':" $0)
+    if (nparam != 1)
+        error("Bad parameters in '" m "':" $0)
     result = ""
     p = param[1 + __param_offset]
     assert_sym_valid_name(p)
@@ -7931,7 +7951,7 @@ function xeq_fn__trim(fn, m, nparam, param,
 #
 #       xbasename SYM: Base (i.e., file name) of path, using external program
 #       xdirname SYM : Directory name of path, using external program
-#       
+#
 #*****************************************************************************
 # @xbasename SYM@
 # @xdirname SYM@
@@ -7940,7 +7960,8 @@ function xeq_fn__xname(fn, m, nparam, param,
 {
     if (secure_level() >= 2)
         error("(" fn ") Security violation")
-    if (nparam != 1) error("(" fn ") Bad parameters in '" m "':" $0)
+    if (nparam != 1)
+        error("(" fn ") Bad parameters in '" m "':" $0)
     p = param[1 + __param_offset]
     assert_sym_valid_name(p)
     assert_sym_defined(p, fn)
@@ -7993,7 +8014,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     SRC_FILE                    = "F"; __blk_label[SRC_FILE]     = "FILE"
     SRC_STRING                  = "S"; __blk_label[SRC_STRING]   = "STRING"
 
-    # Errors                          # ERRORS  
+    # Errors                          # ERRORS
     ERR_OKAY                    =   0
 
     ERR_PARSE                   = 100

@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-10-13 10:25:32 cleyon>
+#  Time-stamp:  <2024-10-13 13:46:09 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -5436,6 +5436,7 @@ function ppf__BLK_LONGDEF(longdef_block)
 #       @m2ctl booltest                 Scan boolean expr from user
 #       @m2ctl clear_debugging          Clear debugging
 #       @m2ctl dbg_namespace            Debug namespaces
+#       @m2ctl dbg_params               Debug symfunc parameters
 #       @m2ctl dbg_ship_out
 #       @m2ctl dump_block BLOCK         Raw dump block #
 #       @m2ctl dump_parse_stack         Dump parse stack
@@ -5482,6 +5483,15 @@ function xeq_cmd__m2ctl(name, cmdline,
         dbg_set_level("namespace", 5)
         dbg_set_level("cmd",       5)
         dbg_set_level("nam",       3)
+        dbg_set_level("sym",       5)
+
+    } else if ($1 == "dbg_params") {
+        # Debug symfunc params: help scan @foo a b c@ and @foo{a}{b}{c}@
+        clear_debugging()
+        dbg_set_level("dosubs",    7)
+        # dbg_set_level("namespace", 5)
+        # dbg_set_level("cmd",       5)
+        # dbg_set_level("nam",       3)
         dbg_set_level("sym",       5)
 
     } else if ($1 == "dbg_ship_out") {
@@ -6950,7 +6960,7 @@ function _c3_advance(    tmp)
 #
 #*****************************************************************************
 function dosubs(s,
-                expand, i, j, l, m, nparam, p, param, r, fn,
+                expand, i, j, l, m, nparam, p, pval, param, r, fn,
                 x, inc_dec, pre_post, subcmd, br, lfn, incr)
 {
     dbg_print("dosubs", 5, sprintf("(dosubs) START s='%s'", s))
@@ -7015,9 +7025,41 @@ function dosubs(s,
 
         nparam = split(m, param) - __param_offset
         fn = param[0 + __param_offset]
+
         # Handle @foo{...} -- isolate fn better
-        if ((br = index(m, TOK_LBRACE)) > 0)
+        if ((br = index(fn, TOK_LBRACE)) > 0) {
+            # Scan @foo{a}{b}{c}...@ better
             fn = substr(fn, 1, br-1)
+
+            # Re-jigger the param array
+            split("", param)    # Start by deleting all entries
+            param[1] = fn       # 1st element is function name
+            wrkm = substr(m, length(fn) + 1)
+            #print_stderr("wrkm='" wrkm "'")
+            nparam = 1
+
+            while (match(wrkm, "^{[^}]*}")) {
+                p = ++nparam
+                pval = substr(wrkm, RSTART+1, RLENGTH-2)
+                #print_stderr("pval='" pval "'")
+                dbg_print("dosubs", 5, sprintf("(dosubs) Parameter %d : %s",
+                                            p, pval))
+                param[p] = pval
+                wrkm = substr(wrkm, RLENGTH+1)
+                #print_stderr("wrkm='" wrkm "'")
+            }
+            if (!emptyp(wrkm))
+                error("(dosubs) Text remains after scanning params")
+
+            #print_stderr("Start param[]")
+            #for (x in param) print_stderr(x "\t" param[x])
+            #print_stderr("End param[]")
+        } else {
+            #print_stderr("No brace; fn='" fn "'")
+            #print_stderr("Start param[]")
+            #for (x in param) print_stderr(x "\t" param[x])
+            #print_stderr("End param[]")
+        }
         lfn = length(fn)
 
         dbg_print("dosubs", 7, sprintf("(dosubs) fn=%s, nparam=%d; l='%s', m='%s', r='%s'", fn, nparam, l, m, r))

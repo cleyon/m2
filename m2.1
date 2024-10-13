@@ -360,18 +360,29 @@ Macros can expand positional parameters whose actual values will be
 supplied when the macro is called.
 The definition should refer to $1, $2, etc.
 ${1} also works, so ${1}1 is distinguishable from $11.
-When a definition refers to a parameter which is not supplied, an empty
-string will used as a default value.
 $0 refers to the name of the macro itself.
 $# is replaced with the actual number of parameters provided.
 $* expands to each given parameter, separated by a space character.
-You may supply more parameters than needed.
+When a definition refers to a parameter which is not supplied, an empty
+string will used as a default value.
+You may supply more parameters than needed; excess parameters are
+simply ignored.
+.Pp
 .Em WARNING :
-Parameters are parsed by splitting on white space.
+Parameters passed using this syntax are parsed by splitting on
+white space.
 This means that in:
 .Dl @foo \[dq]a b\[dq] c@
 .Va foo
 is given three arguments: '"a', 'b"', and 'c' -- not two!
+To support parameters with embedded spaces, an alternate syntax
+is supported:
+.Dl @foo{a b}{c}@
+will provide two arguments: 'a b' and 'c'.  In order for this syntax to
+be recognized, there must be no whitespace between the function name and
+the first open brace; and no text at all between the final closing brace
+and the trailing
+.Qq @ .
 .Pp
 .Em Example :
 .Bd -literal -offset indent -compact

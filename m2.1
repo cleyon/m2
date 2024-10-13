@@ -855,14 +855,20 @@ This injects the current value, formatted by calling
 .Fn sprintf
 with the specified format.
 The form
-.Ql @++ID
+.Ql @++ID@
 is used to generate an increasing sequence of values printed in a
 user-customizable format.
+Use
+.Ql ++
+as shown to increment the sequence value; use
+.Ql --
+to decrement.
+These operators can be used in either a prefix or postfix position.
 To get the current value printed in
 decimal without modification or formatting, say
 .Ql @ID currval@ .
 .Pp
-Sequence values can be modified in two ways:
+Sequence values can be modified in three ways:
 .Bl -enum
 .It
 The
@@ -881,6 +887,10 @@ or
 .Qq --
 (prefix or postfix) will automatically
 modify the sequence while outputting the desired value.
+.It
+The form
+.Ql @ID nextval@
+will increment the value and return it in decimal without special formatting.
 .El
 .Pp
 .Em Example :

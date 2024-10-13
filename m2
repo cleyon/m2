@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-10-13 13:46:09 cleyon>
+#  Time-stamp:  <2024-10-13 16:41:15 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -7005,14 +7005,13 @@ function dosubs(s,
         # - fn :: The name of the "function" to call.  The first element
         #         of m.  Example: "mid".
         # - nparam :: Number of parameters supplied to the function.
-        #     @mid@         -> nparam == 0
-        #     @mid foo@     -> nparam == 1
-        #     @mid foo 3@   -> nparam == 2
-        # In general, a function's parameter N is available in variable
-        #   param[N+1].  Consider "mid foo 3".  nparam is 2.
-        #   The fn is found in the first position, at param [0+1].
-        #   The new prefix is at param[1+1] and new count is at param[2+1].
-        #   This offset of one is referred to as `__param_offset' below.
+        #     @mid@         -> nparam == 0      param[0] == mid
+        #     @mid foo@     -> nparam == 1      param[1] == foo
+        #     @mid foo 3@   -> nparam == 2      param[2] == 3
+        # A function's parameter N is available in variable param[N].
+        #   Consider "mid foo 3".  nparam is 2.
+        #   The function name is found in param[0].
+        #   The symbol (foo) is at param[1] and integer (3) is at param[2].
         # Each function condition eventually executes
         #     r = <SOMETHING> r
         #   which injects <SOMETHING> just before the current value of
@@ -7023,42 +7022,40 @@ function dosubs(s,
         #   words, this injects the result of "invoking" fn.
         # Eventually this big while loop exits and we return "l r".
 
-        nparam = split(m, param) - __param_offset
-        fn = param[0 + __param_offset]
+        nparam = split(m, param)
+        fn = param[1]
 
-        # Handle @foo{...} -- isolate fn better
+        # Check for @foo{...} -- isolate fn to scan @foo{a}{b}{c}...@ better
         if ((br = index(fn, TOK_LBRACE)) > 0) {
-            # Scan @foo{a}{b}{c}...@ better
             fn = substr(fn, 1, br-1)
 
-            # Re-jigger the param array
-            split("", param)    # Start by deleting all entries
-            param[1] = fn       # 1st element is function name
+            # Re-create nparam and param[] according to braces,
+            # not split() on whitespace
+            split("", param)       # Start by deleting all entries
+            param[nparam = 0] = fn # 1st element is function name
             wrkm = substr(m, length(fn) + 1)
-            #print_stderr("wrkm='" wrkm "'")
-            nparam = 1
-
             while (match(wrkm, "^{[^}]*}")) {
                 p = ++nparam
                 pval = substr(wrkm, RSTART+1, RLENGTH-2)
-                #print_stderr("pval='" pval "'")
-                dbg_print("dosubs", 5, sprintf("(dosubs) Parameter %d : %s",
-                                            p, pval))
+                dbg_print("dosubs", 6, sprintf("(dosubs) Parameter %d : %s", p, pval))
                 param[p] = pval
                 wrkm = substr(wrkm, RLENGTH+1)
-                #print_stderr("wrkm='" wrkm "'")
             }
             if (!emptyp(wrkm))
                 error("(dosubs) Text remains after scanning params")
-
-            #print_stderr("Start param[]")
-            #for (x in param) print_stderr(x "\t" param[x])
-            #print_stderr("End param[]")
+            # print_stderr("nparam=" nparam "; param[]:")
+            # for (x in param) print_stderr(x "\t" param[x])
+            # print_stderr("End param[]")
         } else {
-            #print_stderr("No brace; fn='" fn "'")
-            #print_stderr("Start param[]")
-            #for (x in param) print_stderr(x "\t" param[x])
-            #print_stderr("End param[]")
+            # print_stderr("No brace; fn='" fn "'")
+            nparam--
+            # print_stderr("nparam=" nparam "; param[]:")
+            for (j = 1; j <= nparam; j++)
+                param[j] = param[j+1]
+            delete param[nparam + 1]
+            param[0] = fn
+            # for (x in param) print_stderr(x "\t" param[x])
+            # print_stderr("End param[]")
         }
         lfn = length(fn)
 
@@ -7173,7 +7170,7 @@ function dosubs(s,
             } else {
                 if (pre_post != 0)
                     error("Bad parameters in '" m "':" $0)
-                subcmd = param[1 + __param_offset]
+                subcmd = param[1]
                 # @ID currval@ and @ID nextval@ are similar to @ID@ and
                 # @++ID@ but {curr,next}val eschew any formatting.
                 if (nparam == 1) {
@@ -7227,7 +7224,7 @@ function substitute_params(str, nparam, param,
     if (index(str, "$*") > 0) {
         x = ""
         for (j = 1; j <= nparam; j++)
-            x = x  param[j + __param_offset]  TOK_SPACE
+            x = x  param[j]  TOK_SPACE
         gsub("\\$\\*", chop(x), str)
     }
 
@@ -7237,9 +7234,9 @@ function substitute_params(str, nparam, param,
     # Count backwards to get around $10 problem.
     while (j-- >= 0) {
         if (index(str, "${" j "}") > 0)
-            gsub("\\$\\{" j "\\}", (j <= nparam) ? param[j + __param_offset] : "", str)
+            gsub("\\$\\{" j "\\}", (j <= nparam) ? param[j] : "", str)
         if (index(str, "$" j) > 0)
-            gsub("\\$"    j      , (j <= nparam) ? param[j + __param_offset] : "", str)
+            gsub("\\$"    j      , (j <= nparam) ? param[j] : "", str)
     }
 
     return str
@@ -7267,7 +7264,7 @@ function xeq_fn__basename(fn, m, nparam, param,
 {
     if (nparam != 1)
         error("Bad parameters in '" m "':" $0)
-    p = param[1 + __param_offset]
+    p = param[1]
     assert_sym_valid_name(p)
     assert_sym_defined(p, fn)
     result = rm_quotes(sym_fetch(p))
@@ -7305,7 +7302,7 @@ function xeq_fn__boolval(fn, m, nparam, param,
         # True 50% of the time and False the other 50%.
         result = sym_ll_read("__FMT__", rand() < 0.50)
     else {
-        p = param[1 + __param_offset]
+        p = param[1]
         # Always accept your current representation of True or False
         # to actually be true or false without further evaluation.
         if (p == sym_ll_read("__FMT__", TRUE) ||
@@ -7347,7 +7344,7 @@ function xeq_fn__chr(fn, m, nparam, param,
 {
     if (nparam != 1)
         error("Bad parameters in '" m "':" $0)
-    p = param[1 + __param_offset]
+    p = param[1]
     if (sym_valid_p(p)) {
         assert_sym_defined(p)
         return sprintf("%c", sym_fetch(p)+0)
@@ -7414,7 +7411,7 @@ function xeq_fn__dirname(fn, m, nparam, param,
 {
     if (nparam != 1)
         error("Bad parameters in '" m "':" $0)
-    p = param[1 + __param_offset]
+    p = param[1]
     assert_sym_valid_name(p)
     assert_sym_defined(p, fn)
 
@@ -7464,9 +7461,9 @@ function xeq_fn__format(fn, m, nparam, param,
 {
     if (nparam < 1 || nparam > 6)
         error("Bad parameters in '" m "':" $0)
-    fmt = sym_value_or_literal(param[1 + __param_offset])
+    fmt = sym_value_or_literal(param[1])
     for (i = 2; i <= 6; i++)
-        arg[i] = sym_value_or_literal(param[i + __param_offset])
+        arg[i] = sym_value_or_literal(param[i])
     if      (nparam == 1) result = sprintf(fmt)
     else if (nparam == 2) result = sprintf(fmt, arg[2])
     else if (nparam == 3) result = sprintf(fmt, arg[2], arg[3])
@@ -7501,7 +7498,7 @@ function xeq_fn__getenv(fn, m, nparam, param,
     silent = first(fn) == "s"
     if (nparam != 1)
         error("Bad parameters in '" m "':" $0)
-    p = param[1 + __param_offset]
+    p = param[1]
     assert_valid_env_var_name(p)
     if (p in ENVIRON)
         return ENVIRON[p]
@@ -7715,10 +7712,10 @@ function xeq_fn__index(fn, m, nparam, param,
 {
     if (nparam != 2)
         error("Bad parameters in '" m "':" $0)
-    p = param[1 + __param_offset]
+    p = param[1]
     assert_sym_valid_name(p)
     assert_sym_defined(p, fn)
-    x = param[2 + __param_offset]
+    x = param[2]
     return index(sym_fetch(p), x)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
@@ -7741,12 +7738,12 @@ function xeq_fn__left(fn, m, nparam, param,
 {
     if (nparam < 1 || nparam > 2)
         error("Bad parameters in '" m "':" $0)
-    p = param[1 + __param_offset]
+    p = param[1]
     assert_sym_valid_name(p)
     assert_sym_defined(p, fn)
     x = 1
     if (nparam == 2) {
-        x = param[2 + __param_offset]
+        x = param[2]
         if (!integerp(x))
             error("Value '" x "' must be numeric:" $0)
     }
@@ -7774,16 +7771,16 @@ function xeq_fn__mid(fn, m, nparam, param,
 {
     if (nparam < 2 || nparam > 3)
         error("Bad parameters in '" m "':" $0)
-    p = param[1 + __param_offset]
+    p = param[1]
     assert_sym_valid_name(p)
     assert_sym_defined(p, fn)
-    x = param[2 + __param_offset]
+    x = param[2]
     if (!integerp(x))
         error("Value '" x "' must be numeric:" $0)
     if (nparam == 2) {
         result = substr(sym_fetch(p), x)
     } else if (nparam == 3) {
-        y = param[3 + __param_offset]
+        y = param[3]
         if (!integerp(y))
             error("Value '" y "' must be numeric:" $0)
         result = substr(sym_fetch(p), x, y)
@@ -7814,7 +7811,7 @@ function xeq_fn__ord(fn, m, nparam, param,
         error("Bad parameters in '" m "':" $0)
     if (! __ord_initialized)
         initialize_ord()
-    p = param[1 + __param_offset]
+    p = param[1]
     if (sym_valid_p(p) && sym_defined_p(p))
         p = sym_fetch(p)
     return __ord[first(p)]
@@ -7839,12 +7836,12 @@ function xeq_fn__right(fn, m, nparam, param,
 {
     if (nparam < 1 || nparam > 2)
         error("Bad parameters in '" m "':" $0)
-    p = param[1 + __param_offset]
+    p = param[1]
     assert_sym_valid_name(p)
     assert_sym_defined(p, fn)
     x = length(sym_fetch(p))
     if (nparam == 2) {
-        x = param[2 + __param_offset]
+        x = param[2]
         if (!integerp(x))
             error("Value '" x "' must be numeric:" $0)
     }
@@ -7874,7 +7871,7 @@ function xeq_fn__rot13(fn, m, nparam, param,
         initialize_rot13()
     if (nparam == 0)
         error("Bad parameters in '" m "':" $0)
-    p = param[1 + __param_offset]
+    p = param[1]
     p = (sym_valid_p(p) && sym_defined_p(p)) \
         ? sym_fetch(p) : substr(m, length(fn)+2)
     result = ""
@@ -7907,7 +7904,7 @@ function xeq_fn__spaces(fn, m, nparam, param,
     result = ""
     x = 1
     if (nparam == 1) {
-        x = param[1 + __param_offset]
+        x = param[1]
         if (!integerp(x))
             error("Value '" x "' must be numeric:" $0)
     }
@@ -7936,7 +7933,7 @@ function xeq_fn__str_fn(fn, m, nparam, param,
 {
     if (nparam != 1)
         error("Bad parameters in '" m "':" $0)
-    p = param[1 + __param_offset]
+    p = param[1]
     assert_sym_valid_name(p)
     assert_sym_defined(p, fn)
     if (fn == "lc")
@@ -7971,7 +7968,7 @@ function xeq_fn__trim(fn, m, nparam, param,
     if (nparam != 1)
         error("Bad parameters in '" m "':" $0)
     result = ""
-    p = param[1 + __param_offset]
+    p = param[1]
     assert_sym_valid_name(p)
     assert_sym_defined(p, fn)
     result = sym_fetch(p)
@@ -8004,7 +8001,7 @@ function xeq_fn__xname(fn, m, nparam, param,
         error("(" fn ") Security violation")
     if (nparam != 1)
         error("(" fn ") Bad parameters in '" m "':" $0)
-    p = param[1 + __param_offset]
+    p = param[1]
     assert_sym_valid_name(p)
     assert_sym_defined(p, fn)
     cmdline = build_prog_cmdline(fn, rm_quotes(sym_fetch(p)), MODE_IO_CAPTURE)
@@ -8124,7 +8121,6 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     __init_files_loaded         = FALSE # becomes True in load_init_files()
     __namespace                 = GLOBAL_NAMESPACE
     __ord_initialized           = FALSE # becomes True in initialize_ord()
-    __param_offset              = 1
     __print_mode                = MODE_TEXT_PRINT
     __rot13_initialized         = FALSE # becomes True in initialize_rot13()
     __parse_stack[0]            = 0;    __parse_stack["name"]  = "parse_stack"

@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-10-12 23:21:31 cleyon>
+#  Time-stamp:  <2024-10-13 10:25:32 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -6951,7 +6951,7 @@ function _c3_advance(    tmp)
 #*****************************************************************************
 function dosubs(s,
                 expand, i, j, l, m, nparam, p, param, r, fn,
-                x, inc_dec, pre_post, subcmd, br)
+                x, inc_dec, pre_post, subcmd, br, lfn, incr)
 {
     dbg_print("dosubs", 5, sprintf("(dosubs) START s='%s'", s))
     l = ""                   # Left of current pos  - ready for output
@@ -7018,6 +7018,7 @@ function dosubs(s,
         # Handle @foo{...} -- isolate fn better
         if ((br = index(m, TOK_LBRACE)) > 0)
             fn = substr(fn, 1, br-1)
+        lfn = length(fn)
 
         dbg_print("dosubs", 7, sprintf("(dosubs) fn=%s, nparam=%d; l='%s', m='%s', r='%s'", fn, nparam, l, m, r))
 
@@ -7031,14 +7032,14 @@ function dosubs(s,
             inc_dec  = -1
             pre_post = -1
             fn = substr(fn, 3)
-        } else if (substr(fn, length(fn)-1, 2) == "++") {
+        } else if (substr(fn, lfn-1, 2) == "++") {
             inc_dec  = +1
             pre_post = +1
-            fn = substr(fn, 1, length(fn) - 2)
-        } else if (substr(fn, length(fn)-1, 2) == "--") {
+            fn = substr(fn, 1, lfn-2)
+        } else if (substr(fn, lfn-1, 2) == "--") {
             inc_dec  = -1
             pre_post = +1
-            fn = substr(fn, 1, length(fn) - 2)
+            fn = substr(fn, 1, lfn-2)
         }
 
         # Check if it's a known function
@@ -7101,27 +7102,7 @@ function dosubs(s,
         # Old code for macro processing
         # <SOMETHING ELSE> : Call a user-defined macro, handles arguments
         } else if (sym_valid_p(fn) && (sym_defined_p(fn) || sym_deferred_p(fn))) {
-            expand = sym_fetch(fn)
-            # Expand $# => nparam
-            if (index(expand, "$#") > 0)
-                gsub("\\$#", nparam, expand)
-            # Expand $* to all parameters, space separated
-            if (index(expand, "$*") > 0) {
-                x = ""
-                for (j = 1; j <= nparam; j++)
-                    x = x  param[j + __param_offset]  TOK_SPACE
-                gsub("\\$\\*", chop(x), expand)
-            }
-            # Expand $N parameters (includes $0 for macro name)
-            # Re-using j, excuse me
-            j = MAX_PARAM   # but don't go overboard with params
-            # Count backwards to get around $10 problem.
-            while (j-- >= 0) {
-                if (index(expand, "${" j "}") > 0)
-                    gsub("\\$\\{" j "\\}", (j <= nparam) ? param[j + __param_offset] : "", expand)
-                if (index(expand, "$" j) > 0)
-                    gsub("\\$"    j      , (j <= nparam) ? param[j + __param_offset] : "", expand)
-            }
+            expand = substitute_params(sym_fetch(fn), nparam, param)
             trace(TRACE_EXPANSION, fn, sprintf("'%s' => '%s'", m, expand))
             r = expand r
 
@@ -7138,26 +7119,15 @@ function dosubs(s,
                 #   | ++foo    |       -1 |      +1 |
                 #   | foo--    |       +1 |      -1 |
                 #   | foo++    |       +1 |      +1 |
-                if (pre_post == 0) {
-                    # normal call : insert current value with formatting
-                    #print_stderr(sprintf("fn='%s', Injecting '%s'", fn, seq_ll_read(fn)))
-                    r = sprintf(seqtab[fn, "fmt"], seq_ll_read(fn)) r
-                } else {
-                    # Handle prefix xor postfix increment/decrement
-                    if (pre_post == -1)    # prefix
-                        if (inc_dec == -1) # decrement
-                            seq_ll_incr(fn, -seqtab[fn, "incr"])
-                        else
-                            seq_ll_incr(fn, seqtab[fn, "incr"])
-                    # Get current value with desired formatting
-                    r = sprintf(seqtab[fn, "fmt"], seq_ll_read(fn)) r
-                    if (pre_post == +1)    # postfix
-                        if (inc_dec == -1)
-                            seq_ll_incr(fn, -seqtab[fn, "incr"])
-                        else
-                            #seq_ll_incr(fn, seqtab[fn, "incr"])
-                            seq_ll_incr(fn)
-                }
+                incr = seqtab[fn, "incr"]
+                # Handle prefix increment/decrement
+                if (pre_post == -1)
+                    seq_ll_incr(fn, incr * inc_dec)
+                # Insert current value with desired formatting
+                r = sprintf(seqtab[fn, "fmt"], seq_ll_read(fn)) r
+                # Handle postfix increment/decrement
+                if (pre_post == +1)
+                    seq_ll_incr(fn, incr * inc_dec)
             } else {
                 if (pre_post != 0)
                     error("Bad parameters in '" m "':" $0)
@@ -7201,6 +7171,36 @@ function dosubs(s,
 
     dbg_print("dosubs", 3, sprintf("(dosubs) END; Out of loop => '%s'", l r))
     return l r
+}
+
+
+function substitute_params(str, nparam, param,
+                           j, x)
+{
+    # Expande $# => nparam
+    if (index(str, "$#") > 0)
+        gsub("\\$#", nparam, str)
+
+    # Expand $* to all parameters, space separated
+    if (index(str, "$*") > 0) {
+        x = ""
+        for (j = 1; j <= nparam; j++)
+            x = x  param[j + __param_offset]  TOK_SPACE
+        gsub("\\$\\*", chop(x), str)
+    }
+
+    # Expand $N parameters (includes $0 for macro name)
+    # Re-using j, excuse me
+    j = MAX_PARAM   # but don't go overboard with params
+    # Count backwards to get around $10 problem.
+    while (j-- >= 0) {
+        if (index(str, "${" j "}") > 0)
+            gsub("\\$\\{" j "\\}", (j <= nparam) ? param[j + __param_offset] : "", str)
+        if (index(str, "$" j) > 0)
+            gsub("\\$"    j      , (j <= nparam) ? param[j + __param_offset] : "", str)
+    }
+
+    return str
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 

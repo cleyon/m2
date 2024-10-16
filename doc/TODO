@@ -46,8 +46,6 @@
   zero (as if no `-d' was given), and with an empty argument the flags
   are reset to the default.
 
-* MAYBE Implement debugfile
-
 * MAYBE Implement @dumpdef SYM...
   Dumps one or more symbols, with no args, same @dump
 

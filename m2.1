@@ -93,7 +93,8 @@ as the first character at the beginning of a line.
 They consume the entire line.
 Some commands have a
 .Qq silent
-alternative form which prints fewer error messages.
+alternative form which prints fewer error messages or performs some
+slightly different function.
 This form is distinguished by a leading 
 .Qq s
 in the command name.
@@ -132,12 +133,12 @@ See the
 .Sx Streams and Diversions
 section.
 .It @comment [TEXT]
-Comment; ignore line.  Also @@, @c, @;, and @#
+Comment; ignore line.  Also @@, @c, @;, and @#.
 .It @continue
 Continue next iteration of enclosing loop.
 @continue is only valid inside a @for, @foreach, or @while block.
 .It @debug [TEXT]
-If debugging, send TEXT to standard error.
+If debugging, send TEXT to the debug file.
 .It @decr NAME [N]
 Subtract N (default 1) from an already defined NAME.  See note at @incr.
 .It @default NAME VAL
@@ -155,6 +156,13 @@ section.
 Output symbol names & definitions to FILE (standard error).
 .It @dumpall WHAT [FILE]
 Like @dump but include System symbols.
+.It @echo [TEXT]
+Send TEXT to standard error; continue.  Also called @errprint.
+.Ql @warn
+is similar, but adds the current file name and line number to output.
+Variant
+.Ql @secho
+does not automatically add a newline to output.
 .It @else
 Switch to the alternate condition branch of an @if block.
 Only one @else statement is allowed per @if block.
@@ -216,7 +224,7 @@ Add N (1) to an already defined NAME.
 @incr and @decr may be used on both symbols and sequences.
 Note: Unlike m4, @incr modifies the named symbol and produces no expansion output.
 .It @initialize NAME VAL
-Like @define, but abort if NAME already defined
+Like @define, but error if NAME already defined
 .It @input [NAME]
 Read a single line from keyboard to define NAME.
 If NAME is omitted, value is stored in symbol
@@ -309,8 +317,6 @@ below.
 .It @until EXPR ... @endwhile
 Repeatedly evaluate input lines while boolean expression is False
 and stop when it becomes True.
-.It @warn [TEXT]
-Send TEXT to standard error; continue.  Also called @echo, @errprint
 .It @while EXPR ... @endwhile
 Repeatedly evaluate input lines while boolean expression is True
 and stop when it becomes False.
@@ -563,6 +569,9 @@ below.
 Levels for internal debugging systems (integer).
 .It __DEBUG__
 Debugging enabled? (boolean, user modifiable, default FALSE).
+.It __DEBUGFILE__
+File path for debug and trace output (user modifiable, default
+.Pa /dev/stderr ) .
 .It __DIVNUM__
 Current stream number.
 Zero, the default value, indicates output to the terminal (standard output).
@@ -1063,7 +1072,7 @@ produce output.
 Tracing an
 .Nm
 file results in printing additional diagnostic information
-to standard error when certain triggering events occur.
+to the debug file when certain triggering events occur.
 It most frequently happens when a macro is expanded but there are other
 possible triggers.
 These lines are prefixed with "m2trace:" for easy identification.
@@ -1078,6 +1087,19 @@ and
 to control which macros will be traced, and
 .Ql @tracemode
 which controls various options.
+.Pp
+Symbol
+.Va __DEBUG__
+controls debugging; set it to True or False to enable or disabled debugging messages.
+Debugging output is generated with the
+.Ql @debug
+command, or by internal m2 code.
+The debug file is maintained in symbol
+.Va __DEBUGFILE__ .
+At security level zero, the user may specify a file path for debugging and tracing output.
+At higher security levels, the debug file is forced to
+.Pa /dev/stderr ,
+which is also the default value.
 .Bl -inset
 .It Em Trace On :
 Calling
@@ -1182,8 +1204,8 @@ name and input line number.
 .It p   \" GNU only
 Print a message when a named file is found through the path search
 mechanism, giving the actual filename used.
-\" .It V   \" BSD & GNU
-\" [NOT IMPLEMENTED] A shorthand for all of the above flags.
+.\" .It V   \" BSD & GNU
+.\" [NOT IMPLEMENTED] A shorthand for all of the above flags.
 .El
 .El
 .Sh IMPLEMENTATION NOTES

@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-10-13 16:41:15 cleyon>
+#  Time-stamp:  <2024-10-14 15:51:56 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -8423,8 +8423,8 @@ BEGIN {
                     continue
                 } else if (_name == "init") {   # init=<VAL>
                     if (_val > 0)
-                        # Positive value loads init files without
-                        # providing a command-line file.
+                        # Positive value loads init files immediately
+                        # without providing a command-line file.
                         load_init_files()
                     else
                         # Do not load the init files.  Inhibit init file
@@ -8434,22 +8434,16 @@ BEGIN {
                 } else if (_name == "secure") {
                     _name = "__SECURE__"
                 } else if (_name == "strict") {
-                    if (_val > 0)  {
-                        # Turn on strict settings
-                        sym_ll_write("__STRICT__","boolval", GLOBAL_NAMESPACE, TRUE)
-                        sym_ll_write("__STRICT__",    "env", GLOBAL_NAMESPACE, TRUE)
-                        sym_ll_write("__STRICT__",   "file", GLOBAL_NAMESPACE, TRUE)
-                        sym_ll_write("__STRICT__", "symbol", GLOBAL_NAMESPACE, TRUE)
-                        sym_ll_write("__STRICT__",  "undef", GLOBAL_NAMESPACE, TRUE)
-                    } else {
-                        # Turn off strict settings
-                        sym_ll_write("__STRICT__","boolval", GLOBAL_NAMESPACE, FALSE)
-                        sym_ll_write("__STRICT__",    "env", GLOBAL_NAMESPACE, FALSE)
-                        sym_ll_write("__STRICT__",   "file", GLOBAL_NAMESPACE, FALSE)
-                        sym_ll_write("__STRICT__", "symbol", GLOBAL_NAMESPACE, FALSE)
-                        sym_ll_write("__STRICT__",  "undef", GLOBAL_NAMESPACE, FALSE)
-                    }
+                    _val = (_val > 0)           # convert int value to bool
+                    # Update strict settings
+                    sym_ll_write("__STRICT__","boolval", GLOBAL_NAMESPACE, _val)
+                    sym_ll_write("__STRICT__",    "env", GLOBAL_NAMESPACE, _val)
+                    sym_ll_write("__STRICT__",   "file", GLOBAL_NAMESPACE, _val)
+                    sym_ll_write("__STRICT__", "symbol", GLOBAL_NAMESPACE, _val)
+                    sym_ll_write("__STRICT__",  "undef", GLOBAL_NAMESPACE, _val)
                     continue
+                } else if (_name == "trace") {
+                    _name = "__TRACE__"
                 } else if (_name == "U") {      # U=<name>
                     # Undefine name, like @undef
                     xeq_cmd__undefine("undefine", _val)

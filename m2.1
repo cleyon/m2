@@ -1179,14 +1179,11 @@ These are for miscellaneous traces:
 .It i   \" GNU only
 Print a message each time the current input file is changed, giving file
 name and input line number.
-.\" QUESTION: Changed *how* - by progressing to the next file naturally,
-.\"           because of @include or @paste, or what?
-.\" ANSWER: (for now)  Trace any time source_stack changes (push/pop).
 .It p   \" GNU only
 Print a message when a named file is found through the path search
 mechanism, giving the actual filename used.
-.It V   \" BSD & GNU
-A shorthand for all of the above flags.
+\" .It V   \" BSD & GNU
+\" [NOT IMPLEMENTED] A shorthand for all of the above flags.
 .El
 .El
 .Sh IMPLEMENTATION NOTES

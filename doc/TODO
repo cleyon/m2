@@ -4,10 +4,6 @@
 
 * QUESTION In dosubs, shouldn't we always substitute $1 et al?
 
-* MAYBE Implement traceon/traceoff
-  With no arguments, trace all macros (including built-ins).  With args,
-  only trace the specified macros.
-
 * MAYBE Debug options (a la "m4 -d")
   The `-d' option to m4 controls the amount of details presented, when
   using the macros described in the preceding sections.

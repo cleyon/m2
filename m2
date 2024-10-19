@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-10-16 13:43:33 cleyon>
+#  Time-stamp:  <2024-10-19 13:52:51 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -873,7 +873,7 @@ function initialize_debugging()
     dbg_set_level("divert",     7)
     dbg_set_level("dosubs",     7)
     dbg_set_level("dump",       5)
-    dbg_set_level("expr",       0)
+    dbg_set_level("expr",       3)
     dbg_set_level("for",        5)
     dbg_set_level("if",         5)
     dbg_set_level("io",         3)
@@ -1026,29 +1026,32 @@ function tracingp(sym,
 }
 
 
-function trace_prefix(    prefix)
+function trace_prefix(    prefix,
+                          trace_mode)
 {
     prefix = "m2trace:"
-    if (flag_1true_p(__trace_mode, TRACE_SHOW_FILE_NAME))
+    trace_mode = sym_ll_read("__TRACEMODE__", "", GLOBAL_NAMESPACE)
+    if (flag_1true_p(trace_mode, TRACE_SHOW_FILE_NAME))
         prefix = prefix FILE() ":"
-    if (flag_1true_p(__trace_mode, TRACE_SHOW_LINE_NUM))
+    if (flag_1true_p(trace_mode, TRACE_SHOW_LINE_NUM))
         prefix = prefix LINE() ":"
     return prefix
 }
 
 
 function trace(event, sym, message,
-               prefix)
+               trace_mode, prefix)
 {
     if (sym_ll_read("__TRACE__", "", GLOBAL_NAMESPACE) == FALSE)
         return
+    trace_mode = sym_ll_read("__TRACEMODE__", "", GLOBAL_NAMESPACE)
     if (event == TRACE_EXPANSION) {
-        if ( flag_1true_p(__trace_mode, TRACE_ALL) ||
-            (flag_1true_p(__trace_mode, TRACE_EXPANSION) && tracingp(sym)))
+        if ( flag_1true_p(trace_mode, TRACE_ALL) ||
+            (flag_1true_p(trace_mode, TRACE_EXPANSION) && tracingp(sym)))
             print_debugfile(trace_prefix() " " message)
     } else if (event == TRACE_INPUT_FILE_CHG ||
                event == TRACE_PATH_SEARCH) {
-        if (flag_1true_p(__trace_mode, event))
+        if (flag_1true_p(trace_mode, event))
             print_debugfile(trace_prefix() " " message)
     } else
         error("(trace) Unrecognized trace event " event)
@@ -3337,7 +3340,7 @@ function sym_fetch(sym,
     else if (flag_1true_p(code, FLAG_NUMERIC))
         return 0.0 + val
     else if (flag_1true_p(code, FLAG_BOOLEAN))
-        return !! (0 + val)
+        return sym_ll_read("__FMT__", !! (0 + val))
     else
         return val
 }
@@ -6181,37 +6184,45 @@ function xeq_cmd__syscmd(name, cmdline,
 #*****************************************************************************
 # @tracemode    FLAG...
 function xeq_cmd__tracemode(name, cmdline,
-                            i, flag, add_rem)
+                            i, flag, add_rem, letters)
 {
     dbg_print("trace", 3, sprintf("(xeq_cmd__tracemode) START; cmdline='%s'", cmdline))
     $0 = cmdline
     if (NF == 0) {
         # Reset flags to default
-        __trace_mode = TRACE_DEFAULT_SET
-    } else if ($1 ~ /^[aceiflptxV][aceiflptxV]*$/) {
-        __trace_mode = EMPTY
-        for (i = 1; i <= length($1); i++) {
-            flag = substr($1, i, 1)
-            __trace_mode = flag_set_clear(__trace_mode, flag)
-        }
-    } else if ($1 ~ /^[-+][-+aceiflptxV][-+aceiflptxV]*$/) {
-        # add_rem == TRUE  -> Adding flags
-        # add_rem == FALSE -> Removing flags
-        for (i = 1; i <= length($1); i++) {
-            flag = substr($1, i, 1)
-            if (flag == "+")
-                add_rem = TRUE
-            else if (flag == "-")
-                add_rem = FALSE
-            else {
-                if (add_rem)
-                    __trace_mode = flag_set_clear(__trace_mode, flag)
-                else
-                    __trace_mode = flag_set_clear(__trace_mode, "", flag)
-            }
-        }
-    } else
+        sym_ll_write("__TRACEMODE__", "", GLOBAL_NAMESPACE, TRACE_DEFAULT_SET)
+        return
+    }
+
+    letters = $1
+    if (letters !~ /^[-+aeiflmptTV][-+aeiflmptTV]*$/)
         error("@tracemode: Bad parameters")
+
+    add_rem = TRUE              # add_rem == TRUE  -> Adding flags
+                                # add_rem == FALSE -> Removing flags
+    if (first(letters) != "+" && first(letters) != "-")
+        # Not a + or -, so override old flags
+        sym_ll_write("__TRACEMODE__", "", GLOBAL_NAMESPACE, EMPTY)
+    for (i = 1; i <= length(letters); i++) {
+        flag = substr(letters, i, 1)
+        if (flag == "+")
+            add_rem = TRUE
+        else if (flag == "-")
+            add_rem = FALSE
+        else {
+            if (flag == TRACE_SET_ON)
+                sym_ll_write("__TRACE__", "", GLOBAL_NAMESPACE, add_rem)
+            else if (flag == TRACE_WILDCARD_ALL_FLAGS) {
+                if (add_rem)
+                    sym_ll_write("__TRACE__", "", GLOBAL_NAMESPACE, add_rem)
+                sym_ll_write("__TRACEMODE__", "", GLOBAL_NAMESPACE, add_rem ? TRACE_ALL_SET : EMPTY)
+            } else
+                sym_ll_write("__TRACEMODE__", "", GLOBAL_NAMESPACE,
+                             flag_set_clear(sym_ll_read("__TRACEMODE__", "", GLOBAL_NAMESPACE),
+                                            add_rem ? flag : "",
+                                            add_rem ? ""   : flag))
+        }
+    }
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -6232,7 +6243,9 @@ function xeq_cmd__traceoff(name, cmdline,
     $0 = cmdline
     if (NF == 0) {
         # Clear "t" trace flag
-        __trace_mode = flag_set_clear(__trace_mode, EMPTY, TRACE_ALL)
+        sym_ll_write("__TRACEMODE__", "", GLOBAL_NAMESPACE,
+                     flag_set_clear(sym_ll_read("__TRACEMODE__", "", GLOBAL_NAMESPACE),
+                                    EMPTY, TRACE_ALL))
         # Set __TRACE__ to False
         sym_ll_write("__TRACE__", "", GLOBAL_NAMESPACE, FALSE)
     } else {
@@ -6268,7 +6281,9 @@ function xeq_cmd__traceon(name, cmdline,
     $0 = cmdline
     if (NF == 0) {
         # Set "t" trace flag
-        __trace_mode = flag_set_clear(__trace_mode, TRACE_ALL)
+        sym_ll_write("__TRACEMODE__", "", GLOBAL_NAMESPACE,
+                     flag_set_clear(sym_ll_read("__TRACEMODE__", "", GLOBAL_NAMESPACE),
+                                    TRACE_ALL))
     } else {
         # Set FLAG_TRACING for every symbol mentioned
         i = 0
@@ -6857,10 +6872,15 @@ function _c3_factor3(    e, fun, e2)
         if      (e2 == "e")   return E
         else if (e2 == "pi")  return PI
         else if (e2 == "tau") return TAU
-        else if (sym_valid_p(e2) && sym_defined_p(e2))
-            return sym_fetch(e2)
-        else if (seq_valid_p(e2) && seq_defined_p(e2))
-            return seq_ll_read(e2)
+        else if (sym_valid_p(e2) && sym_defined_p(e2)) {
+            e = sym_fetch(e2)
+            dbg_print("expr", 7, sprintf("(_c3_factor3) Symbol '%s' => %s", e2, e))
+            return e
+        } else if (seq_valid_p(e2) && seq_defined_p(e2)) {
+            e = seq_ll_read(e2)
+            dbg_print("expr", 7, sprintf("(_c3_factor3) Sequence '%s' => %s", e2, e))
+            return e
+        }
     }
 
     # error
@@ -7252,8 +7272,11 @@ function substitute_params(str, nparam, param,
     while (j-- >= 0) {
         if (index(str, "${" j "}") > 0)
             gsub("\\$\\{" j "\\}", (j <= nparam) ? param[j] : "", str)
-        if (index(str, "$" j) > 0)
+        if (index(str, "$" j) > 0) {
+            #print_stderr("param[" j "] is " param[j])
             gsub("\\$"    j      , (j <= nparam) ? param[j] : "", str)
+            #print_stderr("str now '" str "'")
+        }
     }
 
     return str
@@ -7455,7 +7478,7 @@ function xeq_fn__expr(fn, m, nparam, param,
     silent = first(fn) == "s"   # don't automatically print result
     sub(/^s?expr[ \t]*/, "", m) # clean up expression to evaluate
     result = calc3_eval(m)
-    dbg_print("expr", 1, sprintf("expr{%s} = %s", m, result))
+    dbg_print("expr", 3, sprintf("(xeq_fn__expr) expr{%s} = %s", m, result))
     sym_ll_write("__EXPR__", "", GLOBAL_NAMESPACE, result+0)
     return silent ? "" : result
 }
@@ -8112,19 +8135,25 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     TOK_RPAREN                  = ")"
     TOK_TAB                     = "\t"
 
-    # For __trace_mode
+    # For __TRACEMODE__
     TRACE_ARGUMENTS             = "a" # show actual arguments in each call
-    TRACE_MULTI_LINE            = "c" # show multiple trace lines for each call
+   #TRACE_MULTI_LINE            = "c" # show multiple trace lines for each call
     TRACE_EXPANSION             = "e" # show macro expansion
     TRACE_INPUT_FILE_CHG        = "i" # trace when input file changes
     TRACE_SHOW_FILE_NAME        = "f" # show file name
     TRACE_SHOW_LINE_NUM         = "l" # show line number
+    TRACE_COMMAND               = "m" # trace when a command is executed
     TRACE_PATH_SEARCH           = "p" # trace when search path search succeeds
     TRACE_ALL                   = "t" # trace internal macros too
-    TRACE_SHOW_CALL_ID          = "x" # show unique call id (may not be used)
+    TRACE_SET_ON                = "T" # Set __TRACE__ to true
+   #TRACE_SHOW_CALL_ID          = "x" # show unique call id (may not be used)
     TRACE_WILDCARD_ALL_FLAGS    = "V" # shorthand for all of above options
     #
-    TRACE_DEFAULT_SET           = TRACE_ARGUMENTS TRACE_EXPANSION
+    TRACE_DEFAULT_SET           = TRACE_ARGUMENTS  TRACE_EXPANSION
+    TRACE_ALL_SET               = TRACE_ARGUMENTS      TRACE_EXPANSION      \
+                                  TRACE_INPUT_FILE_CHG TRACE_SHOW_FILE_NAME \
+                                  TRACE_SHOW_LINE_NUM  TRACE_COMMAND        \
+                                  TRACE_PATH_SEARCH    TRACE_ALL
 
     # Execution control states for loops
     XEQ_NORMAL                  = 0
@@ -8142,7 +8171,6 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     __rot13_initialized         = FALSE # becomes True in initialize_rot13()
     __parse_stack[0]            = 0;    __parse_stack["name"]  = "parse_stack"
     __source_stack[0]           = 0;    __source_stack["name"] = "source_stack"
-    __trace_mode                = TRACE_DEFAULT_SET
     __wrap_cnt                  = 0
     __xeq_ctl                   = XEQ_NORMAL
 
@@ -8227,6 +8255,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     sym_ll_fiat("__SYNC__",         "", FLAGS_WRITABLE_INTEGER, SYNC_FILE)
     sym_ll_fiat("__SYSVAL__",       "", FLAGS_READONLY_INTEGER, 0)
     sym_ll_fiat("__TRACE__",        "", FLAGS_WRITABLE_BOOLEAN, FALSE)
+    sym_ll_fiat("__TRACEMODE__",    "", FLAGS_READONLY_SYMBOL,  TRACE_DEFAULT_SET)
 
     # FUNCS
     # Functions cannot be used as symbol or sequence names.

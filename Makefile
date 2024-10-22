@@ -1,4 +1,7 @@
-.PHONY:	all man callgraph-full callgraph-sane callgraph-io vars funcs clean lint tags check test quiet-test test-quiet quiet-check check-quiet m2
+.PHONY:	all man callgraph-full callgraph-sane callgraph-io vars funcs clean lint tags m2 \
+	check         test \
+	check-quiet   test-quiet   quiet-check   quiet-test \
+	check-verbose test-verbose verbose-check verbose-test
 
 GOOD_M2=/Users/cleyon/bin-n.yuuko/m2
 AWK=/usr/bin/awk
@@ -55,7 +58,7 @@ vars:
 	$(GAWK) -d -f m2 /dev/null >/dev/null
 
 clean:
-	rm -f m2.cat1 tests/*/*/*.run_out tests/*/*/*.run_err
+	rm -f  m2.cat1  tests/*/*/*.run_*
 
 lint:
 	$(GAWK) --lint --posix -f m2 /dev/null
@@ -63,10 +66,10 @@ lint:
 tags:
 	$(TAGS) m2
 
-test check:
+check-verbose test-verbose verbose-check verbose-test:
 	@./check.sh
 
-quiet-test quiet-check test-quiet check-quiet:
+check test check-quiet test-quiet quiet-check quiet-test:
 	@date
 	@echo "!!! BEGIN - Starting test runs"
 	@time ./check.sh | grep -v 'PASS$$'

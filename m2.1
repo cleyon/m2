@@ -418,7 +418,15 @@ The following definitions are recognized:
 .It @basename SYM@
 Base (file) name of SYM implemented in Awk.
 .It @boolval [SYM]@
-Output "1" if SYM is True, else "0".
+Output a formatted representation of the truthiness of SYM.
+If the argument is not a symbol, use its value as a boolean state.
+If SYM is omitted entirely, return True or False with 50/50 chance.
+See system symbols
+.Va __FMT__[0] ,
+.Va __FMT__[1] ,
+and
+.Va __STRICT__[boolval]
+below.
 .It @chr SYM@
 Output character with ASCII code SYM.
 .It @date@
@@ -429,7 +437,8 @@ below.
 .It @dirname SYM@
 Directory name of SYM implemented in Awk.
 .It @epoch@
-Number of seconds since the Epoch, UTC.
+Unix epoch time, the number of non-leap seconds which
+have passed since 00:00:00\ UTC on Thursday, 1\ January\ 1970.
 See
 .Sx Dates and Times
 below.
@@ -455,6 +464,8 @@ An error is thrown if
 is not defined.
 To ignore error and continue with empty string, disable
 .Va __STRICT__[env] .
+Or use variant
+.Ql @sgetenv .
 .It @ifdef{SYMBOL}{TRUE_TEXT}{FALSE_TEXT}@
 If SYMBOL is defined, return TRUE_TEXT, else return FALSE_TEXT.
 The {FALSE_TEXT} clause is optional, and defaults to the empty string.
@@ -609,9 +620,17 @@ Default is "%Y-%m-%dT%H:%M:%S%z"; user modifiable.
 .It __FMT__[0]          \" bracket 0
 Text output when @boolval@ is False.
 Default is "0"; user modifiable.
+A Fortran programmer might change this to
+.Qq .FALSE.
+while a Lisp programmer might change this to
+.Qq nil .
 .It __FMT__[1]          \" bracket 1
 Text output when @boolval@ is True.
 Default is "1"; user modifiable.
+A Fortran programmer might change this to
+.Qq .TRUE.
+while a Lisp programmer might change this to
+.Qq t .
 .It __GID__
 Group id (effective gid).
 .It __HOME__
@@ -649,9 +668,8 @@ See
 .Sx SECURITY CONSIDERATIONS
 for further information.
 .It __STRICT__[boolval]
-If True, variables passed to
-.Ql boolval
-must be defined.
+If True, it is an error to pass an undefined symbol to
+.Ql @boolval@ .
 Default is True.
 If non-strict, undefined variables are considered False.
 User modifiable.

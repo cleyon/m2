@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-10-19 13:52:51 cleyon>
+#  Time-stamp:  <2024-10-22 14:04:18 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -74,11 +74,11 @@ BEGIN {
     TYPE_ANY         = "*";             FLAG_BLKARRAY    = "K"
     TYPE_ARRAY       = "A";             FLAG_BOOLEAN     = "B"
     TYPE_COMMAND     = "C";             FLAG_DEFERRED    = "D"
-    TYPE_USER        = "U";             FLAG_IMMEDIATE   = "!"
-    TYPE_FUNCTION    = "F";             FLAG_INTEGER     = "I"
+    TYPE_FUNCTION    = "F";             FLAG_IMMEDIATE   = "!"
+    TYPE_INTERNAL    = "L";             FLAG_INTEGER     = "I"
     TYPE_SEQUENCE    = "Q";             FLAG_NUMERIC     = "N"
     TYPE_SYMBOL      = "S";             FLAG_READONLY    = "R"
-                                        FLAG_TRACING     = "T"
+    TYPE_USER        = "U";             FLAG_TRACING     = "T"
                                         FLAG_WRITABLE    = "W"
                                         FLAG_SYSTEM      = "Y"
 
@@ -1045,7 +1045,11 @@ function trace(event, sym, message,
     if (sym_ll_read("__TRACE__", "", GLOBAL_NAMESPACE) == FALSE)
         return
     trace_mode = sym_ll_read("__TRACEMODE__", "", GLOBAL_NAMESPACE)
-    if (event == TRACE_EXPANSION) {
+    if (event == TRACE_COMMAND) {
+        if ( flag_1true_p(trace_mode, TRACE_ALL) ||
+            (flag_1true_p(trace_mode, TRACE_COMMAND) && tracingp(sym)))
+            print_debugfile(trace_prefix() " " message)
+    } else if (event == TRACE_EXPANSION) {
         if ( flag_1true_p(trace_mode, TRACE_ALL) ||
             (flag_1true_p(trace_mode, TRACE_EXPANSION) && tracingp(sym)))
             print_debugfile(trace_prefix() " " message)
@@ -1738,14 +1742,14 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
             $1 == "@c" || $1 == "@comment")
             continue
 
-        # See if it's a command of some kind.  Of course we want
-        # first($1)==TOK_AT because we expect the at-sign in column one for
-        # a command.  Adding AND last($1)!=TOK_AT catches when we're
-        # looking at a line like @date@, which is invoking an inline
-        # "sym-function" to be resolved by dosubs().  It has a @ in
-        # column one, but that's just a coincidence.
-        #
-        # first == @ and last != @ catches @foo...@ at BOL not being a command
+        # See if it's a command of some kind.  first == @ and last != @
+        # catches @foo...@ at BOL not being a command.  Of course we
+        # want first($1)==TOK_AT because we expect the at-sign in column
+        # one for a command.  Adding AND last($1)!=TOK_AT catches when
+        # we're looking at a line like @date@, which is invoking an
+        # inline "sym-function" to be resolved by dosubs().  It has a @
+        # in column one, but that's just a coincidence.
+        # WART:  Loses on  @somecommand A B @symbol@
         if (first($1) == TOK_AT && last($1) != TOK_AT) { # looks like it might be a command
             # Winnow out the primary name.  Be sure to handle
             # "@myfn{aaa}{ccc ddd}".  (Naive old code name=$1 resulted
@@ -2839,7 +2843,7 @@ function sym_ll_fiat(name, key, code, new_val,
 
 # Deferred symbols cannot have keys, so don't even pass anything
 function sym_deferred_symbol(name, code, deferred_prog, deferred_arg,
-                              level)
+                             level)
 {
     level = GLOBAL_NAMESPACE
 
@@ -3523,8 +3527,10 @@ function execute__text(text,
     if (stream < 0)
         return
 
-    if (curr_atmode() == MODE_AT_PROCESS)
+    if (curr_atmode() == MODE_AT_PROCESS) {
+        dbg_print("xeq", 7, sprintf("(execute__text) Calling dosubs('%s')", text))
         text = dosubs(text)
+    }
 
     if (stream > TERMINAL) {
         dbg_print("ship_out", 5, sprintf("(execute__text) END Appending text to stream %d", stream))
@@ -3660,6 +3666,7 @@ function bool__tokenize_string(s,
             if (emptyp(name))
                 error("(bool__tokenize_string) exists(); Name cannot be empty")
             __btoken[++__bnf] = TOK_EXISTS_P
+            dbg_print("bool", 7, sprintf("(bool__tokenize_string) Calling dosubs('%s')", name))
             __btoken[++__bnf] = dosubs(name)
             c = substr(s, ++i, 1)       # char after closing paren
             while (c == TOK_SPACE || c == TOK_TAB)
@@ -3710,14 +3717,14 @@ function bool__tokenize_string(s,
 
 function bool__scan_expr(    e, f, r)           # term   | term || term
 {
-    # print_debugfile(sprintf("(bool__scan_expr) __bf=%d, __btoken[]=%s, e='%s'", __bf, __btoken[__bf], e))
+    # print_debugfile(sprintf("(bool__scan_expr) __bf=%d, __btoken[]='%s', e='%s'", __bf, __btoken[__bf], e))
     e = bool__scan_term()
     if (e == ERROR) {
         warn("(bool__scan_expr) Initial e returned ERROR, propagating")
         return e
     }
 
-    # print_debugfile(sprintf("(bool__scan_expr) After bool__scan_term, __bf=%d, __btoken[%d]=%s, e='%s'(%s)", __bf, __bf, __btoken[__bf], e, ppf__bool(e)))
+    # print_debugfile(sprintf("(bool__scan_expr) After bool__scan_term, __bf=%d, __btoken[%d]='%s', e='%s'(%s)", __bf, __bf, __btoken[__bf], e, ppf__bool(e)))
     while (__btoken[__bf] == TOK_OR) {
         __bf++
         f = bool__scan_term()
@@ -3737,7 +3744,7 @@ function bool__scan_term(    e, f, r)           # factor | factor && factor
         warn("(bool__scan_term) Initial e returned ERROR, propagating")
         return e
     }
-    # print_debugfile(sprintf("(bool__scan_term) After bool__scan_factor, __bf=%d, __btoken[]=%s, e='%s'(%s)", __bf, __btoken[__bf], e, ppf__bool(e)))
+    # print_debugfile(sprintf("(bool__scan_term) After bool__scan_factor, __bf=%d, __btoken[]='%s', e='%s'(%s)", __bf, __btoken[__bf], e, ppf__bool(e)))
     while (__btoken[__bf] == TOK_AND) {
         __bf++
         f = bool__scan_factor()
@@ -3756,7 +3763,7 @@ function bool__scan_term(    e, f, r)           # factor | factor && factor
 function bool__scan_factor(    e, r,         # ! factor | variable | ( expression )
                                 name)
 {
-    dbg_print("bool", 5, sprintf("(bool__scan_factor) __bf=%d, __btoken[]=%s, e='%s'", __bf, __btoken[__bf], e))
+    dbg_print("bool", 5, sprintf("(bool__scan_factor) __bf=%d, __btoken[]='%s', e='%s'", __bf, __btoken[__bf], e))
     if (__btoken[__bf] ~ /^[01]$/) {
         dbg_print("bool", 5, "(bool__scan_factor) Match regexp 1")
         return 0+__btoken[__bf++]
@@ -3765,7 +3772,7 @@ function bool__scan_factor(    e, r,         # ! factor | variable | ( expressio
         __bf++
         e = bool__scan_expr()
         if (__btoken[__bf++] != TOK_RPAREN)
-            error("(bool__scan_factor) Missing ')' at " __btoken[__bf])
+            error("(bool__scan_factor) Missing ')' at '" __btoken[__bf]) "'"
         dbg_print("bool", 5, "(bool__scan_factor) Found parens, returning " ppf__bool(e))
         return e
 
@@ -3814,7 +3821,7 @@ function bool__scan_factor(    e, r,         # ! factor | variable | ( expressio
 
     } else {
         # Boolean evaluation would normally fail here, but we'll pass it along to 'evaluate_condition'
-        #print_debugfile(sprintf("bool__scan_factor: Did not match __bf=%d, __btoken[]=%s, e='%s'", __bf, __btoken[__bf], e))
+        #print_debugfile(sprintf("bool__scan_factor: Did not match __bf=%d, __btoken[]='%s', e='%s'", __bf, __btoken[__bf], e))
         r = evaluate_condition(__btoken[__bf], FALSE)
         if (r == ERROR)
             warn("(bool__scan_factor): evaluate_condition('" __btoken[__bf] "') returned ERROR")
@@ -5041,6 +5048,7 @@ function evaluate_condition(cond, negate,
         cond = ltrim(rest(cond))
     }
 
+    dbg_print("if", 7, sprintf("(evaluate_condition) Calling dosubs('%s')", cond))
     cond = dosubs(cond)
     dbg_print("if", 4, sprintf("(evaluate_condition) After dosubs, negate=%s, cond='%s'",
                                ppf__bool(negate), cond))
@@ -5645,20 +5653,15 @@ function execute__user(name, cmdline,
         return
     }
 
-    old_level = __namespace
-
+    # See if it's a user command
     if (nam__scan(name, info) == ERROR)
-        #error("(execute__user) Scan error on '" name "' -- should not happen")
-        error("Scan error, " __m2_msg)
+        error("(execute__user) Scan error, " __m2_msg)
     if ((level = nam_lookup(info)) == ERROR)
         error("(execute__user) nam_lookup failed -- should not happen")
-
-    # See if it's a user command
     if (flag_1false_p((code = nam_ll_read(name, level)), TYPE_USER))
         error("(execute__user) " name " seems to no longer be a command")
 
     user_block = cmd_ll_read(name, level)
-
     dbg_print_block("xeq", 7, user_block, "(execute__user) user_block")
     dbg_print_block("xeq", 7, blktab[user_block, 0, "body_block"], "(execute__user) body_block")
 
@@ -5674,8 +5677,8 @@ function execute__user(name, cmdline,
         cmdline = substr(cmdline, 1, RSTART-1) substr(cmdline, RSTART+RLENGTH)
     }
 
+    old_level = __namespace
     execute__user_body(user_block, args)
-
     if (__namespace != old_level)
         error("(execute__user) @%s %s: Namespace level mismatch")
 }
@@ -6637,8 +6640,10 @@ function ship_out(obj_type, obj,
         sub(/^[ \t]*[^ \t]+[ \t]*/, "", obj)
         # Unlike every other command, @wrap ships out its line literally here.
         # Function end_program(), which handles wrapped text, calls dosubs().
-        if (name != "wrap")
+        if (name != "wrap") {
+            dbg_print("ship_out", 7, "(ship_out) [OBJ_CMD] Calling dosubs('" obj "')")
             obj = dosubs(obj)
+        }
         dbg_print("ship_out", 3, sprintf("(ship_out) CALLING execute__command('%s', '%s')",
                                          name, obj))
         execute__command(name, obj)
@@ -6653,6 +6658,7 @@ function ship_out(obj_type, obj,
     } else if (obj_type == OBJ_USER) {
         name = extract_cmd_name(obj)
         #sub(/^[ \t]*[^ \t]+[ \t]*/, "", obj)   # OBJ_CMD does this but not here, ???
+        dbg_print("ship_out", 7, "(ship_out) [OBJ_USER] Calling dosubs('" obj "')")
         obj = dosubs(obj)
         dbg_print("ship_out", 3, sprintf("(ship_out) CALLING execute__user('%s', '%s')",
                                          name, obj))
@@ -7000,6 +7006,7 @@ function dosubs(s,
                 expand, i, j, l, m, nparam, p, pval, param, r, fn,
                 x, inc_dec, pre_post, subcmd, br, lfn, incr)
 {
+    trace(TRACE_COMMAND, "dosubs", sprintf("dosubs('%s')", s))
     dbg_print("dosubs", 5, sprintf("(dosubs) START s='%s'", s))
     l = ""                   # Left of current pos  - ready for output
     r = s                    # Right of current pos - as yet unexamined
@@ -7323,13 +7330,6 @@ function xeq_fn__basename(fn, m, nparam, param,
 #
 #       boolval SYM: Print __FMT__[0 or 1], depending on SYM truthiness.
 #         @boolval SYM@ => <string>
-#       The actual output is taken from __FMT__[].  The defaults are
-#       "1" and "0", but a Fortran programmer might change them to
-#       ".TRUE." and ".FALSE.", while a Lisp programmer might change
-#       them to "t" and "nil".  If the symbol SYM is not defined:
-#        - In strict mode, throw an error if the symbol is not defined.
-#        - In non-strict mode, you get a 'false' output if not defined.
-#        - If it's not a symbol, use its value as a boolean state.
 #
 #*****************************************************************************
 # @boolval SYM@
@@ -7561,7 +7561,7 @@ function xeq_fn__getenv(fn, m, nparam, param,
 #*****************************************************************************
 # @ifdef{FOO}{True text}{False text}@
 function xeq_fn__ifdef(fn, m, nparam, param,
-                       x, ifcond, init_negate, true_text, false_text)
+                       x, ifcond, init_negate, true_text, false_text, result)
 {
     if (   match(m, "^ifdef{[^}][^}]*}{[^}]*}{[^}]*}$") \
         || match(m, "^ifndef{[^}][^}]*}{[^}]*}{[^}]*}$"))
@@ -7599,7 +7599,9 @@ function xeq_fn__ifdef(fn, m, nparam, param,
     if (!emptyp(m))
         error("(ifdef) Extra text in ifdef: m='" m "'")
 
-    return dosubs(evaluate_boolean(ifcond, init_negate) ? true_text : false_text)
+    result = evaluate_boolean(ifcond, init_negate) ? true_text : false_text
+    dbg_print("dosubs", 7, "(xeq_fn__ifdef) Calling dosubs('" result "')")
+    return dosubs(result)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -7682,6 +7684,7 @@ function xeq_fn__ifelse(fn, m, nparam, param,
         #    the process is repeated with arguments 4, 5, 6, and 7.
     }
 
+    dbg_print("dosubs", 7, "(xeq_fn__ifelse) Calling dosubs('" result "')")
     return dosubs(result)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
@@ -7730,7 +7733,9 @@ function xeq_fn__ifx(fn, m, nparam, param,
     if (!emptyp(m))
         error("(ifx) Extra text in ifx: m='" m "'")
 
-    return dosubs(evaluate_boolean(ifcond, init_negate) ? true_text : false_text)
+    result = evaluate_boolean(ifcond, init_negate) ? true_text : false_text
+    dbg_print("dosubs", 7, "(xeq_fn__ifx) Calling dosubs('" result "')")
+    return dosubs(result)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -8288,6 +8293,12 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
           array, TOK_SPACE)
     for (elem in array)
         nam_ll_write(array[elem], GLOBAL_NAMESPACE, TYPE_COMMAND FLAG_SYSTEM FLAG_IMMEDIATE)
+
+    # INTERNAL
+    # Used for tracing internal functions - not reachable by user
+    split("dosubs", array, TOK_SPACE)
+    for (elem in array)
+        nam_ll_write(array[elem], GLOBAL_NAMESPACE, TYPE_INTERNAL FLAG_SYSTEM)
 
     __flag_label[TYPE_ANY]       = "ANY"
     __flag_label[TYPE_ARRAY]     = "ARR"

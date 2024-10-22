@@ -3,6 +3,25 @@
 * Continue reading next line if last() is backslash
 
 * QUESTION In dosubs, shouldn't we always substitute $1 et al?
+** When/where is dosubs() actually invoked?
+   1. bool__tokenize_string() :: Argument name to boolean function exists()
+   2. evaluate_condition() :: On condition text (why?)
+   3. execute__text() :: Parameter text if current_atmode is MODE_AT_PROCESS
+   4. expand_braces() :: Expanding mtext as we want it to
+   5. search_file() :: On parameter f to get file name
+   6. ship_out() :: For any user cmd or regular command (except @wrap)
+   7. xeq_cmd__cleardivert() :: Each parameter to @cleardivert
+   8. xeq_cmd__divert() :: Each parameter to @divert
+   9. xeq_cmd__dump() :: On parameter to @dump to get dumpfile
+   10. xeq_cmd__error() :: On parameter to @error,@echo,etc to get message
+   11. xeq_cmd__readfile() :: On parameter to get file name
+   12. xeq_cmd__shell() :: On parameter to get send-to program.
+       Also on command text which is sent to shell process.
+   13. xeq_cmd__undivert() :: Each parameter to get stream #
+   14. xeq_fn__ifdef() :: Called on condition expr; also true text & false
+       text - in fact twice, once pre-eval, and again upon return.  Weird
+   15. xeq_fn__ifelse() :: Called on result text
+   16. xeq_fn__ifx() :: Called on result text (but not true/false beforehand!)
 
 * MAYBE Debug options (a la "m4 -d")
   The `-d' option to m4 controls the amount of details presented, when

@@ -27,10 +27,12 @@
 #                           This catches random .m2 files being interpreted as tests, and
 #                           also requires a test to positively specify "no output expected".
 # TESTNAME.sh               If present, this script will be invoked with sh to run the test.
-# TESTNAME.showdiff         If present, show diff of expected/actual output on failure
+# TESTNAME.showdiff         If present, show diff of expected/actual output on failure.
+#                           Diff file is always created, this just controls what is shown
 #
 # Temporary working files, deleted after test run:
 # ------------------------------------------------
+# TESTNAME.run_diff         Diff of expected output vs run output, if different
 # TESTNAME.run_err          m2 run standard error
 # TESTNAME.run_exit         m2 run exit code
 # TESTNAME.run_out          m2 run standard output
@@ -168,9 +170,9 @@ run_test()
     [ -s "$M2_FILE" ] || { echo "SKIP - Empty test file"; return; }
 
     rm -f ${TESTNAME}.expected_out ${TESTNAME}.expected_err ${TESTNAME}.expected_exit
-    rm -f ${TESTNAME}.run_out      ${TESTNAME}.run_err      ${TESTNAME}.run_exit
-    trap 'rm -f ${TESTNAME}.expected_out ${TESTNAME}.expected_err ${TESTNAME}.expected_exit ${TESTNAME}.run_out ${TESTNAME}.run_err ${TESTNAME}.run_exit; summarize_tests; exit' \
-         1 2 3 15
+    rm -f ${TESTNAME}.run_out      ${TESTNAME}.run_err      ${TESTNAME}.run_exit        ${TESTNAME}.run_diff
+   #trap 'rm -f ${TESTNAME}.expected_out ${TESTNAME}.expected_err ${TESTNAME}.expected_exit ${TESTNAME}.run_out ${TESTNAME}.run_err ${TESTNAME}.run_exit ${TESTNAME}.run_diff; summarize_tests; exit' 1 2 3 15
+    trap 'rm -f ${TESTNAME}.expected_* ${TESTNAME}.run_*; summarize_tests; exit' 1 2 3 15
     ntest=$(expr $ntest + 1)
 
     if [ ! -r "$M2_FILE" ]; then
@@ -219,10 +221,13 @@ run_test()
         echo "FAIL - Unexpected output"
         echo "    (file $CATEGORY/$SERIES/$M2_FILE)"
         nfail=$(expr $nfail + 1)
+        # Always create diff file
+        diff -c ${TESTNAME}.expected_out ${TESTNAME}.run_out > ${TESTNAME}.run_diff
+
         if [ -f ${TESTNAME}.showdiff ]; then
             echo ">>> DIFF EXPECTED/ACTUAL OUTPUT TEXT <<<"
             echo diff -c ${TESTNAME}.expected_out ${TESTNAME}.run_out
-            diff -c ${TESTNAME}.expected_out ${TESTNAME}.run_out
+            cat ${TESTNAME}.run_diff
         else
             echo ">>> EXPECTED OUTPUT TEXT <<<"
             cat ${TESTNAME}.expected_out
@@ -246,12 +251,12 @@ run_test()
     else
         echo "PASS"
         npass=$(expr $npass + 1)
-        rm -f ${TESTNAME}.run_out ${TESTNAME}.run_err
+       #rm -f ${TESTNAME}.run_out ${TESTNAME}.run_err
+        rm -f ${TESTNAME}.run_*
     fi
 
-    # Retain ${TESTNAME}.{run_out,run_err} for further investigation
+    # Retain ${TESTNAME}.run_* for further investigation
     rm -f ${TESTNAME}.expected_out ${TESTNAME}.expected_err ${TESTNAME}.expected_exit
-    rm -f                                                   ${TESTNAME}.run_exit 
 }
 
 

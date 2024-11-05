@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-10-22 14:04:18 cleyon>
+#  Time-stamp:  <2024-11-05 16:00:32 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -573,7 +573,7 @@ function expand_braces(s,    atbr, cb, ltext, mtext, rtext)
         #                        ^---cb
         ltext = substr(s, 1,      atbr-1)
         mtext = substr(s, atbr+2, cb-atbr-2)
-                gsub(/\\}/, "}", mtext)
+                gsub(/\\}/, "}", mtext) # XXX
         rtext = substr(s, cb+1)
         if (dbg("braces", 7)) {
             print_debugfile("   expand_braces: ltext='" ltext "'")
@@ -622,7 +622,8 @@ function expand_braces(s,    atbr, cb, ltext, mtext, rtext)
 #     start+offset > length(s)), return EOF as a "failure code".  If the
 #     initial conditions are bad, return ERROR.
 #
-function find_closing_brace(s, start,    offset, c, nc, cb, slen)
+function find_closing_brace(s, start,
+                            offset, c, nc, cb, slen)
 {
     dbg_print("braces", 3, (">> find_closing_brace(s='" s "', start=" start))
 
@@ -761,7 +762,8 @@ function error(text, file, line)
 # names.  Only after all expanded text has been processed and sent to
 # the output does the program get a fresh line of input.
 # Return OKAY, ERROR, or EOF.  parse() is the only caller of readline.
-# (That used to be true, but read_lines_until() now also calls readline.)
+# That used to be true, but read_lines_until() now also calls readline.
+# (later) scan__usercmd_call() can also call readline, chasing closing `}'.
 function readline(    getstat, i)
 {
     getstat = OKAY
@@ -2103,12 +2105,13 @@ function ppf__SRC_FILE(blknum)
 #       The following flag characters are recognized:
 #
 #       Type is mutually exclusive; exactly one must be present:
-#           TYPE_ARRAY          1 : Array refs must use subscripts
-#           TYPE_COMMAND        2 : Built-in "@" command; Global namespace
-#           TYPE_USER           3 : User-defined command; dynamic namespace
-#           TYPE_FUNCTION       4 : Global namespace
-#           TYPE_SEQUENCE       5 : Global namespace
-#           TYPE_SYMBOL         6
+#           TYPE_ARRAY          A : Array refs must use subscripts
+#           TYPE_COMMAND        C : Built-in "@" command; Global namespace
+#           TYPE_FUNCTION       F : Global namespace
+#           TYPE_INTERNAL       L
+#           TYPE_SEQUENCE       Q : Global namespace
+#           TYPE_SYMBOL         S
+#           TYPE_USER           U : User-defined command; dynamic namespace
 #
 #       Read-Only/Writable is mutually exclusive; both are optional:
 #           FLAG_READONLY       R : Read-only; immune from user modification
@@ -6588,13 +6591,6 @@ function xeq_cmd__wrap(name, cmdline,
     dbg_print("parse", 5, sprintf("(xeq_cmd__wrap) START dstblk=%d, mode=%s, $0='%s'",
                                 curr_dstblk(), ppf__mode(curr_atmode()), $0))
 
-    # dbg_print("parse", 5, "(xeq_cmd__ignore) CALLING read_lines_until()")
-    # rstat = read_lines_until(cmdline, DISCARD)
-    # dbg_print("parse", 5, "(xeq_cmd__ignore) RETURNED FROM read_lines_until() => " ppf__bool(rstat))
-    # if (!rstat)
-    #     error("[@ignore] Read error")
-    # dbg_print("parse", 5, "(xeq_cmd__ignore) END")}
-
     $0 = cmdline
     if (NF == 0)
         error("Bad parameters:" $0)
@@ -8262,15 +8258,14 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     sym_ll_fiat("__TRACE__",        "", FLAGS_WRITABLE_BOOLEAN, FALSE)
     sym_ll_fiat("__TRACEMODE__",    "", FLAGS_READONLY_SYMBOL,  TRACE_DEFAULT_SET)
 
-    # FUNCS
-    # Functions cannot be used as symbol or sequence names.
-    split("basename boolval chr date dirname epoch expr format getenv" \
-          " ifdef ifelse ifndef ifx index lc left len ltrim mid ord rem" \
-          " right rot13 rtrim sexpr sgetenv spaces srem strftime" \
-          " substr time trim tz uc utc uuid xbasename xdirname",
+    # IMMEDS
+    # These commands are Immediate
+    split("break case continue else endcase endcmd endif endlong" \
+          " endlongdef endwhile esac fi for foreach if longdef" \
+          " newcmd next of otherwise return unless until wend while",
           array, TOK_SPACE)
     for (elem in array)
-        nam_ll_write(array[elem], GLOBAL_NAMESPACE, TYPE_FUNCTION FLAG_SYSTEM)
+        nam_ll_write(array[elem], GLOBAL_NAMESPACE, TYPE_COMMAND FLAG_SYSTEM FLAG_IMMEDIATE)
 
     # CMDS
     # Built-in commands
@@ -8284,15 +8279,15 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     for (elem in array)
         nam_ll_write(array[elem], GLOBAL_NAMESPACE, TYPE_COMMAND FLAG_SYSTEM)
 
-
-    # IMMEDS
-    # These commands are Immediate
-    split("break case continue else endcase endcmd endif endlong" \
-          " endlongdef endwhile esac fi for foreach if longdef" \
-          " newcmd next of otherwise return unless until wend while",
+    # FUNCS
+    # Functions cannot be used as symbol or sequence names.
+    split("basename boolval chr date dirname epoch expr format getenv" \
+          " ifdef ifelse ifndef ifx index lc left len ltrim mid ord rem" \
+          " right rot13 rtrim sexpr sgetenv spaces srem strftime" \
+          " substr time trim tz uc utc uuid xbasename xdirname",
           array, TOK_SPACE)
     for (elem in array)
-        nam_ll_write(array[elem], GLOBAL_NAMESPACE, TYPE_COMMAND FLAG_SYSTEM FLAG_IMMEDIATE)
+        nam_ll_write(array[elem], GLOBAL_NAMESPACE, TYPE_FUNCTION FLAG_SYSTEM)
 
     # INTERNAL
     # Used for tracing internal functions - not reachable by user
@@ -8303,6 +8298,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     __flag_label[TYPE_ANY]       = "ANY"
     __flag_label[TYPE_ARRAY]     = "ARR"
     __flag_label[TYPE_COMMAND]   = "CMD"
+    __flag_label[TYPE_INTERNAL]  = "intern"
     __flag_label[TYPE_USER]      = "USR"
     __flag_label[TYPE_FUNCTION]  = "FUN"
     __flag_label[TYPE_SEQUENCE]  = "SEQ"

@@ -22,6 +22,26 @@
        text - in fact twice, once pre-eval, and again upon return.  Weird
    15. xeq_fn__ifelse() :: Called on result text
    16. xeq_fn__ifx() :: Called on result text (but not true/false beforehand!)
+** Further thoughts
+This Questions came about because I would like to say:
+@define double @expr 2 * $1@
+@double 2@ => 4
+
+This involves not calling dosubs() too early, because I don't want
+xeq_fn__expr to see $1 (which it won't understand); rather, at run time
+I want to expand the invocation to substitute the actual parameter
+value.  This means that double must have "@expr 2 * $1@" stored as its
+actual value, dosubs() to be called later when $1 is known.
+
+But that can't also work with the following:
+@define twelve @expr 2 * 6@
+@incr twelve    @srem => 13@
+
+Doesn't work because twelve is still "@expr 2 * 6@", and that's not
+something you can increment.
+
+I think the solution is to go back to early evaluation (i.e., before I
+began this experiment), and simply teach calc() how to handle $1.
 
 * MAYBE Debug options (a la "m4 -d")
   The `-d' option to m4 controls the amount of details presented, when

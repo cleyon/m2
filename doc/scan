@@ -1,0 +1,113 @@
+* New functionality
+
+Create new function scan_invoc(s, start, can_readline_p, invoc)
+to scan a string for:
+
+["@"]  [<name>]  "{"  <stuff, including nested {...}>  "}"  ["@"]
+
+<name> must be strict.
+In <stuff>, "\{" outputs "{" but does not increment nest count.
+And "\}" outputs "}" but does not end a brace block.
+"\\" outputs a single "\".
+If there is an open brace block currently being scanned, and if 
+can_readline_p is True and the line ends with a single backslash with no
+following whitespace, then readline() is called.
+
+** QUESTION Good usage?
+
+@mycmdname{Argument 1}{\
+Argument 2 goes here}{\
+Argument 3 is last}
+@ohYesWeDid
+
+
+* Existing
+
+** REPLACES/SUPPLEMENT:
+
+- find_closing_brace(s, start) \\
+  Designed to scan @(...} ; only called from expand_braces(), which is
+  only invoked from dosubs().
+
+  Returns: if brace found, a positive integer which is a position within s.
+           if no brace/end of string, return EOF (0)
+           or ERROR (-1) if things are really bad
+
+- scan__usercmd_call() \\
+  Implicitly scans $0 ; only called from parse(), which is invoked in
+  lots of places.
+
+  Returns: the command line, maybe after readline().  The final string
+           is the ship_out'd as an OBJ_USER.
+
+
+** IN ALL OF THE FOLLOWING FUNCTIONS
+In the following 3 cases, invocation scanning (looking for a name and
+zero or more brace-enclosing character sets) is only used for syntax
+checking, building an array of argument values, probably remembering the
+invocation name and the number of arguments.  But there is no need to
+care about whatever value (or not) the scanning function returns, in
+contrast to the above two items.
+
+*** MIGHT BE USED FOR FIRST TIME TO HELP:
+- parse__newcmd() \\
+  Invoked from parse(). Used to scan @newcmd for parameter names;
+  parameter names stored in blktab[NEWCMD_BLK, N, "param_name"], N >= 1.
+  ``Function name'' stored in blktab[NEWCMD_BLK, 0, "name"]
+
+  Returns: The function itself returns a block, but that's not related
+           to brace parsing.  That's only for syntax checking/arg building.
+
+- execute__user(name, cmdline) \\
+  Invoked from ship_out().  When execute__user is called, dstblk is TERMINAL
+  (zero) so everything gets executed.
+  + Description \\
+    Check for command line arguments; count in "narg", populate
+    args[N].  args array is used to pass arguments to execute__user_body().
+
+- dosubs() \\
+  Look for symfun scanning for @foo{...}  Builds param[] array.
+
+*** These three are very similar and are only invoked by dosubs().
+They all return dosubs(result), obviously a substituted string used in
+some output.
+
+- xeq_fn__ifdef(fn, m, nparam, param) \\
+  Checks to make sure there are 2 or 3 {} groups in m.
+  { Var }{ True } [ { False } ]   . . . .
+- xeq_fn__ifelse(fn, m, nparam, param) \\
+  Similar to above, except needs at least 3.
+  {a}{b}{eqtext}{...}
+- xeq_fn__ifx(fn, m, nparam, param) \\
+  Similar again, exactly 3 {} groups
+  {cond}{true}{
+
+* Array keys
+
+Keys for invoc:
+Leading @ is optional.
+Name is optional.
+If braces are being used, both opening and closing braces must be
+present.  If braces are not used, both must be omitted.
+
+
+- pos_ld_at :: pos of leading "@" if present; 0 if not
+- pos_name :: pos of name, or 0 if omitted
+- pos_obr :: pos of opening brace.  Required if pcbr != 0
+- pos_stuff :: pos of first char of stuff.  See nargs and arg[]
+- pos_cbr :: pos of closing brace.  Required if pobr != 0
+- pos_tr_at :: pos of closing "@" if present; 0 if not
+
+- valid :: bool
+- name :: string or "" if absent
+- nargs :: integer or 0 if no args
+- arg[1..nargs] :: strings
+- ld_at_p :: bool = ["pos_ld_at"] != 0
+- tr_at_p :: bool = ["pos_tr_at"] != 0
+- strval :: string
+
+* New "scan_invoc" function
+function scan_invoc(s, start, can_readline_p,
+                    ...)
+{
+}

@@ -1,0 +1,6 @@
+@define foo	FOODEF
+@longdef bar
+BARDEF 1
+BARDEF 2
+@endlongdef
+@define baz	BAZDEF

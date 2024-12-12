@@ -1,6 +1,9 @@
 #                                               -*- Org -*-
 
-* Continue reading next line if last() is backslash
+* WONTDO Continue reading next line if last() is backslash          :ARCHIVE:
+Maybe I could do this for @newcmd or similar, but after much reflection,
+m2 should not be in the business of modifying backslash lines.  Its
+functionality lies elsewhere.
 
 * QUESTION In dosubs, shouldn't we always substitute $1 et al?
 ** When/where is dosubs() actually invoked?
@@ -24,21 +27,22 @@
    16. xeq_fn__ifx() :: Called on result text (but not true/false beforehand!)
 ** Further thoughts
 This Questions came about because I would like to say:
-@define double @expr 2 * $1@
-@double 2@ => 4
+    @define double @expr 2 * $1@
+    @double 2@ => 4
 
 This involves not calling dosubs() too early, because I don't want
-xeq_fn__expr to see $1 (which it won't understand); rather, at run time
-I want to expand the invocation to substitute the actual parameter
-value.  This means that double must have "@expr 2 * $1@" stored as its
-actual value, dosubs() to be called later when $1 is known.
+xeq_fn__expr to see $1 (which it won't understand and in fact is not
+even defined at that point); rather, at run time I want to expand the
+invocation to substitute the actual parameter value.  This means that
+double must have "@expr 2 * $1@" stored as its actual value, dosubs() to
+be called later when $1 is known.
 
 But that can't also work with the following:
-@define twelve @expr 2 * 6@
-@incr twelve    @srem => 13@
+    @define twelve @expr 2 * 6@
+    @incr twelve    @srem => 13@
 
-Doesn't work because twelve is still "@expr 2 * 6@", and that's not
-something you can increment.
+Doesn't work because twelve would still be "@expr 2 * 6@", and that's
+not something you can increment.
 
 I think the solution is to go back to early evaluation (i.e., before I
 began this experiment), and simply teach calc() how to handle $1.
@@ -86,9 +90,9 @@ began this experiment), and simply teach calc() how to handle $1.
   are reset to the default.
 
 * MAYBE Implement @dumpdef SYM...
-  Dumps one or more symbols, with no args, same @dump
+  Dumps one or more symbols, with no args, same as @dump
 
-* MAYBE Implement a "stack" of definitions
+* WONTDO Implement a "stack" of definitions                         :ARCHIVE:
   pushdef() popdef(); in BSD m4, define() replaces top-most def only.
   How will this work with namespace ?
 

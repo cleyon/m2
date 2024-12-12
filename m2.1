@@ -153,9 +153,14 @@ See the
 .Sx Streams and Diversions
 section.
 .It @dump WHAT [FILE]
-Output symbol names & definitions to FILE (standard error).
+Output symbol names & definitions to FILE.
+If FILE is omitted, output is sent to
+.Va __DEBUGFILE__ .
 .It @dumpall WHAT [FILE]
 Like @dump but include System symbols.
+.It @dumpdef [SYM...]
+Output definition of SYM to
+.Va __DEBUGFILE__ .
 .It @echo [TEXT]
 Send TEXT to standard error; continue.  Also called @errprint.
 .Ql @warn

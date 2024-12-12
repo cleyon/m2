@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-11-05 16:00:32 cleyon>
+#  Time-stamp:  <2024-12-11 11:29:17 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -1490,6 +1490,7 @@ function execute__command(name, cmdline,
     else if (name ==  "default")        xeq_cmd__define(name, cmdline)
     else if (name ==  "define")         xeq_cmd__define(name, cmdline)
     else if (name ==  "divert")         xeq_cmd__divert(name, cmdline)
+    else if (name ==  "dumpdef")        xeq_cmd__dumpdef(name, cmdline)
     else if (name ~   /dump(all)?/)     xeq_cmd__dump(name, cmdline)
     else if (name ~ /s?echo/)           xeq_cmd__error(name, cmdline)
     else if (name ==  "error")          xeq_cmd__error(name, cmdline)
@@ -4466,6 +4467,31 @@ function dump__cmdtab(type, include_sys,
 
 #*****************************************************************************
 #
+#       @  D U M P D E F
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#*****************************************************************************
+# @dumpdef [SYM ...]
+# Output format:
+#       @<command>  SPACE  <name>  TAB  <stuff includes spaces...>
+function xeq_cmd__dumpdef(name, cmdline,
+                          buf, i)
+{
+    $0 = cmdline
+    if (NF == 0)
+        error("@dumpdef: No argument form not supported yet")
+
+    for (i = 1; i <= NF; i++)
+        buf = buf sym_definition_ppf($i) TOK_NEWLINE
+    print_debugfile(chop(buf))
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
 #       @  E R R O R
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -7256,7 +7282,7 @@ function dosubs(s,
 function substitute_params(str, nparam, param,
                            j, x)
 {
-    # Expande $# => nparam
+    # Expand $# => nparam
     if (index(str, "$#") > 0)
         gsub("\\$#", nparam, str)
 
@@ -8271,11 +8297,11 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     # Built-in commands
     # Also need to add entry in execute__command()  [search: DISPATCH]
     split("append array cleardivert debug decr default define divert dump" \
-          " dumpall echo error errprint esyscmd eval exit ignore include incr" \
-          " initialize input local m2ctl nextfile paste readfile readarray" \
-          " readonly secho sequence shell sinclude spaste sreadfile sreadarray" \
-          " syscmd tracemode traceoff traceon typeout undef undefine undivert" \
-          " warn wrap", array, TOK_SPACE)
+          " dumpall dumpdef echo error errprint esyscmd eval exit ignore" \
+          " include incr initialize input local m2ctl nextfile paste" \
+          " readfile readarray readonly secho sequence shell sinclude spaste" \
+          " sreadfile sreadarray syscmd tracemode traceoff traceon typeout" \
+          " undef undefine undivert warn wrap", array, TOK_SPACE)
     for (elem in array)
         nam_ll_write(array[elem], GLOBAL_NAMESPACE, TYPE_COMMAND FLAG_SYSTEM)
 

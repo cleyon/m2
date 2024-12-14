@@ -1,0 +1,4 @@
+@define a	aa
+@define b	bb
+@define c	cc
+@define DMPFILE	dumpfile.out

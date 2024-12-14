@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-12-11 11:29:17 cleyon>
+#  Time-stamp:  <2024-12-14 18:33:19 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -18,7 +18,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "4.0.0"
+    M2_VERSION = "4.0.1"
 
     # Customize these paths as needed for correct operation on your system.
     # If a program is not available, it's okay to remove the entry entirely.
@@ -1188,8 +1188,8 @@ function blk_dump_block_raw(blknum,
                             x, k, blk, type)
 {
     type = blk_type(blknum)
-    dbg_print("xeq", 5, "(blk_dump_blktab) type=" type)
-    dbg_print_block("xeq", -1, blknum, "(blk_dump_blktab)")
+    dbg_print("xeq", 5, "(blk_dump_block_raw) type=" type)
+    dbg_print_block("xeq", -1, blknum, "(blk_dump_block_raw)")
 
     for (k in blktab) {
         split(k, x, SUBSEP)
@@ -4210,21 +4210,16 @@ function xeq_cmd__dump(name, cmdline,
     dumpfile = EMPTY
 
     $0 = cmdline
+    what = (NF == 0) ? "symbols" : tolower($1)
     if (NF > 1) {
         if (secure_level() >= 1) {
             warn("(@dump) Security violation: Dumpfile not allowed")
             return
         }
-        warn("(xeq_cmd__dump) Dumpfile is not supported yet")
-        what = $1
         $1 = ""
         sub("^[ \t]*", "")
         dumpfile = rm_quotes(dosubs($0))
         # print_debugfile(sprintf("dumpfile = '%s'", dumpfile))
-    } else if (NF == 0) {
-        what = "symbols"
-    } else {                    # NF == 1
-        what = tolower($1)
     }
 
     if (what ~ /sym(bol)?s?/) {
@@ -4241,7 +4236,8 @@ function xeq_cmd__dump(name, cmdline,
         what_type = TYPE_ANY
         buf = nam_dump_namtab(what_type, all_flag)
     } else if (what ~ /bl(oc)?ks?/) {
-        buf = "BROKEN: " blk_dump_blktab()
+        what_type = TYPE_ANY    # There is no "block" type
+        buf = blk_dump_blktab()
     } else if (what ~ /[0-9]+/) {
         what_type = TYPE_ANY    # There is no "block" type
         #print_debugfile("Dump of block # " what)
@@ -4267,7 +4263,7 @@ function xeq_cmd__dump(name, cmdline,
         # was not read properly...
         warn(sprintf("(xeq_cmd__dump) Empty %s table; dumpfile='%s'", ppf__flags(what_type), dumpfile))
     } else if (emptyp(dumpfile))  # No FILE arg provided to @dump command
-        print buf
+        print_debugfile(buf)
     else {
         dbg_print("sym", 3, sprintf("(xeq_cmd__dump) %s table dump to '%s'",
                                     ppf__flags(what_type), dumpfile))
@@ -4479,11 +4475,17 @@ function xeq_cmd__dumpdef(name, cmdline,
                           buf, i)
 {
     $0 = cmdline
-    if (NF == 0)
-        error("@dumpdef: No argument form not supported yet")
+    if (NF == 0) {
+        buf = dump__symtab(TYPE_SYMBOL, FALSE) # normal symbols only
+        if (emptyp(buf)) {
+            warn("@dumpdef: Empty SYM table")
+            return
+        }
+        buf = buf TOK_NEWLINE
+    } else
+        for (i = 1; i <= NF; i++)
+            buf = buf sym_definition_ppf($i) TOK_NEWLINE
 
-    for (i = 1; i <= NF; i++)
-        buf = buf sym_definition_ppf($i) TOK_NEWLINE
     print_debugfile(chop(buf))
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =

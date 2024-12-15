@@ -3,20 +3,3 @@ Preamble
 Of clauses may print in different order - that's okay
 One
 End
-@newcmd one
-@define FOO 1
-Begin
-@case FOO
-Preamble
-Of clauses may print in different order - that's okay
-@of 3
-Three
-@of 1
-One
-@of 2
-Two
-@otherwise
-Not matched
-@endcase
-End
-@endcmd

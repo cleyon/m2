@@ -1,13 +1,13 @@
-@define DMPFILE dumpfile.out
-@wrap @syscmd rm -f @DMPFILE@
+@define DUMPFILE dumpfile.list
+@wrap @syscmd rm -f @DUMPFILE@
 @define a aa
 @define b bb
 @define c cc
-@dump symbols @DMPFILE@
+@dump symbols @DUMPFILE@
 @@ @shell EOD
-@@ ls -l @DMPFILE@
+@@ ls -l @DUMPFILE@
 @@ EOD
-@syscmd cmp -s @DMPFILE@ dumpfile.target
+@syscmd cmp -s @DUMPFILE@ dumpfile.target
 @if __SYSVAL__ == 0
 Success!
 @else

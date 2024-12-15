@@ -1,0 +1,11 @@
+@newcmd FOO
+Foo on you!
+@endcmd
+@newcmd greet{name}
+Hello, @name@!
+@endcmd
+@newcmd pronounce{who}{judgment}
+@for i 1 4 1
+That's @judgment@, @who@, @judgment@!
+@next i
+@endcmd

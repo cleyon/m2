@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-12-14 18:33:19 cleyon>
+#  Time-stamp:  <2024-12-14 21:16:21 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -3440,11 +3440,11 @@ function sym_definition_ppf(sym,
 
 
 function sym_true_p(sym,
-                     val)
+                    val)
 {
     return (sym_defined_p(sym) &&
             ((val = sym_fetch(sym)) != FALSE &&
-              val                    != EMPTY))
+              val                   != EMPTY))
 }
 
 
@@ -3765,7 +3765,7 @@ function bool__scan_term(    e, f, r)           # factor | factor && factor
 
 
 function bool__scan_factor(    e, r,         # ! factor | variable | ( expression )
-                                name)
+                               name)
 {
     dbg_print("bool", 5, sprintf("(bool__scan_factor) __bf=%d, __btoken[]='%s', e='%s'", __bf, __btoken[__bf], e))
     if (__btoken[__bf] ~ /^[01]$/) {
@@ -3795,6 +3795,8 @@ function bool__scan_factor(    e, r,         # ! factor | variable | ( expressio
         name = __btoken[++__bf]
         if (name == EMPTY) return ERROR
         assert_sym_valid_name(name)
+        if (sym_deferred_p(name))
+            sym_deferred_define_now(name)
         r = sym_defined_p(name)
         dbg_print("bool", 5, "(bool__scan_factor): DEFINED; name='" name "', returning " ppf__bool(r))
         __bf++
@@ -3818,7 +3820,10 @@ function bool__scan_factor(    e, r,         # ! factor | variable | ( expressio
         return r
 
     } else if (__btoken[__bf] ~ /^[A-Za-z#_][A-Za-z#_0-9]*$/) { # symbol?
-        r = sym_true_p(__btoken[__bf])
+        name = __btoken[__bf]
+        if (sym_deferred_p(name))
+            sym_deferred_define_now(name)
+        r = sym_true_p(name)
         dbg_print("bool", 5, "(bool__scan_factor): SYM; just read '" __btoken[__bf] "', so returning " ppf__bool(r))
         __bf++
         return r
@@ -5091,6 +5096,8 @@ function evaluate_condition(cond, negate,
     } else if (cond ~ /^[A-Za-z_][A-Za-z0-9_]*$/) {
         dbg_print("if", 6, sprintf("(evaluate_condition) Found simple name '%s'", cond))
         assert_sym_valid_name(cond)
+        if (sym_deferred_p(cond))
+            sym_deferred_define_now(cond)
         retval = sym_true_p(cond)
 
     } else if (match(cond, ".* (in|IN) .*")) { # poor regexp, fragile
@@ -5127,6 +5134,8 @@ function evaluate_condition(cond, negate,
         op = substr(cond, RSTART, RLENGTH)
         rhs = substr(cond, RLENGTH+2)
 
+        if (sym_valid_p(lhs) && sym_deferred_p(lhs))
+            sym_deferred_define_now(lhs)
         if (sym_valid_p(lhs) && sym_defined_p(lhs))
             lval = sym_fetch(lhs)
         else if (seq_defined_p(lhs))
@@ -5134,6 +5143,8 @@ function evaluate_condition(cond, negate,
         else
             lval = lhs
 
+        if (sym_valid_p(rhs) && sym_deferred_p(rhs))
+            sym_deferred_define_now(rhs)
         if (sym_valid_p(rhs) && sym_defined_p(rhs))
             rval = sym_fetch(rhs)
         else if (seq_defined_p(rhs))

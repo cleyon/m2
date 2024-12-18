@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-12-14 21:16:21 cleyon>
+#  Time-stamp:  <2024-12-18 17:08:28 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -1503,6 +1503,7 @@ function execute__command(name, cmdline,
     else if (name ==  "incr")           xeq_cmd__incr(name, cmdline)
     else if (name ==  "initialize")     xeq_cmd__define(name, cmdline)
     else if (name ==  "input")          xeq_cmd__input(name, cmdline)
+    else if (name ==  "literal")        xeq_cmd__literal(name, cmdline)
     else if (name ==  "local")          xeq_cmd__local(name, cmdline)
     else if (name ==  "m2ctl")          xeq_cmd__m2ctl(name, cmdline)
     else if (name ==  "nextfile")       xeq_cmd__nextfile(name, cmdline)
@@ -5373,6 +5374,41 @@ function xeq_cmd__input(name, cmdline,
 
 #*****************************************************************************
 #
+#       @  L I T E R A L
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#*****************************************************************************
+# @literal   DELIM
+function xeq_cmd__literal(name, cmdline,
+                          rstat, lit_block)
+{
+    dbg_print("parse", 5, sprintf("(xeq_cmd__literal) START dstblk=%d, mode=%s, $0='%s'",
+                                curr_dstblk(), ppf__mode(curr_atmode()), $0))
+
+    $0 = cmdline
+    if (NF == 0)
+        error("Bad parameters:" $0)
+
+    lit_block = blk_new(BLK_AGG)
+
+    dbg_print("parse", 5, "(xeq_cmd__literal) CALLING read_lines_until()")
+    rstat = read_lines_until(cmdline, lit_block)
+    dbg_print("parse", 5, "(xeq_cmd__literal) RETURNED FROM read_lines_until() => " ppf__bool(rstat))
+    if (!rstat)
+        error("[@literal] Read error")
+
+    dbg_print("parse", 5, sprintf("(xeq_cmd__literal) CALLING ship_out(%s, '%s')", OBJ_BLKNUM, lit_block))
+    ship_out(OBJ_BLKNUM, lit_block)
+    dbg_print("parse", 5, "(xeq_cmd__literal) RETURNED FROM ship_out()")
+    dbg_print("parse", 5, "(xeq_cmd__literal) END")
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
 #       @  L O C A L
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -8311,7 +8347,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     # Also need to add entry in execute__command()  [search: DISPATCH]
     split("append array cleardivert debug decr default define divert dump" \
           " dumpall dumpdef echo error errprint esyscmd eval exit ignore" \
-          " include incr initialize input local m2ctl nextfile paste" \
+          " include incr initialize input literal local m2ctl nextfile paste" \
           " readfile readarray readonly secho sequence shell sinclude spaste" \
           " sreadfile sreadarray syscmd tracemode traceoff traceon typeout" \
           " undef undefine undivert warn wrap", array, TOK_SPACE)

@@ -223,8 +223,8 @@ If EXPR is a simple NAME, check if NAME is True.
 See
 .Sx Boolean Expressions
 below.
-.It @ignore DELIM
-Ignore input until line that begins with DELIM
+.It @ignore PATTERN
+Ignore input until line that matches regular expression PATTERN.
 .It @include FILE
 Read and process contents of FILE.
 Variant
@@ -240,6 +240,9 @@ Like @define, but error if NAME already defined
 Read a single line from keyboard to define NAME.
 If NAME is omitted, value is stored in symbol
 .Va __INPUT__ .
+.It @literal PATTERN
+Read and print input literally, without interpretation, until line that
+matches regular expression PATTERN.
 .It @local NAME
 Declare NAME as a symbol local to the current frame.
 .It @longdef NAME ... @endlongdef
@@ -288,8 +291,8 @@ Create and manage sequences.
 See the
 .Sx Sequences
 section.
-.It @shell DELIM [PROG] ... DELIM
-Evaluate input until DELIM and send raw data to PROG.
+.It @shell PATTERN [PROG]
+Evaluate input until PATTERN and send raw data to PROG.
 Output stream is captured; shell exit status is stored in
 .Va __SYSVAL__ .
 If PROG is not specified, the value of symbol

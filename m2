@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-12-18 17:08:28 cleyon>
+#  Time-stamp:  <2024-12-19 16:53:21 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -573,7 +573,7 @@ function expand_braces(s,    atbr, cb, ltext, mtext, rtext)
         #                        ^---cb
         ltext = substr(s, 1,      atbr-1)
         mtext = substr(s, atbr+2, cb-atbr-2)
-                gsub(/\\}/, "}", mtext) # XXX
+                gsub(/\\}/, "}", mtext)
         rtext = substr(s, cb+1)
         if (dbg("braces", 7)) {
             print_debugfile("   expand_braces: ltext='" ltext "'")
@@ -5215,7 +5215,7 @@ function ppf__BLK_IF(blknum)
 #*****************************************************************************
 # @ignore    DELIM
 function xeq_cmd__ignore(name, cmdline,
-                         rstat)
+                         readstat, save_line, save_lineno)
 {
     dbg_print("parse", 5, sprintf("(xeq_cmd__ignore) START dstblk=%d, mode=%s, $0='%s'",
                                 curr_dstblk(), ppf__mode(curr_atmode()), $0))
@@ -5223,12 +5223,14 @@ function xeq_cmd__ignore(name, cmdline,
     $0 = cmdline
     if (NF == 0)
         error("Bad parameters:" $0)
+    save_line = $0
+    save_lineno = LINE()
 
     dbg_print("parse", 5, "(xeq_cmd__ignore) CALLING read_lines_until()")
-    rstat = read_lines_until(cmdline, DISCARD)
-    dbg_print("parse", 5, "(xeq_cmd__ignore) RETURNED FROM read_lines_until() => " ppf__bool(rstat))
-    if (!rstat)
-        error("[@ignore] Read error")
+    readstat = read_lines_until(cmdline, DISCARD)
+    dbg_print("parse", 5, "(xeq_cmd__ignore) RETURNED FROM read_lines_until() => " ppf__bool(readstat))
+    if (readstat != TRUE)
+        error("[@ignore] Pattern '" cmdline "' not found:" save_line, "", save_lineno)
     dbg_print("parse", 5, "(xeq_cmd__ignore) END")
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
@@ -5381,7 +5383,7 @@ function xeq_cmd__input(name, cmdline,
 #*****************************************************************************
 # @literal   DELIM
 function xeq_cmd__literal(name, cmdline,
-                          rstat, lit_block)
+                          readstat, save_line, save_lineno, lit_block)
 {
     dbg_print("parse", 5, sprintf("(xeq_cmd__literal) START dstblk=%d, mode=%s, $0='%s'",
                                 curr_dstblk(), ppf__mode(curr_atmode()), $0))
@@ -5389,14 +5391,15 @@ function xeq_cmd__literal(name, cmdline,
     $0 = cmdline
     if (NF == 0)
         error("Bad parameters:" $0)
-
+    save_line = $0
+    save_lineno = LINE()
     lit_block = blk_new(BLK_AGG)
 
     dbg_print("parse", 5, "(xeq_cmd__literal) CALLING read_lines_until()")
-    rstat = read_lines_until(cmdline, lit_block)
-    dbg_print("parse", 5, "(xeq_cmd__literal) RETURNED FROM read_lines_until() => " ppf__bool(rstat))
-    if (!rstat)
-        error("[@literal] Read error")
+    readstat = read_lines_until(cmdline, lit_block)
+    dbg_print("parse", 5, "(xeq_cmd__literal) RETURNED FROM read_lines_until() => " ppf__bool(readstat))
+    if (readstat != TRUE)
+        error("[@literal] Pattern '" cmdline "' not found:" save_line, "", save_lineno)
 
     dbg_print("parse", 5, sprintf("(xeq_cmd__literal) CALLING ship_out(%s, '%s')", OBJ_BLKNUM, lit_block))
     ship_out(OBJ_BLKNUM, lit_block)
@@ -5838,16 +5841,18 @@ function ppf__BLK_USER(blknum,
 #*****************************************************************************
 # @nextfile
 function xeq_cmd__nextfile(name, cmdline,
-                           rstat)
+                           readstat, save_line, save_lineno)
 {
     dbg_print("parse", 5, sprintf("(xeq_cmd__nextfile) START dstblk=%d, mode=%s, $0='%s'",
                                 curr_dstblk(), ppf__mode(curr_atmode()), $0))
+    save_line = $0
+    save_lineno = LINE()
 
     dbg_print("parse", 5, "(xeq_cmd__nextfile) CALLING read_lines_until()")
-    rstat = read_lines_until("", DISCARD)
-    dbg_print("parse", 5, "(xeq_cmd__nextfile) RETURNED FROM read_lines_until() => " ppf__bool(rstat))
-    if (!rstat)
-        error("[@nextfile] Read error")
+    readstat = read_lines_until("", DISCARD)
+    dbg_print("parse", 5, "(xeq_cmd__nextfile) RETURNED FROM read_lines_until() => " ppf__bool(readstat))
+    if (readstat != TRUE)
+        error("[@nextfile] Read error:" save_line, "", save_lineno)
     dbg_print("parse", 5, "(xeq_cmd__nextfile) END")
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
@@ -6186,10 +6191,10 @@ function xeq_cmd__shell(name, cmdline,
     shell_data_blk = blk_new(BLK_AGG)
     readstat = read_lines_until(delim, shell_data_blk)
     if (readstat != TRUE)
-        error("Delimiter '" delim "' not found:" save_line, "", save_lineno)
+        error("[@shell] Delimiter '" delim "' not found:" save_line, "", save_lineno)
 
-    # Don't check security level until now so we can properly read to
-    # the delimiter.
+    # Postpone checking security level until now so we can properly read
+    # to the delimiter.
     if (secure_level() >= 1) {
         warn("(@shell) Security violation")
         return

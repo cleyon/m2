@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2024-12-19 16:53:21 cleyon>
+#  Time-stamp:  <2024-12-22 17:37:21 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -450,7 +450,9 @@ function default_shell()
         return sym_fetch("M2_SHELL")
     if ("SHELL" in ENVIRON)
         return ENVIRON["SHELL"]
-    return sym_ll_read("__PROG__", "sh", GLOBAL_NAMESPACE)
+    if ("sh" in PROG)
+        return sym_ll_read("__PROG__", "sh", GLOBAL_NAMESPACE)
+    error("(default_shell) No shell program found!")
 }
 
 

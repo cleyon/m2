@@ -23,6 +23,7 @@
 # TESTNAME.disabled         If present, TESTNAME is not executed for testing
 # TESTNAME.err              If present, expected m2 error text.  Default ""
 # TESTNAME.exit             If present, expected m2 exit code.  Default 0
+# TESTNAME.m2               m2 input file, obviously required.
 # TESTNAME.out              Expected m2 standard output.  Required to exist even if empty
 #                           This catches random .m2 files being interpreted as tests, and
 #                           also requires a test to positively specify "no output expected".
@@ -295,7 +296,7 @@ test_something()
     esac
 }
 
- 
+
 [ $debug = "true" ] && echo "cwd     is `pwd`"
 [ $debug = "true" ] && echo "I see $# arguments"
 case $# in

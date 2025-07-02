@@ -1,7 +1,7 @@
 @@  Dump user specified blocks.  Enter 0 to quit.
 @while 1
 @echo
-@secho Block number?	
+@secho Block number (0 to exit)? 
 @input BLK
 @@  BLK='@BLK@'
 @if @len BLK@ == 0

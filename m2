@@ -1,19 +1,22 @@
 #!/usr/bin/awk -f
 #!/usr/local/bin/mawk -f
 #!/usr/local/bin/gawk -f
-
+#
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-02-11 14:25:20 cleyon>
+#  Time-stamp:  <2025-07-01 19:06:40 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
+#  SPDX-License-Identifier: BSD-2-Clause
 #
 #  USAGE
 #       m2 [NAME=VAL ...] [file ...]
 #
 #  DESCRIPTION
 #       Line-oriented macro processor
+#
+#  Copyright (c) 2025, Christopher Leyon
 #
 #*****************************************************************************
 

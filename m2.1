@@ -95,7 +95,7 @@ Some commands have a
 .Qq silent
 alternative form which prints fewer error messages or performs some
 slightly different function.
-This form is distinguished by a leading 
+This form is distinguished by a leading
 .Qq s
 in the command name.
 For example, the silent variant to include a file is
@@ -238,6 +238,7 @@ Note: Unlike m4, @incr modifies the named symbol and produces no expansion outpu
 Like @define, but error if NAME already defined
 .It @input [NAME]
 Read a single line from keyboard to define NAME.
+No prompt is issued; if you want one, use @echo.
 If NAME is omitted, value is stored in symbol
 .Va __INPUT__ .
 .It @literal PATTERN
@@ -252,7 +253,7 @@ Create a user command NAME (lines until @endcmd)
 .It @next VAR
 Continue execution of next iteration of enclosing @for or @foreach loop.
 .It @nextfile
-Ignore remainder of current file, continue processing with the... next file.
+Ignore remainder of current file, continue processing with the next file.
 .It @of TEXT
 Begin a new branch of an enclosing @case structure
 matching TEXT at run time.
@@ -268,9 +269,14 @@ Variant
 does not print an error message if FILE does not exist.
 .It @readarray ARR FILE
 Read each line from FILE into array ARR.
+Any existing array entries are deleted before reading file contents.
 Variant
 .Ql @sreadarry
 does not print an error message if FILE does not exist.
+ARR must be known to be an array (regular or block), which
+implies that user code must say
+.Ql @array ARR
+before @readarray can be used.
 .It @readfile NAME FILE
 Read FILE contents to define NAME.
 This is not intended to be a full-blown file inputter (use @readarray
@@ -282,7 +288,7 @@ Variant
 .Ql @sreadfile
 does not print an error message if FILE does not exist.
 .It @readonly NAME
-Make NAME unchangeable -- cannot be undone
+Make NAME unchangeable--cannot be undone.
 .It @return
 Cease execution of a user command.
 @return is only valid inside a @newcmd definition.
@@ -303,6 +309,13 @@ will be used.
 If also not defined, the value of
 .Va __PROG__[sh]
 will be used.
+PROG should default to a reasonable shell, but might be overridden to
+run other useful programs such as an alternative shell, an email message
+reader, or /usr/bin/bc.
+It must be a program that functions as a filter (in the Unix sense,
+i.e., reading from standard input and writing to standard output).
+Standard error is not redirected, so any errors will appear on the
+user's terminal.
 .It @syscmd CMDLINE...
 Execute CMDLINE using Awk's system() function.
 Standard output and standard error are both discarded.
@@ -384,17 +397,23 @@ $0 refers to the name of the macro itself.
 $# is replaced with the actual number of parameters provided.
 $* expands to each given parameter, separated by a space character.
 When a definition refers to a parameter which is not supplied, an empty
-string will used as a default value.
+string will be used as a default value.
 You may supply more parameters than needed; excess parameters are
 simply ignored.
+.Pp
+.Em Example :
+.Bd -literal -offset indent -compact
+@define greet Hello, $1!  m2 sends you $0ings.
+@greet world@
+\ \ \ => Hello, world!  m2 sends you greetings.
+.Ed
 .Pp
 .Em WARNING :
 Parameters passed using this syntax are parsed by splitting on
 white space.
 This means that in:
 .Dl @foo \[dq]a b\[dq] c@
-.Va foo
-is given three arguments: '"a', 'b"', and 'c' -- not two!
+foo is given three arguments: '"a', 'b"', and 'c' -- not two!
 To support parameters with embedded spaces, an alternate syntax
 is supported:
 .Dl @foo{a b}{c}@
@@ -406,9 +425,13 @@ and the trailing
 .Pp
 .Em Example :
 .Bd -literal -offset indent -compact
-@define greet Hello, $1!  m2 sends you $0ings.
-@greet world@
-\ \ \ => Hello, world!  m2 sends you greetings.
+@define foo Arg1='$1' Arg2='$2' Arg3='$3'  narg=$#
+@foo "a b" c@
+@foo{a b}{c}@
+@foo{a b}{c}{}@
+\ \ \ => Arg1='"a' Arg2='b"' Arg3='c'  narg=3
+\ \ \ => Arg1='a b' Arg2='c' Arg3=''  narg=2
+\ \ \ => Arg1='a b' Arg2='c' Arg3=''  narg=3
 .Ed
 .Pp
 To alleviate scanning ambiguities, any characters enclosed in
@@ -430,7 +453,10 @@ The following definitions are recognized:
 .Pp
 .Bl -tag -width @right_SYM_[N]@ -offset indent
 .It @basename SYM@
-Base (file) name of SYM implemented in Awk.
+Base (file) name of SYM implemented in Awk, assuming Unix style path
+separators.
+See also
+.Va @xbasename .
 .It @boolval [SYM]@
 Output a formatted representation of the truthiness of SYM.
 If the argument is not a symbol, use its value as a boolean state.
@@ -449,7 +475,10 @@ See
 .Sx Dates and Times
 below.
 .It @dirname SYM@
-Directory name of SYM implemented in Awk.
+Directory name of SYM implemented in Awk, assuming Unix style path
+separators.
+See also
+.Va @xdirname .
 .It @epoch@
 Unix epoch time, the number of non-leap seconds which
 have passed since 00:00:00\ UTC on Thursday, 1\ January\ 1970.
@@ -477,8 +506,8 @@ An error is thrown if
 .Va VAR
 is not defined.
 To ignore error and continue with empty string, disable
-.Va __STRICT__[env] .
-Or use variant
+.Va __STRICT__[env]
+or use variant
 .Ql @sgetenv .
 .It @ifdef{SYMBOL}{TRUE_TEXT}{FALSE_TEXT}@
 If SYMBOL is defined, return TRUE_TEXT, else return FALSE_TEXT.
@@ -863,10 +892,11 @@ still processed, regardless of exit status.
 .Nm
 supports named sequences, which are integer values.  By default,
 sequences begin at zero and increment by one as appropriate.  These
-defaults can be changed, and the value updated or restarted.  You create
-and manage sequences with the
+defaults can be changed, and the value can be updated or restarted.
+You create and manage sequences with the
 .Ql @sequence <ID> <ACTION> [<ARG>]
-command.  Valid actions are:
+command.
+Valid actions are:
 .Pp
 .Bl -tag -width ID_format_STR____ -compact -offset indent
 .It ID [create]

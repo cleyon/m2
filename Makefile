@@ -67,7 +67,10 @@ tags:
 	$(TAGS) m2
 
 check-verbose test-verbose verbose-check verbose-test:
-	@./check.sh
+	@date
+	@echo "!!! BEGIN - Starting test runs"
+	@time ./check.sh
+	@date
 
 check test check-quiet test-quiet quiet-check quiet-test:
 	@date

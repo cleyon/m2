@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-07-01 19:06:40 cleyon>
+#  Time-stamp:  <2025-07-04 08:21:51 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -21,7 +21,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "4.0.2"
+    M2_VERSION = "4.0.3"
 
     # Customize these paths as needed for correct operation on your system.
     # If a program is not available, it's okay to remove the entry entirely.
@@ -1498,7 +1498,7 @@ function execute__command(name, cmdline,
     else if (name ==  "dumpdef")        xeq_cmd__dumpdef(name, cmdline)
     else if (name ~   /dump(all)?/)     xeq_cmd__dump(name, cmdline)
     else if (name ~ /s?echo/)           xeq_cmd__error(name, cmdline)
-    else if (name ==  "error")          xeq_cmd__error(name, cmdline)
+    else if (name ~ /s?error/)          xeq_cmd__error(name, cmdline)
     else if (name ==  "errprint")       xeq_cmd__error(name, cmdline)
     else if (name ==  "esyscmd")        xeq_cmd__esyscmd(name, cmdline)
     else if (name ==  "eval")           xeq_cmd__eval(name, cmdline)
@@ -4526,11 +4526,12 @@ function xeq_cmd__dumpdef(name, cmdline,
 #       | error    | Format  | Yes   |                    |
 #       | errprint | Raw     | No    | Same as @echo      |
 #       | secho    | Raw     | No    | No newline         |
+#       | serror   | Raw     | Yes   |                    |
 #       | warn     | Format  | No    |                    |
 function xeq_cmd__error(name, cmdline,
                        m2_will_exit, do_format, do_print, message)
 {
-    m2_will_exit = (name == "error")
+    m2_will_exit = (name == "error" || name == "serror")
     do_format = (name == "debug" || name == "error" || name == "warn")
     do_print  = (name != "debug" || debugp())
     message = dosubs(cmdline)
@@ -8358,8 +8359,8 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     split("append array cleardivert debug decr default define divert dump" \
           " dumpall dumpdef echo error errprint esyscmd eval exit ignore" \
           " include incr initialize input literal local m2ctl nextfile paste" \
-          " readfile readarray readonly secho sequence shell sinclude spaste" \
-          " sreadfile sreadarray syscmd tracemode traceoff traceon typeout" \
+          " readfile readarray readonly secho sequence serror shell sinclude" \
+          " spaste sreadfile sreadarray syscmd tracemode traceoff traceon typeout" \
           " undef undefine undivert warn wrap", array, TOK_SPACE)
     for (elem in array)
         nam_ll_write(array[elem], GLOBAL_NAMESPACE, TYPE_COMMAND FLAG_SYSTEM)

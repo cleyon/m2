@@ -193,6 +193,9 @@ Also called @wend.
 .It @error [TEXT]
 Send TEXT to standard error; exit code 2.
 Any diverted streams are discarded.
+Variant
+.Ql @serror
+prints only TEXT, omitting file and line number information.
 .It @esyscmd CMDLINE...
 Execute CMDLINE in a subshell.
 Standard output is captured into the output stream as normal.

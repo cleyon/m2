@@ -1,0 +1,4 @@
+m2:sp1.m2:4:@split: Symbol 'DATA' has no fields to split
+@define ARR[0]	1
+@define ARR[1]	aaa
+@define DATA	aaa

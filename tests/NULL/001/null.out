@@ -1,0 +1,3 @@
+Length(Empty) = 0
+Length(NonEmpty) = 1
+Length(NiceTry) = 2

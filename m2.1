@@ -144,7 +144,7 @@ Subtract N (default 1) from an already defined NAME.  See note at @incr.
 .It @default NAME VAL
 Like @define, but no-op if NAME already defined.
 .It @define NAME TEXT
-Set NAME to TEXT.
+Set value of NAME to TEXT.
 .It @divert [N]
 Divert subsequent text to stream N.
 Default 0 resets to standard output.
@@ -250,13 +250,16 @@ matches regular expression PATTERN.
 .It @local NAME
 Declare NAME as a symbol local to the current frame.
 .It @longdef NAME ... @endlongdef
-Set NAME to <...> (all lines until @endlongdef)
+Set value of NAME to <...> (all lines until @endlongdef)
 .It @newcmd NAME ... @endcmd
 Create a user command NAME (lines until @endcmd)
 .It @next VAR
 Continue execution of next iteration of enclosing @for or @foreach loop.
 .It @nextfile
 Ignore remainder of current file, continue processing with the next file.
+.It @null NAME
+Set value of NAME to the empty string.
+(@define cannot do this, because it defaults a missing value to "1".)
 .It @of TEXT
 Begin a new branch of an enclosing @case structure
 matching TEXT at run time.
@@ -319,6 +322,10 @@ It must be a program that functions as a filter (in the Unix sense,
 i.e., reading from standard input and writing to standard output).
 Standard error is not redirected, so any errors will appear on the
 user's terminal.
+.It @split NAME ARRAY
+Split value of NAME into N whitespace-separated fields, storing them in ARRAY elements 1..N.
+N itself is stored in array element 0.
+Any previous entries in ARRAY are deleted.
 .It @syscmd CMDLINE...
 Execute CMDLINE using Awk's system() function.
 Standard output and standard error are both discarded.

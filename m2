@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-07-04 08:21:51 cleyon>
+#  Time-stamp:  <2025-07-05 16:02:58 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -1512,6 +1512,7 @@ function execute__command(name, cmdline,
     else if (name ==  "local")          xeq_cmd__local(name, cmdline)
     else if (name ==  "m2ctl")          xeq_cmd__m2ctl(name, cmdline)
     else if (name ==  "nextfile")       xeq_cmd__nextfile(name, cmdline)
+    else if (name ==  "null")           xeq_cmd__null(name, cmdline)
     else if (name ~ /s?paste/)          xeq_cmd__include(name, cmdline)
     else if (name ~ /s?readarray/)      xeq_cmd__readarray(name, cmdline)
     else if (name ~ /s?readfile/)       xeq_cmd__readfile(name, cmdline)
@@ -1519,6 +1520,7 @@ function execute__command(name, cmdline,
     else if (name ==  "return")         xeq_cmd__return(name, cmdline)
     else if (name ==  "sequence")       xeq_cmd__sequence(name, cmdline)
     else if (name ==  "shell")          xeq_cmd__shell(name, cmdline)
+    else if (name ==  "split")          xeq_cmd__split(name, cmdline)
     else if (name ==  "syscmd")         xeq_cmd__syscmd(name, cmdline)
     else if (name ==  "tracemode")      xeq_cmd__tracemode(name, cmdline)
     else if (name ==  "traceoff")       xeq_cmd__traceoff(name, cmdline)
@@ -2012,9 +2014,9 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
 }
 
 
-# Unlike built-in CMDs, which must be complete on a single line, USER
+# Unlike built-in commands, which must be complete on a single line, USER
 # commands might span multiple physical lines.  This is because (unlike
-# CMDs), parameters are enclosed with braces, so the user might say:
+# built-in commands), parameters are enclosed with braces, so one may write:
 #       @mycmd{Title}{A very very very
 #       very long title}
 # Call readline() repeatedly until braces are closed properly.
@@ -3437,11 +3439,14 @@ function sym_definition_ppf(sym,
                             definition)
 {
     definition = sym_fetch(sym)
-    return (index(definition, TOK_NEWLINE) == IDX_NOT_FOUND) \
-        ? "@define "  sym TOK_TAB definition \
-        : "@longdef " sym TOK_NEWLINE \
-          definition      TOK_NEWLINE \
-          "@endlongdef"
+    if (emptyp(definition))
+        return "@null "    sym
+    else if (index(definition, TOK_NEWLINE) == IDX_NOT_FOUND)
+        return "@define "  sym TOK_TAB definition
+    else
+        return "@longdef " sym TOK_NEWLINE \
+               definition      TOK_NEWLINE \
+               "@endlongdef"
 }
 
 
@@ -4146,6 +4151,8 @@ function xeq_cmd__define(name, cmdline,
                          sym, append_flag, nop_if_defined, error_if_defined)
 {
     $0 = cmdline
+    dbg_print("xeq", 1, sprintf("(xeq_cmd__define) START cmdline='%s'",
+                                  cmdline))
     if (NF == 0)
         error("Bad parameters:" $0)
     append_flag = (name == "append")
@@ -4167,6 +4174,7 @@ function xeq_cmd__define(name, cmdline,
     # XXX No checking, dangerous!!
     sym_store(sym, append_flag ? sym_fetch(sym) $0 \
                                : $0)
+    dbg_print("xeq", 1, "(xeq_cmd__define) END")
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -5867,6 +5875,33 @@ function xeq_cmd__nextfile(name, cmdline,
 
 #*****************************************************************************
 #
+#       @  N U L L
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#*****************************************************************************
+# @null         NAME
+function xeq_cmd__null(name, cmdline,
+                       sym)
+{
+    $0 = cmdline
+    dbg_print("xeq", 1, sprintf("(xeq_cmd__null) START cmdline='%s'",
+                                  cmdline))
+    if (NF == 0)
+        error("Bad parameters:" $0)
+
+    sym = $1
+    assert_sym_okay_to_define(sym)
+    # XXX No checking, dangerous!!
+    sym_store(sym, "")
+    dbg_print("xeq", 1, "(xeq_cmd__null) END")
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
 #       @  R E A D A R R A Y
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -6243,6 +6278,85 @@ function xeq_cmd__shell(name, cmdline,
 
 #*****************************************************************************
 #
+#       @  S P L I T
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#*****************************************************************************
+# @split        SYM ARR
+function xeq_cmd__split(name, cmdline,
+                        sym, arr, nsp, nparts, info, level, code,
+                        val, x, k, del_list, tmparr)
+{
+    dbg_print("cmd", 3, sprintf("(xeq_cmd__split) START"))
+    $0 = cmdline
+    if (NF != 2)
+        error("(xeq_cmd__split) Bad parameters")
+    sym = $1
+    arr = $2
+
+    # Check SYM
+    if (! sym_defined_p(sym))
+        error(sprintf("Name '%s' not defined",  sym))
+    val = sym_fetch(sym)
+
+    # Check ARR
+    if ((nparts = nam__scan(arr, info)) == ERROR)
+        error("(xeq_cmd__split) Scan error, " __m2_msg)
+    if (nparts == 2)
+        error(sprintf("(xeq_cmd__split) Array name cannot have subscripts: '%s'", arr))
+
+    # Now call nam_lookup(info)
+    level = nam_lookup(info)
+    if (level == ERROR)
+        error(sprintf("(xeq_cmd__split) Name not found: '%s'", arr))
+    if (info["isarray"] != TRUE)
+        error(sprintf("(xeq_cmd__split) Name not an array: '%s'", arr))
+    code = info["code"]
+    if (flag_anytrue_p(code, FLAG_SYSTEM FLAG_READONLY))
+        error(sprintf("(xeq_cmd__split) Array not writable: '%s'", arr))
+
+    # Maybe more checks later as I think of them
+
+    dbg_print("xeq", 5, sprintf("(xeq_cmd__split) code=%s", code))
+    dbg_print("xeq", 5, sprintf("(xeq_cmd__split) namtab[%s,%d] = %s", arr, level, code))
+    assert_sym_okay_to_define(arr)
+
+    # Clear ARR
+    for (k in symtab) {
+        split(k, x, SUBSEP)
+        if (x[1] == arr && x[3]+0 == level)
+            del_list[x[1], x[2], x[3], x[4]] = TRUE
+    }
+    for (k in del_list) {
+        split(k, x, SUBSEP)
+        dbg_print("sym", 3, sprintf("(xeq_cmd__split) Delete symtab['%s', '%s', %d, %s]",
+                                     x[1], x[2], x[3], x[4]))
+        delete symtab[x[1], x[2], x[3], x[4]]
+    }
+
+    # Do split
+    if (emptyp(val)) {
+        warn("@split: Symbol '" sym "' is empty")
+        sym_ll_write(arr, "0", level, 0)
+    } else {
+        if (index(val, FS) == 0)
+            warn("@split: Symbol '" sym "' has no fields to split")
+        nsp = split(val, tmparr)
+        sym_ll_write(arr, "0", level, nsp)
+        for (k = 1; k <= nsp; k++) {
+            sym_ll_write(arr, k, level, tmparr[k])
+        }
+    }
+
+    dbg_print("cmd", 3, sprintf("(xeq_cmd__split) END"))
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
 #       @  S Y S C M D
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -6426,7 +6540,8 @@ function xeq_cmd__typeout(name, cmdline,
 #*****************************************************************************
 # @undef[ine]           NAME
 function xeq_cmd__undefine(name, cmdline,
-                           sym, info, level, code, nparts, type)
+                           sym, info, level, code, nparts, type,
+                           x, k, del_list)
 {
     $0 = cmdline
     if (NF != 1)
@@ -6458,6 +6573,7 @@ function xeq_cmd__undefine(name, cmdline,
     if ((level = nam_lookup(info)) == ERROR) {
         error("(xeq_cmd__undefine) '" sym "' not found")
     }
+
     if ((type = info["type"]) == TYPE_SYMBOL) {
         sym = info["name"]
         assert_sym_unprotected(sym)
@@ -6467,6 +6583,20 @@ function xeq_cmd__undefine(name, cmdline,
             error("Name '" sym "' not available:" $0)
         dbg_print("sym", 3, ("About to sym_destroy('" sym "')"))
         sym_destroy(sym, info["key"], info["level"])
+
+    } else if (type == TYPE_ARRAY) {
+        for (k in symtab) {
+            split(k, x, SUBSEP)
+            if (x[1] == sym && x[3]+0 == info["level"])
+                del_list[x[1], x[2], x[3], x[4]] = TRUE
+        }
+        for (k in del_list) {
+            split(k, x, SUBSEP)
+            dbg_print("sym", 3, sprintf("(xeq_cmd__undefine) Delete symtab['%s', '%s', %d, %s]",
+                                         x[1], x[2], x[3], x[4]))
+            delete symtab[x[1], x[2], x[3], x[4]]
+        }
+
     } else if (type == TYPE_SEQUENCE)
         seq_destroy(sym)
     else if (type == TYPE_USER)
@@ -8358,10 +8488,11 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     # Also need to add entry in execute__command()  [search: DISPATCH]
     split("append array cleardivert debug decr default define divert dump" \
           " dumpall dumpdef echo error errprint esyscmd eval exit ignore" \
-          " include incr initialize input literal local m2ctl nextfile paste" \
-          " readfile readarray readonly secho sequence serror shell sinclude" \
-          " spaste sreadfile sreadarray syscmd tracemode traceoff traceon typeout" \
-          " undef undefine undivert warn wrap", array, TOK_SPACE)
+          " include incr initialize input literal local m2ctl nextfile null" \
+          " paste readfile readarray readonly secho sequence serror shell" \
+          " sinclude spaste split sreadfile sreadarray syscmd tracemode" \
+          " traceoff traceon typeout undef undefine undivert warn wrap", \
+          array, TOK_SPACE)
     for (elem in array)
         nam_ll_write(array[elem], GLOBAL_NAMESPACE, TYPE_COMMAND FLAG_SYSTEM)
 

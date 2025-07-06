@@ -2369,8 +2369,8 @@ function nam_purge(level,
 
 
 function nam_dump_namtab(filter_fs, include_sys,
-                           x, k, code, s, desc, name, level, f_arr, l,
-                           include_system)
+                         x, k, code, s, desc, name, level, f_arr, l,
+                         include_system)
 {
     include_system = flag_1true_p(filter_fs, FLAG_SYSTEM)
     print(sprintf("Begin namtab (%s%s):", filter_fs,
@@ -4846,6 +4846,7 @@ function execute__for(for_block,
     if (start < end && incr < 0)
         error("(execute__for) Start cannot be less than End")
 
+    # Run the loop
     while (!done) {
         new_level = raise_namespace()
         nam_ll_write(loopvar, new_level, TYPE_SYMBOL FLAG_INTEGER FLAG_READONLY)
@@ -5562,6 +5563,7 @@ function ppf__BLK_LONGDEF(longdef_block)
 #       @m2ctl dbg_params               Debug symfunc parameters
 #       @m2ctl dbg_ship_out
 #       @m2ctl dump_block BLOCK         Raw dump block #
+#       @m2ctl dump_namtab              Dump of name table (non-system)
 #       @m2ctl dump_parse_stack         Dump parse stack
 #       @m2ctl set_dbg DSYS LEVEL       Set debug level directly
 #
@@ -5624,6 +5626,9 @@ function xeq_cmd__m2ctl(name, cmdline,
     } else if ($1 == "dump_block") {
         blk = $2 + 0
         blk_dump_block_raw(blk)
+
+    } else if ($1 == "dump_namtab") {
+        nam_dump_namtab(TYPE_ANY, FALSE)
 
     } else if ($1 == "dump_parse_stack") {
         dump_parse_stack()

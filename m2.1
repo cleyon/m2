@@ -15,6 +15,7 @@ is a line-oriented macro processor, a
 to the
 .Xr m4 1
 macro processor found on Unix systems.
+It is based on an earlier program, m1, written by Jon Bentley.
 The program can perform several functions, including:
 .Bl -enum
 .It
@@ -79,6 +80,30 @@ and the name, so a lone at-sign does not trigger macro processing in any way.
 Thus, a line like
 .Dl 100 dollars @ 5% annual interest.
 is completely benign.
+.Pp
+Using the same character to delimit both the beginning and end of macro
+invocations was a conscious design decision by m1's author, but it presents
+challenges when attempting to invoke macros in a nested fashion.
+To alleviate scanning ambiguities, any characters enclosed in
+at-sign braces
+.Qq @{...}
+will be recursively scanned and expanded.
+Thus
+.Dl @data_list[@{my_key}]@
+uses the value in
+.Va my_key
+to look up data from
+.Va data_list .
+The text between the braces is implicitly interpreted as if it
+were surrounded by
+.Qq @
+characters, so
+.Ql @{SYMBOL}
+is correct.
+The
+.Qq @{...}
+is required whenever you invoke macros inside other macros, and failure
+to do so will result in obscure and hard-to-debug errors.
 .Ss Commands
 Control commands
 .Po
@@ -107,9 +132,9 @@ evaluate, control, or define macros for subsequent processing:
 .\" This table could use a little formatting TLC...
 .Bl -tag -width @if(_not)_defined -offset indent
 .It @append NAME TEXT
-Add TEXT to an already defined macro NAME
+Add TEXT to an already defined macro NAME.
 .It @array ARR
-Declare ARR as an array
+Declare ARR to be an array.
 .It @break
 Interrupt execution of enclosing loop.
 @break is only valid inside a @for, @foreach, or @while block.
@@ -220,6 +245,9 @@ Default INCR is 1.
 Execute a loop with VAR taking on successive
 values of keys to an array.
 NOTE: Different Awk implementations may return keys in differing order.
+However, files read with
+.Ql @readarray
+are guaranteed to return their integer indices in numerical order.
 .It @if EXPR ... [@else ...] @endif
 Include subsequent lines of text if boolean expression is True.
 If EXPR is a simple NAME, check if NAME is True.
@@ -238,7 +266,7 @@ Add N (1) to an already defined NAME.
 @incr and @decr may be used on both symbols and sequences.
 Note: Unlike m4, @incr modifies the named symbol and produces no expansion output.
 .It @initialize NAME VAL
-Like @define, but error if NAME already defined
+Like @define, but error if NAME already defined.
 .It @input [NAME]
 Read a single line from keyboard to define NAME.
 No prompt is issued; if you want one, use @echo.
@@ -250,16 +278,17 @@ matches regular expression PATTERN.
 .It @local NAME
 Declare NAME as a symbol local to the current frame.
 .It @longdef NAME ... @endlongdef
-Set value of NAME to <...> (all lines until @endlongdef)
+Set value of NAME to <...> (all lines until @endlongdef).
 .It @newcmd NAME ... @endcmd
-Create a user command NAME (lines until @endcmd)
+Create a user command NAME (lines until @endcmd).
 .It @next VAR
 Continue execution of next iteration of enclosing @for or @foreach loop.
 .It @nextfile
 Ignore remainder of current file, continue processing with the next file.
 .It @null NAME
 Set value of NAME to the empty string.
-(@define cannot do this, because it defaults a missing value to "1".)
+(This is surprisingly difficult to do without this command;
+@define cannot do it, because it defaults a missing value to "1".)
 .It @of TEXT
 Begin a new branch of an enclosing @case structure
 matching TEXT at run time.
@@ -444,21 +473,6 @@ and the trailing
 \ \ \ => Arg1='a b' Arg2='c' Arg3=''  narg=3
 .Ed
 .Pp
-To alleviate scanning ambiguities, any characters enclosed in
-at-sign braces will be recursively scanned and expanded.
-Thus
-.Dl @data_list[@{my_key}]@
-uses the value in
-.Va my_key
-to look up data from
-.Va data_list .
-The text between the braces is implicitly interpreted as if it
-were surrounded by
-.Qq @
-characters, so
-.Ql @{SYMBOL}
-is correct.
-.Pp
 The following definitions are recognized:
 .Pp
 .Bl -tag -width @right_SYM_[N]@ -offset indent
@@ -535,7 +549,7 @@ This baroque arrangement is modeled after
 .Xr m4 1 .
 For a saner syntax, try the @case or @if commands.
 However, @ifelse@ is a function, not a command, so it can be used
-in-line with other text, which @if and @case cannot do.
+in-line with other text, whereas @if and @case cannot.
 .It @ifx{BOOL_EXP}{TRUE_TEXT}{FALSE_TEXT}@
 Evaluate BOOL_EXP; if True, return TRUE_TEXT else return FALSE_TEXT.
 All three brace-enclosed clauses must be present.
@@ -580,7 +594,7 @@ Output value of SYM (or literal string if SYM not defined) with rot13 text.
 .It @rtrim SYM@
 Remove trailing whitespace.
 .It @spaces [N]@
-Output N space characters  (default 1).
+Output N space characters (default 1).
 .It @strftime FMT@
 Current date/time in user-specified format.
 .It @time@
@@ -1620,7 +1634,8 @@ and
 .Ql @esyscmd
 commands to attempt execution of any program the user specifies.
 At secure level 1, those commands are disabled entirely.
-Undiverting a stream to an output file is also prohibited.
+Undiverting a stream to an output file is also prohibited,
+as is specifying a file to receive @dump output.
 However, programs required for
 .Nm Ap s
 operation (as defined in the

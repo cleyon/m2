@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-07-05 16:02:58 cleyon>
+#  Time-stamp:  <2025-07-06 23:42:34 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -1190,7 +1190,7 @@ function blk_dump_blktab(    x, k, blknum, seen, type)
 
 
 function blk_dump_block_raw(blknum,
-                            x, k, blk, type)
+                            x, k, blk, type, slot_type_str)
 {
     type = blk_type(blknum)
     dbg_print("xeq", 5, "(blk_dump_block_raw) type=" type)
@@ -1200,8 +1200,12 @@ function blk_dump_block_raw(blknum,
         split(k, x, SUBSEP)
         blk = x[1] + 0
         if (blk == blknum) {
-            print_debugfile(k)
-            print_debugfile(x[1] "/" x[2] "/" x[3] "/", x[4])
+            #print_debugfile(k)
+            slot_type_str = ""
+            if (x[3] == "slot_type")
+                slot_type_str = " (" ppf__block_type(blktab[x[1], x[2], x[3]]) ")"
+            print_debugfile("blknum=" x[1] ", slot=" x[2] ", tag=" x[3] \
+                            " => '" blktab[x[1], x[2], x[3]] "'" slot_type_str)
         }
     }
 }
@@ -4766,6 +4770,7 @@ function parse__for(                  for_block, body_block, pstat, incr, info, 
             error(sprintf("(parse__for) Name '%s' is not an array", info["name"]))
         blktab[for_block, 0, "loop_type"] = "each"
         blktab[for_block, 0, "loop_array_name"] = $3
+        blktab[for_block, 0, "array_type"] = (flag_1true_p(info["code"], FLAG_BLKARRAY)) ? "block" : "normal"
         blktab[for_block, 0, "level"] = level
 
     } else
@@ -4818,7 +4823,10 @@ function xeq__BLK_FOR(for_block,
         error("(xeq__BLK_FOR) Bad config")
 
     if (blktab[for_block, 0, "loop_type"] == "each")
-        execute__foreach(for_block)
+        if (blktab[for_block, 0, "array_type"] == "normal")
+            execute__foreach_normal(for_block)
+        else
+            execute__foreach_blkarray(for_block)
     else
         execute__for(for_block)
 }
@@ -4873,18 +4881,19 @@ function execute__for(for_block,
 }
 
 
-function execute__foreach(for_block,
-                          loopvar, arrname, level, keys, x, k, body_block, new_level)
+function execute__foreach_normal(for_block,
+                                 loopvar, arrname, level, keys, x, k, body_block, new_level)
 {
     loopvar = blktab[for_block, 0, "loop_var"]
     arrname = blktab[for_block, 0, "loop_array_name"]
     level = blktab[for_block, 0, "level"]
     body_block = blktab[for_block, 0, "body_block"]
-    dbg_print("for", 4, sprintf("(execute__foreach) loopvar='%s', arrname='%s'",
-                                loopvar, arrname))
+    dbg_print("for", 4, sprintf("(execute__foreach_normal) loopvar='%s', arrname='%s', level=%d, body_block=%d",
+                                loopvar, arrname, level, body_block))
     # Find the keys
     for (k in symtab) {
         split(k, x, SUBSEP)
+        dbg_print("for", 7, sprintf("symtab[%s,%s,%d,%s]", x[1], x[2], x[3], x[4]))
         if (x[1] == arrname && x[3] == level && x[4] == "symval")
             keys[x[2]] = 1
     }
@@ -4894,9 +4903,9 @@ function execute__foreach(for_block,
         new_level = raise_namespace()
         nam_ll_write(loopvar, new_level, TYPE_SYMBOL FLAG_READONLY)
         sym_ll_write(loopvar, "", new_level, k)
-        dbg_print("for", 5, sprintf("(execute__foreach) CALLING execute__block(%d)", body_block))
+        dbg_print("for", 5, sprintf("(execute__foreach_normal) CALLING execute__block(%d)", body_block))
         execute__block(body_block)
-        dbg_print("for", 5, sprintf("(execute__foreach) RETURNED FROM execute__block()"))
+        dbg_print("for", 5, sprintf("(execute__foreach_normal) RETURNED FROM execute__block()"))
         lower_namespace()
 
         # Check for break or continue
@@ -4910,7 +4919,51 @@ function execute__foreach(for_block,
             # about to re-iterate the loop anyway
         }
     }
-    dbg_print("for", 1, "(execute__foreach) END")
+    dbg_print("for", 1, "(execute__foreach_normal) END")
+}
+
+
+function execute__foreach_blkarray(for_block,
+                                   arrname, level, loopvar, start, count, done,
+                                   counter, body_block, new_level, agg_block)
+{
+    loopvar = blktab[for_block, 0, "loop_var"]
+    arrname = blktab[for_block, 0, "loop_array_name"]
+    level = blktab[for_block, 0, "level"]
+    body_block = blktab[for_block, 0, "body_block"]
+    dbg_print("for", 4, sprintf("(execute__foreach_blkarray) loopvar='%s', arrname='%s', level=%d, body_block=%d",
+                                loopvar, arrname, level, body_block))
+
+    counter = 1
+    agg_block = symtab[arrname, "", level, "agg_block"]
+    count = blktab[agg_block, 0, "count"]
+
+    if (count > 0 ) {
+        # Run the loop
+        while (!done) {
+            new_level = raise_namespace()
+            nam_ll_write(loopvar, new_level, TYPE_SYMBOL FLAG_INTEGER FLAG_READONLY)
+            sym_ll_write(loopvar, "", new_level, counter)
+            dbg_print("for", 5, sprintf("(execute__for) CALLING execute__block(%d)", body_block))
+            execute__block(body_block)
+            dbg_print("for", 5, sprintf("(execute__for) RETURNED FROM execute__block()"))
+            lower_namespace()
+            done = (counter += 1) > count
+
+            # Check for break or continue
+            if (__xeq_ctl == XEQ_BREAK) {
+                __xeq_ctl = XEQ_NORMAL
+                break
+            }
+            if (__xeq_ctl == XEQ_CONTINUE) {
+                __xeq_ctl = XEQ_NORMAL
+                # Actual "continue" wouldn't do anything here since we're
+                # about to re-iterate the loop anyway
+            }
+        }
+    }
+
+    dbg_print("for", 1, "(execute__foreach_blkarray) END")
 }
 
 
@@ -7256,6 +7309,7 @@ function dosubs(s,
         }
 
         m = substr(r, 1, i-1)   # Middle
+        dbg_print("dosubs", 6, sprintf("(dosubs) m='%s'", m))
         r = substr(r, i+1)
 
         # s == L  @  M  @  R
@@ -7289,13 +7343,16 @@ function dosubs(s,
         # Check for @foo{...} -- isolate fn to scan @foo{a}{b}{c}...@ better
         if ((br = index(fn, TOK_LBRACE)) > 0) {
             fn = substr(fn, 1, br-1)
+            dbg_print("dosubs", 6, sprintf("(dosubs) fn='%s'", fn))
 
             # Re-create nparam and param[] according to braces,
             # not split() on whitespace
             split("", param)       # Start by deleting all entries
             param[nparam = 0] = fn # 1st element is function name
             wrkm = substr(m, length(fn) + 1)
+            dbg_print("dosubs", 6, sprintf("(dosubs) Before loop, wrkm='%s'", wrkm))
             while (match(wrkm, "^{[^}]*}")) {
+                dbg_print("dosubs", 6, sprintf("(dosubs) Top of loop, wrkm='%s'", wrkm))
                 p = ++nparam
                 pval = substr(wrkm, RSTART+1, RLENGTH-2)
                 dbg_print("dosubs", 6, sprintf("(dosubs) Parameter %d : %s", p, pval))

@@ -1,5 +1,5 @@
-@array data
-@readarray data lines.dat
-@foreach line data
-@line@: @data[@{line}]@
+@array mydata
+@readarray mydata lines.dat
+@foreach line mydata
+@line@: @mydata[@{line}]@
 @next line

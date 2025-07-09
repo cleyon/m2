@@ -312,7 +312,7 @@ Set value of NAME to the empty string.
 .It @of TEXT
 Begin a new branch of an enclosing @case structure
 matching TEXT at run time.
-Every branch's TEXT must be unique.
+Every branch's TEXT label must be unique.
 .It @otherwise
 Begin a new branch of an enclosing @case structure
 which is executed if no @of branch triggers.
@@ -800,7 +800,6 @@ See
 below.
 .It __TIMESTAMP__
 ISO 8601 timestamp, with "T" separator.
-Example: "1945-07-16T05:30:00-0600".
 See
 .Sx Dates and Times
 below.
@@ -830,10 +829,8 @@ are fixed at program start and do not change.
 .Ql @time@ ,
 and
 .Ql @tz@
-do change, so you could define timestamp as:
-.Dl @define timestamp @date@T@time@@__TZ__@
-to generate a current timestamp.
-Of course, time zones don't normally change; the point is that
+do change to reflect the current time and date.
+Of course, time zones don't normally change; the difference is that
 .Ql @__TZ__@
 prints
 .Qq -0800
@@ -841,6 +838,13 @@ while
 .Ql @tz@
 prints
 .Qq PST .
+.Pp
+.Em Example :
+.Bd -literal -offset indent -compact
+@define timestamp @date@T@time@@__TZ__@
+@timestamp@
+\ \ \ => 1945-07-16T05:30:00-0600
+.Ed
 .Ss Streams and Diversions
 .Nm
 attempts to follow m4 in its use of
@@ -1335,7 +1339,7 @@ Awk and does not require GNU Awk or any other files.
 Even later Awk additions such as
 .Fn systime
 are avoided.
-m2 is tested for compatibility with BSD\ awk version\ 20210215,
+m2 is tested for compatibility with BSD\ Awk version\ 20210215,
 GNU\ Awk\ 5.3.0, mawk 1.3.4\ 2024012,
 and BusyBox Awk\ v1.36.1
 .Sh ENVIRONMENT
@@ -1448,7 +1452,7 @@ Image:  @my_image@
 .Xr m4 1
 .Bl -hang
 .It Lk http://www.drdobbs.com/open-source/m1-a-mini-macro-processor/200001791
-.It Lk https://docstore.mik.ua/orelly/unix3/sedawk/ch13_10.htm
+.It Lk https://docstore.mik.ua/oreilly/unix3/sedawk/ch13_10.htm
 .El
 .Rs
 .%A Alfred V. Aho

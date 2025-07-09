@@ -1,0 +1,8 @@
+@define matrix00 Stay in an play games
+@define matrix01 Short ride with rain gear
+@define matrix10 Walk to get ice cream
+@define matrix11 Ride to the beach
+@define activity @matrix@sunny@@bikeOK@@
+@define sunny 1
+@define bikeOK 0
+@activity@

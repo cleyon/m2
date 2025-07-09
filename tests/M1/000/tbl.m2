@@ -1,0 +1,21 @@
+@define width 6
+@longdef TE
+@define TE
+::::
+:::
+@endlong
+@longdef TB
+:::{.grid-x}
+@define _width .shrink
+@if width
+@define _width .small-@width@
+@fi
+::::{.cell @_width@}
+@endlong
+@TB@
+Book | Author
+----|----
+Programming Pearls | Jon Bentley
+Thinking Forth | Leo Brodie
+Godel, Escher, Bach | Douglas Hofstadter
+@TE@

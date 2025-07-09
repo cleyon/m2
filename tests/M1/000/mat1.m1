@@ -1,0 +1,8 @@
+@define matrix00 A
+@define matrix01 B
+@define matrix10 C
+@define matrix11 D
+@define ref @matrix@a@@b@@
+@define a 1
+@define b 0
+@ref@

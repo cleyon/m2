@@ -19,6 +19,9 @@ all:
 
 man: m2.cat1
 
+manview: m2.cat1
+	less $^
+
 callgraph-full:
 	$(CALLGRAPH) m2 -language awk
 

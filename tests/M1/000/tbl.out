@@ -1,0 +1,9 @@
+:::{.grid-x}
+::::{.cell .small-6}
+Book | Author
+----|----
+Programming Pearls | Jon Bentley
+Thinking Forth | Leo Brodie
+Godel, Escher, Bach | Douglas Hofstadter
+::::
+:::

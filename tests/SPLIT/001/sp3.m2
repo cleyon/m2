@@ -1,5 +1,5 @@
 @define DATA aaa bbb ccc
-@array  ARR
+@array  MYARRAY
 DATA='@DATA@'
-@split DATA ARR
+@split DATA MYARRAY
 @dump

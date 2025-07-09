@@ -100,6 +100,8 @@ were surrounded by
 characters, so
 .Ql @{SYMBOL}
 is correct.
+The example shows it when accessing an array element, but the
+syntax is applicable generally.
 The
 .Qq @{...}
 is required whenever you invoke macros inside other macros, and failure
@@ -112,17 +114,16 @@ such as
 .Ql @define ,
 etc
 .Pc
-are distinguished by a
+are distinguished by an
 .Qq @
 as the first character at the beginning of a line.
 They consume the entire line.
 Some commands have a
 .Qq silent
-alternative form which prints fewer error messages or performs some
-slightly different function.
-This form is distinguished by a leading
+alternate form, distinguished by a leading
 .Qq s
-in the command name.
+in the command name, which prints fewer error messages or performs some
+slightly different function.
 For example, the silent variant to include a file is
 .Ql @sinclude .
 .Pp
@@ -143,13 +144,13 @@ Evaluate value of NAME, comparing it with
 each successive @of TEXT.
 If a matching @of branch is found, execute the preamble (if any) and the
 of-branch text and commands.
-If none match, use text from @otherwise block if present.
+If no @of text matches, use text from @otherwise block if present.
 Execution of the @otherwise block does
 .Em not
 execute the preamble.
 (The purpose of the preamble is to provide "boiler-plate" header text for
 known cases.
-The text and commands of the unexpected (@otherwise) instance are expected
+The text and commands of the @otherwise instance are expected
 to compensate for the lack of a preamble.)
 .It @cleardivert [N...]
 Clear stream(s) specified by N.
@@ -162,6 +163,15 @@ Comment; ignore line.  Also @@, @c, @;, and @#.
 .It @continue
 Continue next iteration of enclosing loop.
 @continue is only valid inside a @for, @foreach, or @while block.
+.It @data ARR ... @enddata
+Store all lines until
+.Ql @enddata
+into array
+.Va ARR .
+Any previously existing array entries are deleted.
+ARR must be known to be an array.
+See also
+.Va @array , @readarray .
 .It @debug [TEXT]
 If debugging, send TEXT to the debug file.
 .It @decr NAME [N]
@@ -193,7 +203,8 @@ Output definition of SYM to
 More than one symbol may be listed.
 If no symbols are specified, all symbols are dumped.
 .It @echo [TEXT]
-Send TEXT to standard error; continue.  Also called @errprint.
+Send TEXT to standard error.
+Also called @errprint.
 .Ql @warn
 is similar, but adds the current file name and line number to output.
 Variant
@@ -207,8 +218,11 @@ Indicate the end of a @case structure.
 Also called @esac thanks to Algol\ 68.
 .It @endcmd
 Indicate the end of a @newcmd definition.
+.It @enddata
+Indicate the end of a @data block.
+Also called @eod.
 .It @endif
-Indicate the end of an @if (or @unless) condition block.
+Indicate the end of an @if or @unless condition block.
 Also called @fi, keeping the dream alive.
 .It @endlongdef
 Indicate the end of a multi-line @longdef.
@@ -217,10 +231,11 @@ Indicate the end of a @while or @until loop.
 Also called @wend.
 .It @error [TEXT]
 Send TEXT to standard error; exit code 2.
-Any diverted streams are discarded.
+Any diverted streams are discarded, although any wrapped text is evaluated.
 Variant
 .Ql @serror
-prints only TEXT, omitting file and line number information.
+prints only TEXT, omitting file and line number information, for
+complete control over error messages.
 .It @esyscmd CMDLINE...
 Execute CMDLINE in a subshell.
 Standard output is captured into the output stream as normal.
@@ -230,7 +245,7 @@ but standard error is not modified.
 The command's exit code is saved in
 .Va __SYSVAL__ .
 .It @eval TEXT
-Parse and evaluate string TEXT as a command.
+Parse and evaluate TEXT as a command.
 .It @exit [N]
 Immediately stop parsing; exit with status N.
 If N is omitted, the default value is zero.
@@ -241,11 +256,14 @@ Commands deferred with @wrap are processed regardless of N value.
 Execute a loop with VAR taking on successive
 integer values specified by START and END.
 Default INCR is 1.
-.It @foreach VAR ARRAY ... @next VAR
-Execute a loop with VAR taking on successive
-values of keys to an array.
+.It @foreach VAR ARR ... @next VAR
+Execute a loop with VAR taking on successive values of
+.Em keys
+to an array.
 NOTE: Different Awk implementations may return keys in differing order.
-However, files read with
+However, arrays created with
+.Ql @data
+or
 .Ql @readarray
 are guaranteed to return their integer indices in numerical order.
 .It @if EXPR ... [@else ...] @endif
@@ -255,12 +273,14 @@ See
 .Sx Boolean Expressions
 below.
 .It @ignore PATTERN
-Ignore input until line that matches regular expression PATTERN.
+Discard input until a line that matches regular expression PATTERN is found.
 .It @include FILE
 Read and process contents of FILE.
 Variant
 .Ql @sinclude
 does not print an error message if FILE does not exist.
+See also
+.Va @paste .
 .It @incr NAME [N]
 Add N (1) to an already defined NAME.
 @incr and @decr may be used on both symbols and sequences.
@@ -276,7 +296,7 @@ If NAME is omitted, value is stored in symbol
 Read and print input literally, without interpretation, until line that
 matches regular expression PATTERN.
 .It @local NAME
-Declare NAME as a symbol local to the current frame.
+Declare NAME as a symbol local to the current namespace.
 .It @longdef NAME ... @endlongdef
 Set value of NAME to <...> (all lines until @endlongdef).
 .It @newcmd NAME ... @endcmd
@@ -284,7 +304,7 @@ Create a user command NAME (lines until @endcmd).
 .It @next VAR
 Continue execution of next iteration of enclosing @for or @foreach loop.
 .It @nextfile
-Ignore remainder of current file, continue processing with the next file.
+Ignore remainder of current file and resume processing with the next file.
 .It @null NAME
 Set value of NAME to the empty string.
 (This is surprisingly difficult to do without this command;
@@ -304,12 +324,11 @@ Variant
 does not print an error message if FILE does not exist.
 .It @readarray ARR FILE
 Read each line from FILE into array ARR.
-Any existing array entries are deleted before reading file contents.
+Any previously existing array entries are deleted before reading file contents.
 Variant
 .Ql @sreadarry
 does not print an error message if FILE does not exist.
-ARR must be known to be an array (regular or block), which
-implies that user code must say
+ARR must be known to be an array, which implies that user code must say
 .Ql @array ARR
 before @readarray can be used.
 .It @readfile NAME FILE
@@ -351,10 +370,10 @@ It must be a program that functions as a filter (in the Unix sense,
 i.e., reading from standard input and writing to standard output).
 Standard error is not redirected, so any errors will appear on the
 user's terminal.
-.It @split NAME ARRAY
-Split value of NAME into N whitespace-separated fields, storing them in ARRAY elements 1..N.
+.It @split NAME ARR
+Split value of NAME into N whitespace-separated fields, storing them in ARR elements 1..N.
 N itself is stored in array element 0.
-Any previous entries in ARRAY are deleted.
+Any previous entries in ARR are deleted.
 .It @syscmd CMDLINE...
 Execute CMDLINE using Awk's system() function.
 Standard output and standard error are both discarded.
@@ -452,7 +471,7 @@ Parameters passed using this syntax are parsed by splitting on
 white space.
 This means that in:
 .Dl @foo \[dq]a b\[dq] c@
-foo is given three arguments: '"a', 'b"', and 'c' -- not two!
+foo is given three arguments, not two: '"a', 'b"', and 'c'.
 To support parameters with embedded spaces, an alternate syntax
 is supported:
 .Dl @foo{a b}{c}@

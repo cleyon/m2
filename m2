@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-07-06 23:42:34 cleyon>
+#  Time-stamp:  <2025-07-09 03:03:21 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -21,7 +21,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "4.0.3"
+    M2_VERSION = "4.0.4"
 
     # Customize these paths as needed for correct operation on your system.
     # If a program is not available, it's okay to remove the entry entirely.
@@ -1070,6 +1070,60 @@ function trace(event, sym, message,
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
 
+
+#*****************************************************************************
+#
+#       A R R A Y   A P I
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#       Check that arr is really an ARRAY and that it's writable
+#
+#*****************************************************************************
+function assert_array_okay_to_define(arr,
+                                     nparts, level, info, code)
+{
+    # Check namtab
+    if ((nparts = nam__scan(arr, info)) == ERROR)
+        error("(assert_array_okay_to_define) Scan error, " __m2_msg)
+    if (nparts == 2)
+        error(sprintf("(assert_array_okay_to_define) Array name cannot have subscripts: '%s'", arr))
+
+    # Now call nam_lookup(info).  Must be TYPE_ARRAY && !FLAG_SYSTEM
+    level = nam_lookup(info)
+    if (level == ERROR)
+        error(sprintf("(assert_array_okay_to_define) Name not found: '%s'", arr))
+    if (info["isarray"] != TRUE)
+        error(sprintf("(assert_array_okay_to_define) Name not an array: '%s'", arr))
+    code = info["code"]
+    if (flag_anytrue_p(code, FLAG_SYSTEM FLAG_READONLY))
+        error(sprintf("(assert_array_okay_to_define) Array not writable: '%s'", arr))
+
+    # Maybe more checks later as I think of them
+
+    return TRUE
+}
+
+
+function clear_array(arr, level,
+                     k, x, del_list)
+{
+    for (k in symtab) {
+        split(k, x, SUBSEP)
+        if (x[1] == arr && x[3]+0 == level)
+            del_list[x[1], x[2], x[3], x[4]] = TRUE
+    }
+    for (k in del_list) {
+        split(k, x, SUBSEP)
+        dbg_print("sym", 3, sprintf("(clear_array) Delete symtab['%s', '%s', %d, %s]",
+                                     x[1], x[2], x[3], x[4]))
+        delete symtab[x[1], x[2], x[3], x[4]]
+    }
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
 #*****************************************************************************
 #
 #       B L O C K   A P I
@@ -1088,9 +1142,9 @@ function blk_new(block_type,
     if (block_type == BLK_AGG)
         blktab[new_blknum, 0, "count"] = 0
     else if (block_type == BLK_CASE)
-        blktab[new_blknum, 0, "terminator"] = "@(endcase|esac)"
+        blktab[new_blknum, 0, "terminator"] = "^@(endcase|esac)"
     else if (block_type == BLK_IF)
-        blktab[new_blknum, 0, "terminator"] = "@(endif|fi)"
+        blktab[new_blknum, 0, "terminator"] = "^@(endif|fi)"
     else if (block_type == SRC_FILE) {
         blktab[new_blknum, 0, "open"] = FALSE
         blktab[new_blknum, 0, "terminator"] = ""
@@ -1099,16 +1153,16 @@ function blk_new(block_type,
         blktab[new_blknum, 0, "terminator"] = ""
         blktab[new_blknum, 0, "oob_terminator"] = "EOS"
     } else if (block_type == BLK_FOR)
-        blktab[new_blknum, 0, "terminator"] = "@next"
+        blktab[new_blknum, 0, "terminator"] = "^@next"
     else if (block_type == BLK_LONGDEF)
-        blktab[new_blknum, 0, "terminator"] = "@endlong(def)?"
+        blktab[new_blknum, 0, "terminator"] = "^@endlong(def)?"
     else if (block_type == BLK_TERMINAL) {
         blktab[new_blknum, 0, "dstblk"] = TERMINAL
         blktab[new_blknum, 0, "terminator"] = ""
     } else if (block_type == BLK_USER)
-        blktab[new_blknum, 0, "terminator"] = "@endcmd"
+        blktab[new_blknum, 0, "terminator"] = "^@endcmd"
     else if (block_type == BLK_WHILE)
-        blktab[new_blknum, 0, "terminator"] = "@(endwhile|wend)"
+        blktab[new_blknum, 0, "terminator"] = "^@(endwhile|wend)"
     else
         error("(blk_new) Uncaught block_type '" block_type "'")
 
@@ -1494,6 +1548,7 @@ function execute__command(name, cmdline,
     else if (name ==  "break")          xeq_cmd__break(name, cmdline)
     else if (name ==  "cleardivert")    xeq_cmd__cleardivert(name, cmdline)
     else if (name ==  "continue")       xeq_cmd__continue(name, cmdline)
+    else if (name ==  "data")           xeq_cmd__data(name, cmdline)
     else if (name ==  "debug")          xeq_cmd__error(name, cmdline)
     else if (name ==  "decr")           xeq_cmd__incr(name, cmdline)
     else if (name ==  "default")        xeq_cmd__define(name, cmdline)
@@ -1502,6 +1557,7 @@ function execute__command(name, cmdline,
     else if (name ==  "dumpdef")        xeq_cmd__dumpdef(name, cmdline)
     else if (name ~   /dump(all)?/)     xeq_cmd__dump(name, cmdline)
     else if (name ~ /s?echo/)           xeq_cmd__error(name, cmdline)
+    else if (name ~   /enddata|eod/)    error(sprintf("[@%s] Parse error; Not in a @data block", name))
     else if (name ~ /s?error/)          xeq_cmd__error(name, cmdline)
     else if (name ==  "errprint")       xeq_cmd__error(name, cmdline)
     else if (name ==  "esyscmd")        xeq_cmd__esyscmd(name, cmdline)
@@ -1699,7 +1755,7 @@ function parse__file(    filename, file_block1, file_block2, pstat, d)
 # PARSE
 function parse(    code, terminator, rstat, name, retval, new_block, fc,
                    info, level, parser, parser_type, parser_label, i, scnt, found,
-                   new_cmd_name, clevel, cmdline, src_block)
+                   new_cmd_name, clevel, cmdline, src_block, l2)
 {
     dbg_print("parse", 3, "(parse) START dstblk=" curr_dstblk() ", mode=" ppf__mode(curr_atmode()))
 
@@ -1753,8 +1809,12 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
         }
 
         # Quickly skip comments
-        if ($1 == "@@" || $1 == "@;" || $1 == "@#" ||
-            $1 == "@c" || $1 == "@comment")
+        if ($1 == "@@" || $1 == "@c" || $1 == "@comment")
+            continue
+        # @; and @# need not be followed immediately by whitespace,
+        # but @@, @c, and @comment must have whitespace.
+        l2 = substr($1, 1, 2)
+        if (l2 == "@;" || l2 == "@#")
             continue
 
         # See if it's a command of some kind.  first == @ and last != @
@@ -4142,6 +4202,61 @@ function xeq_cmd__continue(name, cmdline)
 
 #*****************************************************************************
 #
+#       @  D A T A
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#*****************************************************************************
+# @data         ARR
+function xeq_cmd__data(name, cmdline,
+                       save_line, save_lineno, agg_block, readstat,
+                       arr, info, key, level, code)
+{
+    dbg_print("parse", 5, sprintf("(xeq_cmd__data) START dstblk=%d, mode=%s, $0='%s'",
+                                curr_dstblk(), ppf__mode(curr_atmode()), $0))
+
+    $0 = cmdline
+    if (NF == 0)
+        error("Bad parameters:" $0)
+
+    arr = $1
+    assert_array_okay_to_define(arr)
+    save_line = $0
+    save_lineno = LINE()
+
+    # Check ARR.  assert_array_okay_to_define() passed, so this won't fail
+    nam__scan(arr, info)
+    level = nam_lookup(info)
+    code = info["code"]
+    dbg_print("xeq", 5, sprintf("(xeq_cmd__data) code=%s", code))
+    clear_array(arr, level)
+
+    # Make it a block array
+    namtab[arr, level] = code = flag_set_clear(code, FLAG_BLKARRAY, "")
+    dbg_print("xeq", 5, sprintf("(xeq_cmd__data) namtab[%s,%d] = %s", arr, level, code))
+
+    # create a new Agg block
+    agg_block = blk_new(BLK_AGG)
+    key = ""
+    dbg_print("parse", 5, sprintf("(xeq_cmd__data) symtab['%s','%s',%d,'agg_block'] = %d",
+                                 arr, key, level, agg_block))
+    symtab[arr, key, level, "agg_block"] = agg_block
+    blktab[agg_block, 0, "dstblk"] = agg_block
+
+    dbg_print("parse", 5, "(xeq_cmd__data) CALLING read_lines_until()")
+    readstat = read_lines_until("^@(enddata|eod)", agg_block)
+    dbg_print("parse", 5, "(xeq_cmd__data) RETURNED FROM read_lines_until() => " ppf__bool(readstat))
+    if (readstat != TRUE)
+        error("[@data] Pattern '@enddata' not found:" save_line, "", save_lineno)
+
+    dbg_print("parse", 5, "(xeq_cmd__data) END")
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
 #       @  D E F I N E
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -5987,42 +6102,29 @@ function xeq_cmd__readarray(name, cmdline,
     silent = first(name) == "s" # silent mutes file errors
     arr = $1
     filename = $2
+    assert_array_okay_to_define(arr)
 
-    # Check that arr is really an ARRAY and that it's writable
-    if ((nparts = nam__scan(arr, info)) == ERROR)
-        error("[@readarry] Scan error, " __m2_msg)
-    if (nparts == 2)
-        error(sprintf("(xeq_cmd__readarray) Array name cannot have subscripts: '%s'", arr))
-
-    # Now call nam_lookup(info)
+    # Check ARR.  assert_array_okay_to_define() passed, so this won't fail
+    nam__scan(arr, info)
     level = nam_lookup(info)
-    if (level == ERROR)
-        error(sprintf("(xeq_cmd__readarray) Name not found: '%s'", arr))
-    # I don't think I care about this....
-    # if (info["level"] != __namespace)
-    #     error(sprintf("(xeq_cmd__readarray) Name not in current namespace: '%s'", arr))
-    if (info["isarray"] != TRUE)
-        error(sprintf("(xeq_cmd__readarray) Name not an array: '%s'", arr))
     code = info["code"]
-    if (flag_anytrue_p(code, FLAG_SYSTEM FLAG_READONLY))
-        error(sprintf("(xeq_cmd__readarray) Array not writable: '%s'", arr))
-    # Maybe more checks later as I think of them
     dbg_print("xeq", 5, sprintf("(xeq_cmd__readarray) code=%s", code))
+    clear_array(arr, level)
+
+    # Make it a block array
     namtab[arr, level] = code = flag_set_clear(code, FLAG_BLKARRAY, "")
     dbg_print("xeq", 5, sprintf("(xeq_cmd__readarray) namtab[%s,%d] = %s", arr, level, code))
-    assert_sym_okay_to_define(arr)
-
-    # check if variable name available
 
     # create a new Agg block
     agg_block = blk_new(BLK_AGG)
-    dbg_print("parse", 5, sprintf("symtab['%s','%s',%d,'agg_block'] = %d",
+    key = ""
+    dbg_print("parse", 5, sprintf("(xeq_cmd__readarray) symtab['%s','%s',%d,'agg_block'] = %d",
                                  arr, key, level, agg_block))
     symtab[arr, key, level, "agg_block"] = agg_block
     blktab[agg_block, 0, "dstblk"] = agg_block
-    stk_push(__parse_stack, agg_block)
 
     # create a new literal file parser
+    stk_push(__parse_stack, agg_block)
     file_block = prep_file(filename)
     blktab[file_block, 0, "atmode"] = MODE_AT_LITERAL
     # Push file block manually because prep_file doesn't do that
@@ -6043,8 +6145,6 @@ function xeq_cmd__readarray(name, cmdline,
         else
             warn(error_text)
     }
-
-    # set up array variable, FLAG_BLKARRAY, to point to agg block.
 
     dbg_print("xeq", 1, sprintf("(xeq_cmd__readarray) END"))
 }
@@ -6343,8 +6443,8 @@ function xeq_cmd__shell(name, cmdline,
 #*****************************************************************************
 # @split        SYM ARR
 function xeq_cmd__split(name, cmdline,
-                        sym, arr, nsp, nparts, info, level, code,
-                        val, x, k, del_list, tmparr)
+                        sym, arr, nsp, info, code, level,
+                        val, k, tmparr)
 {
     dbg_print("cmd", 3, sprintf("(xeq_cmd__split) START"))
     $0 = cmdline
@@ -6352,48 +6452,25 @@ function xeq_cmd__split(name, cmdline,
         error("(xeq_cmd__split) Bad parameters")
     sym = $1
     arr = $2
+    assert_array_okay_to_define(arr)
 
     # Check SYM
     if (! sym_defined_p(sym))
         error(sprintf("Name '%s' not defined",  sym))
-    val = sym_fetch(sym)
 
-    # Check ARR
-    if ((nparts = nam__scan(arr, info)) == ERROR)
-        error("(xeq_cmd__split) Scan error, " __m2_msg)
-    if (nparts == 2)
-        error(sprintf("(xeq_cmd__split) Array name cannot have subscripts: '%s'", arr))
-
-    # Now call nam_lookup(info)
+    # Check ARR.  assert_array_okay_to_define() passed, so this won't fail
+    nam__scan(arr, info)
     level = nam_lookup(info)
-    if (level == ERROR)
-        error(sprintf("(xeq_cmd__split) Name not found: '%s'", arr))
-    if (info["isarray"] != TRUE)
-        error(sprintf("(xeq_cmd__split) Name not an array: '%s'", arr))
     code = info["code"]
-    if (flag_anytrue_p(code, FLAG_SYSTEM FLAG_READONLY))
-        error(sprintf("(xeq_cmd__split) Array not writable: '%s'", arr))
-
-    # Maybe more checks later as I think of them
-
     dbg_print("xeq", 5, sprintf("(xeq_cmd__split) code=%s", code))
-    dbg_print("xeq", 5, sprintf("(xeq_cmd__split) namtab[%s,%d] = %s", arr, level, code))
-    assert_sym_okay_to_define(arr)
+    clear_array(arr, level)
 
-    # Clear ARR
-    for (k in symtab) {
-        split(k, x, SUBSEP)
-        if (x[1] == arr && x[3]+0 == level)
-            del_list[x[1], x[2], x[3], x[4]] = TRUE
-    }
-    for (k in del_list) {
-        split(k, x, SUBSEP)
-        dbg_print("sym", 3, sprintf("(xeq_cmd__split) Delete symtab['%s', '%s', %d, %s]",
-                                     x[1], x[2], x[3], x[4]))
-        delete symtab[x[1], x[2], x[3], x[4]]
-    }
+    # Make it a regular array
+    namtab[arr, level] = code = flag_set_clear(code, "", FLAG_BLKARRAY)
+    dbg_print("xeq", 5, sprintf("(xeq_cmd__split) namtab[%s,%d] = %s", arr, level, code))
 
     # Do split
+    val = sym_fetch(sym)
     if (emptyp(val)) {
         warn("@split: Symbol '" sym "' is empty")
         sym_ll_write(arr, "0", level, 0)
@@ -6402,9 +6479,8 @@ function xeq_cmd__split(name, cmdline,
             warn("@split: Symbol '" sym "' has no fields to split")
         nsp = split(val, tmparr)
         sym_ll_write(arr, "0", level, nsp)
-        for (k = 1; k <= nsp; k++) {
-            sym_ll_write(arr, k, level, tmparr[k])
-        }
+        for (k = 1; k <= nsp; k++)
+            sym_ll_write(arr, "" k, level, tmparr[k])
     }
 
     dbg_print("cmd", 3, sprintf("(xeq_cmd__split) END"))
@@ -8548,12 +8624,13 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     # CMDS
     # Built-in commands
     # Also need to add entry in execute__command()  [search: DISPATCH]
-    split("append array cleardivert debug decr default define divert dump" \
-          " dumpall dumpdef echo error errprint esyscmd eval exit ignore" \
-          " include incr initialize input literal local m2ctl nextfile null" \
-          " paste readfile readarray readonly secho sequence serror shell" \
-          " sinclude spaste split sreadfile sreadarray syscmd tracemode" \
-          " traceoff traceon typeout undef undefine undivert warn wrap", \
+    split("append array cleardivert data debug decr default define divert" \
+          " dump dumpall dumpdef echo enddata eod error errprint esyscmd" \
+          " eval exit ignore include incr initialize input literal local" \
+          " m2ctl nextfile null paste readfile readarray readonly secho" \
+          " sequence serror shell sinclude spaste split sreadfile sreadarray" \
+          " syscmd tracemode traceoff traceon typeout undef undefine" \
+          " undivert warn wrap",
           array, TOK_SPACE)
     for (elem in array)
         nam_ll_write(array[elem], GLOBAL_NAMESPACE, TYPE_COMMAND FLAG_SYSTEM)

@@ -20,7 +20,7 @@ all:
 man: m2.cat1
 
 manview: m2.cat1
-	less $^
+	less m2.cat1
 
 callgraph-full:
 	$(CALLGRAPH) m2 -language awk

@@ -423,7 +423,7 @@ function FILE()
 function strictp(ssys)
 {
     if (ssys == EMPTY)
-        error("(strictp) ssys cannot be empty!")
+        panic("(strictp) ssys cannot be empty!")
     # Use low-level function here, not sym_true_p(), to prevent infinite loop
     return sym_ll_read("__STRICT__", ssys, GLOBAL_NAMESPACE)
 }
@@ -433,7 +433,7 @@ function build_prog_cmdline(prog, arg, mode)
 {
     if (! sym_ll_in("__PROG__", prog, GLOBAL_NAMESPACE))
         # This should be same as assert_[n]sym_defined()
-        error(sprintf("build_prog_cmdline: __PROG__[%s] not defined", prog))
+        panic(sprintf("build_prog_cmdline: __PROG__[%s] not defined", prog))
     return sprintf("%s %s%s", \
                    sym_ll_read("__PROG__", prog, GLOBAL_NAMESPACE),  \
                    arg, \
@@ -448,7 +448,7 @@ function exec_prog_cmdline(prog, arg,    sym)
 
     if (! sym_ll_in("__PROG__", prog, GLOBAL_NAMESPACE))
         # This should be same as assert_[n]sym_defined()
-        error(sprintf("(exec_prog_cmdline) __PROG__[%s] not defined", prog))
+        panic(sprintf("(exec_prog_cmdline) __PROG__[%s] not defined", prog))
     return system(build_prog_cmdline(prog, arg, MODE_IO_SILENT)) # always silent
 }
 
@@ -491,7 +491,7 @@ function curr_atmode(    src_block)
     src_block = stk_top(__source_stack)
     dbg_print_block("ship_out", 7, src_block, "(curr_atmode) src_block [top of __source_stack]")
     if (! ((src_block, 0, "atmode") in blktab)) {
-        error("(curr_atmode) Top block " src_block " does not have 'atmode'")
+        panic("(curr_atmode) Top block " src_block " does not have 'atmode'")
     }
     return blktab[src_block, 0, "atmode"]
 }
@@ -503,11 +503,11 @@ function curr_atmode(    src_block)
 function curr_dstblk(    top_block)
 {
     if (stk_emptyp(__parse_stack))
-        error("(curr_dstblk) Parse stack is empty!")
+        panic("(curr_dstblk) Parse stack is empty!")
     top_block = stk_top(__parse_stack)
     dbg_print_block("ship_out", 7, top_block, "(curr_dstblk) top_block [top of __parse_stack]")
     if (! ((top_block, 0, "dstblk") in blktab)) {
-        error("(curr_dstblk) Top block " top_block " does not have 'dstblk'")
+        panic("(curr_dstblk) Top block " top_block " does not have 'dstblk'")
     }
     return blktab[top_block, 0, "dstblk"] + 0
 }
@@ -523,9 +523,9 @@ function ppf__mode(mode)
     else if (mode == MODE_TEXT_STRING)      return "StringText"
     else if (mode == MODE_STREAMS_DISCARD)  return "DiscardStream"
     else if (mode == MODE_STREAMS_SHIP_OUT) return "ShipOutStream"
-    # else
-    #     error("(ppf__mode) Unknown mode '" mode "'")
-    else return "UnknownMode('" mode "')"
+    else
+        panic("(ppf__mode) Unknown mode '" mode "'")
+#    else return "UnknownMode('" mode "')"
 }
 
 
@@ -540,7 +540,7 @@ function raise_namespace()
 function lower_namespace()
 {
     if (__namespace == GLOBAL_NAMESPACE)
-        error("(lower_namespace) Cannot be called from global namespace")
+        panic("(lower_namespace) Cannot be called from global namespace")
     sym_purge(__namespace)
     nam_purge(__namespace)
     __namespace--
@@ -783,6 +783,23 @@ function error(text, file, line)
 }
 
 
+function panic(text, file, line,
+               timestamp)
+{
+    warn(text, file, line)
+    __exit_code = EX_SOFTWARE
+
+    flush_stdout(SYNC_FORCE)
+    if (debugp()) {
+        timestamp = secure_level() < 2 ? \
+            xeq_fn__date("strftime", "strftime  %Y-%m-%dT%H:%M:%S%z", 1) : ""
+        #             NB - two spaces --------^^
+        print_debugfile("m2:PANIC" timestamp)
+    }
+    exit __exit_code
+}
+
+
 # Put next input line into global string "__buffer".  The readline()
 # function manages the "pushback."  After expanding a macro, macro
 # processors examine the newly created text for any additional macro
@@ -834,7 +851,7 @@ function read_lines_until(regexp, dstblk,
     dbg_print("parse", 3, sprintf("(read_lines_until) START; regexp='%s', dstblk=%d",
                                  regexp, dstblk))
     if (dstblk == TERMINAL)
-        error("(read_lines_until) dstblk must not be 0")
+        panic("(read_lines_until) dstblk must not be 0")
 
     while (TRUE) {
         readstat = readline()   # OKAY, EOF, ERROR
@@ -944,8 +961,8 @@ function debugp()
 function dbg(dsys, lev)
 {
     if (lev == EMPTY)           lev = 1
-    if (dsys == EMPTY)          error("(dbg) dsys cannot be empty")
-    if (! (dsys in __dbg_sysnames)) error("(dbg) Unknown dsys name '" dsys "' (lev=" lev "): " $0)
+    if (dsys == EMPTY)          panic("(dbg) dsys cannot be empty")
+    if (! (dsys in __dbg_sysnames)) panic("(dbg) Unknown dsys name '" dsys "' (lev=" lev "): " $0)
     if (lev < 0)                return TRUE
     if (!debugp())              return FALSE
     if (lev == 0)               return TRUE
@@ -964,8 +981,8 @@ function dbg(dsys, lev)
 # going to be less than any LEV.
 function dbg_get_level(dsys)
 {
-    if (dsys == EMPTY) error("(dbg_get_level) dsys cannot be empty")
-    if (! (dsys in __dbg_sysnames)) error("(dbg_get_level) Unknown dsys name '" dsys "'")
+    if (dsys == EMPTY) panic("(dbg_get_level) dsys cannot be empty")
+    if (! (dsys in __dbg_sysnames)) panic("(dbg_get_level) Unknown dsys name '" dsys "'")
     # return (sym_fetch(sprintf("%s[%s]", "__DBG__", dsys))+0) \
     if (!sym_ll_in("__DBG__", dsys, GLOBAL_NAMESPACE))
         return 0
@@ -977,8 +994,8 @@ function dbg_get_level(dsys)
 # Set the level (lev) for the debug dsys
 function dbg_set_level(dsys, lev)
 {
-    if (dsys == EMPTY)           error("(dbg_set_level) dsys cannot be empty")
-    if (! (dsys in __dbg_sysnames)) error("(dbg_set_level) Unknown dsys name '" dsys "'")
+    if (dsys == EMPTY)           panic("(dbg_set_level) dsys cannot be empty")
+    if (! (dsys in __dbg_sysnames)) panic("(dbg_set_level) Unknown dsys name '" dsys "'")
     if (lev == EMPTY)           lev = 1
     # Formerly, negative levels were automagically set to zero.
     # Now, the new level is the absolute value.  Since dbg_get_level()
@@ -1023,7 +1040,7 @@ function dbg_print_block(dsys, lev, blknum, description,
 ##    blknum = blknum+0
     # print_debugfile("(dbg_print_block) blknum = " blknum)
     if (! ((blknum, 0, "type") in blktab))
-        error("(dbg_print_block) No 'type' field for block " blknum)
+        panic("(dbg_print_block) No 'type' field for block " blknum)
     block_type = blk_type(blknum)
     # print_debugfile("(dbg_print_block) block_type = " block_type)
     blk_label = ppf__block_type(block_type)
@@ -1087,7 +1104,7 @@ function trace(event, sym, message,
         if (flag_1true_p(trace_mode, event))
             print_debugfile(trace_prefix() " " message)
     } else
-        error("(trace) Unrecognized trace event " event)
+        panic("(trace) Unrecognized trace event " event)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -1157,7 +1174,7 @@ function blk_new(block_type,
                   new_blknum)
 {
     if (block_type == EMPTY)
-        error("(blk_new) Missing type")
+        panic("(blk_new) Missing type")
     new_blknum = ++__block_cnt
     blktab[new_blknum, 0, "depth"] = stk_depth(__parse_stack)
     blktab[new_blknum, 0, "type"] = block_type
@@ -1186,7 +1203,7 @@ function blk_new(block_type,
     else if (block_type == BLK_WHILE)
         blktab[new_blknum, 0, "terminator"] = "^@(endwhile|wend)"
     else
-        error("(blk_new) Uncaught block_type '" block_type "'")
+        panic("(blk_new) Uncaught block_type '" block_type "'")
 
     dbg_print("ship_out", 1, sprintf("(blk_new) Block # %d; type=%s",
                                       new_blknum, ppf__block_type(block_type)))
@@ -1198,10 +1215,10 @@ function blk_type(blknum,
                   bt)
 {
     if (! ((blknum, 0, "type") in blktab))
-        error("(blk_type) Block # " blknum " has no type!")
+        panic("(blk_type) Block # " blknum " has no type!")
     bt = blktab[blknum, 0, "type"]
     if (! (bt in __blk_label))
-        error("(blk_type) Block # " blknum " has invalid block type '" bt "'")
+        panic("(blk_type) Block # " blknum " has invalid block type '" bt "'")
    return bt
 }
 
@@ -1210,7 +1227,7 @@ function blk_ll_slot_type(blknum, slot)
 {
     if ((blknum, slot, "slot_type") in blktab)
         return blktab[blknum, slot, "slot_type"]
-    error("(blk_ll_slot_type) Not found: blknum=" blknum ", slot=" slot)
+    panic("(blk_ll_slot_type) Not found: blknum=" blknum ", slot=" slot)
 }
 
 
@@ -1218,7 +1235,7 @@ function blk_ll_slot_value(blknum, slot)
 {
     if ((blknum, slot, "slot_value") in blktab)
         return blktab[blknum, slot, "slot_value"]
-    error("(blk_ll_slot_value) Not found: blknum=" blknum ", slot=" slot)
+    panic("(blk_ll_slot_value) Not found: blknum=" blknum ", slot=" slot)
 }
 
 
@@ -1234,12 +1251,12 @@ function blk_append(blknum, slot_type, value,
                      slot)
 {
     if (blk_type(blknum) != BLK_AGG)
-        error(sprintf("(blk_append) Block %d has type %s, not AGG",
+        panic(sprintf("(blk_append) Block %d has type %s, not AGG",
                       blknum, ppf__block_type(blk_type(blknum))))
 
     if (slot_type != OBJ_CMD  && slot_type != OBJ_BLKNUM &&
         slot_type != OBJ_TEXT && slot_type != OBJ_USER)
-        error(sprintf("(blk_append) Argument has bad type %s; should be OBJ_{CMD,BLKNUM,TEXT,USER}", ppf__block_type(slot_type)))
+        panic(sprintf("(blk_append) Argument has bad type %s; should be OBJ_{CMD,BLKNUM,TEXT,USER}", ppf__block_type(slot_type)))
 
     slot = ++blktab[blknum, 0, "count"]
     dbg_print("ship_out", 3,
@@ -1311,10 +1328,10 @@ function blk_to_string(blknum,
 function ppf__block_type(block_type)
 {
     if (block_type == EMPTY)
-        error("(ppf__block_type) block_type is empty, how did that happen?")
+        panic("(ppf__block_type) block_type is empty, how did that happen?")
     dbg_print("xeq", 7, "(ppf__block_type) block_type = " block_type)
     if (! (block_type in __blk_label)) {
-        error("(ppf__block_type) Invalid block type '" block_type "'")
+        panic("(ppf__block_type) Invalid block type '" block_type "'")
     }
     return __blk_label[block_type]
 }
@@ -1337,7 +1354,7 @@ function ppf__block(blknum,
     else if (block_type == BLK_USER)      buf = ppf__user(blknum)
     else if (block_type == BLK_WHILE)     buf = ppf__while(blknum)
     else
-        error(sprintf("(ppf__block) Block # %d: type %s (%s) not handled",
+        panic(sprintf("(ppf__block) Block # %d: type %s (%s) not handled",
                       blknum, block_type, ppf__block_type(block_type)))
     return buf
 }
@@ -1361,7 +1378,7 @@ function ppf__BLK(blknum,
     else if (block_type == BLK_TERMINAL) text = EMPTY
     else if (block_type == BLK_WHILE)    text = ppf__BLK_WHILE(blknum)
     else
-        error(sprintf("(ppf__BLK) Can't handle type '%s' for block %d",
+        panic(sprintf("(ppf__BLK) Can't handle type '%s' for block %d",
                       block_type, blknum))
 
     return text
@@ -1388,11 +1405,11 @@ function execute__block(blknum,
     else if (block_type == BLK_USER)      xeq__BLK_USER(blknum)
     else if (block_type == BLK_WHILE)     xeq__BLK_WHILE(blknum)
     else
-        error(sprintf("(execute__block) Block # %d: type %s (%s) not handled",
+        panic(sprintf("(execute__block) Block # %d: type %s (%s) not handled",
                       blknum, block_type, ppf__block_type(block_type)))
 
     if (__namespace != old_level)
-        error(sprintf("(execute__block) blknum=%d, type=%s: %s; old_level=%d, __namespace=%d",
+        panic(sprintf("(execute__block) blknum=%d, type=%s: %s; old_level=%d, __namespace=%d",
                       blknum, ppf__block_type(block_type), "Namespace level mismatch", old_level, __namespace))
 }
 
@@ -1423,7 +1440,7 @@ function ppf__agg(agg_block,
                   lim, i, slot_type, value, buf)
 {
     if (blk_type(agg_block) != BLK_AGG)
-        error(sprintf("(ppf__agg) Block %d type != AGG",
+        panic(sprintf("(ppf__agg) Block %d type != AGG",
                       agg_block))
     lim = blktab[agg_block, 0, "count"]
     buf = ""
@@ -1438,7 +1455,7 @@ function ppf__agg(agg_block,
                  slot_type == OBJ_USER) {
             buf = buf value TOK_NEWLINE
         } else
-            error(sprintf("(ppf__agg) Bad slot type %s", slot_type))
+            panic(sprintf("(ppf__agg) Bad slot type %s", slot_type))
     }
 
     return chomp(buf)
@@ -1496,7 +1513,7 @@ function cmd_definition_ppf(name,
         error("(cmd_definition_ppf) nam_lookup failed -- should not happen")
     # See if it's a user command
     if (flag_1false_p(nam_ll_read(name, level), TYPE_USER))
-        error("(cmd_definition_ppf) " name " seems to no longer be a command")
+        panic("(cmd_definition_ppf) " name " seems to no longer be a command")
 
     user_block = cmd_ll_read(name, level)
     return ppf__user(user_block)
@@ -1613,10 +1630,10 @@ function execute__command(name, cmdline,
     else if (name ==  "warn")           xeq_cmd__error(name, cmdline)
     else if (name ==  "wrap")           xeq_cmd__wrap(name, cmdline)
     else
-        error("(execute__command) Unrecognized command '" name "' in '" cmdline "'")
+        panic("(execute__command) Unrecognized command '" name "' in '" cmdline "'")
 
     if (__namespace != old_level)
-        error("(execute__command) @%s %s: Namespace level mismatch")
+        panic("(execute__command) @%s %s: Namespace level mismatch")
 }
 
 
@@ -1716,7 +1733,7 @@ function dofile(filename,
 function parse__file(    filename, file_block1, file_block2, pstat, d)
 {
     if (stk_emptyp(__source_stack))
-        error("(parse__file) Source stack empty")
+        panic("(parse__file) Source stack empty")
     file_block1 = stk_top(__source_stack)
 
     filename = blktab[file_block1, 0, "filename"]
@@ -1762,7 +1779,7 @@ function parse__file(    filename, file_block1, file_block2, pstat, d)
 
     file_block2 = stk_pop(__source_stack)
     if (file_block1 != file_block2)
-        error("(parse__file) File block mismatch")
+        panic("(parse__file) File block mismatch")
     __buffer = blktab[file_block2, 0, "old.buffer"]
     sym_ll_write("__FILE__",      "", GLOBAL_NAMESPACE, blktab[file_block2, 0, "old.file"])
     sym_ll_write("__LINE__",      "", GLOBAL_NAMESPACE, blktab[file_block2, 0, "old.line"])
@@ -1784,13 +1801,13 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
     # The "parser" is the topmost element of the __parse_stack
     # which we wish to access a few times
     if (stk_emptyp(__parse_stack))
-        error("Parse error, Empty parse stack")
+        panic("Parse error, Empty parse stack")
     parser = stk_top(__parse_stack)
     parser_type = blk_type(parser)
     parser_label = ppf__block_type(parser_type)
 
     if (stk_emptyp(__source_stack))
-        error("Parse error, Empty source stack")
+        panic("Parse error, Empty source stack")
     src_block = stk_top(__source_stack)
 
     # terminator is a regular expression, and we call
@@ -2059,7 +2076,7 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
                         dbg_print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM ship_out()"))
 
                     } else
-                        error("(parse) [" parser_label "] Found immediate command " name " but no handler")
+                        panic("(parse) [" parser_label "] Found immediate command " name " but no handler")
 
                 } else {
                     # It's a non-immediate built-in command -- ship it
@@ -2117,7 +2134,7 @@ function scan__usercmd_call(    s, name, obj, i, oldi, c, nc, narg, nlbr,
     i = 1
     c = substr(s, i, 1)
     if (c != TOK_AT)
-        error(sprintf("(scan__usercmd_call) Doesn't start with @: s-'%s'", s))
+        error(sprintf("(scan__usercmd_call) Doesn't start with @: s='%s'", s))
 
     # Read cmd name
     c = substr(s, (oldi = ++i), 1)
@@ -2333,7 +2350,7 @@ function ppf__flag_type(code,
     code = first(code)
     dbg_print("xeq", 7, "(ppf__flag_type) code = " code)
     if (! (code in __flag_label)) {
-        error("(ppf__flag_type) Invalid type '" code "'")
+        panic("(ppf__flag_type) Invalid type '" code "'")
     }
     return __flag_label[code]
 }
@@ -2512,7 +2529,7 @@ function nam_ll_read(name, level)
 function nam_ll_in(name, level)
 {
     if (level == EMPTY)
-        error("(nam_ll_in) LEVEL missing")
+        panic("(nam_ll_in) LEVEL missing")
     if (name != "__LINE__" && name != "__NLINE__")
         dbg_print("sym", 5, sprintf("(nam_ll_in) Looking for '%s' at level %d", name, level))
     return (name, level) in namtab
@@ -2523,7 +2540,7 @@ function nam_ll_write(name, level, code,
                        retval)
 {
     if (level == EMPTY)
-        error("(nam_ll_write) LEVEL missing")
+        panic("(nam_ll_write) LEVEL missing")
     # It's important to use low-level functions here, and not invoke
     # dbg_* functions in this procedure, otherwise nasty loops ensue.
     if (sym_ll_in("__DBG__", "nam", GLOBAL_NAMESPACE) &&
@@ -2709,7 +2726,7 @@ function stk_emptyp(stack)
 function stk_top(stack)
 {
     if (stk_emptyp(stack))
-        error("(stk_top) Empty stack")
+        panic("(stk_top) Empty stack")
     return stack[stack[0]]
 }
 
@@ -2718,7 +2735,7 @@ function stk_pop(stack,
                  old_top, new_top)
 {
     if (stk_emptyp(stack))
-        error("(stk_pop) Empty stack")
+        panic("(stk_pop) Empty stack")
     old_top = stack[stack[0]--]
     if (!stk_emptyp(stack) && stack["name"] == "source_stack") {
         new_top = stack[stack[0]]
@@ -2770,7 +2787,7 @@ function undivert(stream,
         return
     }
     if (blk_type(stream) != BLK_AGG)
-        error(sprintf("(undivert) Block %d has type %s, not AGG",
+        panic(sprintf("(undivert) Block %d has type %s, not AGG",
                       stream, ppf__block_type(blk_type(stream))))
     if ((count = blktab[stream, 0, "count"]) > 0) {
         # It is required to clear the stream immediately after undiverting.
@@ -2807,7 +2824,7 @@ function undivert_file(stream, file,
 {
     dbg_print("divert", 1, sprintf("(undivert_file) START; stream=%d, file='%s'", stream, file))
     if (blk_type(stream) != BLK_AGG)
-        error(sprintf("(undivert_file) Block %d has type %s, not AGG",
+        panic(sprintf("(undivert_file) Block %d has type %s, not AGG",
                       stream, ppf__block_type(blk_type(stream))))
     if ((count = blktab[stream, 0, "count"]) > 0) {
         ship_out_file(stream, file)
@@ -2827,7 +2844,7 @@ function cleardivert(stream,
         return
     }
     if (blk_type(stream) != BLK_AGG)
-        error(sprintf("(cleardivert) Block %d has type %s, not AGG",
+        panic(sprintf("(cleardivert) Block %d has type %s, not AGG",
                       stream, ppf__block_type(blk_type(stream))))
     if ((count = blktab[stream, 0, "count"]) > 0) {
         for (i = 1; i <= count; i++) {
@@ -2947,7 +2964,7 @@ function sym_deferred_symbol(name, code, deferred_prog, deferred_arg,
 
     # Create an entry in the name table
     if (nam_ll_in(name, level))
-        error("Cannot create deferred symbol when it already exists")
+        panic("Cannot create deferred symbol when it already exists")
 
     nam_ll_write(name, level, code FLAG_DEFERRED)
     # It has no symbol value (yet), but we do store the two args in the
@@ -2985,7 +3002,7 @@ function sym_destroy(name, key, level)
 function nam_system_p(name)
 {
     if (name == EMPTY)
-        error("nam_system_p: NAME missing")
+        panic("nam_system_p: NAME missing")
     return nam_ll_in(name, GLOBAL_NAMESPACE) &&
            flag_1true_p(nam_ll_read(name, GLOBAL_NAMESPACE), FLAG_SYSTEM)
 }
@@ -3119,7 +3136,7 @@ function sym_defined_p(sym,
             return FALSE
         }
         if (! ((name, "", level, "agg_block") in symtab))
-            error(sprintf("Could not find ['%s','%s',%d,'agg_block'] in symtab",
+            panic(sprintf("(sym_defined_p) Could not find ['%s','%s',%d,'agg_block'] in symtab",
                           name, "", level))
 
         agg_block = symtab[name, "", level, "agg_block"]
@@ -3127,7 +3144,7 @@ function sym_defined_p(sym,
         if (key >= 1 && key <= count) {
             # Make sure slot holds text, which it pretty much has to
             if (blk_ll_slot_type(agg_block, key) != OBJ_TEXT)
-                error(sprintf("(sym_defined_p) Block # %d slot %d is not OBJ_TEXT", agg_block, key))
+                panic(sprintf("(sym_defined_p) Block # %d slot %d is not OBJ_TEXT", agg_block, key))
             dbg_print("sym", 2, sprintf("(sym_defined_p) END sym='%s', level=%d => %s", sym, level, ppf__bool(TRUE)))
             return TRUE
         }
@@ -3303,7 +3320,7 @@ function sym_ll_read(name, key, level)
 function sym_ll_in(name, key, level)
 {
     if (level == EMPTY)
-        error("sym_ll_in: LEVEL missing")
+        panic("sym_ll_in: LEVEL missing")
     return (name, key, level, "symval") in symtab
 }
 
@@ -3311,7 +3328,7 @@ function sym_ll_in(name, key, level)
 function sym_ll_write(name, key, level, val)
 {
     if (level == EMPTY)
-        error("sym_ll_write: LEVEL missing")
+        panic("sym_ll_write: LEVEL missing")
     if (sym_ll_in("__DBG__", "sym", GLOBAL_NAMESPACE) &&
         sym_ll_read("__DBG__", "sym", GLOBAL_NAMESPACE) >= 5 &&
         !nam_system_p(name))
@@ -3341,7 +3358,7 @@ function sym_ll_incr(name, key, level, incr)
 {
     if (incr == EMPTY) incr = 1
     if (level == EMPTY)
-        error("sym_ll_incr: LEVEL missing")
+        panic("sym_ll_incr: LEVEL missing")
     if (sym_ll_in("__DBG__", "sym", GLOBAL_NAMESPACE) &&
         sym_ll_read("__DBG__", "sym", GLOBAL_NAMESPACE) >= 5 &&
         !nam_system_p(name))
@@ -3417,7 +3434,7 @@ function sym_fetch(sym,
         if (!integerp(key))
             error(sprintf("(sym_fetch) Block array indices must be integers"))
         if (! ((name, "", level, "agg_block") in symtab))
-            error(sprintf("Could not find ['%s','%s',%d,'agg_block'] in symtab",
+            panic(sprintf("(sym_fetch) Could not find ['%s','%s',%d,'agg_block'] in symtab",
                           name, "", level))
 
         agg_block = symtab[name, "", level, "agg_block"]
@@ -3425,7 +3442,7 @@ function sym_fetch(sym,
         if (key >= 1 && key <= count) {
             # Make sure slot holds text, which it pretty much has to
             if (blk_ll_slot_type(agg_block, key) != OBJ_TEXT)
-                error(sprintf("(sym_fetch) Block # %d slot %d is not OBJ_TEXT", agg_block, key))
+                panic(sprintf("(sym_fetch) Block # %d slot %d is not OBJ_TEXT", agg_block, key))
             val = blk_ll_slot_value(agg_block, key)
         } else
             error(sprintf("(sym_fetch) Out of bounds"))
@@ -3645,7 +3662,7 @@ function execute__text(text,
     } else if (__print_mode == MODE_TEXT_STRING)
         __textbuf = sprintf("%s%s\n", __textbuf, text)
     else
-        error("(execute__text) Bad __print_mode " __print_mode)
+        panic("(execute__text) Bad __print_mode " __print_mode)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -3977,7 +3994,7 @@ function xeq_cmd__break(name, cmdline,
 {
     # Logical check
     if (__xeq_ctl != XEQ_NORMAL)
-        error("(xeq_cmd__break) __xeq_ctl is not normal, how did that happen?")
+        panic("(xeq_cmd__break) __xeq_ctl is not normal, how did that happen?")
 
     __xeq_ctl = XEQ_BREAK
 }
@@ -4214,7 +4231,7 @@ function xeq_cmd__continue(name, cmdline)
 {
     # Logical check
     if (__xeq_ctl != XEQ_NORMAL)
-        error("(xeq_cmd__continue) __xeq_ctl is not normal, how did that happen?")
+        panic("(xeq_cmd__continue) __xeq_ctl is not normal, how did that happen?")
 
     __xeq_ctl = XEQ_CONTINUE
 }
@@ -4402,7 +4419,7 @@ function xeq_cmd__dump(name, cmdline,
         what_type = TYPE_ANY    # There is no "block" type
         #print_debugfile("Dump of block # " what)
         if (! ((what, 0, "type") in blktab))
-            error("(xeq_cmd__dump) No 'type' field for block " what)
+            panic("(xeq_cmd__dump) No 'type' field for block " what)
         block_type = blk_type(what)
         blk_label = ppf__block_type(block_type)
         # print_debugfile("(xeq_cmd__dump) block_type = " block_type)
@@ -4462,7 +4479,7 @@ function _less_than(s1, s2,    fs1, fs2, d1, d2)
     fs1 = first(s1)
     fs2 = first(s2)
 
-    if      (fs1 == "" && fs2 == "") error("(_less_than) fs1 and fs2 are empty!")
+    if      (fs1 == "" && fs2 == "") panic("(_less_than) fs1 and fs2 are empty!")
     else if (fs1 == "" && fs2 != "") return TRUE
     else if (fs1 != "" && fs2 == "") return FALSE
 
@@ -4506,7 +4523,7 @@ function dump__symtab(type, include_sys, # caller names this "all_flag"
 {
     dbg_print("sym", 4, "(dump__symtab) BEGIN")
     if (first(type) != TYPE_SYMBOL)
-        error("(dump__symtab) Bad type " ppf__flags(first(type)))
+        panic("(dump__symtab) Bad type " ppf__flags(first(type)))
     sym_define_all_deferred()
 
     # Build keys[] array, whose values are printable symbol names that
@@ -4547,7 +4564,7 @@ function dump__seqtab(type, include_sys,
 {
     dbg_print("seq", 4, "(dump__seqtab) BEGIN")
     if (first(type) != TYPE_SEQUENCE)
-        error("(dump__seqtab) Bad type " ppf__flags(first(type)))
+        panic("(dump__seqtab) Bad type " ppf__flags(first(type)))
 
     # Build keys[] array, whose values are printable symbol names that
     # pass restrictive checks.
@@ -4584,7 +4601,7 @@ function dump__cmdtab(type, include_sys,
 {
     dbg_print("cmd", 4, "(dump__cmdtab) BEGIN")
     if (first(type) != TYPE_USER)
-        error("(dump__cmdtab) Bad type " ppf__flags(first(type)))
+        panic("(dump__cmdtab) Bad type " ppf__flags(first(type)))
 
     # Build keys[] array, whose values are printable symbol names that
     # pass restrictive checks.
@@ -4792,7 +4809,7 @@ function dostring(str,
 function parse__string(    str, string_block1, string_block2, pstat, d)
 {
     if (stk_emptyp(__source_stack))
-        error("(parse__string) Source stack empty")
+        panic("(parse__string) Source stack empty")
     string_block1 = stk_top(__source_stack)
     str = blktab[string_block1, 0, "str"]
 
@@ -4813,7 +4830,7 @@ function parse__string(    str, string_block1, string_block2, pstat, d)
 
     string_block2 = stk_pop(__source_stack)
     if (string_block1 != string_block2)
-        error("(parse__string) String block mismatch")
+        panic("(parse__string) String block mismatch")
     __buffer = blktab[string_block2, 0, "old.buffer"]
 
     dbg_print("parse", 1, sprintf("(parse__string) END '%s' => %s",
@@ -4911,7 +4928,7 @@ function parse__for(                  for_block, body_block, pstat, incr, info, 
         blktab[for_block, 0, "level"] = level
 
     } else
-        error("(parse__for) How did I get here?")
+        panic("(parse__for) How did I get here?")
 
     dbg_print_block("for", 7, for_block, "(parse__for) for_block")
     stk_push(__parse_stack, for_block) # Push it on to the parse_stack
@@ -5970,7 +5987,7 @@ function execute__user(name, cmdline,
     old_level = __namespace
     execute__user_body(user_block, args)
     if (__namespace != old_level)
-        error("(execute__user) @%s %s: Namespace level mismatch")
+        panic("(execute__user) @%s %s: Namespace level mismatch")
 }
 
 
@@ -6009,7 +6026,7 @@ function execute__user_body(user_block, args,
         __xeq_ctl = XEQ_NORMAL
     # If things are still not normal, that's a problem
     if (__xeq_ctl != XEQ_NORMAL)
-        error("(xeq_cmd__return) __xeq_ctl is not normal, how did that happen?")
+        panic("(xeq_cmd__return) __xeq_ctl is not normal, how did that happen?")
 
     dbg_print("cmd", 1, "(execute__user_body) END")
 }
@@ -6277,7 +6294,7 @@ function xeq_cmd__return(name, cmdline,
 {
     # Logical check
     if (__xeq_ctl != XEQ_NORMAL)
-        error("(xeq_cmd__return) __xeq_ctl is not normal, how did that happen?")
+        panic("(xeq_cmd__return) __xeq_ctl is not normal, how did that happen?")
 
     __xeq_ctl = XEQ_RETURN
 }
@@ -6476,9 +6493,9 @@ function xeq_cmd__split(name, cmdline,
     arr = $2
     assert_array_okay_to_define(arr)
 
-    # Check SYM
-    if (! sym_defined_p(sym))
-        error(sprintf("Name '%s' not defined",  sym))
+    # # Check SYM
+    # if (! sym_defined_p(sym))
+    #     error(sprintf("Name '%s' not defined",  sym))
 
     # Check ARR.  assert_array_okay_to_define() passed, so this won't fail
     nam__scan(arr, info)
@@ -6678,7 +6695,7 @@ function xeq_cmd__typeout(name, cmdline,
                           src_block)
 {
     if (stk_emptyp(__source_stack))
-        error("(xeq_cmd__typeout) Source stack is empty")
+        panic("(xeq_cmd__typeout) Source stack is empty")
 
     src_block = stk_top(__source_stack)
     blktab[src_block, 0, "atmode"] = MODE_AT_LITERAL
@@ -6995,7 +7012,7 @@ function ship_out(obj_type, obj,
         return
     }
     if (dstblk != TERMINAL)
-        error(sprintf("(ship_out) dstblk is %d, not zero!", dstblk))
+        panic(sprintf("(ship_out) dstblk is %d, not zero!", dstblk))
 
     # dstblk is zero, so obj must be executed (or text printed)
     if (obj_type == OBJ_BLKNUM) {
@@ -7035,7 +7052,7 @@ function ship_out(obj_type, obj,
                                          name))
 
     } else
-        error("(ship_out) Unrecognized obj_type '" obj_type "'")
+        panic("(ship_out) Unrecognized obj_type '" obj_type "'")
 
     dbg_print("ship_out", 3, sprintf("(ship_out) END"))
 }
@@ -7047,14 +7064,14 @@ function ship_out_file(block, file,
     dbg_print("ship_out", 3, sprintf("(ship_out_file) START; block=%d, file='%s'",
                                      block, file))
     if (blk_type(block) != BLK_AGG)
-        error(sprintf("(ship_out_file) Block %d has type %s, not AGG",
+        panic(sprintf("(ship_out_file) Block %d has type %s, not AGG",
                       block, ppf__block_type(blk_type(block))))
 
     lim = blktab[block, 0, "count"]
     for (i = 1; i <= lim; i++) {
         slot_type = blk_ll_slot_type(block, i)
         if (slot_type != OBJ_TEXT)
-            error(sprintf("(ship_out_file) Block %d slot %d has type %s, not TEXT",
+            panic(sprintf("(ship_out_file) Block %d slot %d has type %s, not TEXT",
                           block, i, ppf__block_type(slot_type)))
 
         value = blk_ll_slot_value(block, i)
@@ -7552,7 +7569,7 @@ function dosubs(s,
             else if (fn == "xbasename" || fn == "xdirname")
                 r = xeq_fn__xname(fn, m, nparam, param)    r
             else
-                error("(dosubs) Function '" fn "' not handled")
+                panic("(dosubs) Function '" fn "' not handled")
 
         # Old code for macro processing
         # <SOMETHING ELSE> : Call a user-defined macro, handles arguments
@@ -7565,7 +7582,7 @@ function dosubs(s,
         } else if (seq_valid_p(fn) && seq_defined_p(fn)) {
             dbg_print("dosubs", 3, "(dosubs) It's a sequence")
             # Check for pre/post increment/decrement.
-            # This is only performe on a bare reference.
+            # This is only performed on a bare reference.
             if (nparam == 0) {
                 #   |          | pre_post | inc_dec |
                 #   |----------+----------+---------|

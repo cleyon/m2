@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-07-09 17:54:19 cleyon>
+#  Time-stamp:  <2025-07-13 01:30:36 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -94,6 +94,7 @@ BEGIN {
     EX_M2_ERROR      =  1
     EX_USER_REQUEST  =  2
     EX_NOINPUT       = 66
+    EX_SOFTWARE      = 70
 
     # Flags
     TYPE_ANY         = "*";             FLAG_BLKARRAY    = "K"
@@ -425,7 +426,7 @@ function strictp(ssys)
     if (ssys == EMPTY)
         panic("(strictp) ssys cannot be empty!")
     # Use low-level function here, not sym_true_p(), to prevent infinite loop
-    return sym_ll_read("__STRICT__", ssys, GLOBAL_NAMESPACE)
+    return sym_ll_read("__STRICT__", ssys, GLOBAL_NAMESPACE) != 0
 }
 
 
@@ -1144,20 +1145,66 @@ function assert_array_okay_to_define(arr,
 }
 
 
-function clear_array(arr, level,
-                     k, x, del_list)
+function arr_clear(arr, level, code,
+                     k, x, del_list, agg_block, count, i)
 {
-    for (k in symtab) {
-        split(k, x, SUBSEP)
-        if (x[1] == arr && x[3]+0 == level)
-            del_list[x[1], x[2], x[3], x[4]] = TRUE
+    if (code == EMPTY)
+        panic("(arr_clear) Missing code!")
+    if (flag_1true_p(code, FLAG_BLKARRAY)) {
+        # Clear block array
+        if (! ((arr, "", level, "agg_block") in symtab))
+            panic(sprintf("(arr_clear) Could not find ['%s','%s',%d,'agg_block'] in symtab",
+                          arr, "", level))
+        agg_block = symtab[arr, "", level, "agg_block"]
+        count = blktab[agg_block, 0, "count"]+0
+        if (count > 0) {
+            for (i = 1; i <= count; i++) {
+                delete blktab[agg_block, i, "slot_type"]
+                delete blktab[agg_block, i, "slot_value"]
+            }
+            blktab[agg_block, 0, "count"] = 0
+        }
+    } else {
+        # Clear regular array
+        for (k in symtab) {
+            split(k, x, SUBSEP)
+            if (x[1] == arr && x[3]+0 == level)
+                del_list[x[1], x[2], x[3], x[4]] = TRUE
+        }
+        for (k in del_list) {
+            split(k, x, SUBSEP)
+            dbg_print("sym", 3, sprintf("(arr_clear) Delete symtab['%s', '%s', %d, %s]",
+                                        x[1], x[2], x[3], x[4]))
+            delete symtab[x[1], x[2], x[3], x[4]]
+        }
     }
-    for (k in del_list) {
-        split(k, x, SUBSEP)
-        dbg_print("sym", 3, sprintf("(clear_array) Delete symtab['%s', '%s', %d, %s]",
-                                     x[1], x[2], x[3], x[4]))
-        delete symtab[x[1], x[2], x[3], x[4]]
+}
+
+
+function arr_size(arr, level, code,
+                  agg_block, count, k, x)
+{
+    if (code == EMPTY)
+        panic("(arr_size) Missing code!")
+    count = 0
+    if (flag_1true_p(code, FLAG_BLKARRAY)) {
+        # Size block array
+        if (! ((arr, "", level, "agg_block") in symtab))
+            panic(sprintf("(arr_clear) Could not find ['%s','%s',%d,'agg_block'] in symtab",
+                          arr, "", level))
+        agg_block = symtab[arr, "", level, "agg_block"]
+        count = blktab[agg_block, 0, "count"]+0
+    } else {
+        # Size regular array
+        for (k in symtab) {
+            split(k, x, SUBSEP)
+            if (x[1] == arr && x[3]+0 == level)
+                count++
+        }
     }
+    dbg_print("sym", 7, sprintf("(arr_size) arr='%s', level=%d, RETURNING %d",
+                                arr, level, count))
+    return count
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -1816,7 +1863,7 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
     retval = FALSE
 
     while (TRUE) {
-        dbg_print("parse", 4, sprintf("(parse) [%s] TOP OF LOOP: __FILE__ %s __LINE__ %d ________________",
+        dbg_print("parse", 4, sprintf("(parse) [%s] TOP OF LOOP: ____ %s  LINE=%d  ________________________________",
                                      parser_label, FILE(), LINE()+1)) # LINE will be +1 after upcoming readline()
 
         rstat = readline()   # OKAY, EOF, ERROR
@@ -3131,6 +3178,11 @@ function sym_defined_p(sym,
 
     # If it's not a normal symbol table entry, maybe a block-array
     if (flag_alltrue_p(info["code"], TYPE_ARRAY FLAG_BLKARRAY)) {
+        if (key == EMPTY) {
+            dbg_print("sym", 2, sprintf("(sym_defined_p) Block array bare name returns count"))
+            return TRUE
+        }
+
         if (!integerp(key)) {
             dbg_print("sym", 2, sprintf("(sym_defined_p) Block array indices must be integers"))
             return FALSE
@@ -3393,13 +3445,17 @@ function sym_fetch(sym,
     # Sanity checks
     good = FALSE
 
-    # 1. Fetching @ARRNAME@ w/o key return # elements in ARRNAME.
-    if (info["isarray"] == TRUE && info["hasbracket"] == FALSE)
-        error("sym_fetch: Fetching @ARRNAME@ without a key is not supported yet")
+    # 1. Fetching @ARRNAME@ without key return # elements in ARRNAME.
+    if (info["isarray"] == TRUE && info["hasbracket"] == FALSE) {
+        val = arr_size(name, level, code)
+        dbg_print("sym", 2, sprintf("(sym_fetch) END sym='%s', level=%d RETURNING %d",
+                                    sym, level, val))
+        return val
+    }
 
     # 2. Error if symbol is not an array but sym has array[key] syntax
     if (info["isarray"] == FALSE && info["hasbracket"] == TRUE)
-        error("sym_fetch: Symbol is not an array but sym has array[key] syntax")
+        error("(sym_fetch) Symbol is not an array but sym has array[key] syntax")
 
     # Now, either both isarray and hasbracket are TRUE
     # or both are FALSE.
@@ -3891,7 +3947,7 @@ function bool__scan_factor(    e, r,         # ! factor | variable | ( expressio
         e = bool__scan_expr()
         if (__btoken[__bf++] != TOK_RPAREN)
             error("(bool__scan_factor) Missing ')' at '" __btoken[__bf]) "'"
-        dbg_print("bool", 5, "(bool__scan_factor) Found parens, returning " ppf__bool(e))
+        dbg_print("bool", 5, "(bool__scan_factor) Found parens, RETURNING " ppf__bool(e))
         return e
 
     } else if (__btoken[__bf] == TOK_NOT) {
@@ -3901,7 +3957,7 @@ function bool__scan_factor(    e, r,         # ! factor | variable | ( expressio
             dbg_print("bool", 5, "(bool__scan_factor): NOT: scan_factor => ERROR, propagating")
             return ERROR
         } else {
-            dbg_print("bool", 5, "(bool__scan_factor) NOT: Just read " e ", so returning " ppf__bool(!e))
+            dbg_print("bool", 5, "(bool__scan_factor) NOT: Just read " e ", so RETURNING " ppf__bool(!e))
             return !e
         }
 
@@ -3912,7 +3968,7 @@ function bool__scan_factor(    e, r,         # ! factor | variable | ( expressio
         if (sym_deferred_p(name))
             sym_deferred_define_now(name)
         r = sym_defined_p(name)
-        dbg_print("bool", 5, "(bool__scan_factor): DEFINED; name='" name "', returning " ppf__bool(r))
+        dbg_print("bool", 5, "(bool__scan_factor): DEFINED; name='" name "', RETURNING " ppf__bool(r))
         __bf++
         return r
 
@@ -3921,7 +3977,7 @@ function bool__scan_factor(    e, r,         # ! factor | variable | ( expressio
         if (name == EMPTY) return ERROR
         assert_valid_env_var_name(name)
         r = name in ENVIRON
-        dbg_print("bool", 5, "(bool__scan_factor): ENV; name='" name "', returning " ppf__bool(r))
+        dbg_print("bool", 5, "(bool__scan_factor): ENV; name='" name "', RETURNING " ppf__bool(r))
         __bf++
         return r
 
@@ -3929,7 +3985,7 @@ function bool__scan_factor(    e, r,         # ! factor | variable | ( expressio
         name = __btoken[++__bf]
         if (name == EMPTY) return ERROR
         r = path_exists_p(name)
-        dbg_print("bool", 5, "(bool__scan_factor) EXISTS; name='" name "', returning " ppf__bool(r))
+        dbg_print("bool", 5, "(bool__scan_factor) EXISTS; name='" name "', RETURNING " ppf__bool(r))
         __bf++
         return r
 
@@ -3938,7 +3994,7 @@ function bool__scan_factor(    e, r,         # ! factor | variable | ( expressio
         if (sym_deferred_p(name))
             sym_deferred_define_now(name)
         r = sym_true_p(name)
-        dbg_print("bool", 5, "(bool__scan_factor): SYM; just read '" __btoken[__bf] "', so returning " ppf__bool(r))
+        dbg_print("bool", 5, "(bool__scan_factor): SYM; just read '" __btoken[__bf] "', so RETURNING " ppf__bool(r))
         __bf++
         return r
 
@@ -4268,7 +4324,7 @@ function xeq_cmd__data(name, cmdline,
     level = nam_lookup(info)
     code = info["code"]
     dbg_print("xeq", 5, sprintf("(xeq_cmd__data) code=%s", code))
-    clear_array(arr, level)
+    arr_clear(arr, level, code)
 
     # Make it a block array
     namtab[arr, level] = code = flag_set_clear(code, FLAG_BLKARRAY, "")
@@ -4519,7 +4575,7 @@ function _less_than(s1, s2,    fs1, fs2, d1, d2)
 # *omits* newline.
 function dump__symtab(type, include_sys, # caller names this "all_flag"
                       x, k, code, buf, cond_matched,
-                      keys, cnt, i)
+                      keys, cnt, i, blk, count)
 {
     dbg_print("sym", 4, "(dump__symtab) BEGIN")
     if (first(type) != TYPE_SYMBOL)
@@ -4531,21 +4587,44 @@ function dump__symtab(type, include_sys, # caller names this "all_flag"
     cnt = 0
     for (k in symtab) {
         split(k, x, SUBSEP)
+        dbg_print("sym", 8, sprintf("(dump__symbtab) ['%s','%s',%d,%s]",
+                                    x[1], x[2], x[3], x[4]))
         # print "name  =", x[1]
         # print "key   =", x[2]
         # print "level =", x[3]
         # print "elem  =", x[4]
-        if (x[4] != "symval") continue
+
         code = nam_ll_read(x[1], x[3]) # name, level
         dbg_print("sym", 7, sprintf("(dump__symtab) name='%s', key='%s', code=%s",
                                     x[1], x[2], code))
+        if (!include_sys && flag_1true_p(code, FLAG_SYSTEM))
+            continue
+
+        if (x[4] == "agg_block") {
+            if (flag_anyfalse_p(code, TYPE_ARRAY FLAG_BLKARRAY))
+                panic("(dump__symtab) Found type 'agg_block' but not a block array")
+            # It's a block array so insert all the keys.
+            blk = symtab[x[1], x[2], x[3], x[4]]
+            count = blktab[blk, 0, "count"]
+            #print_stderr("blk=" blk ", count=" count)
+            if (count > 0)
+                for (i = 1; i <= count; i++) {
+                    #print_stderr("Adding keys[" cnt+1 "] = " x[1] "[" i "]")
+                    keys[++cnt] = x[1] "[" i "]"
+                }
+            continue
+        } else if (x[4] != "symval") {
+            panic(sprintf("(dump__symtab) Unexpected elem type: ['%s','%s',%d,%s]",
+                          x[1], x[2], x[3], x[4]))
+            continue
+        }
+
+        # It's a regular symbol so process it
         if (((flag_1true_p(code, TYPE_SYMBOL) && x[2] == EMPTY) ||
              (flag_1true_p(code, TYPE_ARRAY)  && x[2] != EMPTY))) {
-            # So far so good - now see if we should eliminate system symbols
-            if (!include_sys && flag_1true_p(code, FLAG_SYSTEM))
-                continue
             keys[++cnt] = x[1] (x[2] != EMPTY ? "[" x[2] "]" : "")
-        }
+        } else
+            panic("(dump__symtab) Strange combination of symbol/array")
     }
 
     qsort(keys, 1, cnt)
@@ -5793,7 +5872,7 @@ function xeq_cmd__m2ctl(name, cmdline,
             getstat = getline input < TTY
             #print("just read '" input "'")
             if (input == EMPTY) {
-                print_stderr("Exiting boolean expr; returning to regular commands!")
+                print_stderr("Exiting boolean expr; RETURNING to regular commands!")
                 break
             }
 
@@ -6148,7 +6227,7 @@ function xeq_cmd__readarray(name, cmdline,
     level = nam_lookup(info)
     code = info["code"]
     dbg_print("xeq", 5, sprintf("(xeq_cmd__readarray) code=%s", code))
-    clear_array(arr, level)
+    arr_clear(arr, level, code)
 
     # Make it a block array
     namtab[arr, level] = code = flag_set_clear(code, FLAG_BLKARRAY, "")
@@ -6483,7 +6562,7 @@ function xeq_cmd__shell(name, cmdline,
 # @split        SYM ARR
 function xeq_cmd__split(name, cmdline,
                         sym, arr, nsp, info, code, level,
-                        val, k, tmparr)
+                        val, k, tmparr, agg_block)
 {
     dbg_print("cmd", 3, sprintf("(xeq_cmd__split) START"))
     $0 = cmdline
@@ -6493,33 +6572,35 @@ function xeq_cmd__split(name, cmdline,
     arr = $2
     assert_array_okay_to_define(arr)
 
-    # # Check SYM
-    # if (! sym_defined_p(sym))
-    #     error(sprintf("Name '%s' not defined",  sym))
-
     # Check ARR.  assert_array_okay_to_define() passed, so this won't fail
     nam__scan(arr, info)
     level = nam_lookup(info)
     code = info["code"]
     dbg_print("xeq", 5, sprintf("(xeq_cmd__split) code=%s", code))
-    clear_array(arr, level)
+    arr_clear(arr, level, code)
 
-    # Make it a regular array
-    namtab[arr, level] = code = flag_set_clear(code, "", FLAG_BLKARRAY)
+    # Make it a block array
+    namtab[arr, level] = code = flag_set_clear(code, FLAG_BLKARRAY, "")
     dbg_print("xeq", 5, sprintf("(xeq_cmd__split) namtab[%s,%d] = %s", arr, level, code))
+
+    # Create a new Agg block
+    agg_block = blk_new(BLK_AGG)
+    dbg_print("parse", 5, sprintf("(xeq_cmd__split) symtab['%s','%s',%d,'agg_block'] = %d",
+                                 arr, "", level, agg_block))
+    symtab[arr, "", level, "agg_block"] = agg_block
+    blktab[agg_block, 0, "count"] = 0
 
     # Do split
     val = sym_fetch(sym)
     if (emptyp(val)) {
         warn("@split: Symbol '" sym "' is empty")
-        sym_ll_write(arr, "0", level, 0)
     } else {
         if (index(val, FS) == 0)
             warn("@split: Symbol '" sym "' has no fields to split")
         nsp = split(val, tmparr)
-        sym_ll_write(arr, "0", level, nsp)
         for (k = 1; k <= nsp; k++)
-            sym_ll_write(arr, "" k, level, tmparr[k])
+            blk_append(agg_block, OBJ_TEXT, tmparr[k])
+        blktab[agg_block, 0, "count"] = nsp
     }
 
     dbg_print("cmd", 3, sprintf("(xeq_cmd__split) END"))

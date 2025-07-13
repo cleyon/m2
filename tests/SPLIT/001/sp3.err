@@ -1,5 +1,4 @@
 @define DATA	aaa bbb ccc
-@define MYARRAY[0]	3
 @define MYARRAY[1]	aaa
 @define MYARRAY[2]	bbb
 @define MYARRAY[3]	ccc

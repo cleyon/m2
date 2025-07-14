@@ -16,7 +16,8 @@ to the
 .Xr m4 1
 macro processor found on Unix systems.
 It is based on an earlier program, m1, written by Jon Bentley.
-The program can perform several functions, including:
+Like other macro processors,
+the program can perform several functions, including:
 .Bl -enum
 .It
 Define and expand macros.
@@ -61,10 +62,14 @@ characters.
 Thus, any occurrence of
 .Ql @name@
 in the input is replaced in the output by the corresponding value.
-To compensate for the burden of manually invoking macro expansion,
-there is no need to
+To compensate you for the burden of having to manually invoke
+macro expansion, there is in recompense no need to
 .Qq quote
-identifiers to protect against unwanted or inadvertent replacement.
+identifiers to protect against unwanted or inadvertent replacement,
+which, depending upon the insistence of
+.Em other
+macro processors, may
+present quite a challenge.
 Substitutions can occur multiple times in a single line.
 .Pp
 .Em Example :
@@ -82,8 +87,14 @@ Thus, a line like
 is completely benign.
 .Pp
 Using the same character to delimit both the beginning and end of macro
-invocations was a conscious design decision by m1's author, but it presents
-challenges when attempting to invoke macros in a nested fashion.
+invocations was a conscious design decision by m1's author, but it
+presents challenges when attempting to parse more advanced syntax, such
+as invoking macros in a nested fashion.
+It is difficult to distinguish, purely lexically:\" in Awk!
+.Bd -literal -offset indent -compact
+This is @one and 2@ AND ALSO @three and 4@.
+This is @mid mySym @myBegPos1 Field1@ myLen@.
+.Ed
 To alleviate scanning ambiguities, any characters enclosed in
 at\&-sign braces
 .Qq @{...}
@@ -92,7 +103,7 @@ Thus
 .Dl @data_list[@{my_key}]@
 uses the value in
 .Va my_key
-to look up data from
+to look up data from the array
 .Va data_list .
 The text between the braces is implicitly interpreted as if it
 were surrounded by
@@ -100,7 +111,7 @@ were surrounded by
 characters, so
 .Ql @{SYMBOL}
 is correct.
-The example shows it when accessing an array element, but the
+The example shows the syntax when accessing an array element, but the
 syntax is applicable generally.
 The
 .Qq @{...}
@@ -123,7 +134,7 @@ Some commands have a
 alternate form, distinguished by a leading
 .Qq s
 in the command name, which prints fewer error messages or performs some
-slightly different function.
+slightly altered function.
 For example, the silent variant to include a file is
 .Ql @sinclude .
 .Pp
@@ -178,8 +189,11 @@ If debugging, send TEXT to the debug file.
 Subtract N (default 1) from an already defined NAME.  See note at @incr.
 .It @default NAME VAL
 Like @define, but no\&-op if NAME already defined.
-.It @define NAME TEXT
+.It @define NAME [TEXT]
 Set value of NAME to TEXT.
+If TEXT is missing, a value of 1 is assumed.
+See also
+.Va @null .
 .It @divert [N]
 Divert subsequent text to stream N.
 Default 0 resets to standard output.
@@ -306,8 +320,9 @@ Continue execution of next iteration of enclosing @for or @foreach loop.
 Ignore remainder of current file and resume processing with the next file.
 .It @null NAME
 Set value of NAME to the empty string.
-(This is surprisingly difficult to do without this command;
-@define cannot do it, because it defaults a missing value to "1".)
+Note the difference between this command and
+.Ql @define NAME
+which sets the value of NAME to 1.
 .It @of TEXT
 Begin a new branch of an enclosing @case structure
 matching TEXT at run time.
@@ -371,7 +386,6 @@ Standard error is not redirected, so any errors will appear on the
 user's terminal.
 .It @split NAME ARR
 Split value of NAME into N whitespace-separated fields, storing them in ARR elements 1..N.
-N itself is stored in array element 0.
 Any previous entries in ARR are deleted.
 .It @syscmd CMDLINE...
 Execute CMDLINE using Awk's system() function.
@@ -407,6 +421,7 @@ and stop when it becomes False.
 Defer TEXT until m2 has processed all files and diversions and is about to exit.
 Wrapped text will be evaluated as a command; output will occur after diverted streams, if any.
 Wraps are always processed, even if @error or @exit commands are encountered.
+.\"     An m2 internal panic() will exit immediately without processing wraps.
 .El
 .Pp
 .Nm

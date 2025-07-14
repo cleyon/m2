@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-07-13 01:30:36 cleyon>
+#  Time-stamp:  <2025-07-14 02:19:16 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -238,6 +238,12 @@ function abs(n)
 }
 
 
+function to_bool(x)
+{
+    return !! (0 + x)
+}
+
+
 function ppf__bool(x)
 {
     return (x == 0 || x == "") ? "False" : "True"
@@ -423,7 +429,7 @@ function FILE()
 
 function strictp(ssys)
 {
-    if (ssys == EMPTY)
+    if (emptyp(ssys))
         panic("(strictp) ssys cannot be empty!")
     # Use low-level function here, not sym_true_p(), to prevent infinite loop
     return sym_ll_read("__STRICT__", ssys, GLOBAL_NAMESPACE) != 0
@@ -487,7 +493,7 @@ function default_shell()
 # are not processed for macros, so the default mode in this case is literal.
 function curr_atmode(    src_block)
 {
-    if (stk_emptyp(__source_stack))
+    if (stk_empty_p(__source_stack))
         return MODE_AT_LITERAL
     src_block = stk_top(__source_stack)
     dbg_print_block("ship_out", 7, src_block, "(curr_atmode) src_block [top of __source_stack]")
@@ -503,7 +509,7 @@ function curr_atmode(    src_block)
 # gets popped at the end of main().
 function curr_dstblk(    top_block)
 {
-    if (stk_emptyp(__parse_stack))
+    if (stk_empty_p(__parse_stack))
         panic("(curr_dstblk) Parse stack is empty!")
     top_block = stk_top(__parse_stack)
     dbg_print_block("ship_out", 7, top_block, "(curr_dstblk) top_block [top of __parse_stack]")
@@ -559,7 +565,7 @@ function lower_namespace()
 function check__parse_stack(expected_block_type,
                                 btop)
 {
-    if (stk_emptyp(__parse_stack)) {
+    if (stk_empty_p(__parse_stack)) {
         __m2_msg = "Empty parse stack"
         return ERR_PARSE_STACK
     }
@@ -1779,7 +1785,7 @@ function dofile(filename,
 # Caller is responsible for removing potential quotes from filename.
 function parse__file(    filename, file_block1, file_block2, pstat, d)
 {
-    if (stk_emptyp(__source_stack))
+    if (stk_empty_p(__source_stack))
         panic("(parse__file) Source stack empty")
     file_block1 = stk_top(__source_stack)
 
@@ -1847,13 +1853,13 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
 
     # The "parser" is the topmost element of the __parse_stack
     # which we wish to access a few times
-    if (stk_emptyp(__parse_stack))
+    if (stk_empty_p(__parse_stack))
         panic("Parse error, Empty parse stack")
     parser = stk_top(__parse_stack)
     parser_type = blk_type(parser)
     parser_label = ppf__block_type(parser_type)
 
-    if (stk_emptyp(__source_stack))
+    if (stk_empty_p(__source_stack))
         panic("Parse error, Empty source stack")
     src_block = stk_top(__source_stack)
 
@@ -2393,7 +2399,7 @@ function ppf__flag_type(code,
                         type)
 {
     if (code == EMPTY)
-        warn("(ppf__flag_type) code is empty, how did that happen?")
+        panic("(ppf__flag_type) code is empty, how did that happen?")
     code = first(code)
     dbg_print("xeq", 7, "(ppf__flag_type) code = " code)
     if (! (code in __flag_label)) {
@@ -2764,7 +2770,7 @@ function stk_push(stack, new_elem)
 }
 
 
-function stk_emptyp(stack)
+function stk_empty_p(stack)
 {
     return (stk_depth(stack) == 0)
 }
@@ -2772,7 +2778,7 @@ function stk_emptyp(stack)
 
 function stk_top(stack)
 {
-    if (stk_emptyp(stack))
+    if (stk_empty_p(stack))
         panic("(stk_top) Empty stack")
     return stack[stack[0]]
 }
@@ -2781,10 +2787,10 @@ function stk_top(stack)
 function stk_pop(stack,
                  old_top, new_top)
 {
-    if (stk_emptyp(stack))
+    if (stk_empty_p(stack))
         panic("(stk_pop) Empty stack")
     old_top = stack[stack[0]--]
-    if (!stk_emptyp(stack) && stack["name"] == "source_stack") {
+    if (!stk_empty_p(stack) && stack["name"] == "source_stack") {
         new_top = stack[stack[0]]
         trace(TRACE_INPUT_FILE_CHG, EMPTY,
               sprintf("Input file now '%s'", blktab[new_top, 0, "filename"]))
@@ -3178,7 +3184,7 @@ function sym_defined_p(sym,
 
     # If it's not a normal symbol table entry, maybe a block-array
     if (flag_alltrue_p(info["code"], TYPE_ARRAY FLAG_BLKARRAY)) {
-        if (key == EMPTY) {
+        if (emptyp(key)) {
             dbg_print("sym", 2, sprintf("(sym_defined_p) Block array bare name returns count"))
             return TRUE
         }
@@ -3223,7 +3229,7 @@ function sym_info_defined_lev_p(info, level,
     dbg_print("sym", 5, sprintf("(sym_info_defined_lev_p) sym='%s' START", name))
 
 
-    if (key == EMPTY) {
+    if (emptyp(key)) {
         if ((name, "", 0+level, "symval") in symtab) {
             dbg_print("sym", 5, sprintf("(sym_info_defined_lev_p) END [\"%s\",\"%s\",%d,\"symval\"] Found in symtab => TRUE", name, key, level))
             return TRUE
@@ -3421,8 +3427,8 @@ function sym_ll_incr(name, key, level, incr)
 
 
 function sym_fetch(sym,
-                    nparts, info, name, key, code, level, val, good,
-                    agg_block, count)
+                   nparts, info, name, key, code, level, val, good,
+                   agg_block, count)
 {
     dbg_print("sym", 5, sprintf("(sym_fetch) START; sym='%s'", sym))
 
@@ -3464,7 +3470,7 @@ function sym_fetch(sym,
         if (info["isarray"] == FALSE &&
             info["hasbracket"] == FALSE &&
             flag_1true_p(code, TYPE_SYMBOL) &&
-            key == EMPTY) {
+            emptyp(key)) {
             good = TRUE
             break # - - - - - - - - - - - - - - - - - - - - - - - - - -
         }
@@ -3515,7 +3521,7 @@ function sym_fetch(sym,
     else if (flag_1true_p(code, FLAG_NUMERIC))
         return 0.0 + val
     else if (flag_1true_p(code, FLAG_BOOLEAN))
-        return sym_ll_read("__FMT__", !! (0 + val))
+        return sym_ll_read("__FMT__", to_bool(val)) # !! (0 + val))
     else
         return val
 }
@@ -3963,7 +3969,7 @@ function bool__scan_factor(    e, r,         # ! factor | variable | ( expressio
 
     } else if (__btoken[__bf] == TOK_DEFINED_P) {
         name = __btoken[++__bf]
-        if (name == EMPTY) return ERROR
+        if (emptyp(name)) return ERROR
         assert_sym_valid_name(name)
         if (sym_deferred_p(name))
             sym_deferred_define_now(name)
@@ -3974,7 +3980,7 @@ function bool__scan_factor(    e, r,         # ! factor | variable | ( expressio
 
     } else if (__btoken[__bf] == TOK_ENV_P) {
         name = __btoken[++__bf]
-        if (name == EMPTY) return ERROR
+        if (emptyp(name)) return ERROR
         assert_valid_env_var_name(name)
         r = name in ENVIRON
         dbg_print("bool", 5, "(bool__scan_factor): ENV; name='" name "', RETURNING " ppf__bool(r))
@@ -3983,7 +3989,7 @@ function bool__scan_factor(    e, r,         # ! factor | variable | ( expressio
 
     } else if (__btoken[__bf] == TOK_EXISTS_P) {
         name = __btoken[++__bf]
-        if (name == EMPTY) return ERROR
+        if (emptyp(name)) return ERROR
         r = path_exists_p(name)
         dbg_print("bool", 5, "(bool__scan_factor) EXISTS; name='" name "', RETURNING " ppf__bool(r))
         __bf++
@@ -4385,7 +4391,7 @@ function xeq_cmd__define(name, cmdline,
     #sub(/^[ \t]*[^ \t]+[ \t]+[^ \t]+[ \t]*/, "")
     sub(/^[ \t]*[^ \t]+[ \t]*/, "")
     if ($0 == EMPTY) $0 = "1"
-    # XXX No checking, dangerous!!
+    # XXX No checking, dangerous!
     sym_store(sym, append_flag ? sym_fetch(sym) $0 \
                                : $0)
     dbg_print("xeq", 1, "(xeq_cmd__define) END")
@@ -4887,7 +4893,7 @@ function dostring(str,
 
 function parse__string(    str, string_block1, string_block2, pstat, d)
 {
-    if (stk_emptyp(__source_stack))
+    if (stk_empty_p(__source_stack))
         panic("(parse__string) Source stack empty")
     string_block1 = stk_top(__source_stack)
     str = blktab[string_block1, 0, "str"]
@@ -5871,7 +5877,7 @@ function xeq_cmd__m2ctl(name, cmdline,
             print_stderr("Enter line to scan as boolean expr (RETURN to end):")
             getstat = getline input < TTY
             #print("just read '" input "'")
-            if (input == EMPTY) {
+            if (emptyp(input)) {
                 print_stderr("Exiting boolean expr; RETURNING to regular commands!")
                 break
             }
@@ -6183,7 +6189,7 @@ function xeq_cmd__null(name, cmdline,
 
     sym = $1
     assert_sym_okay_to_define(sym)
-    # XXX No checking, dangerous!!
+    # XXX No checking, dangerous!
     sym_store(sym, "")
     dbg_print("xeq", 1, "(xeq_cmd__null) END")
 }
@@ -6775,7 +6781,7 @@ function xeq_cmd__typeout(name, cmdline,
 #                          i, parser)
                           src_block)
 {
-    if (stk_emptyp(__source_stack))
+    if (stk_empty_p(__source_stack))
         panic("(xeq_cmd__typeout) Source stack is empty")
 
     src_block = stk_top(__source_stack)
@@ -7829,7 +7835,7 @@ function xeq_fn__boolval(fn, m, nparam, param,
                 result = sym_ll_read("__FMT__", FALSE)
         } else
             # It's not a symbol, so use its value interpreted as a boolean
-            result = sym_ll_read("__FMT__", !!p)
+            result = sym_ll_read("__FMT__", to_bool(p))  # !!p)
     }
 
     return result
@@ -8130,7 +8136,7 @@ function xeq_fn__ifelse(fn, m, nparam, param,
         # At this point, the three required args have been
         # stripped out of m.  What remains in m could be:
         # 1. Empty - no fourth argument, so use empty string.
-        if (m == EMPTY) {
+        if (emptyp(m)) {
             result = ""
             break
         }
@@ -8949,7 +8955,8 @@ BEGIN {
                 } else if (_name == "I") {      # I=<path>
                     # Include-path elements on command-line are prepended
                     # to M2PATH so they override env variable values.
-                    __inc_path = _val (emptyp(__inc_path) ? "" : ":" __inc_path)
+                    if (!emptyp(_val))
+                        __inc_path = _val (emptyp(__inc_path) ? "" : ":" __inc_path)
                     continue
                 } else if (_name == "init") {   # init=<VAL>
                     if (_val > 0)
@@ -8964,7 +8971,7 @@ BEGIN {
                 } else if (_name == "secure") {
                     _name = "__SECURE__"
                 } else if (_name == "strict") {
-                    _val = (_val > 0)           # convert int value to bool
+                    _val = to_bool(_val) # (_val > 0) # convert int value to bool
                     # Update strict settings
                     sym_ll_write("__STRICT__","boolval", GLOBAL_NAMESPACE, _val)
                     sym_ll_write("__STRICT__",    "env", GLOBAL_NAMESPACE, _val)
@@ -8979,13 +8986,18 @@ BEGIN {
                     xeq_cmd__undefine("undefine", _val)
                     continue
                 }
-                xeq_cmd__define("define", _name TOK_SPACE _val)
+                # Documentation states "NAME=" on command line
+                # defines with empty value.
+                if (emptyp(_val))
+                    xeq_cmd__null("null", _name)
+                else
+                    xeq_cmd__define("define", _name TOK_SPACE _val)
 
             # Otherwise load a file
             } else {
                 load_init_files()
                 _loadfile = search_file(_arg)
-                if (_loadfile == EMPTY || !dofile(_loadfile)) {
+                if (emptyp(_loadfile) || !dofile(_loadfile)) {
                     warn("File '" _arg "' not found", "ARGV", _i)
                     __exit_code = EX_NOINPUT
                 }

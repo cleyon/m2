@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-07-14 03:01:55 cleyon>
+#  Time-stamp:  <2025-07-14 18:04:26 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -6565,17 +6565,29 @@ function xeq_cmd__shell(name, cmdline,
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
 #*****************************************************************************
-# @split        SYM ARR
+# @split        SYM ARR [FS]
 function xeq_cmd__split(name, cmdline,
                         sym, arr, nsp, info, code, level,
-                        val, k, tmparr, agg_block)
+                        val, k, tmparr, agg_block,
+                        wantfs, tmpfs)
 {
     dbg_print("cmd", 3, sprintf("(xeq_cmd__split) START"))
     $0 = cmdline
-    if (NF != 2)
+    if (NF < 2)
         error("(xeq_cmd__split) Bad parameters")
     sym = $1
     arr = $2
+
+    # See if there's an (optional) FS
+    sub(/^[ \t]*[^ \t]+[ \t]+[^ \t]+[ \t]*/, "")
+    if ($0 != EMPTY) {
+        wantfs = TRUE
+        tmpfs = $0
+    } else if (sym_defined_p("__FS__")) {
+        wantfs = TRUE
+        tmpfs = sym_fetch("__FS__")
+    } else
+        wantfs = FALSE
     assert_array_okay_to_define(arr)
 
     # Check ARR.  assert_array_okay_to_define() passed, so this won't fail
@@ -6598,12 +6610,10 @@ function xeq_cmd__split(name, cmdline,
 
     # Do split
     val = sym_fetch(sym)
-    if (emptyp(val)) {
+    if (emptyp(val))
         warn("@split: Symbol '" sym "' is empty")
-    } else {
-        if (index(val, FS) == 0)
-            warn("@split: Symbol '" sym "' has no fields to split")
-        nsp = split(val, tmparr)
+    else {
+        nsp = wantfs ? split(val, tmparr, tmpfs) : split(val, tmparr)
         for (k = 1; k <= nsp; k++)
             blk_append(agg_block, OBJ_TEXT, tmparr[k])
         blktab[agg_block, 0, "count"] = nsp
@@ -8952,6 +8962,8 @@ BEGIN {
                 _val = substr(_arg, _eq+1)
                 if (_name == "debug") {
                     _name = "__DEBUG__"
+                } else if (_name == "fs") {
+                    _name = "__FS__"
                 } else if (_name == "I") {      # I=<path>
                     # Include-path elements on command-line are prepended
                     # to M2PATH so they override env variable values.

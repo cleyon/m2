@@ -388,16 +388,24 @@ It must be a program that functions as a filter (in the Unix sense,
 i.e., reading from standard input and writing to standard output).
 Standard error is not redirected, so any errors will appear on the
 user's terminal.
-.It @split NAME ARR
-Split value of NAME into N whitespace-separated fields, storing them in ARR elements 1..N.
+.It @split NAME ARR [FS]
+Split value of NAME into N fields, storing them in ARR elements 1..N.
 Any previous entries in ARR are deleted.
+If
+.Va FS
+is specified, use it as field separator.
+If not and symbol
+.Va __FS__
+is defined, use its value as field separator.
+If neither condition is true, use Awk's default FS,
+which means fields will be split on whitespace.
 .It @syscmd CMDLINE...
 Execute CMDLINE using Awk's system() function.
 Standard output and standard error are both discarded.
 The command's exit code is saved in
 .Va __SYSVAL__ .
 .It @typeout
-Print remainder of input file literally, no macro processing will be done.
+Print remainder of input file literally; no macro processing will be done.
 .It @undefine NAME
 Remove definition of NAME.
 Symbols can also be removed from the command line with
@@ -1110,6 +1118,12 @@ A Fortran programmer might change this to
 .Qq .TRUE.
 while a Lisp programmer might change this to
 .Qq t .
+.It __FS__
+If defined, value to use as field separator for
+.Ql @split
+and
+.Ql @join@ .
+User modifiable.
 .It __GID__
 Group id (effective gid).
 .It __HOME__

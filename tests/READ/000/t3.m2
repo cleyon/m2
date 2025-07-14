@@ -1,1 +1,1 @@
-@readfile foo nonexistent-file
+@filedefine foo nonexistent-file

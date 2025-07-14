@@ -1,2 +1,2 @@
-@readfile passes parker
+@filedefine passes parker
 >@passes@<

@@ -1,3 +1,3 @@
-@readfile FIRST ws.right
+@filedefine FIRST ws.right
 Before: FIRST=>@FIRST@<
 After: FIRST=>@rtrim FIRST@<

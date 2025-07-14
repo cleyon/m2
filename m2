@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-07-14 02:19:16 cleyon>
+#  Time-stamp:  <2025-07-14 03:01:55 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -1655,6 +1655,8 @@ function execute__command(name, cmdline,
     else if (name ==  "esyscmd")        xeq_cmd__esyscmd(name, cmdline)
     else if (name ==  "eval")           xeq_cmd__eval(name, cmdline)
     else if (name ==  "exit")           xeq_cmd__exit(name, cmdline)
+    else if (name ~ /s?filedata/)       xeq_cmd__filedata(name, cmdline)
+    else if (name ~ /s?filedefine/)     xeq_cmd__filedefine(name, cmdline)
     else if (name ==  "ignore")         xeq_cmd__ignore(name, cmdline)
     else if (name ~ /s?include/)        xeq_cmd__include(name, cmdline)
     else if (name ==  "incr")           xeq_cmd__incr(name, cmdline)
@@ -1666,8 +1668,6 @@ function execute__command(name, cmdline,
     else if (name ==  "nextfile")       xeq_cmd__nextfile(name, cmdline)
     else if (name ==  "null")           xeq_cmd__null(name, cmdline)
     else if (name ~ /s?paste/)          xeq_cmd__include(name, cmdline)
-    else if (name ~ /s?readarray/)      xeq_cmd__readarray(name, cmdline)
-    else if (name ~ /s?readfile/)       xeq_cmd__readfile(name, cmdline)
     else if (name ==  "readonly")       xeq_cmd__readonly(name, cmdline)
     else if (name ==  "return")         xeq_cmd__return(name, cmdline)
     else if (name ==  "sequence")       xeq_cmd__sequence(name, cmdline)
@@ -4961,6 +4961,127 @@ function xeq_cmd__exit(name, cmdline)
 
 #*****************************************************************************
 #
+#       @  F I L E D A T A
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#*****************************************************************************
+# @{s,}filedata        ARR FILE
+# ARR must be known to be an array (regular or block).
+# Any existing array entries are deleted before reading file contents.
+# Yes, this implies that user code must say
+#     @array A
+#     @filedata A myfile
+# The first is the declaration that creates an entry in the name table.
+# The second command performs the block creation and file reading.
+function xeq_cmd__filedata(name, cmdline,
+                            arr, filename, line, getstat, line_cnt, silent, level,
+                            nparts, info, code, key,
+                            file_block, agg_block, rc, error_text    )
+{
+    $0 = cmdline
+    dbg_print("xeq", 1, sprintf("(xeq_cmd__filedata) START dstblk=%d, name=%s, cmdline='%s'",
+                                curr_dstblk(), name, cmdline))
+
+    if (NF < 2)
+        error("(xeq_cmd__filedata) Bad parameters:" cmdline)
+    silent = first(name) == "s" # silent mutes file errors
+    arr = $1
+    filename = $2
+    assert_array_okay_to_define(arr)
+
+    # Check ARR.  assert_array_okay_to_define() passed, so this won't fail
+    nam__scan(arr, info)
+    level = nam_lookup(info)
+    code = info["code"]
+    dbg_print("xeq", 5, sprintf("(xeq_cmd__filedata) code=%s", code))
+    arr_clear(arr, level, code)
+
+    # Make it a block array
+    namtab[arr, level] = code = flag_set_clear(code, FLAG_BLKARRAY, "")
+    dbg_print("xeq", 5, sprintf("(xeq_cmd__filedata) namtab[%s,%d] = %s", arr, level, code))
+
+    # create a new Agg block
+    agg_block = blk_new(BLK_AGG)
+    key = ""
+    dbg_print("parse", 5, sprintf("(xeq_cmd__filedata) symtab['%s','%s',%d,'agg_block'] = %d",
+                                 arr, key, level, agg_block))
+    symtab[arr, key, level, "agg_block"] = agg_block
+    blktab[agg_block, 0, "dstblk"] = agg_block
+
+    # create a new literal file parser
+    stk_push(__parse_stack, agg_block)
+    file_block = prep_file(filename)
+    blktab[file_block, 0, "atmode"] = MODE_AT_LITERAL
+    # Push file block manually because prep_file doesn't do that
+    dbg_print("parse", 7, sprintf("(xeq_cmd__filedata) Pushing file block %d (%s) onto source_stack", file_block, filename))
+    stk_push(__source_stack, file_block)
+
+    dbg_print("parse", 5, "(xeq_cmd__filedata) CALLING parse__file()")
+    rc = parse__file()
+    dbg_print("parse", 5, "(xeq_cmd__filedata) RETURNED FROM parse__file()")
+    # parse__file pops the source stack
+    stk_pop(__parse_stack)
+
+    if (!rc) {
+        if (silent) return
+        error_text = "File '" filename "' does not exist:" $0
+        if (strictp("file"))
+            error(error_text)
+        else
+            warn(error_text)
+    }
+
+    dbg_print("xeq", 1, sprintf("(xeq_cmd__filedata) END"))
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  F I L E D E F I N E
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#*****************************************************************************
+# @{s,}filedefine         NAME FILE
+function xeq_cmd__filedefine(name, cmdline,
+                             sym, filename, line, val, getstat, silent)
+{
+    # We could play games and use fancy file blocks and literal atmode, but we
+    # really just want to read in a file and assign its contents to a symbol.
+    $0 = cmdline
+    if (NF < 2)
+        error("(xeq_cmd__filedefine) Bad parameters:" $0)
+    silent = first(name) == "s" # silent mutes file errors, even in strict mode
+    sym  = $1
+    assert_sym_okay_to_define(sym)
+    # These contortions because a filename might have embedded spaces
+    $1 = ""
+    sub("^[ \t]*", "")
+    filename = rm_quotes(dosubs($0))
+
+    val = EMPTY
+    while (TRUE) {
+        getstat = getline line < filename
+        if (getstat == ERROR && !silent)
+            warn("Error reading file '" filename "' [filedefine]")
+        if (getstat != OKAY)
+            break
+        # This concatenation becomes quite slow after more than a few
+        # dozen lines, which is why @filedata exists.
+        val = val line TOK_NEWLINE
+    }
+    close(filename)
+    sym_store(sym, chomp(val))
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
 #       @  F O R
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -6192,127 +6313,6 @@ function xeq_cmd__null(name, cmdline,
     # XXX No checking, dangerous!
     sym_store(sym, "")
     dbg_print("xeq", 1, "(xeq_cmd__null) END")
-}
-# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
-
-
-
-#*****************************************************************************
-#
-#       @  R E A D A R R A Y
-#
-#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-#
-#*****************************************************************************
-# @{s,}readarray        ARR FILE
-# ARR must be known to be an array (regular or block).
-# Any existing array entries are deleted before reading file contents.
-# Yes, this implies that user code must say
-#     @array A
-#     @readarray A myfile
-# The first is the declaration that creates an entry in the name table.
-# The second command performs the block creation and file reading.
-function xeq_cmd__readarray(name, cmdline,
-                            arr, filename, line, getstat, line_cnt, silent, level,
-                            nparts, info, code, key,
-                            file_block, agg_block, rc, error_text    )
-{
-    $0 = cmdline
-    dbg_print("xeq", 1, sprintf("(xeq_cmd__readarray) START dstblk=%d, name=%s, cmdline='%s'",
-                                curr_dstblk(), name, cmdline))
-
-    if (NF < 2)
-        error("(xeq_cmd__readarray) Bad parameters:" cmdline)
-    silent = first(name) == "s" # silent mutes file errors
-    arr = $1
-    filename = $2
-    assert_array_okay_to_define(arr)
-
-    # Check ARR.  assert_array_okay_to_define() passed, so this won't fail
-    nam__scan(arr, info)
-    level = nam_lookup(info)
-    code = info["code"]
-    dbg_print("xeq", 5, sprintf("(xeq_cmd__readarray) code=%s", code))
-    arr_clear(arr, level, code)
-
-    # Make it a block array
-    namtab[arr, level] = code = flag_set_clear(code, FLAG_BLKARRAY, "")
-    dbg_print("xeq", 5, sprintf("(xeq_cmd__readarray) namtab[%s,%d] = %s", arr, level, code))
-
-    # create a new Agg block
-    agg_block = blk_new(BLK_AGG)
-    key = ""
-    dbg_print("parse", 5, sprintf("(xeq_cmd__readarray) symtab['%s','%s',%d,'agg_block'] = %d",
-                                 arr, key, level, agg_block))
-    symtab[arr, key, level, "agg_block"] = agg_block
-    blktab[agg_block, 0, "dstblk"] = agg_block
-
-    # create a new literal file parser
-    stk_push(__parse_stack, agg_block)
-    file_block = prep_file(filename)
-    blktab[file_block, 0, "atmode"] = MODE_AT_LITERAL
-    # Push file block manually because prep_file doesn't do that
-    dbg_print("parse", 7, sprintf("(xeq_cmd__readarray) Pushing file block %d (%s) onto source_stack", file_block, filename))
-    stk_push(__source_stack, file_block)
-
-    dbg_print("parse", 5, "(xeq_cmd__readarray) CALLING parse__file()")
-    rc = parse__file()
-    dbg_print("parse", 5, "(xeq_cmd__readarray) RETURNED FROM parse__file()")
-    # parse__file pops the source stack
-    stk_pop(__parse_stack)
-
-    if (!rc) {
-        if (silent) return
-        error_text = "File '" filename "' does not exist:" $0
-        if (strictp("file"))
-            error(error_text)
-        else
-            warn(error_text)
-    }
-
-    dbg_print("xeq", 1, sprintf("(xeq_cmd__readarray) END"))
-}
-# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
-
-
-
-#*****************************************************************************
-#
-#       @  R E A D F I L E
-#
-#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-#
-#*****************************************************************************
-# @{s,}readfile         NAME FILE
-function xeq_cmd__readfile(name, cmdline,
-                           sym, filename, line, val, getstat, silent)
-{
-    # We could play games and use fancy file blocks and literal atmode, but we
-    # really just want to read in a file and assign its contents to a symbol.
-    $0 = cmdline
-    if (NF < 2)
-        error("(xeq_cmd__readfile) Bad parameters:" $0)
-    silent = first(name) == "s" # silent mutes file errors, even in strict mode
-    sym  = $1
-    assert_sym_okay_to_define(sym)
-    # These contortions because a filename might have embedded spaces
-    $1 = ""
-    sub("^[ \t]*", "")
-    filename = rm_quotes(dosubs($0))
-
-    val = EMPTY
-    while (TRUE) {
-        getstat = getline line < filename
-        if (getstat == ERROR && !silent)
-            warn("Error reading file '" filename "' [readfile]")
-        if (getstat != OKAY)
-            break
-        # This concatenation becomes quite slow after more than a few
-        # dozen lines, which is why @readarray exists.
-        val = val line TOK_NEWLINE
-    }
-    close(filename)
-    sym_store(sym, chomp(val))
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -8752,9 +8752,9 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     # Also need to add entry in execute__command()  [search: DISPATCH]
     split("append array cleardivert data debug decr default define divert" \
           " dump dumpall dumpdef echo enddata eod error errprint esyscmd" \
-          " eval exit ignore include incr initialize input literal local" \
-          " m2ctl nextfile null paste readfile readarray readonly secho" \
-          " sequence serror shell sinclude spaste split sreadfile sreadarray" \
+          " eval exit filedata filedefine ignore include incr initialize" \
+          " input literal local m2ctl nextfile null paste readonly secho" \
+          " sequence serror sfiledata sfiledefine shell sinclude spaste split" \
           " syscmd tracemode traceoff traceon typeout undef undefine" \
           " undivert warn wrap",
           array, TOK_SPACE)

@@ -62,15 +62,15 @@ characters.
 Thus, any occurrence of
 .Ql @name@
 in the input is replaced in the output by the corresponding value.
-To compensate you for the burden of having to manually invoke
-macro expansion, there is in recompense no need to
+To compensate for the burden of having to manually invoke
+macro expansion, there is conversely no need to
 .Qq quote
 identifiers to protect against unwanted or inadvertent replacement,
 which, depending upon the insistence of
 .Em other
 macro processors, may
-present quite a challenge.
-Substitutions can occur multiple times in a single line.
+present a challenge.
+Substitutions can occur multiple times in a line.
 .Pp
 .Em Example :
 .Bd -literal -offset indent -compact
@@ -182,7 +182,7 @@ into array
 Any previously existing array entries are deleted.
 ARR must be known to be an array.
 See also
-.Va @array , @readarray .
+.Va @array , @filedata .
 .It @debug [TEXT]
 If debugging, send TEXT to the debug file.
 .It @decr NAME [N]
@@ -266,6 +266,29 @@ If N is omitted, the default value is zero.
 Negative values or values greater than 126 are changed to 1.
 If N is non-zero, diverted streams are discarded.
 Commands deferred with @wrap are processed regardless of N value.
+.It @filedata ARR FILE
+Read each line from FILE into array ARR.
+Any previously existing array entries are deleted before reading file contents.
+Variant
+.Ql @sfiledata
+does not print an error message if FILE does not exist.
+ARR must be known to be an array, therefore user code must say
+.Ql @array ARR
+before @filedata can be used.
+See also
+.Va @data .
+.It @filedefine NAME FILE
+Read FILE contents to define NAME.
+This is not intended to be a full\&-blown file inputter (use @filedata
+for that) but rather just to read short snippets like a file path
+or username.
+Multi-line values are accepted but the final
+trailing newline, if any, is stripped.
+Variant
+.Ql @sfiledefine
+does not print an error message if FILE does not exist.
+See also
+.Va @define .
 .It @for VAR START END [INCR] ... @next VAR
 Execute a loop with VAR taking on successive
 integer values specified by START and END.
@@ -278,7 +301,7 @@ NOTE: Different Awk implementations may return keys in differing order.
 However, arrays created with
 .Ql @data
 or
-.Ql @readarray
+.Ql @filedata
 are guaranteed to return their integer indices in numerical order.
 .It @if EXPR ... [@else ...] @endif
 Include subsequent lines of text if boolean expression is True.
@@ -335,25 +358,6 @@ Only one @otherwise branch is permitted per @case structure.
 Insert FILE contents literally, with no changes or macros.
 Variant
 .Ql @spaste
-does not print an error message if FILE does not exist.
-.It @readarray ARR FILE
-Read each line from FILE into array ARR.
-Any previously existing array entries are deleted before reading file contents.
-Variant
-.Ql @sreadarry
-does not print an error message if FILE does not exist.
-ARR must be known to be an array, which implies that user code must say
-.Ql @array ARR
-before @readarray can be used.
-.It @readfile NAME FILE
-Read FILE contents to define NAME.
-This is not intended to be a full\&-blown file inputter (use @readarray
-for that) but rather just to read short snippets like a file path
-or username.
-As usual, multi-line values are accepted but the final
-trailing newline, if any, is stripped.
-Variant
-.Ql @sreadfile
 does not print an error message if FILE does not exist.
 .It @readonly NAME
 Make NAME unchangeable \(em cannot be undone.
@@ -868,10 +872,31 @@ User arrays must be declared before use
 by executing the command
 .Ql @array
 and specifying the name of the array to create.
-Henceforward, elements of the array can be accessed
-like any other symbol name
-by using the array name followed by the key in brackets.
-
+After array declaration, its elements can be accessed
+by using the array name immediately followed by the
+element key in brackets; as always, surrounded by
+.Qq @ .
+Accessing the bare array name, without brackets,
+as in
+.Ql @ARRAY@ ,
+will return the number of elements in the array.
+.Pp
+Arrays are loaded with data by the
+.Ql @data
+or
+.Ql @filedata
+commands.
+.Ql @data
+requires the data to be present in\-line
+in the input file, which is read until
+.Ql @enddata .
+If you wish to read your data from an external
+file, use
+.Ql @filedata .
+Data loaded in this way are assigned integer
+keys from 1 to the number records.
+Arrays can also be created with
+.Ql @split .
 .Ss Mathematical Expressions
 The
 .Ql @expr ...@
@@ -1379,7 +1404,7 @@ A colon-separated list of directories to try (if necessary) for the
 and
 .Ql @paste
 commands.
-Note: M2PATH does not apply to the @readfile or @readarray commands.
+Note: M2PATH does not apply to the @filedefine or @filedata commands.
 .It Ev M2RC
 Specifies a file which, if it exists, overrides
 .Pa $HOME/.m2rc

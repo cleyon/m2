@@ -1,2 +1,2 @@
-@readfile quote hamlet
+@filedefine quote hamlet
 "@quote@"

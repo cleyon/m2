@@ -1,2 +1,0 @@
-@include alphabet
-@len ALPHABET@

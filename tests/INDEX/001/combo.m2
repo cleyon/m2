@@ -1,2 +1,2 @@
-@include ../001/alphabet
+@include ../../test-data/alphabet
 @substr ALPHABET @{@index ALPHABET BCD@} 3@

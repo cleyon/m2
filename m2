@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-07-15 16:22:33 cleyon>
+#  Time-stamp:  <2025-07-15 17:17:14 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -43,7 +43,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "4.0.4"
+    M2_VERSION = "4.0.5"
 
     # Customize these paths as needed for correct operation on your system.
     # If a program is not available, it's okay to remove the entry entirely.

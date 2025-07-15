@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-07-14 18:04:26 cleyon>
+#  Time-stamp:  <2025-07-15 16:22:33 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -101,7 +101,7 @@ BEGIN {
     TYPE_ARRAY       = "A";             FLAG_BOOLEAN     = "B"
     TYPE_COMMAND     = "C";             FLAG_DEFERRED    = "D"
     TYPE_FUNCTION    = "F";             FLAG_IMMEDIATE   = "!"
-    TYPE_INTERNAL    = "L";             FLAG_INTEGER     = "I"
+    TYPE_INTERNAL    = "_";             FLAG_INTEGER     = "I"
     TYPE_SEQUENCE    = "Q";             FLAG_NUMERIC     = "N"
     TYPE_SYMBOL      = "S";             FLAG_READONLY    = "R"
     TYPE_USER        = "U";             FLAG_TRACING     = "T"
@@ -2226,16 +2226,16 @@ function scan__usercmd_call(    s, name, obj, i, oldi, c, nc, narg, nlbr,
             #print_debugfile("just read = >" $0 "<")
             s = s TOK_NEWLINE $0
             c = substr(s, i, 1)
-            dbg_print("parse", 7, sprintf("(scan__usercmd_call) INFO, After readline, i=%d, c='%s', nlbr now=%d, s='%s'", i, c, nlbr, s))
+            dbg_print("parse", 7, sprintf("(scan__usercmd_call) After readline, i=%d, c='%s', nlbr now=%d, s='%s'", i, c, nlbr, s))
             continue
         } else if (c == TOK_LBRACE) {
             nlbr++
             narg++
-            dbg_print("parse", 5, sprintf("(scan__usercmd_call) INFO, found '{': i=%d, c='%s', nlbr now=%d", i, c, nlbr))
+            dbg_print("parse", 5, sprintf("(scan__usercmd_call) Found '{': i=%d, c='%s', nlbr now=%d", i, c, nlbr))
             oldi = i+1
         } else if (c == TOK_RBRACE) {
             nlbr--
-            dbg_print("parse", 5, sprintf("(scan__usercmd_call) INFO, found '}': i=%d, c='%s', nlbr now=%d", i, c, nlbr))
+            dbg_print("parse", 5, sprintf("(scan__usercmd_call) found '}': i=%d, c='%s', nlbr now=%d", i, c, nlbr))
             dbg_print("parse", 3, sprintf("(scan__usercmd_call) Arg[%d]='%s'", narg, substr(s, oldi, i-oldi)))
         }
         # else normal character
@@ -2273,7 +2273,7 @@ function ppf__SRC_FILE(blknum)
 #           TYPE_ARRAY          A : Array refs must use subscripts
 #           TYPE_COMMAND        C : Built-in "@" command; Global namespace
 #           TYPE_FUNCTION       F : Global namespace
-#           TYPE_INTERNAL       L
+#           TYPE_INTERNAL       _ : Awk function tracing, not reachable by user
 #           TYPE_SEQUENCE       Q : Global namespace
 #           TYPE_SYMBOL         S
 #           TYPE_USER           U : User-defined command; dynamic namespace
@@ -2613,6 +2613,7 @@ function nam_ll_write(name, level, code,
 #       code    : Code string from namtab
 #       isarray : TRUE if NAME is TYPE_ARRAY
 #       level   : Level at which name was found
+#       tracing : TRUE if we are tracing this name
 #       type    : Character code for TYPE_xxx
 #*****************************************************************************
 function nam_lookup(info,
@@ -5482,7 +5483,7 @@ function xeq__BLK_IF(if_block,
 
 
 function ppf__if(if_block,
-    buf)
+                 buf)
 {
     buf = "@if " blktab[if_block, 0, "condition"] TOK_NEWLINE \
         ppf__block(blktab[if_block, 0, "true_block"]) TOK_NEWLINE
@@ -6588,9 +6589,11 @@ function xeq_cmd__split(name, cmdline,
         tmpfs = sym_fetch("__FS__")
     } else
         wantfs = FALSE
-    assert_array_okay_to_define(arr)
 
-    # Check ARR.  assert_array_okay_to_define() passed, so this won't fail
+    # Check array ARR.
+    assert_array_okay_to_define(arr)
+    # Since assert_array_okay_to_define() passed,
+    # these calls won't fail either...
     nam__scan(arr, info)
     level = nam_lookup(info)
     code = info["code"]
@@ -7640,6 +7643,8 @@ function dosubs(s,
                 r = xeq_fn__ifx(fn, m, nparam, param)      r
             else if (fn == "index")
                 r = xeq_fn__index(fn, m, nparam, param)    r
+            else if (fn == "join" || fn == "sjoin")
+                r = xeq_fn__join(fn, m, nparam, param)     r
             else if (fn == "left")
                 r = xeq_fn__left(fn, m, nparam, param)     r
             else if (fn == "mid" || fn == "substr")
@@ -8255,6 +8260,91 @@ function xeq_fn__index(fn, m, nparam, param,
 
 #*****************************************************************************
 #
+#       @  J O I N  @
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#*****************************************************************************
+# @{s,}join ARR [FS]
+function xeq_fn__join(fn, m, nparam, param,
+                      info, nparts, level, s, arr, fs, fslen, silent,
+                      code, size, k, x, keys, i, agg_block)
+{
+    silent = first(fn) == "s"
+
+    if (nparam == 0)
+        error("Bad parameters in '" m "':" $0)
+    arr = param[1]
+
+    # TODO Need real checks here!
+    # assert_sym_valid_name(arr)
+    # assert_sym_defined(arr, fn)
+    if (nparam > 1) {
+        fs = param[2]        # too simple
+    } else if (sym_defined_p("__FS__")) {
+        fs = sym_fetch("__FS__")
+    } else {
+        fs = " "
+    }
+    fslen = length(fs)
+
+    # Check namtab
+    if ((nparts = nam__scan(arr, info)) == ERROR)
+        error("(xeq_fn__join) Scan error, " __m2_msg)
+    if (nparts == 2)
+        error(sprintf("(xeq_fn__join) Array name cannot have subscripts: '%s'", arr))
+
+    # Now call nam_lookup(info).  Must be TYPE_ARRAY && !FLAG_SYSTEM
+    level = nam_lookup(info)
+    if (level == ERROR)
+        error(sprintf("(xeq_fn__join) Name not found: '%s'", arr))
+    if (info["isarray"] != TRUE)
+        error(sprintf("(xeq_fn__join) Name not an array: '%s'", arr))
+    code = info["code"]
+    size = arr_size(arr, level, code)
+
+    s = ""
+    if (size > 0) {
+        # Build return string
+        if (flag_1true_p(code, FLAG_BLKARRAY)) {
+            # It's a block array - Get its agg_block
+            if (! ((arr, "", level, "agg_block") in symtab))
+                panic(sprintf("(xeq_fn__join) Could not find ['%s','%s',%d,'agg_block'] in symtab",
+                              arr, "", level))
+            agg_block = symtab[arr, "", level, "agg_block"]
+            # Inject the values
+            for (i = 1; i <= size; i++) {
+                # Make sure slot holds text, which it pretty much has to
+                if (blk_ll_slot_type(agg_block, i) != OBJ_TEXT)
+                    panic(sprintf("(xeq_fn__join) Block # %d slot %d is not OBJ_TEXT", agg_block, i))
+                s = s  blk_ll_slot_value(agg_block, i)  fs
+            }
+        } else {
+            # It's a normal array - Find the keys
+            for (k in symtab) {
+                split(k, x, SUBSEP)
+                if (x[1] == arr && x[3] == level && x[4] == "symval")
+                    keys[x[2]] = 1
+            }
+            # Inject the values
+            for (k in keys) {
+                # print_stderr("JOIN: arr[" k "] = " sym_ll_read(arr, k, level))
+                s = s sym_ll_read(arr, k, level) fs
+            }
+        }
+
+        # Remove trailing field separator if need be
+        if (!silent)
+            s = substr(s, 1, length(s)-fslen)
+    }
+    return s
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
 #       @  L E F T  @
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -8729,6 +8819,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     sym_ll_fiat("__FMT__",      "time", "",                     "%H:%M:%S")
     sym_ll_fiat("__FMT__",        "tz", "",                     "%Z")
     sym_ll_fiat("__FMT__",       "utc", "",                     "%Y-%m-%dT%H:%M:%S%z") # ISO 8601
+    nam_ll_write("__FS__", GLOBAL_NAMESPACE, FLAGS_WRITABLE_SYMBOL)
     if ("HOME" in ENVIRON)
       sym_ll_fiat("__HOME__",       "", FLAGS_READONLY_SYMBOL,  with_trailing_slash(ENVIRON["HOME"]))
     sym_ll_fiat("__INPUT__",        "", FLAGS_WRITABLE_SYMBOL,  EMPTY)
@@ -8774,8 +8865,8 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     # FUNCS
     # Functions cannot be used as symbol or sequence names.
     split("basename boolval chr date dirname epoch expr format getenv" \
-          " ifdef ifelse ifndef ifx index lc left len ltrim mid ord rem" \
-          " right rot13 rtrim sexpr sgetenv spaces srem strftime" \
+          " ifdef ifelse ifndef ifx index join lc left len ltrim mid ord rem" \
+          " right rot13 rtrim sexpr sgetenv sjoin spaces srem strftime" \
           " substr time trim tz uc utc uuid xbasename xdirname",
           array, TOK_SPACE)
     for (elem in array)
@@ -8790,7 +8881,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     __flag_label[TYPE_ANY]       = "ANY"
     __flag_label[TYPE_ARRAY]     = "ARR"
     __flag_label[TYPE_COMMAND]   = "CMD"
-    __flag_label[TYPE_INTERNAL]  = "intern"
+    __flag_label[TYPE_INTERNAL]  = "AWK"
     __flag_label[TYPE_USER]      = "USR"
     __flag_label[TYPE_FUNCTION]  = "FUN"
     __flag_label[TYPE_SEQUENCE]  = "SEQ"

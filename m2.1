@@ -399,6 +399,8 @@ If not and symbol
 is defined, use its value as field separator.
 If neither condition is true, use Awk's default FS,
 which means fields will be split on whitespace.
+See also
+.Va @join@ .
 .It @syscmd CMDLINE...
 Execute CMDLINE using Awk's system() function.
 Standard output and standard error are both discarded.
@@ -553,7 +555,7 @@ See section
 .It @expr MATH@
 Evaluate mathematical expression.
 Variant
-.Ql @sexpr
+.Ql @sexpr@
 performs the same calculations but does not output the result.
 However, assignments are still performed and
 .Va __EXPR__
@@ -573,7 +575,7 @@ is not defined.
 To ignore error and continue with empty string, disable
 .Va __STRICT__[env]
 or use variant
-.Ql @sgetenv .
+.Ql @sgetenv@ .
 .It @ifdef{SYMBOL}{TRUE_TEXT}{FALSE_TEXT}@
 If SYMBOL is defined, return TRUE_TEXT, else return FALSE_TEXT.
 The {FALSE_TEXT} clause is optional, and defaults to the empty string.
@@ -608,6 +610,19 @@ Note that
 follows the Awk convention of numbering characters in a string from 1;
 this is different from m4.
 If SUBSTRING is not found, the returned value is zero.
+.It @join ARR [FS]@
+Concatenate each element of ARR into a single string,
+inserting FS between elements to separate them.
+If FS is omitted, then the value of
+.Va __FS__
+is used; if not defined, then separate elements
+with a single space.
+Variant
+.Ql @sjoin@
+adds a final FS after the last element (useful when
+FS is a newline).
+See also
+.Va @split .
 .It @lc SYM@
 Lower case.
 .It @left SYM [N]@
@@ -619,14 +634,14 @@ Remove leading whitespace.
 .It @mid SYM BEG [LEN]@
 Substring of SYM from BEG, LEN chars long.
 Also called
-.Ql @substr .
+.Ql @substr@ .
 BEG begins the string at position 1.
 .It @ord SYM@
 Output ASCII code of first character in SYM.
 .It @rem COMMENT@
 Embedded comment text is ignored.
 Variant
-.Ql @srem COMMENT@
+.Ql @srem@
 also discards preceding whitespace.
 .It @right SYM [N]@
 Substring of SYM from N to last character.
@@ -1170,7 +1185,7 @@ User modifiable.
 If True, environment variables must be defined.
 Default is True.
 If non-strict, unknown environment variables expand to an empty string.
-This action can also be accomplished with @sgetenv.
+This action can also be accomplished with @sgetenv@.
 User modifiable.
 .It __STRICT__[file]
 If True, reading a non-existent file with

@@ -2,7 +2,7 @@
 @longdef bar
 222
 333
-@endlong
+@endlongdef
 @endcmd
 @newcmd single
 @define foo 111

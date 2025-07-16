@@ -1,4 +1,4 @@
-@define __STRICT__[undef]  0
+@define __STRICT__[def]  0
 @define DATA aaa bbb ccc
 @array  MYARRAY
 DATA='@DATA@'

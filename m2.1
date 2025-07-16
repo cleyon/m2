@@ -161,9 +161,9 @@ Execution of the @otherwise block does
 execute the preamble.
 (The purpose of the preamble is to provide "boiler-plate" header text for
 known cases.
-The text and commands of the @otherwise instance are expected
+The text and commands of the @otherwise block are expected
 to compensate for the lack of a preamble.)
-.It @cleardivert [N...]
+.It @cleardivert [N ...]
 Clear stream(s) specified by N.
 If no arguments are provided then all streams are cleared.
 See the
@@ -180,7 +180,7 @@ Store all lines until
 into array
 .Va ARR .
 Any previously existing array entries are deleted.
-ARR must be known to be an array.
+ARR must declared as an array.
 See also
 .Va @array , @filedata .
 .It @debug [TEXT]
@@ -211,7 +211,7 @@ If FILE is omitted, output is sent to
 .Va __DEBUGFILE__ .
 .It @dumpall WHAT [FILE]
 Like @dump but include System symbols.
-.It @dumpdef [SYM...]
+.It @dumpdef [SYM ...]
 Output definition of SYM to
 .Va __DEBUGFILE__ .
 More than one symbol may be listed.
@@ -250,7 +250,7 @@ Variant
 .Ql @serror
 prints only TEXT, omitting file and line number information, for
 complete control over error messages.
-.It @esyscmd CMDLINE...
+.It @esyscmd CMDLINE ...
 Execute CMDLINE in a subshell.
 Standard output is captured into the output stream as normal.
 Standard input is set to
@@ -262,7 +262,7 @@ The command's exit code is saved in
 Parse and evaluate TEXT as a command.
 .It @exit [N]
 Immediately stop parsing; exit with status N.
-If N is omitted, the default value is zero.
+If N is omitted, the default value is 0.
 Negative values or values greater than 126 are changed to 1.
 If N is non-zero, diverted streams are discarded.
 Commands deferred with @wrap are processed regardless of N value.
@@ -272,7 +272,7 @@ Any previously existing array entries are deleted before reading file contents.
 Variant
 .Ql @sfiledata
 does not print an error message if FILE does not exist.
-ARR must be known to be an array, therefore user code must say
+ARR must be declared as an array, therefore user code must say
 .Ql @array ARR
 before @filedata can be used.
 See also
@@ -401,19 +401,37 @@ If neither condition is true, use Awk's default FS,
 which means fields will be split on whitespace.
 See also
 .Va @join@ .
-.It @syscmd CMDLINE...
+.It @syscmd CMDLINE ...
 Execute CMDLINE using Awk's system() function.
 Standard output and standard error are both discarded.
 The command's exit code is saved in
 .Va __SYSVAL__ .
+.It @tracemode [FLAG...]
+With no arguments, reset trace flags to default value.
+Preceding flag with
+.Qq +
+or
+.Qq \-
+will add to or remove from trace flags;
+otherwise, overwrite trace flags with new value.
+See also
+.Va __TRACEMODE__ .
+.It @traceoff [SYM ...]
+Disable tracing for specified symbols.
+If SYM is omitted, disable tracing for all symbols.
+.It @traceon [SYM ...]
+Enable tracing for specified symbols.
+If SYM is omitted, enable tracing for all symbols.
+See also
+.Va __TRACE__ .
 .It @typeout
 Print remainder of input file literally; no macro processing will be done.
 .It @undefine NAME
 Remove definition of NAME.
 Symbols can also be removed from the command line with
 .Ql U=<symName>
-.It @undivert [N...] | N FILE
-Inject stream N... (default all) into current stream.
+.It @undivert [N ...] | N FILE
+Inject stream N (default all) into current stream.
 If no arguments are provided then all streams are injected.
 With second form, stream N is output to FILE.
 Undiverted streams are automatically cleared.
@@ -535,7 +553,7 @@ See system symbols
 .Va __FMT__[0] ,
 .Va __FMT__[1] ,
 and
-.Va __STRICT__[boolval] .
+.Va __STRICT__[bool] .
 .It @chr SYM@
 Output character with ASCII code SYM.
 .It @date@
@@ -560,12 +578,15 @@ performs the same calculations but does not output the result.
 However, assignments are still performed and
 .Va __EXPR__
 is still set.
-.It @format FMT ARG ...@
-Print arguments two up to six, using argument one as a format
-specification string for
-.Fn sprintf .
-Arguments must be compatible with format string, otherwise you get to
-keep all the pieces.
+.It @format FMT [ARG ...]@
+.\" Six is entirely arbitrary, limited only by my patience
+.\" for repeatedly typing printf()'s for cases that will likely
+.\" never be used.  If you need monster @format ...@, go for it!
+Using the first argument as a format specification for
+.Fn sprintf ,
+print from zero to five additional arguments (args 2..6),
+Arguments must be compatible with format string,
+otherwise you get to keep all the pieces.
 .It @getenv VAR@
 Get value of environment variable
 .Va VAR .
@@ -608,8 +629,8 @@ Return the position of SUBSTR within the value of SYM.
 Note that
 .Nm
 follows the Awk convention of numbering characters in a string from 1;
-this is different from m4.
-If SUBSTRING is not found, the returned value is zero.
+this is different from m4, which is zero-based.
+If SUBSTRING is not found, the returned value is 0.
 .It @join ARR [FS]@
 Concatenate each element of ARR into a single string,
 inserting FS between elements to separate them.
@@ -736,7 +757,7 @@ to standard output (aka stream # 0)
 .It @divert N
 All subsequent output is sent to stream N (1 \*(Le N \*(Le
 .Va __MAX_STREAM__ )
-.It @divert N1 N2...
+.It @divert N1 N2 ...
 Error!  Multiple arguments are not allowed.
 .El
 .It Em Undivert :
@@ -752,7 +773,7 @@ No effect.
 Inject only the numbered diversion into current stream.
 (1 \*(Le N \*(Le
 .Va __MAX_STREAM__ )
-.It @undivert N1 N2...
+.It @undivert N1 N2 ...
 Inject all specified diversions (in argument order, not numerical
 order), if legal, into current stream.
 .It @undivert N FILE
@@ -808,7 +829,7 @@ still processed, regardless of exit status.
 .Ss Sequences
 .Nm
 supports named sequences, which are integer values.  By default,
-sequences begin at zero and increment by one as appropriate.  These
+sequences begin at 0 and increment by 1 as appropriate.  These
 defaults can be changed, and the value can be updated or restarted.
 You create and manage sequences with the
 .Ql @sequence <ID> <ACTION> [<ARG>]
@@ -972,6 +993,8 @@ Floor of x, largest integer \*(Le x
 Hypotenuse of a right-angled triangle
 .It int(x)
 Integer part of x
+.It lg(x)
+Logarithm of x, base 2
 .It log(x)
 Natural logarithm of x, base e
 .It log10(x)
@@ -1076,19 +1099,19 @@ The following are pre-defined; example values, defaults, or types are shown:
 .It __CWD__
 Current working directory, including trailing slash.
 .It __DATE__
-m2 run start date as YYYYMMDD (eg: 19450716).
+m2 run start date as
+.Em YYYYMMDD
+(eg: 19450716).
 See section
 .Sx Dates and Times .
-.It __DBG__[<id>]
-Levels for internal debugging systems (integer).
-.It __DEBUG__
-Debugging enabled? (boolean, user modifiable, default FALSE).
 .It __DEBUGFILE__
 File path for debug and trace output (user modifiable, default
 .Pa /dev/stderr ) .
+.It __DEBUG__
+Debugging enabled? (boolean, user modifiable, default FALSE).
 .It __DIVNUM__
 Current stream number.
-Zero, the default value, indicates output to the terminal (standard output).
+0, the default value, indicates output to the terminal (standard output).
 Integer values between 0 and
 .Va __MAX_STREAM__
 are valid.
@@ -1098,10 +1121,10 @@ See section
 .Sx Dates and Times .
 .It __EXPR__
 Value from most recent @expr ...@ result.
-.It __FILE__
-Current file name.
 .It __FILE_UUID__
 UUID unique to this file.
+.It __FILE__
+Current file name.
 .It __FMT__[date]
 Date format for @date@.
 Default is "%Y\&-%m\&-%d"; user modifiable.
@@ -1143,10 +1166,10 @@ User modifiable.
 Group id (effective gid).
 .It __HOME__
 User's home directory, including trailing slash.
-.It __HOST__
-Short host name (eg myhost).
 .It __HOSTNAME__
 FQDN host name (eg myhost.example.com).
+.It __HOST__
+Short host name (eg myhost).
 .It __INPUT__
 The data read by @input; user modifiable.
 .It __LINE__
@@ -1170,62 +1193,73 @@ Number of lines read so far from all files.
 Operating system name.
 .It __PID__
 m2 process id.
+.It __PROG__[...]
+Paths to various system utility programs.
 .It __SECURE__
 Security level (0, 1, or 2).
 See
 .Sx SECURITY CONSIDERATIONS
 for further information.
-.It __STRICT__[boolval]
-If True, it is an error to pass an undefined symbol to
+.It __STRICT__[bool]
+If True (the default), it is an error to pass an undefined symbol to
 .Ql @boolval@ .
-Default is True.
-If non-strict, undefined variables are considered False.
+If non-strict (False), undefined variables are considered False.
 User modifiable.
-.It __STRICT__[env]
-If True, environment variables must be defined.
-Default is True.
-If non-strict, unknown environment variables expand to an empty string.
-This action can also be accomplished with @sgetenv@.
-User modifiable.
-.It __STRICT__[file]
-If True, reading a non-existent file with
-.Ql @include
-causes an error.
-Default is True.
-If non-strict, attempts to read non-existent files result in a warning message.
-For completely silent behavior, use
-.Ql @sinclude .
-User modifiable.
-.It __STRICT__[symbol]
-If True, symbol names are limited to the following syntax for names:
-.Dl /^[A\-Za\-z#_][A\-Za\-z#_0\-9]*$/
-Default is True.
-If non-strict, symbol names are much more liberal!
-User modifiable.
-.It __STRICT__[undef]
-If True, symbols inside @ signs must be defined.
-Default is True.
-If non-strict,
+.It __STRICT__[def]
+If True (the default), symbols inside
+.Qq @
+signs must be defined.
+If non-strict (False),
 .Ql @XLERB@
 or other unrecognized name will silently expand to an empty string.
 User modifiable.
+.It __STRICT__[env]
+If True (the default), environment variables must be defined.
+If non-strict (False), unknown environment variables expand to an empty string.
+(This action can also be accomplished in strict mode with @sgetenv@.)
+User modifiable.
+.It __STRICT__[file]
+If True (the default), reading a non-existent file with
+.Ql @include
+causes an error.
+If non-strict (False), attempts to read non-existent files result in a warning message.
+For completely silent behavior, use
+.Ql @sinclude .
+User modifiable.
+.It __STRICT__[name]
+If True (the default), symbol names are limited to the following syntax for names:
+.Dl /^[A\-Za\-z#_][A\-Za\-z#_0\-9]*$/
+If non-strict (False), symbol names are much more liberal!
+User modifiable.
 .It __SYNC__
 Frequency to flush output (0..2).
-0=end only, 1=every file (default), 2=every line.
+0=End only, 1=Every file (default), 2=Every line.
 User modifiable.
 .It __SYSVAL__
 Exit status of most recent @shell or @syscmd command.
-.It __TIME__
-m2 run start time as HHMMSS (eg 053000).
-See section
-.Sx Dates and Times .
 .It __TIMESTAMP__
 ISO 8601 timestamp, with "T" separator.
+See section
+.Sx Dates and Times .
+.It __TIME__
+m2 run start time as
+.Em HHMMSS
+(eg 053000).
 See section
 .Sx Dates and Times .
 .It __TMPDIR__
 Location for temporary files.
 Default is /tmp/; user modifiable.
+.It __TRACEMODE__
+String containing trace control flags.
+Default is
+.Qq ae .
+.It __TRACE__
+If True, tracing is enabled.
+If False (the default), tracing messages are inhibited
+regardless of the settings in
+.Va __TRACEMODE__ .
+User modifiable.
 .It __TZ__
 Time zone numeric offset from UTC (\-0800).
 See section
@@ -1254,7 +1288,20 @@ Names declared with @newcmd are recognized and run in the procedure
 that processes the control commands (@if, @define, etc).
 These things can only be on a line of their own and (mostly) do not
 produce output.
-.Ss Tracing and Debugging
+.Ss Debugging
+Symbol
+.Va __DEBUG__
+controls debugging; set it to True or False to enable or disabled debugging messages.
+Debugging output is generated by the
+.Ql @debug
+command and by m2 execution.
+The debug file is maintained in symbol
+.Va __DEBUGFILE__ .
+At security level 0, the user may specify a file path for debugging and tracing output.
+At higher security levels, the debug file is forced to
+.Pa /dev/stderr ,
+which is also the default value.
+.Ss Tracing
 Tracing an
 .Nm
 file results in printing additional diagnostic information
@@ -1273,19 +1320,6 @@ and
 to control which macros will be traced, and
 .Ql @tracemode
 which controls various options.
-.Pp
-Symbol
-.Va __DEBUG__
-controls debugging; set it to True or False to enable or disabled debugging messages.
-Debugging output is generated by the
-.Ql @debug
-command and by m2 execution.
-The debug file is maintained in symbol
-.Va __DEBUGFILE__ .
-At security level zero, the user may specify a file path for debugging and tracing output.
-At higher security levels, the debug file is forced to
-.Pa /dev/stderr ,
-which is also the default value.
 .Bl -inset
 .It Em Trace On :
 Calling
@@ -1301,7 +1335,7 @@ will trace
 .Em ALL
 symbols, including internal built-ins: it does this by enabling the "t"
 option in the trace mode.
-.It @traceon SYM...
+.It @traceon SYM ...
 Calling
 .Ql @traceon
 with one or more symbol names will enable tracing for those symbols: it
@@ -1318,7 +1352,7 @@ with no arguments will clear the "t" flag from the trace modes and also set
 .Va __TRACE__
 to False.
 No changes are made to the name table flags.
-.It @traceoff SYM...
+.It @traceoff SYM ...
 Calling
 .Ql @traceoff
 with one or more symbol names will disable tracing for those symbols by
@@ -1729,7 +1763,7 @@ The symbol
 contains an integer storing the security level, which controls how
 .Nm
 may invoke subprocesses.
-The default is zero which signifies no restrictions.
+The default is 0 which signifies no restrictions.
 In particular, this allows the
 .Ql @shell ,
 .Ql @syscmd ,

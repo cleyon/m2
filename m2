@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-07-15 17:17:14 cleyon>
+#  Time-stamp:  <2025-07-16 00:55:03 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -32,7 +32,7 @@
 #  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
 #  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
 #  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-#  DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+#  DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS BE LIABLE
 #  FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
 #  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
 #  SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
@@ -429,7 +429,7 @@ function FILE()
 
 function strictp(ssys)
 {
-    if (emptyp(ssys))
+    if (ssys == EMPTY)
         panic("(strictp) ssys cannot be empty!")
     # Use low-level function here, not sym_true_p(), to prevent infinite loop
     return sym_ll_read("__STRICT__", ssys, GLOBAL_NAMESPACE) != 0
@@ -692,10 +692,10 @@ function find_closing_brace(s, start,
             if (cb <= 0)
                 return cb       # propagate failure/error
 
-            # Since the return value is the *absolute* location of the
-            # "}" in string s, update i to be the value corresponding to
-            # that location.  In fact, i, being an offset, is exactly
-            # the distance from that closing brace back to "start".
+            # Since the return value is the absolute location of the "}"
+            # in string s, update offset to be the value corresponding
+            # to that location.  In fact, offset is exactly the distance
+            # from that closing brace back to "start".
             offset = cb - start
             nc = substr(s, start+offset+1, 1)
             dbg_print("braces", 5, ("   find_closing_brace: (recursive) cb=" cb \
@@ -864,7 +864,7 @@ function read_lines_until(regexp, dstblk,
         readstat = readline()   # OKAY, EOF, ERROR
         if (readstat == ERROR) {
             # Whatever just happened, the read didn't finish properly
-            dbg_print("parse", 1, "(read_lines_until) readline()=>ERROR")
+            dbg_print("parse", 2, "(read_lines_until) readline()=>ERROR")
             return FALSE
         }
         if (readstat == EOF) {
@@ -1008,10 +1008,10 @@ function dbg_set_level(dsys, lev)
     # Now, the new level is the absolute value.  Since dbg_get_level()
     # returns a negative level when not debugging, this new version
     # allows the following:
-    #           foolev = dbg_get_level("foo")
-    #           dbg_set_level("foo", 7)
-    #           ...
-    #           dbg_set_level("foo", foolev)
+    #           foo_old_level = dbg_get_level("foo")	# save old level
+    #           dbg_set_level("foo", 7)			# raise level
+    #           # ... foo stuff with temporarily raised debug level
+    #           dbg_set_level("foo", foo_old_level)	# return orig
     # regardless of whether debugging is enabled or not.  It does mean
     # dbg_set_level("foo", -4) doesn't quite do what you say, but that
     # idiom was never supported before anyway.
@@ -1034,6 +1034,8 @@ function print_debugfile(text,
 function dbg_print(dsys, lev, text,
                    retval)
 {
+    if (lev == 1)
+        warn("(dbg_print) dsys=" dsys "; level 1 reserved for @debug")
     if (dbg(dsys, lev))
         print_debugfile(text)
 }
@@ -1042,6 +1044,8 @@ function dbg_print(dsys, lev, text,
 function dbg_print_block(dsys, lev, blknum, description,
                          block_type, blk_label, text)
 {
+    if (lev == 1)
+        warn("(dbg_print_block) dsys=" dsys "; level 1 reserved for @debug")
     if (! dbg(dsys, lev))
         return
 ##    blknum = blknum+0
@@ -1258,7 +1262,7 @@ function blk_new(block_type,
     else
         panic("(blk_new) Uncaught block_type '" block_type "'")
 
-    dbg_print("ship_out", 1, sprintf("(blk_new) Block # %d; type=%s",
+    dbg_print("ship_out", 2, sprintf("(blk_new) Block # %d; type=%s",
                                       new_blknum, ppf__block_type(block_type)))
     return new_blknum
 }
@@ -1594,7 +1598,7 @@ function ppf__user(user_block,
 
 function cmd_destroy(id)
 {
-    dbg_print("cmd", 1, "(cmd_destroy) BROKEN!")
+    dbg_print("cmd", 2, "(cmd_destroy) BROKEN!")
     # delete namtab[id, GLOBAL_NAMESPACE]
     # delete cmdtab[id, "definition"]
     # delete cmdtab[id, "nparam"]
@@ -1656,7 +1660,7 @@ function execute__command(name, cmdline,
     else if (name ==  "eval")           xeq_cmd__eval(name, cmdline)
     else if (name ==  "exit")           xeq_cmd__exit(name, cmdline)
     else if (name ~ /s?filedata/)       xeq_cmd__filedata(name, cmdline)
-    else if (name ~ /s?filedefine/)     xeq_cmd__filedefine(name, cmdline)
+    else if (name ~ /s?filedef(ine)?/)  xeq_cmd__filedefine(name, cmdline)
     else if (name ==  "ignore")         xeq_cmd__ignore(name, cmdline)
     else if (name ~ /s?include/)        xeq_cmd__include(name, cmdline)
     else if (name ==  "incr")           xeq_cmd__incr(name, cmdline)
@@ -1790,11 +1794,11 @@ function parse__file(    filename, file_block1, file_block2, pstat, d)
     file_block1 = stk_top(__source_stack)
 
     filename = blktab[file_block1, 0, "filename"]
-    dbg_print("parse", 1, sprintf("(parse__file) filename='%s', dstblk=%d, mode=%s",
+    dbg_print("parse", 2, sprintf("(parse__file) filename='%s', dstblk=%d, mode=%s",
                                   filename, curr_dstblk(),
                                   ppf__mode(blktab[file_block1, 0, "atmode"])))
     if (!path_exists_p(filename)) {
-        dbg_print("parse", 1, sprintf("(parse__file) END File '%s' does not exist => %s",
+        dbg_print("parse", 2, sprintf("(parse__file) END File '%s' does not exist => %s",
                                      filename, ppf__bool(FALSE)))
         stk_pop(__source_stack) # Remove SRC_FILE for non-existent file
         return FALSE
@@ -1838,7 +1842,7 @@ function parse__file(    filename, file_block1, file_block2, pstat, d)
     sym_ll_write("__LINE__",      "", GLOBAL_NAMESPACE, blktab[file_block2, 0, "old.line"])
     sym_ll_write("__FILE_UUID__", "", GLOBAL_NAMESPACE, blktab[file_block2, 0, "old.file_uuid"])
 
-    dbg_print("parse", 1, sprintf("(parse__file) END '%s' => %s",
+    dbg_print("parse", 2, sprintf("(parse__file) END '%s' => %s",
                                  filename, ppf__bool(pstat)))
     return pstat
 }
@@ -1875,7 +1879,7 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
         rstat = readline()   # OKAY, EOF, ERROR
         if (rstat == ERROR) {
             # Whatever just happened, the parse didn't finish properly
-            dbg_print("parse", 1, "(parse) [" parser_label "] readline()=>ERROR")
+            dbg_print("parse", 2, "(parse) [" parser_label "] readline()=>ERROR")
             break          # out of entire parsing loop, to then return
         }
         if (rstat == EOF) {
@@ -2201,7 +2205,7 @@ function scan__usercmd_call(    s, name, obj, i, oldi, c, nc, narg, nlbr,
 
     if (c != TOK_LBRACE) {
         # It's just @Foo, no braces, no scanning needed
-        dbg_print("parse", 1, sprintf("(scan__usercmd_call) END 1: narg=%d, name='%s', s='%s'", narg, name, s))
+        dbg_print("parse", 2, sprintf("(scan__usercmd_call) END 1: narg=%d, name='%s', s='%s'", narg, name, s))
         return s
     }
 
@@ -2215,7 +2219,7 @@ function scan__usercmd_call(    s, name, obj, i, oldi, c, nc, narg, nlbr,
             error(sprintf("(scan__usercmd_call) ERROR, i too big: i=%d, c='%s'", i, c))
         else if (c == "") {
             if (nlbr == 0) {
-                dbg_print("parse", 1, sprintf("(scan__usercmd_call) END 2 (eos, {} bal): narg=%d, s='%s'", narg, s))
+                dbg_print("parse", 2, sprintf("(scan__usercmd_call) END 2 (eos, {} bal): narg=%d, s='%s'", narg, s))
                 return s
             }
             # We ran out of characters looking for a }
@@ -2241,7 +2245,7 @@ function scan__usercmd_call(    s, name, obj, i, oldi, c, nc, narg, nlbr,
         # else normal character
         c = substr(s, ++i, 1)
     }
-    dbg_print("parse", 1, sprintf("(scan__usercmd_call) END 3: narg=%d, s='%s'", narg, s))
+    dbg_print("parse", 2, sprintf("(scan__usercmd_call) END 3: narg=%d, s='%s'", narg, s))
     return s
 }
 
@@ -2457,7 +2461,7 @@ function ppf__flags(code,
 #       keyvalid   : TRUE if KEY is valid according to non-strict.
 #                    This restricts it to most printable characters.
 #       name       : name part[1]
-#       namevalid  : TRUE if NAME is valid according to current __STRICT__[symbol]
+#       namevalid  : TRUE if NAME is valid according to current __STRICT__[name]
 #       nparts     : 1 or 2 depending if text is NAME or NAME[KEY]
 #      #text       : original text string
 #*****************************************************************************
@@ -2495,7 +2499,7 @@ function nam__scan(text, info,
     # simple index() for an open bracket should suffice here.
     info["hasbracket"] = index(text, "[") > 0
     info["keyvalid"]   = nam_valid_with_strict_as(key, FALSE)
-    info["namevalid"]  = nam_valid_with_strict_as(name, strictp("symbol"))
+    info["namevalid"]  = nam_valid_with_strict_as(name, strictp("name"))
     info["nparts"]     = nparts = (count == 1) ? 1 : 2
     dbg_print("nam", 4, sprintf("(nam__scan) '%s' => %d", text, nparts))
     return nparts
@@ -2830,7 +2834,7 @@ function undivert(stream,
                   count, i, dstblk)
 {
     dstblk = curr_dstblk()
-    dbg_print("divert", 1, sprintf("(undivert) START dstblk=%d, stream=%d",
+    dbg_print("divert", 2, sprintf("(undivert) START dstblk=%d, stream=%d",
                                    curr_dstblk(), stream))
     if (dstblk < 0) {
         dbg_print("divert", 3, "(undivert) END because dstblk <0")
@@ -2876,7 +2880,7 @@ function undivert_all(    stream)
 function undivert_file(stream, file,
                        count, i)
 {
-    dbg_print("divert", 1, sprintf("(undivert_file) START; stream=%d, file='%s'", stream, file))
+    dbg_print("divert", 2, sprintf("(undivert_file) START; stream=%d, file='%s'", stream, file))
     if (blk_type(stream) != BLK_AGG)
         panic(sprintf("(undivert_file) Block %d has type %s, not AGG",
                       stream, ppf__block_type(blk_type(stream))))
@@ -2891,7 +2895,7 @@ function undivert_file(stream, file,
 function cleardivert(stream,
                      count, i)
 {
-    dbg_print("divert", 1, sprintf("(cleardivert) START dstblk=%d, stream=%d",
+    dbg_print("divert", 2, sprintf("(cleardivert) START dstblk=%d, stream=%d",
                                    curr_dstblk(), stream))
     if (stream < 0) {
         dbg_print("divert", 3, "(cleardivert) END because stream <0")
@@ -2928,7 +2932,7 @@ function cleardivert_all(    stream)
 #
 #*****************************************************************************
 
-# In strict [symbol] mode, a symbol must match the following regexp:
+# In strict [name] mode, a symbol must match the following regexp:
 #       /^[A-Za-z#_][A-Za-z#_0-9]*$/
 # see function nam_valid_strict_regexp_p()
 # In non-strict mode, any non-empty string is valid.  NOT TRUE
@@ -3356,7 +3360,7 @@ function sym_store(sym, new_val,
 
     # Add entry:        symtab[name, key, level, "symval"] = new_val
     if (good) {
-        dbg_print("sym", 1, sprintf("(sym_store) [\"%s\",\"%s\",%d,\"symval\"]=%s",
+        dbg_print("sym", 2, sprintf("(sym_store) [\"%s\",\"%s\",%d,\"symval\"]=%s",
                                      name, key, level, new_val))
         sym_ll_write(name, key, level, new_val)
     } else {
@@ -4260,7 +4264,7 @@ function xeq_cmd__cleardivert(name, cmdline,
                            i, stream)
 {
     $0 = cmdline
-    dbg_print("divert", 1, sprintf("(xeq_cmd__cleardivert) START dstblk=%d, cmdline='%s'",
+    dbg_print("divert", 2, sprintf("(xeq_cmd__cleardivert) START dstblk=%d, cmdline='%s'",
                                    curr_dstblk(), cmdline))
     dbg_print_block("ship_out", 8, curr_dstblk(), "(xeq_cmd__cleardivert) curr_dstblk()")
     if (NF == 0)
@@ -4372,7 +4376,7 @@ function xeq_cmd__define(name, cmdline,
                          sym, append_flag, nop_if_defined, error_if_defined)
 {
     $0 = cmdline
-    dbg_print("xeq", 1, sprintf("(xeq_cmd__define) START cmdline='%s'",
+    dbg_print("xeq", 2, sprintf("(xeq_cmd__define) START cmdline='%s'",
                                   cmdline))
     if (NF == 0)
         error("Bad parameters:" $0)
@@ -4395,7 +4399,7 @@ function xeq_cmd__define(name, cmdline,
     # XXX No checking, dangerous!
     sym_store(sym, append_flag ? sym_fetch(sym) $0 \
                                : $0)
-    dbg_print("xeq", 1, "(xeq_cmd__define) END")
+    dbg_print("xeq", 2, "(xeq_cmd__define) END")
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -4416,7 +4420,7 @@ function xeq_cmd__divert(name, cmdline,
                         new_stream)
 {
     $0 = cmdline
-    dbg_print("divert", 1, sprintf("(xeq_cmd__divert) START dstblk=%d, NF=%d, cmdline='%s'",
+    dbg_print("divert", 2, sprintf("(xeq_cmd__divert) START dstblk=%d, NF=%d, cmdline='%s'",
                                    curr_dstblk(), NF, cmdline))
     new_stream = (NF == 0) ? "0" : dosubs($1)
     if (!integerp(new_stream))
@@ -4426,7 +4430,7 @@ function xeq_cmd__divert(name, cmdline,
         error("Bad parameters:" $0)
 
     sym_ll_write("__DIVNUM__", "", GLOBAL_NAMESPACE, int(new_stream))
-    dbg_print("divert", 1, sprintf("(xeq_cmd__divert) END; __DIVNUM__ now %d", new_stream))
+    dbg_print("divert", 2, sprintf("(xeq_cmd__divert) END; __DIVNUM__ now %d", new_stream))
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -4899,7 +4903,7 @@ function parse__string(    str, string_block1, string_block2, pstat, d)
     string_block1 = stk_top(__source_stack)
     str = blktab[string_block1, 0, "str"]
 
-    dbg_print("parse", 1, sprintf("(parse__string) str='%s', dstblk=%d, mode=%s",
+    dbg_print("parse", 2, sprintf("(parse__string) str='%s', dstblk=%d, mode=%s",
                                   str, curr_dstblk(),
                                   ppf__mode(blktab[string_block1, 0, "atmode"])))
 
@@ -4919,7 +4923,7 @@ function parse__string(    str, string_block1, string_block2, pstat, d)
         panic("(parse__string) String block mismatch")
     __buffer = blktab[string_block2, 0, "old.buffer"]
 
-    dbg_print("parse", 1, sprintf("(parse__string) END '%s' => %s",
+    dbg_print("parse", 2, sprintf("(parse__string) END '%s' => %s",
                                  str, ppf__bool(pstat)))
     return pstat
 }
@@ -4981,7 +4985,7 @@ function xeq_cmd__filedata(name, cmdline,
                             file_block, agg_block, rc, error_text    )
 {
     $0 = cmdline
-    dbg_print("xeq", 1, sprintf("(xeq_cmd__filedata) START dstblk=%d, name=%s, cmdline='%s'",
+    dbg_print("xeq", 2, sprintf("(xeq_cmd__filedata) START dstblk=%d, name=%s, cmdline='%s'",
                                 curr_dstblk(), name, cmdline))
 
     if (NF < 2)
@@ -5033,7 +5037,7 @@ function xeq_cmd__filedata(name, cmdline,
             warn(error_text)
     }
 
-    dbg_print("xeq", 1, sprintf("(xeq_cmd__filedata) END"))
+    dbg_print("xeq", 2, sprintf("(xeq_cmd__filedata) END"))
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -5238,7 +5242,7 @@ function execute__for(for_block,
             # about to re-iterate the loop anyway
         }
     }
-    dbg_print("for", 1, "(execute__for) END")
+    dbg_print("for", 2, "(execute__for) END")
 }
 
 
@@ -5280,7 +5284,7 @@ function execute__foreach_normal(for_block,
             # about to re-iterate the loop anyway
         }
     }
-    dbg_print("for", 1, "(execute__foreach_normal) END")
+    dbg_print("for", 2, "(execute__foreach_normal) END")
 }
 
 
@@ -5324,7 +5328,7 @@ function execute__foreach_blkarray(for_block,
         }
     }
 
-    dbg_print("for", 1, "(execute__foreach_blkarray) END")
+    dbg_print("for", 2, "(execute__foreach_blkarray) END")
 }
 
 
@@ -5460,7 +5464,7 @@ function xeq__BLK_IF(if_block,
     condition = blktab[if_block, 0, "condition"]
     negate = blktab[if_block, 0, "init_negate"]
     condval = evaluate_boolean(condition, negate)
-    dbg_print("if", 1, sprintf("(xeq__BLK_IF) evaluate_boolean('%s') => %s", condition, ppf__bool(condval)))
+    dbg_print("if", 2, sprintf("(xeq__BLK_IF) evaluate_boolean('%s') => %s", condition, ppf__bool(condval)))
     if (condval == ERROR)
         error("@if: Error evaluating condition '" condition "'")
 
@@ -5858,7 +5862,7 @@ function xeq_cmd__local(name, cmdline,
         error("Cannot use @local in global namespace")
     sym = $1
     # check for valid name
-    if (!nam_valid_with_strict_as(sym, strictp("symbol")))
+    if (!nam_valid_with_strict_as(sym, strictp("name")))
         error("@local: Invalid name '" sym "'")
     assert_sym_okay_to_define(sym)
     if (nam_ll_in(sym, __namespace))
@@ -5939,7 +5943,7 @@ function xeq__BLK_LONGDEF(longdef_block,
     body_block = blktab[longdef_block, 0, "body_block"]
     dbg_print_block("sym", 3, body_block, "(xeq__BLK_LONGDEF) body_block")
     sym_store(name, blk_to_string(body_block))
-    dbg_print("sym", 1, "(xeq__BLK_LONGDEF) END")
+    dbg_print("sym", 2, "(xeq__BLK_LONGDEF) END")
 }
 
 
@@ -5948,7 +5952,7 @@ function ppf__longdef(longdef_block,
 {
     return "@longdef " blktab[longdef_block, 0, "name"] TOK_NEWLINE      \
             ppf__block(blktab[longdef_block, 0, "body_block"]) TOK_NEWLINE \
-            "@endlong"
+            "@endlongdef"
 }
 
 
@@ -5989,7 +5993,7 @@ function xeq_cmd__m2ctl(name, cmdline,
                         getstat, input, e, dsys, lev, blk)
 {
     $0 = cmdline
-    dbg_print("xeq", 1, sprintf("(xeq_cmd__m2ctl) START dstblk=%d, cmdline='%s'",
+    dbg_print("xeq", 2, sprintf("(xeq_cmd__m2ctl) START dstblk=%d, cmdline='%s'",
                                    curr_dstblk(), cmdline))
     if (NF == 0)
         error("Bad parameters:" $0)
@@ -6150,7 +6154,7 @@ function xeq__BLK_USER(newcmd_block,
     nam_ll_write(name, __namespace, TYPE_USER)
     cmd_ll_write(name, __namespace, newcmd_block)
 
-    dbg_print("cmd", 1, "(xeq__BLK_USER) END")
+    dbg_print("cmd", 2, "(xeq__BLK_USER) END")
 }
 
 
@@ -6235,7 +6239,7 @@ function execute__user_body(user_block, args,
     if (__xeq_ctl != XEQ_NORMAL)
         panic("(xeq_cmd__return) __xeq_ctl is not normal, how did that happen?")
 
-    dbg_print("cmd", 1, "(execute__user_body) END")
+    dbg_print("cmd", 2, "(execute__user_body) END")
 }
 
 
@@ -6304,7 +6308,7 @@ function xeq_cmd__null(name, cmdline,
                        sym)
 {
     $0 = cmdline
-    dbg_print("xeq", 1, sprintf("(xeq_cmd__null) START cmdline='%s'",
+    dbg_print("xeq", 2, sprintf("(xeq_cmd__null) START cmdline='%s'",
                                   cmdline))
     if (NF == 0)
         error("Bad parameters:" $0)
@@ -6313,7 +6317,7 @@ function xeq_cmd__null(name, cmdline,
     assert_sym_okay_to_define(sym)
     # XXX No checking, dangerous!
     sym_store(sym, "")
-    dbg_print("xeq", 1, "(xeq_cmd__null) END")
+    dbg_print("xeq", 2, "(xeq_cmd__null) END")
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -6400,7 +6404,7 @@ function xeq_cmd__sequence(name, cmdline,
                           id, action, arg, saveline)
 {
     $0 = cmdline
-    dbg_print("seq", 1, sprintf("(xeq_cmd__sequence) START dstblk=%d, name=%s, cmdline='%s'",
+    dbg_print("seq", 2, sprintf("(xeq_cmd__sequence) START dstblk=%d, name=%s, cmdline='%s'",
                                 curr_dstblk(), name, cmdline))
     if (NF == 0)
         error("Bad parameters: Missing sequence name:" $0)
@@ -6893,7 +6897,7 @@ function xeq_cmd__undivert(name, cmdline,
                            i, stream)
 {
     $0 = cmdline
-    dbg_print("divert", 1, sprintf("(xeq_cmd__undivert) START dstblk=%d, cmdline='%s'",
+    dbg_print("divert", 2, sprintf("(xeq_cmd__undivert) START dstblk=%d, cmdline='%s'",
                                    curr_dstblk(), cmdline))
     dbg_print_block("divert", 8, curr_dstblk(), "(xeq_cmd__undivert) curr_dstblk()")
     if (NF == 0) {
@@ -7010,7 +7014,7 @@ function xeq__BLK_WHILE(while_block,
     condition = blktab[while_block, 0, "condition"]
     negate = blktab[while_block, 0, "init_negate"]
     condval = evaluate_boolean(condition, negate)
-    dbg_print("while", 1, sprintf("(xeq__BLK_WHILE) Initial evaluate_boolean('%s') => %s", condition, ppf__bool(condval)))
+    dbg_print("while", 2, sprintf("(xeq__BLK_WHILE) Initial evaluate_boolean('%s') => %s", condition, ppf__bool(condval)))
     if (condval == ERROR)
         error("@while: Error evaluating condition '" condition "'")
 
@@ -7333,7 +7337,7 @@ function _c3_factor3(    e, fun, e2)
     if (match(e, /^([A-Za-z#_][A-Za-z#_0-9]+)?\(/)) {
         fun = _c3_advance()
         # These are for numeric functions only, not strings/symbols
-        if (fun ~ /^(abs|acos|asin|ceil|cos|deg|exp|floor|int|log(10)?|rad|randint|round|sign|sin|sqrt|srand|tan)?\(/) {
+        if (fun ~ /^(abs|acos|asin|ceil|cos|deg|exp|floor|int|lg|ln|log(10)?|rad|randint|round|sign|sin|sqrt|srand|tan)?\(/) {
             e = _c3_expr()
             e = _c3_calculate_function(fun, e)
         } else if (fun ~ /^defined\(/) {
@@ -7399,7 +7403,9 @@ function _c3_calculate_function(fun, e,
     if (fun == "floor(")   { c = int(e)
                              return e < c ? c-1 : c }
     if (fun == "int(")     return int(e)
-    if (fun == "log(")     return log(e)
+    if (fun == "lg(")      return log(e) / LOG2
+    if (fun == "log(" || fun == "ln(")
+                           return log(e)
     if (fun == "log10(")   return log(e) / LOG10
     if (fun == "rad(")     return e * (TAU / 360)
     if (fun == "randint(") return randint(e) + 1
@@ -7733,8 +7739,8 @@ function dosubs(s,
             }
 
         # Throw an error on undefined symbol (strict-only)
-        } else if (strictp("undef")) {
-            error("Name '" m "' not defined [strict mode]:" $0)
+        } else if (strictp("def")) {
+            error("Name '" m "' not defined (__STRICT__[def] True):" $0)
 
         } else {
             l = l TOK_AT m
@@ -7844,8 +7850,8 @@ function xeq_fn__boolval(fn, m, nparam, param,
             # If not, check if we're in strict mode (error) or not.
             if (sym_defined_p(p))
                 result = sym_ll_read("__FMT__", sym_true_p(p))
-            else if (strictp("boolval"))
-                error("Name '" p "' not defined [boolval]:" $0)
+            else if (strictp("bool"))
+                error("Name '" p "' not defined [bool]:" $0)
             else
                 result = sym_ll_read("__FMT__", FALSE)
         } else
@@ -8649,6 +8655,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     # Constants
     E                           = exp(1)
     IDX_NOT_FOUND               = 0
+    LOG2                        = log(2)
     LOG10                       = log(10)
     MAX_DBG_LEVEL               = 10
     MAX_PARAM                   = 20
@@ -8829,11 +8836,11 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     sym_ll_fiat("__NFILE__",        "", FLAGS_READONLY_INTEGER, 0)
     sym_ll_fiat("__NLINE__",        "", FLAGS_READONLY_INTEGER, 0)
     sym_ll_fiat("__MAX_STREAM__",   "", FLAGS_READONLY_INTEGER, MAX_STREAM)
-    sym_ll_fiat("__STRICT__","boolval", "",                     TRUE)
+    sym_ll_fiat("__STRICT__",   "bool", "",                     TRUE)
+    sym_ll_fiat("__STRICT__",    "def", "",                     TRUE)
     sym_ll_fiat("__STRICT__",    "env", "",                     TRUE)
     sym_ll_fiat("__STRICT__",   "file", "",                     TRUE)
-    sym_ll_fiat("__STRICT__", "symbol", "",                     TRUE)
-    sym_ll_fiat("__STRICT__",  "undef", "",                     TRUE)
+    sym_ll_fiat("__STRICT__",   "name", "",                     TRUE)
     sym_ll_fiat("__SYNC__",         "", FLAGS_WRITABLE_INTEGER, SYNC_FILE)
     sym_ll_fiat("__SYSVAL__",       "", FLAGS_READONLY_INTEGER, 0)
     sym_ll_fiat("__TRACE__",        "", FLAGS_WRITABLE_BOOLEAN, FALSE)
@@ -8853,9 +8860,9 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     # Also need to add entry in execute__command()  [search: DISPATCH]
     split("append array cleardivert data debug decr default define divert" \
           " dump dumpall dumpdef echo enddata eod error errprint esyscmd" \
-          " eval exit filedata filedefine ignore include incr initialize" \
+          " eval exit filedata filedef filedefine ignore include incr initialize" \
           " input literal local m2ctl nextfile null paste readonly secho" \
-          " sequence serror sfiledata sfiledefine shell sinclude spaste split" \
+          " sequence serror sfiledata sfiledef sfiledefine shell sinclude spaste split" \
           " syscmd tracemode traceoff traceon typeout undef undefine" \
           " undivert warn wrap",
           array, TOK_SPACE)
@@ -9076,11 +9083,11 @@ BEGIN {
                 } else if (_name == "strict") {
                     _val = to_bool(_val) # (_val > 0) # convert int value to bool
                     # Update strict settings
-                    sym_ll_write("__STRICT__","boolval", GLOBAL_NAMESPACE, _val)
-                    sym_ll_write("__STRICT__",    "env", GLOBAL_NAMESPACE, _val)
-                    sym_ll_write("__STRICT__",   "file", GLOBAL_NAMESPACE, _val)
-                    sym_ll_write("__STRICT__", "symbol", GLOBAL_NAMESPACE, _val)
-                    sym_ll_write("__STRICT__",  "undef", GLOBAL_NAMESPACE, _val)
+                    sym_ll_write("__STRICT__", "bool", GLOBAL_NAMESPACE, _val)
+                    sym_ll_write("__STRICT__",  "def", GLOBAL_NAMESPACE, _val)
+                    sym_ll_write("__STRICT__",  "env", GLOBAL_NAMESPACE, _val)
+                    sym_ll_write("__STRICT__", "file", GLOBAL_NAMESPACE, _val)
+                    sym_ll_write("__STRICT__", "name", GLOBAL_NAMESPACE, _val)
                     continue
                 } else if (_name == "trace") {
                     _name = "__TRACE__"

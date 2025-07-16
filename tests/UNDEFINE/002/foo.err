@@ -1,1 +1,1 @@
-m2:foo.m2:1:Name 'foo' not defined [strict mode]:foo is @foo@
+m2:foo.m2:1:Name 'foo' not defined (__STRICT__[def] True):foo is @foo@

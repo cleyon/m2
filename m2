@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-07-16 00:55:03 cleyon>
+#  Time-stamp:  <2025-07-17 13:06:04 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -3759,7 +3759,6 @@ function evaluate_boolean(text, negate,
 function bool__tokenize_string(s,
                                slen, i, oldi, c, pcnt, name)
 {
-    dbg_print("bool", 6, "(bool__tokenize_string) START")
     slen = length(s)
     i = 1
     __bnf = 0
@@ -3902,20 +3901,22 @@ function bool__tokenize_string(s,
 
 function bool__scan_expr(    e, f, r)           # term   | term || term
 {
-    # print_debugfile(sprintf("(bool__scan_expr) __bf=%d, __btoken[]='%s', e='%s'", __bf, __btoken[__bf], e))
+    dbg_print("bool", 5, sprintf("(bool__scan_expr) __bf=%d, __btoken[]='%s', e='%s'", __bf, __btoken[__bf], e))
     e = bool__scan_term()
     if (e == ERROR) {
         warn("(bool__scan_expr) Initial e returned ERROR, propagating")
         return e
     }
-
-    # print_debugfile(sprintf("(bool__scan_expr) After bool__scan_term, __bf=%d, __btoken[%d]='%s', e='%s'(%s)", __bf, __bf, __btoken[__bf], e, ppf__bool(e)))
+    dbg_print("bool", 7, sprintf("(bool__scan_expr) After bool__scan_term, __bf=%d, __btoken[%d]='%s', e='%s'(%s)", __bf, __bf, __btoken[__bf], e, ppf__bool(e)))
     while (__btoken[__bf] == TOK_OR) {
         __bf++
+        if (to_bool(e) == TRUE) {
+            dbg_print("bool", 5, sprintf("(bool__scan_expr) TOK_OR, e known True so short-circuit, RETURNING True"))
+            return TRUE
+        }
         f = bool__scan_term()
         r = e || f
-        #print_debugfile("Found TOK_OR, __bf now " __bf++)
-        dbg_print("bool", 5, sprintf("(bool__scan_expr) TOK_OR, e'%s' || f'%s' => %s", e, f, ppf__bool(r)))
+        dbg_print("bool", 5, sprintf("(bool__scan_expr) Found TOK_OR (__bf now %d), e'%s' || f'%s' => %s", __bf, e, f, ppf__bool(r)))
         e = r
     }
     return e
@@ -3929,9 +3930,14 @@ function bool__scan_term(    e, f, r)           # factor | factor && factor
         warn("(bool__scan_term) Initial e returned ERROR, propagating")
         return e
     }
-    # print_debugfile(sprintf("(bool__scan_term) After bool__scan_factor, __bf=%d, __btoken[]='%s', e='%s'(%s)", __bf, __btoken[__bf], e, ppf__bool(e)))
+    dbg_print("bool", 5, sprintf("(bool__scan_term) After bool__scan_factor, __bf=%d, __btoken[]='%s', e='%s'(%s)", __bf, __btoken[__bf], e, ppf__bool(e)))
     while (__btoken[__bf] == TOK_AND) {
         __bf++
+        dbg_print("bool", 7, sprintf("(bool__scan_term) Found TOK_AND, e'%s' (=> %s); f not eval yet", e, ppf__bool(e)))
+        if (to_bool(e) == FALSE) {
+            dbg_print("bool", 5, sprintf("(bool__scan_term) TOK_AND, e known False so short-circuit, RETURNING False"))
+            return FALSE
+        }
         f = bool__scan_factor()
         if (f == ERROR) {
             warn("(bool__scan_term) f returned ERROR, propagating")
@@ -3965,7 +3971,7 @@ function bool__scan_factor(    e, r,         # ! factor | variable | ( expressio
         __bf++
         e = bool__scan_factor()
         if (e == ERROR) {
-            dbg_print("bool", 5, "(bool__scan_factor): NOT: scan_factor => ERROR, propagating")
+            dbg_print("bool", 5, "(bool__scan_factor) NOT: scan_factor => ERROR, propagating")
             return ERROR
         } else {
             dbg_print("bool", 5, "(bool__scan_factor) NOT: Just read " e ", so RETURNING " ppf__bool(!e))
@@ -3979,7 +3985,7 @@ function bool__scan_factor(    e, r,         # ! factor | variable | ( expressio
         if (sym_deferred_p(name))
             sym_deferred_define_now(name)
         r = sym_defined_p(name)
-        dbg_print("bool", 5, "(bool__scan_factor): DEFINED; name='" name "', RETURNING " ppf__bool(r))
+        dbg_print("bool", 5, "(bool__scan_factor) DEFINED; name='" name "', RETURNING " ppf__bool(r))
         __bf++
         return r
 
@@ -3988,7 +3994,7 @@ function bool__scan_factor(    e, r,         # ! factor | variable | ( expressio
         if (emptyp(name)) return ERROR
         assert_valid_env_var_name(name)
         r = name in ENVIRON
-        dbg_print("bool", 5, "(bool__scan_factor): ENV; name='" name "', RETURNING " ppf__bool(r))
+        dbg_print("bool", 5, "(bool__scan_factor) ENV; name='" name "', RETURNING " ppf__bool(r))
         __bf++
         return r
 
@@ -4005,16 +4011,16 @@ function bool__scan_factor(    e, r,         # ! factor | variable | ( expressio
         if (sym_deferred_p(name))
             sym_deferred_define_now(name)
         r = sym_true_p(name)
-        dbg_print("bool", 5, "(bool__scan_factor): SYM; just read '" __btoken[__bf] "', so RETURNING " ppf__bool(r))
+        dbg_print("bool", 5, "(bool__scan_factor) SYM; just read '" __btoken[__bf] "', so RETURNING " ppf__bool(r))
         __bf++
         return r
 
     } else {
         # Boolean evaluation would normally fail here, but we'll pass it along to 'evaluate_condition'
-        #print_debugfile(sprintf("bool__scan_factor: Did not match __bf=%d, __btoken[]='%s', e='%s'", __bf, __btoken[__bf], e))
+        dbg_print("bool", 5, sprintf("bool__scan_factor) Did not match __bf=%d, __btoken[]='%s', e='%s'", __bf, __btoken[__bf], e))
         r = evaluate_condition(__btoken[__bf], FALSE)
         if (r == ERROR)
-            warn("(bool__scan_factor): evaluate_condition('" __btoken[__bf] "') returned ERROR")
+            warn("(bool__scan_factor) Evaluate_condition('" __btoken[__bf] "') returned ERROR")
         else
             dbg_print("bool", 5, "(bool__scan_factor) evaluate_condition('" __btoken[__bf] "') returned " ppf__bool(r))
         return r
@@ -7495,7 +7501,7 @@ function _c3_advance(    tmp)
 #*****************************************************************************
 function dosubs(s,
                 expand, i, j, l, m, nparam, p, pval, param, r, fn,
-                x, inc_dec, pre_post, subcmd, br, lfn, incr)
+                x, inc_dec, pre_post, subcmd, br, lfn, incr, wrkm)
 {
     trace(TRACE_COMMAND, "dosubs", sprintf("dosubs('%s')", s))
     dbg_print("dosubs", 5, sprintf("(dosubs) START s='%s'", s))
@@ -8829,6 +8835,8 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     nam_ll_write("__FS__", GLOBAL_NAMESPACE, FLAGS_WRITABLE_SYMBOL)
     if ("HOME" in ENVIRON)
       sym_ll_fiat("__HOME__",       "", FLAGS_READONLY_SYMBOL,  with_trailing_slash(ENVIRON["HOME"]))
+    else if ("LOGDIR" in ENVIRON)
+      sym_ll_fiat("__HOME__",       "", FLAGS_READONLY_SYMBOL,  with_trailing_slash(ENVIRON["LOGDIR"]))
     sym_ll_fiat("__INPUT__",        "", FLAGS_WRITABLE_SYMBOL,  EMPTY)
     sym_ll_fiat("__LINE__",         "", FLAGS_READONLY_INTEGER, 0)
     sym_ll_fiat("__M2_UUID__",      "", FLAGS_READONLY_SYMBOL,  uuid())
@@ -9008,8 +9016,9 @@ function load_init_files(    old_debug)
 
     if ("M2RC" in ENVIRON && path_exists_p(ENVIRON["M2RC"]))
         dofile(ENVIRON["M2RC"])
-    else if ("HOME" in ENVIRON)
-        dofile(ENVIRON["HOME"] "/.m2rc")
+    else if (sym_ll_in("__HOME__", "", GLOBAL_NAMESPACE))
+        dofile(sym_ll_read("__HOME__", "", GLOBAL_NAMESPACE) \
+               ".m2rc")
     dofile("./.m2rc")
 
     # Don't count init files in total line/file tally - it's better to

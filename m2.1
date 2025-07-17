@@ -455,7 +455,7 @@ Wrapped text will be evaluated as a command; output will occur after diverted st
 Wraps are always processed, even if @error or @exit commands are encountered.
 .\"     An m2 internal panic() will exit immediately without processing wraps.
 .El
-.Pp
+.Ss Including Files
 .Nm
 can incorporate the contents of files into its data stream.
 .Ql @include
@@ -740,8 +740,10 @@ and
 .Ql @undivert .
 Each buffer stream has a number, from 1 to
 .Va __MAX_STREAM__ .
-Buffer 0 is considered resuming printing to standard output;
-text diverted to a negative stream is discarded.
+Stream 0 is interpreted as resuming printing to standard output.
+Text diverted to a negative stream is discarded.
+The current stream number is available in the system symbol
+.Va __DIVNUM__ .
 .Bl -inset
 .It Em Divert :
 No error message or action if argument is not an integer.
@@ -1065,6 +1067,10 @@ They support the
 and
 .Qq \&!
 operators for logical AND, OR, and NOT, respectively.
+The && and || operators will
+.Qq short-circuit
+and not evaluate their right-hand side terms if the result is
+determined by the left-hand side term.
 Parentheses may be used to enforce evaluation order.
 .Pp
 The following boolean functions and syntax are supported:
@@ -1461,6 +1467,12 @@ Used to access your
 file.
 Available through symbol
 .Va __HOME__ .
+.It Ev LOGDIR
+Used as an alternative source for
+.Va __HOME__
+in case
+.Va HOME
+is not defined in your environment.
 .It Ev M2PATH
 A colon-separated list of directories to try (if necessary) for the
 .Ql @include

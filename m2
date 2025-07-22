@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-07-22 01:41:00 cleyon>
+#  Time-stamp:  <2025-07-22 11:55:55 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -3759,6 +3759,7 @@ function evaluate_boolean(text, negate,
 function bool__tokenize_string(s,
                                slen, i, oldi, c, pcnt, name)
 {
+    dbg_print("bool", 6, "(bool__tokenize_string) START")
     slen = length(s)
     i = 1
     __bnf = 0
@@ -8832,7 +8833,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     sym_ll_fiat("__FMT__",      "time", "",                     "%H:%M:%S")
     sym_ll_fiat("__FMT__",        "tz", "",                     "%Z")
     sym_ll_fiat("__FMT__",       "utc", "",                     "%Y-%m-%dT%H:%M:%S%z") # ISO 8601
-    nam_ll_write("__FS__", GLOBAL_NAMESPACE, FLAGS_WRITABLE_SYMBOL)
+    nam_ll_write("__FS__", GLOBAL_NAMESPACE, FLAGS_WRITABLE_SYMBOL) # NB - *not* in sync with real FS
     if ("HOME" in ENVIRON)
       sym_ll_fiat("__HOME__",       "", FLAGS_READONLY_SYMBOL,  with_trailing_slash(ENVIRON["HOME"]))
     else if ("LOGDIR" in ENVIRON)

@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-07-17 13:06:04 cleyon>
+#  Time-stamp:  <2025-07-22 01:41:00 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -9123,11 +9123,14 @@ BEGIN {
             }
         }
 
-        # If we get here with __init_files_loaded still false, that means
+        # If we get here with __NFILE__ still zero, that means
         # we used up every ARGV defining symbols and didn't specify any
         # files.  Not specifying any input files, like ARGC==1, means to
         # read standard input, so that is what we must now do.
-        if (!__init_files_loaded) {
+        # (Buggy old version checked __init_files_loaded, but that meant
+        #    m2 init=0
+        # would do nothing rather than read standard input as it should.)
+        if (sym_fetch("__NFILE__") == 0) {
             load_init_files()
             __exit_code = dofile("-") ? EX_OK : EX_NOINPUT
         }

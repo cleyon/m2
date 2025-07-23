@@ -396,7 +396,8 @@ is specified, use it as field separator.
 If not and symbol
 .Va __FS__
 is defined, use its value as field separator.
-If neither condition is true, use Awk's default FS,
+If neither condition is true, use Awk's default
+.Va FS ,
 which means fields will be split on whitespace.
 See also
 .Va @join@ .
@@ -635,12 +636,13 @@ Concatenate each element of ARR into a single string,
 inserting FS between elements to separate them.
 If FS is omitted, then the value of
 .Va __FS__
-is used; if not defined, then separate elements
-with a single space.
+is used;
+if not defined, then a single space shall be the separator.
 Variant
 .Ql @sjoin@
 adds a final FS after the last element (useful when
-FS is a newline).
+.Va __FS__
+is a newline).
 See also
 .Va @split .
 .It @lc SYM@
@@ -1794,7 +1796,8 @@ and
 .Ql @esyscmd
 commands to attempt execution of any program the user specifies.
 At secure level 1, those commands are disabled entirely.
-Undiverting a stream to an output file is also prohibited,
+It also prevents creation of additional files, so
+undiverting a stream to an output file is prohibited,
 as is specifying a file to receive @dump output.
 However, programs required for
 .Nm Ap s

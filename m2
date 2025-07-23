@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-07-22 23:55:13 cleyon>
+#  Time-stamp:  <2025-07-23 10:12:55 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -1642,6 +1642,7 @@ function execute__command(name, cmdline,
         return
     }
 
+    trace(TRACE_COMMAND, name, sprintf("@%s %s", name, cmdline))
     old_level = __namespace
 
     # DISPATCH
@@ -6001,7 +6002,7 @@ function ppf__BLK_LONGDEF(longdef_block)
 #       @m2ctl booltest                 Scan boolean expr from user
 #       @m2ctl clear_debugging          Clear debugging
 #       @m2ctl dbg_namespace            Debug namespaces
-#       @m2ctl dbg_params               Debug symfunc parameters
+#       @m2ctl dbg_params               Debug function parameters
 #       @m2ctl dbg_ship_out
 #       @m2ctl dump_block BLOCK         Raw dump block #
 #       @m2ctl dump_namtab              Dump of name table (non-system)
@@ -6052,7 +6053,7 @@ function xeq_cmd__m2ctl(name, cmdline,
         dbg_set_level("sym",       5)
 
     } else if ($1 == "dbg_params") {
-        # Debug symfunc params: help scan @foo a b c@ and @foo{a}{b}{c}@
+        # Debug function params: help scan @foo a b c@ and @foo{a}{b}{c}@
         clear_debugging()
         dbg_set_level("dosubs",    7)
         # dbg_set_level("namespace", 5)
@@ -6595,7 +6596,7 @@ function xeq_cmd__shell(name, cmdline,
 #*****************************************************************************
 # @split        SYM ARR [FS]
 function xeq_cmd__split(name, cmdline,
-                        sym, arr, nsp, info, code, level,
+                        sym, arr, count, info, code, level,
                         val, k, tmparr, agg_block,
                         wantfs, tmpfs)
 {
@@ -6643,10 +6644,11 @@ function xeq_cmd__split(name, cmdline,
     if (emptyp(val))
         warn("@split: Symbol '" sym "' is empty")
     else {
-        nsp = wantfs ? split(val, tmparr, tmpfs) : split(val, tmparr)
-        for (k = 1; k <= nsp; k++)
+        count = wantfs ? split(val, tmparr, tmpfs) \
+                       : split(val, tmparr)
+        for (k = 1; k <= count; k++)
             blk_append(agg_block, OBJ_TEXT, tmparr[k])
-        blktab[agg_block, 0, "count"] = nsp
+        blktab[agg_block, 0, "count"] = count
     }
 
     dbg_print("cmd", 3, sprintf("(xeq_cmd__split) END"))
@@ -7643,66 +7645,77 @@ function dosubs(s,
             fn = substr(fn, 1, lfn-2)
         }
 
-        # Check if it's a known function
+        # Check if it's a known function (formerly SYMFUNC)
         if (nam_ll_in(fn, GLOBAL_NAMESPACE) &&
             flag_1true_p((nam_ll_read(fn, GLOBAL_NAMESPACE)), TYPE_FUNCTION)) {
             if (fn == "basename")
-                r = xeq_fn__basename(fn, m, nparam, param) r
+                expand = xeq_fn__basename(fn, m, nparam, param)
             else if (fn == "boolval")
-                r = xeq_fn__boolval(fn, m, nparam, param)  r
+                expand = xeq_fn__boolval(fn, m, nparam, param)
+            else if (fn == "center" || fn == "scenter")
+                expand = "@center@ Not implemented yet"
             else if (fn == "chr")
-                r = xeq_fn__chr(fn, m, nparam, param)      r
+                expand = xeq_fn__chr(fn, m, nparam, param)
             else if (fn == "date"     || fn == "epoch" ||
                      fn == "strftime" || fn == "time"  ||
                      fn == "tz"       || fn == "utc")
-                r = xeq_fn__date(fn, m, nparam, param)     r
+                expand = xeq_fn__date(fn, m, nparam, param)
             else if (fn == "dirname")
-                r = xeq_fn__dirname(fn, m, nparam, param)  r
+                expand = xeq_fn__dirname(fn, m, nparam, param)
+            else if (fn == "daynum")
+                expand = xeq_fn__daynum(fn, m, nparam, param)
             else if (fn == "expr" || fn == "sexpr")
-                r = xeq_fn__expr(fn, m, nparam, param)     r
+                expand = xeq_fn__expr(fn, m, nparam, param)
             else if (fn == "format")
-                r = xeq_fn__format(fn, m, nparam, param)   r
+                expand = xeq_fn__format(fn, m, nparam, param)
             else if (fn == "getenv" || fn == "sgetenv")
-                r = xeq_fn__getenv(fn, m, nparam, param)   r
+                expand = xeq_fn__getenv(fn, m, nparam, param)
             else if (fn == "ifdef" || fn == "ifndef")
-                r = xeq_fn__ifdef(fn, m, nparam, param)    r
+                expand = xeq_fn__ifdef(fn, m, nparam, param)
             else if (fn == "ifelse")
-                r = xeq_fn__ifelse(fn, m, nparam, param)   r
+                expand = xeq_fn__ifelse(fn, m, nparam, param)
             else if (fn == "ifx")
-                r = xeq_fn__ifx(fn, m, nparam, param)      r
+                expand = xeq_fn__ifx(fn, m, nparam, param)
             else if (fn == "index")
-                r = xeq_fn__index(fn, m, nparam, param)    r
+                expand = xeq_fn__index(fn, m, nparam, param)
             else if (fn == "join" || fn == "sjoin")
-                r = xeq_fn__join(fn, m, nparam, param)     r
+                expand = xeq_fn__join(fn, m, nparam, param)
             else if (fn == "left")
-                r = xeq_fn__left(fn, m, nparam, param)     r
+                expand = xeq_fn__left(fn, m, nparam, param)
+            else if (fn == "ljust" || fn == "rjust" || \
+                     fn == "sljust" || fn == "srjust")
+                expand = "@[lr]just@ Not implemented yet"
             else if (fn == "mid" || fn == "substr")
-                r = xeq_fn__mid(fn, m, nparam, param)      r
+                expand = xeq_fn__mid(fn, m, nparam, param)
             else if (fn == "ord")
-                r = xeq_fn__ord(fn, m, nparam, param)      r
+                expand = xeq_fn__ord(fn, m, nparam, param)
             else if (fn == "rem" || fn == "srem") {
                 # @rem ...@  is considered an in-line comment and ignored
                 # @srem ...@ like @rem, but preceding whitespace is discarded
+                expand = EMPTY
                 if (first(fn) == "s")
                     sub(/[ \t]+$/, "", l)
             } else if (fn == "right")
-                r = xeq_fn__right(fn, m, nparam, param)    r
+                expand = xeq_fn__right(fn, m, nparam, param)
             else if (fn == "rot13")
-                r = xeq_fn__rot13(fn, m, nparam, param)    r
+                expand = xeq_fn__rot13(fn, m, nparam, param)
             else if (fn == "spaces")
-                r = xeq_fn__spaces(fn, m, nparam, param)   r
+                expand = xeq_fn__spaces(fn, m, nparam, param)
             else if (fn == "lc" || fn == "len" || fn == "uc")
-                r = xeq_fn__str_fn(fn, m, nparam, param)   r
+                expand = xeq_fn__str_fn(fn, m, nparam, param)
             else if (fn == "trim" || fn == "ltrim" || fn == "rtrim")
-                r = xeq_fn__trim(fn, m, nparam, param)     r
+                expand = xeq_fn__trim(fn, m, nparam, param)
             else if (fn == "uuid")
-                r = uuid()                                 r
+                expand = uuid()
             else if (fn == "xbasename" || fn == "xdirname")
-                r = xeq_fn__xname(fn, m, nparam, param)    r
+                expand = xeq_fn__xname(fn, m, nparam, param)
             else
                 panic("(dosubs) Function '" fn "' not handled")
 
-        # Old code for macro processing
+            # Maybe trace this function, then do the actual change
+            trace(TRACE_EXPANSION, fn, sprintf("'%s' => '%s'", m, expand))
+            r = expand r
+
         # <SOMETHING ELSE> : Call a user-defined macro, handles arguments
         } else if (sym_valid_p(fn) && (sym_defined_p(fn) || sym_deferred_p(fn))) {
             expand = substitute_params(sym_fetch(fn), nparam, param)

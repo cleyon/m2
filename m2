@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-07-23 10:12:55 cleyon>
+#  Time-stamp:  <2025-07-23 10:59:20 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -7967,6 +7967,56 @@ function xeq_fn__date(fn, m, nparam, param,
 
 #*****************************************************************************
 #
+#       @  D A Y N U M  @
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#       Compute number of days since 01-JAN-1901.
+#       http://www.netlib.org/research/awkbookcode/ch3
+#
+#*****************************************************************************
+# @daynum [YEAR MONTH DAY]@
+function xeq_fn__daynum(fn, m, nparam, param,
+                        year, month, day, monthdays, i, n,
+                        silent, count, date)
+{
+    if (secure_level() >= 2)
+        error(sprintf("(%s) Security violation", fn))
+    if (nparam == 0) {
+        date  = sym_fetch("__DATE__")
+        year  = 0 + substr(date, 1, 4)
+        month = 0 + substr(date, 5, 2)
+        day   = 0 + substr(date, 7, 2)
+    } else if (nparam == 3) {
+        year  = 0 + param[1]
+        month = 0 + param[2]
+        day   = 0 + param[3]
+    } else
+        error("Bad parameters in '" m "':" $0)
+    dbg_print("dosubs", 7, "(xeq_fn__daynum) year=" year ", month=" month ", day=" day)
+
+    # Check date - not perfect, but should catch gross errors
+    if (   year  < 1901 || year  > 2099 \
+        || month <    1 || month >   12 \
+        || day   <    1 || day   >   31)
+        error("Bad date: Year=" year ", Month=" month ", Day=" day)
+
+    # 1 == Jan 1, 1901
+    split("31 28 31 30 31 30 31 31 30 31 30 31", monthdays)
+    # 365 days a year, plus one for each leap year
+    count = (year-1901) * 365 + int((year-1901)/4)
+    if (year % 4 == 0) # leap year from 1901 to 2099
+        monthdays[2]++
+    for (i = 1; i < month; i++)
+        count += monthdays[i]
+    return "" (count + day)
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
 #       @  D I R N A M E  @
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -8914,11 +8964,14 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
         nam_ll_write(array[elem], GLOBAL_NAMESPACE, TYPE_COMMAND FLAG_SYSTEM)
 
     # FUNCS
+    # They are similar to symbols but with optional parameter handling
+    # Also need to add handler in dosubs()  [search: SYMFUNC]
     # Functions cannot be used as symbol or sequence names.
-    split("basename boolval chr date dirname epoch expr format getenv" \
-          " ifdef ifelse ifndef ifx index join lc left len ltrim mid ord rem" \
-          " right rot13 rtrim sexpr sgetenv sjoin spaces srem strftime" \
-          " substr time trim tz uc utc uuid xbasename xdirname",
+    split("basename boolval center chr date daynum dirname epoch expr format" \
+          " getenv ifdef ifelse ifndef ifx index join lc left len ljust" \
+          " ltrim mid ord rem right rjust rot13 rtrim scenter sexpr sgetenv" \
+          " sjoin sljust spaces srem srjust strftime substr time trim tz uc" \
+          " utc uuid xbasename xdirname",
           array, TOK_SPACE)
     for (elem in array)
         nam_ll_write(array[elem], GLOBAL_NAMESPACE, TYPE_FUNCTION FLAG_SYSTEM)

@@ -560,6 +560,11 @@ Output character with ASCII code SYM.
 Current date (format as __FMT__[date]).
 See section
 .Sx Dates and Times .
+.It @daynum [YEAR MONTH DAY]@
+Return the number of days counting from 1\ January\ 1901.
+.Ql @daynum 1901 1 1@
+=>\ 1.
+With no parameters, the current date is used.
 .It @dirname SYM@
 Directory name of SYM implemented in Awk, assuming Unix style path
 separators.

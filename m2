@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-07-23 10:59:20 cleyon>
+#  Time-stamp:  <2025-07-23 18:52:44 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -323,16 +323,13 @@ function path_exists_p(path,
     # unreadable files.
     status = (getline not_used < path)
 
-    if (status > 0) {
-        # Found
+    if (status > 0) {           # Found
         close(path)
         return TRUE
-    } else if (status == 0) {
-        # Empty but readable
+    } else if (status == 0) {   # Empty but readable
         close(path)
         return TRUE
-    } else {
-        # Error: non-existent or unreadable
+    } else {                    # Error: non-existent or unreadable
         return FALSE
     }
 }
@@ -377,13 +374,14 @@ function round(x,   ival, aval, fraction)
 }
 
 
-# 0  <=  randint(N)  <  N
-# To generate a hex digit (0..15), say `randint(16)'
-# To roll a die (generate 1..6),   say `randint(6)+1'.
-function randint(n)
+# Return value:         LOWER <= ri2() <= UPPER
+# To generate a hex digit (0..15), say `randint2(0,15)'
+# To roll a standard die (1..6),   say `randint2(1,6)'
+function randint2(lower, upper)
 {
-    return int(n * rand())
+    return int( (upper-lower+1) * rand()  + lower)
 }
+#function randint1(n)  { return int(n*rand()) }         # 0 <= ri1() < N
 
 
 # Return a string of N random hex digits [0-9A-F].
@@ -391,7 +389,7 @@ function hex_digits(n,    s)
 {
     s = EMPTY
     while (n-- > 0)
-        s = s sprintf("%X", randint(16))
+        s = s sprintf("%X", randint2(0,15))
     return s
 }
 
@@ -7412,35 +7410,46 @@ function _c3_factor3(    e, fun, e2)
 function _c3_calculate_function(fun, e,
                                 c)
 {
-    if (fun == "(")        return e
-    if (fun == "abs(")     return abs(e) # e < 0 ? -e : e
+    if (fun == "(")        { return e }
+    if (fun == "abs(")     { return abs(e) }    # e < 0 ? -e : e
     if (fun == "acos(")    { if (e < -1 || e > 1)
-                                 error(sprintf("Math expression error [acos(%d)]:", e) $0)
+                                 error(sprintf("Math expression error [%s%d)]:", fun, e) $0)
                              return atan2(sqrt(1 - e^2), e) }
     if (fun == "asin(")    { if (e < -1 || e > 1)
-                                 error(sprintf("Math expression error [asin(%d)]:", e) $0)
+                                 error(sprintf("Math expression error [%s%d)]:", fun, e) $0)
                              return atan2(e, sqrt(1 - e^2)) }
     if (fun == "ceil(")    { c = int(e)
                              return e > c ? c+1 : c }
-    if (fun == "cos(")     return cos(e)
-    if (fun == "deg(")     return e * (360 / TAU)
-    if (fun == "exp(")     return exp(e)
+    if (fun == "cos(")     { return cos(e) }
+    if (fun == "deg(")     { return e * (360 / TAU) }
+    if (fun == "exp(")     { return exp(e) }
     if (fun == "floor(")   { c = int(e)
                              return e < c ? c-1 : c }
-    if (fun == "int(")     return int(e)
-    if (fun == "lg(")      return log(e) / LOG2
+    if (fun == "int(")     { return int(e) }
+    if (fun == "lg(")      { if (e <= 0)
+                                 error(sprintf("Math expression error [%s%d)]:", fun, e) $0)
+                             return log(e) / LOG2 }
     if (fun == "log(" || fun == "ln(")
-                           return log(e)
-    if (fun == "log10(")   return log(e) / LOG10
-    if (fun == "rad(")     return e * (TAU / 360)
-    if (fun == "randint(") return randint(e) + 1
-    if (fun == "round(")   return round(e)
-    if (fun == "sign(")    return (e > 0) - (e < 0)
-    if (fun == "sin(")     return sin(e)
-    if (fun == "sqrt(")    return sqrt(e)
-    if (fun == "srand(")   return srand(e)
+                           { if (e <= 0)
+                                 error(sprintf("Math expression error [%s%d)]:", fun, e) $0)
+                             return log(e) }
+    if (fun == "log10(")   { if (e <= 0)
+                                 error(sprintf("Math expression error [%s%d)]:", fun, e) $0)
+                             return log(e) / LOG10 }
+    if (fun == "rad(")     { return e * (TAU / 360) }
+    if (fun == "randint(") { if (e < 1)
+                                 error(sprintf("Math expression error [randint(%d)]:", e) $0)
+                             return randint2(1,int(e)) }
+    if (fun == "round(")   { return round(e) }
+    if (fun == "sign(")    { return (e > 0) - (e < 0) } # cf _The Elements of Programming Style, 2ed_, Kernighan & Plauger, 1974, pp. 1-2
+    if (fun == "sin(")     { return sin(e) }
+    if (fun == "sqrt(")    { if (e < 0)
+                                 error(sprintf("Math expression error [%s%d)]:", fun, e) $0)
+                             return sqrt(e) }
+    if (fun == "srand(")   { return srand(e) }
     if (fun == "tan(")     { c = cos(e)
-                             if (c == 0) error("Division by zero:" $0)
+                             if (c == 0)
+                                 error(sprintf("Math expression error [%s%d)]:", fun, e) $0)
                              return sin(e) / c }
     error(sprintf("Unknown function '%s':%s",
                   (last(fun) == "(") ? chop(fun) : fun, $0))

@@ -1101,6 +1101,16 @@ Except for certain writable symbols, they cannot be created or modified by the u
 The following are pre-defined; example values, defaults, or types are shown:
 .Pp
 .Bl -tag -width __FMT__[number]___ -offset indent
+.It __COLUMNS__
+Width of terminal screen, in characters.
+Value from environment variable
+.Va COLUMNS ;
+if not present, fetch
+.Qq cols
+value from
+.Xr tput 1 .
+If security level prevents this, use default value of 80.
+User modifiable.
 .It __CWD__
 Current working directory, including trailing slash.
 .It __DATE__
@@ -1460,6 +1470,8 @@ GNU\ Awk 5.3.0, mawk 1.3.4\ 2024012, GoAWK 1.29.1,
 and BusyBox Awk\ v1.36.1
 .Sh ENVIRONMENT
 .Bl -tag -width indent
+.It Ev COLUMNS
+If available, used to determine the output line width.
 .It Ev HOME
 Used to access your
 .Pa $HOME/.m2rc

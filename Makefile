@@ -31,6 +31,9 @@ callgraph callgraph-sane:
 callgraph-io:
 	$(CALLGRAPH) m2 -language awk -ignore '$(CALLGRAPH_IO_IGNORE_REGEXP)'
 
+debug:
+	$(GAWK) -D -f m2
+
 m2.cat1: m2.1
 	nroff -mdoc m2.1 > $@
 

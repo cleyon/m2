@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-07-22 11:55:55 cleyon>
+#  Time-stamp:  <2025-07-22 23:55:13 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -56,6 +56,7 @@ BEGIN {
     PROG["rm"]       = "/bin/rm"
     PROG["sh"]       = "/bin/sh"
     PROG["stat"]     = "/usr/bin/stat"
+    PROG["tput"]     = "/usr/bin/tput"
     PROG["uname"]    = "/usr/bin/uname"
 
     # Secure level 0 (default) allows user-code to run arbitrary
@@ -309,6 +310,9 @@ function assert_valid_env_var_name(var)
 function path_exists_p(path,
                        status, not_used)
 {
+    #print_stderr("(path_exists_p) START; path=" path)
+    if (path == STDIN)
+        return TRUE
     if (secure_level() < 2)
         return exec_prog_cmdline("stat", path) == EX_OK
 
@@ -817,8 +821,10 @@ function panic(text, file, line,
 # (later) scan__usercmd_call() can also call readline, chasing closing `}'.
 function readline(    getstat, i)
 {
+    dbg_print("io", 6, "(readline) START")
     getstat = OKAY
     if (!emptyp(__buffer)) {
+        dbg_print("io", 6, "(readline) __buffer not empty so using its contents")
         # Return the buffer even if somehow it doesn't end with a newline
         if ((i = index(__buffer, TOK_NEWLINE)) == IDX_NOT_FOUND) {
             $0 = __buffer
@@ -834,16 +840,18 @@ function readline(    getstat, i)
 
     } else {
         dbg_print("io", 8, "source_stack count = " stk_depth(__source_stack))
-        dbg_print_block("io", 7, stk_top(__source_stack), "In readline:")
+        dbg_print_block("io", 7, stk_top(__source_stack), "(readline) About to call getline < FILE()...")
         getstat = getline < FILE()
-        if (getstat == ERROR) {
-            warn("(readline) getline=>Error reading file '" FILE() "'")
-        } else if (getstat != EOF) {
+        dbg_print("io", 7, "(readline) getstat=" getstat)
+        if (getstat == OKAY) {
             sym_increment("__LINE__", 1)
             sym_increment("__NLINE__", 1)
-        }
+        } else if (getstat == ERROR) {
+            warn("(readline) getline=>Error reading file '" FILE() "'")
+        } else if (getstat != EOF)
+            panic("getline returned strange value: " getstat)
     }
-    dbg_print("io", 6, sprintf("(readline) RETURNING %d, $0='%s'", getstat, $0))
+    dbg_print("io", 3, sprintf("(readline) RETURNING %d, $0='%s'", getstat, $0))
     return getstat
 }
 
@@ -1877,9 +1885,10 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
                                      parser_label, FILE(), LINE()+1)) # LINE will be +1 after upcoming readline()
 
         rstat = readline()   # OKAY, EOF, ERROR
+        dbg_print("parse", 4, "(parse) [" parser_label "] readline() returned " rstat)
         if (rstat == ERROR) {
             # Whatever just happened, the parse didn't finish properly
-            dbg_print("parse", 2, "(parse) [" parser_label "] readline()=>ERROR")
+            dbg_print("parse", 5, "(parse) [" parser_label "] readline()=>ERROR")
             break          # out of entire parsing loop, to then return
         }
         if (rstat == EOF) {
@@ -2466,9 +2475,10 @@ function ppf__flags(code,
 #      #text       : original text string
 #*****************************************************************************
 function nam__scan(text, info,
-                    name, key, nparts, part, count, i)
+                   name, key, nparts, part, count, i)
 {
     dbg_print("nam", 5, sprintf("(nam__scan) START text='%s'", text))
+    info["name"] = name = info["key"] = key = EMPTY
     #info["text"] = text
 
     # Simple test for CHARS or CHARS[CHARS]
@@ -2487,12 +2497,18 @@ function nam__scan(text, info,
 
     count = split(text, part, "(\\[|\\])")
     if (dbg("nam", 8)) {
-        print_debugfile("'" text "' ==> " count " fields:")
+        print_debugfile("'split(" text ")' ==> " count " fields:")
         for (i = 1; i <= count; i++)
             print_debugfile(i " = '" part[i] "'")
     }
-    info["name"] = name = part[1]
-    info["key"]   = key = part[2]
+    if (count < 1 || count > 3) # assert count in [1,2,3]
+        error("(nam__scan) split() returned strange value " count)
+    if (count == 3 && !emptyp(part[3]))
+        error("(nam__scan) split() part[3] should be empty")
+    if (count >= 2)
+        info["key"]   = key = part[2]
+    if (count >= 1)
+        info["name"] = name = part[1]
 
     # Since we passed the regexp in first if() statement, we can be
     # assured that text is either ^CHARS$ or ^CHARS\[CHARS\]$.  Thus, a
@@ -8815,6 +8831,12 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     nam_ll_write("__FMT__",    GLOBAL_NAMESPACE, TYPE_ARRAY FLAG_SYSTEM FLAG_WRITABLE)
     nam_ll_write("__STRICT__", GLOBAL_NAMESPACE, TYPE_ARRAY FLAG_SYSTEM FLAG_WRITABLE)
 
+    if ("COLUMNS" in ENVIRON)
+      sym_ll_fiat("__COLUMNS__",    "", FLAGS_WRITABLE_INTEGER, ENVIRON["COLUMNS"])
+    else if (secure_level() < 2 && ("tput" in PROG))
+      sym_deferred_symbol("__COLUMNS__",FLAGS_WRITABLE_INTEGER, "tput", "cols")
+    else
+      sym_ll_fiat("__COLUMNS__",    "", FLAGS_WRITABLE_INTEGER, 80)
     if ("PWD" in ENVIRON)
       sym_ll_fiat("__CWD__",        "", FLAGS_READONLY_SYMBOL,  with_trailing_slash(ENVIRON["PWD"]))
     else if (secure_level() < 2 && ("pwd" in PROG))
@@ -8990,6 +9012,8 @@ function initialize_prog_paths()
         sym_ll_fiat("__PROG__", "sh",        FLAGS_READONLY_SYMBOL, PROG["sh"])
     if ("stat" in PROG)
         sym_ll_fiat("__PROG__", "stat",      FLAGS_READONLY_SYMBOL, PROG["stat"])
+    if ("tput" in PROG)
+        sym_ll_fiat("__PROG__", "tput",      FLAGS_READONLY_SYMBOL, PROG["tput"])
     if ("uname" in PROG)
         sym_ll_fiat("__PROG__", "uname",     FLAGS_READONLY_SYMBOL, PROG["uname"])
 }
@@ -9108,10 +9132,13 @@ BEGIN {
                 }
                 # Documentation states "NAME=" on command line
                 # defines with empty value.
-                if (emptyp(_val))
+                if (emptyp(_val)) {
+                    dbg_print("args", 3, "BEGIN: Setting '" _name "' to @null")
                     xeq_cmd__null("null", _name)
-                else
+                } else {
+                    dbg_print("args", 3, "BEGIN: Setting '" _name "' to '" _val "'")
                     xeq_cmd__define("define", _name TOK_SPACE _val)
+                }
 
             # Otherwise load a file
             } else {

@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-07-23 18:52:44 cleyon>
+#  Time-stamp:  <2025-07-23 23:17:16 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -192,6 +192,16 @@ function rtrim(s)
 #     sub(/[ \t]+$/, "", s)
 #     return s
 # }
+
+
+# Return N spaces
+function spaces(n,
+                s)
+{
+    while (n-- > 0)
+        s = s TOK_SPACE
+    return s
+}
 
 
 # If s is surrounded by quotes, remove them.
@@ -1391,7 +1401,7 @@ function blk_to_string(blknum,
 function ppf__block_type(block_type)
 {
     if (block_type == EMPTY)
-        panic("(ppf__block_type) block_type is empty, how did that happen?")
+        panic("(ppf__block_type) block_type is empty")
     dbg_print("xeq", 7, "(ppf__block_type) block_type = " block_type)
     if (! (block_type in __blk_label)) {
         panic("(ppf__block_type) Invalid block type '" block_type "'")
@@ -1573,10 +1583,10 @@ function cmd_definition_ppf(name,
     if (nam__scan(name, info) == ERROR)
         error("Scan error, " __m2_msg)
     if ((level = nam_lookup(info)) == ERROR)
-        error("(cmd_definition_ppf) nam_lookup failed -- should not happen")
+        error("(cmd_definition_ppf) nam_lookup failed")
     # See if it's a user command
     if (flag_1false_p(nam_ll_read(name, level), TYPE_USER))
-        panic("(cmd_definition_ppf) " name " seems to no longer be a command")
+        panic("(cmd_definition_ppf) " name " is no longer a user command")
 
     user_block = cmd_ll_read(name, level)
     return ppf__user(user_block)
@@ -2411,7 +2421,7 @@ function ppf__flag_type(code,
                         type)
 {
     if (code == EMPTY)
-        panic("(ppf__flag_type) code is empty, how did that happen?")
+        panic("(ppf__flag_type) code is empty")
     code = first(code)
     dbg_print("xeq", 7, "(ppf__flag_type) code = " code)
     if (! (code in __flag_label)) {
@@ -4083,7 +4093,7 @@ function xeq_cmd__break(name, cmdline,
 {
     # Logical check
     if (__xeq_ctl != XEQ_NORMAL)
-        panic("(xeq_cmd__break) __xeq_ctl is not normal, how did that happen?")
+        panic("(xeq_cmd__break) __xeq_ctl is not normal")
 
     __xeq_ctl = XEQ_BREAK
 }
@@ -4320,7 +4330,7 @@ function xeq_cmd__continue(name, cmdline)
 {
     # Logical check
     if (__xeq_ctl != XEQ_NORMAL)
-        panic("(xeq_cmd__continue) __xeq_ctl is not normal, how did that happen?")
+        panic("(xeq_cmd__continue) __xeq_ctl is not normal")
 
     __xeq_ctl = XEQ_CONTINUE
 }
@@ -5012,7 +5022,8 @@ function xeq_cmd__filedata(name, cmdline,
 
     if (NF < 2)
         error("(xeq_cmd__filedata) Bad parameters:" cmdline)
-    silent = first(name) == "s" # silent mutes file errors
+    # S variant mutes file errors
+    silent = first(name) == "s"
     arr = $1
     filename = $2
     assert_array_okay_to_define(arr)
@@ -5081,7 +5092,8 @@ function xeq_cmd__filedefine(name, cmdline,
     $0 = cmdline
     if (NF < 2)
         error("(xeq_cmd__filedefine) Bad parameters:" $0)
-    silent = first(name) == "s" # silent mutes file errors, even in strict mode
+    # S variant mutes file errors, even in strict mode
+    silent = first(name) == "s"
     sym  = $1
     assert_sym_okay_to_define(sym)
     # These contortions because a filename might have embedded spaces
@@ -5698,6 +5710,8 @@ function xeq_cmd__ignore(name, cmdline,
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
+#       @paste does not process macros
+#
 #*****************************************************************************
 # @{s,}{include,paste}  FILE
 function xeq_cmd__include(name, cmdline,
@@ -5707,8 +5721,8 @@ function xeq_cmd__include(name, cmdline,
                                  name, cmdline))
     if (cmdline == EMPTY)
         error("Bad parameters:" $0)
-    # paste does not process macros
-    silent = (first(name) == "s") # silent mutes file errors, even in strict mode
+    # S variants mute file errors, even in strict mode
+    silent = (first(name) == "s")
 
     filename = search_file(cmdline)
     if (emptyp(filename)) {
@@ -6197,7 +6211,7 @@ function execute__user(name, cmdline,
     if (nam__scan(name, info) == ERROR)
         error("(execute__user) Scan error, " __m2_msg)
     if ((level = nam_lookup(info)) == ERROR)
-        error("(execute__user) nam_lookup failed -- should not happen")
+        error("(execute__user) nam_lookup failed")
     if (flag_1false_p((code = nam_ll_read(name, level)), TYPE_USER))
         error("(execute__user) " name " seems to no longer be a command")
 
@@ -6259,7 +6273,7 @@ function execute__user_body(user_block, args,
         __xeq_ctl = XEQ_NORMAL
     # If things are still not normal, that's a problem
     if (__xeq_ctl != XEQ_NORMAL)
-        panic("(xeq_cmd__return) __xeq_ctl is not normal, how did that happen?")
+        panic("(xeq_cmd__return) __xeq_ctl is not normal")
 
     dbg_print("cmd", 2, "(execute__user_body) END")
 }
@@ -6406,7 +6420,7 @@ function xeq_cmd__return(name, cmdline,
 {
     # Logical check
     if (__xeq_ctl != XEQ_NORMAL)
-        panic("(xeq_cmd__return) __xeq_ctl is not normal, how did that happen?")
+        panic("(xeq_cmd__return) __xeq_ctl is not normal")
 
     __xeq_ctl = XEQ_RETURN
 }
@@ -7661,8 +7675,6 @@ function dosubs(s,
                 expand = xeq_fn__basename(fn, m, nparam, param)
             else if (fn == "boolval")
                 expand = xeq_fn__boolval(fn, m, nparam, param)
-            else if (fn == "center" || fn == "scenter")
-                expand = "@center@ Not implemented yet"
             else if (fn == "chr")
                 expand = xeq_fn__chr(fn, m, nparam, param)
             else if (fn == "date"     || fn == "epoch" ||
@@ -7691,9 +7703,9 @@ function dosubs(s,
                 expand = xeq_fn__join(fn, m, nparam, param)
             else if (fn == "left")
                 expand = xeq_fn__left(fn, m, nparam, param)
-            else if (fn == "ljust" || fn == "rjust" || \
-                     fn == "sljust" || fn == "srjust")
-                expand = "@[lr]just@ Not implemented yet"
+            else if (fn == "ljust"  || fn == "rjust"  || fn == "center" || \
+                     fn == "sljust" || fn == "srjust" || fn == "scenter")
+                expand = xeq_fn__lrc(fn, m, nparam, param)
             else if (fn == "mid" || fn == "substr")
                 expand = xeq_fn__mid(fn, m, nparam, param)
             else if (fn == "ord")
@@ -7785,7 +7797,7 @@ function dosubs(s,
 
         # Throw an error on undefined symbol (strict-only)
         } else if (strictp("def")) {
-            error("Name '" m "' not defined (__STRICT__[def] True):" $0)
+            error("Name '" m "' not defined (__STRICT__[def] is True):" $0)
 
         } else {
             l = l TOK_AT m
@@ -7896,7 +7908,7 @@ function xeq_fn__boolval(fn, m, nparam, param,
             if (sym_defined_p(p))
                 result = sym_ll_read("__FMT__", sym_true_p(p))
             else if (strictp("bool"))
-                error("Name '" p "' not defined [bool]:" $0)
+                error("Name '" p "' not defined (__STRICT__[bool] is True):" $0)
             else
                 result = sym_ll_read("__FMT__", FALSE)
         } else
@@ -7987,7 +7999,7 @@ function xeq_fn__date(fn, m, nparam, param,
 # @daynum [YEAR MONTH DAY]@
 function xeq_fn__daynum(fn, m, nparam, param,
                         year, month, day, monthdays, i, n,
-                        silent, count, date)
+                        count, date)
 {
     if (secure_level() >= 2)
         error(sprintf("(%s) Security violation", fn))
@@ -8067,7 +8079,8 @@ function xeq_fn__dirname(fn, m, nparam, param,
 function xeq_fn__expr(fn, m, nparam, param,
                       silent, result)
 {
-    silent = first(fn) == "s"   # don't automatically print result
+    # S variant won't automatically print result
+    silent = first(fn) == "s"
     sub(/^s?expr[ \t]*/, "", m) # clean up expression to evaluate
     result = calc3_eval(m)
     dbg_print("expr", 3, sprintf("(xeq_fn__expr) expr{%s} = %s", m, result))
@@ -8135,7 +8148,7 @@ function xeq_fn__getenv(fn, m, nparam, param,
     if (p in ENVIRON)
         return ENVIRON[p]
     if (strictp("env") && !silent)
-        error("Environment variable '" p "' not defined:" $0)
+        error("Environment variable '" p "' not defined (__STRICT__[env] is True):" $0)
     return ""
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
@@ -8371,8 +8384,8 @@ function xeq_fn__join(fn, m, nparam, param,
                       info, nparts, level, s, arr, fs, fslen, silent,
                       code, size, k, x, keys, i, agg_block)
 {
+    # S variant appends a final separator as a terminator
     silent = first(fn) == "s"
-
     if (nparam == 0)
         error("Bad parameters in '" m "':" $0)
     arr = param[1]
@@ -8385,7 +8398,7 @@ function xeq_fn__join(fn, m, nparam, param,
     } else if (sym_defined_p("__FS__")) {
         fs = sym_fetch("__FS__")
     } else {
-        fs = " "
+        fs = TOK_SPACE
     }
     fslen = length(fs)
 
@@ -8470,6 +8483,68 @@ function xeq_fn__left(fn, m, nparam, param,
             error("Value '" x "' must be numeric:" $0)
     }
     return substr(sym_fetch(p), 1, x)
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  L J U S T   /   R J U S T   /   C E N T E R  @
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#       ljust: Left justify string
+#       rjust: Right justify string
+#       center: Center string
+#
+#*****************************************************************************
+# @ljust  SYM [WID]@
+# @rjust  SYM [WID]@
+# @center SYM [WID]@
+function xeq_fn__lrc(fn, m, nparam, param,
+                     silent, p, width, s, slen, x, sp)
+{
+    if (nparam < 1 || nparam > 2)
+        error("Bad parameters in '" m "':" $0)
+    p = param[1]
+    assert_sym_valid_name(p)
+    assert_sym_defined(p, fn)
+    if (nparam == 2) {
+        width = param[2]
+        if (!integerp(width))
+            error("Value '" width "' must be numeric:" $0)
+    } else {
+        width = sym_fetch("__COLUMNS__")
+        if (!integerp(width) || width <= 0)
+            width = 80
+    }
+    width = 0 + width
+    if ((slen = length(s = sym_fetch(p))) == width)
+        return s
+
+    # S variants do not truncate output
+    if (silent = first(fn) == "s")
+        fn = rest(fn)
+    if (fn == "ljust") {
+        if (slen > width)
+            return silent ? s : substr(s, 1, width)
+        else
+            return s spaces(width-slen)
+    } else if (fn == "rjust") {
+        if (slen > width)
+            return silent ? s : substr(s, slen-width+1, width)
+        else
+            return spaces(width-slen) s
+    } else if (fn == "center") {
+        if (slen > width)
+            return silent ? s : substr(s, 1+int((slen-width)/2), width)
+        else {
+            sp = int((width-slen)/2)
+            return spaces(sp) s spaces(width-sp-slen)
+        }
+    } else
+        panic("Function '" fn "' not defined:" $0)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -8619,20 +8694,17 @@ function xeq_fn__rot13(fn, m, nparam, param,
 #*****************************************************************************
 # @spaces N@
 function xeq_fn__spaces(fn, m, nparam, param,
-                        x, result)
+                        n)
 {
     if (nparam > 1)
         error("Bad parameters in '" m "':" $0)
-    result = ""
-    x = 1
     if (nparam == 1) {
-        x = param[1]
-        if (!integerp(x))
-            error("Value '" x "' must be numeric:" $0)
-    }
-    while (x-- > 0)
-        result = result TOK_SPACE
-    return result
+        n = param[1]
+        if (!integerp(n))
+            error("Value '" n "' must be numeric:" $0)
+    } else
+        n = 1
+    return spaces(n)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -8665,7 +8737,7 @@ function xeq_fn__str_fn(fn, m, nparam, param,
     else if (fn == "uc")
         result = toupper(sym_fetch(p))
     else
-        error("Function '" fn "' not defined [can't happen]:" $0)
+        panic("Function '" fn "' not defined:" $0)
 
     return result
 }

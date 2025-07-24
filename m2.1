@@ -554,6 +554,15 @@ See system symbols
 .Va __FMT__[1] ,
 and
 .Va __STRICT__[bool] .
+.It @center SYM [WIDTH]@
+Center the value of SYM in a field of WIDTH columns.
+If WIDTH is omitted, the value of
+.Va __COLUMNS__
+is used.
+Strings longer than WIDTH are truncated as necessary.
+Variant
+.Ql @scenter@
+does not truncate output.
 .It @chr SYM@
 Output character with ASCII code SYM.
 .It @date@
@@ -656,6 +665,15 @@ Lower case.
 Substring of SYM from 1 to Nth character.
 .It @len SYM@
 Number of characters in SYM's value.
+.It @ljust SYM [WIDTH]@
+Left-justify the value of SYM in a field of WIDTH columns.
+If WIDTH is omitted, the value of
+.Va __COLUMNS__
+is used.
+Strings longer than WIDTH are truncated as necessary.
+Variant
+.Ql @sljust@
+does not truncate output.
 .It @ltrim SYM@
 Remove leading whitespace.
 .It @mid SYM BEG [LEN]@
@@ -672,6 +690,15 @@ Variant
 also discards preceding whitespace.
 .It @right SYM [N]@
 Substring of SYM from N to last character.
+.It @rjust SYM [WIDTH]@
+Right-justify the value of SYM in a field of WIDTH columns.
+If WIDTH is omitted, the value of
+.Va __COLUMNS__
+is used.
+Strings longer than WIDTH are truncated as necessary.
+Variant
+.Ql @srjust@
+does not truncate output.
 .It @rot13 SYM@
 Output value of SYM (or literal string if SYM not defined) with rot13 text.
 .It @rtrim SYM@

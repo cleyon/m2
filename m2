@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-07-24 00:11:31 cleyon>
+#  Time-stamp:  <2025-07-24 17:14:31 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -794,6 +794,10 @@ function warn(text, file, line)
 }
 
 
+# error() is used when m2 cannot continue processing due to a logical
+# error, invalid syntax, math error, etc, something from user code that
+# doesn't work.  The end_program() routine undiverts any streams, executes
+# any wraps, and exits with code 1.
 function error(text, file, line)
 {
     warn(text, file, line)
@@ -802,19 +806,20 @@ function error(text, file, line)
 }
 
 
+# panic() is more extreme than error().  It should not be possible to
+# induce a panic merely by executing user code.  It is used when there
+# is an internal error, a logical inconsistency, or a "can't happen"
+# situation.  It prints its message and, without undiverting any streams
+# or executing any wraps, exits immediately with code 70.
 function panic(text, file, line,
                timestamp)
 {
     warn(text, file, line)
     __exit_code = EX_SOFTWARE
-
     flush_stdout(SYNC_FORCE)
-    if (debugp()) {
-        timestamp = secure_level() < 2 ? \
-            xeq_fn__date("strftime", "strftime  %Y-%m-%dT%H:%M:%S%z", 1) : ""
-        #             NB - two spaces --------^^
-        print_debugfile("m2:PANIC" timestamp)
-    }
+    print_stderr("m2:PANIC" secure_level() < 2 ? \
+                 xeq_fn__date("strftime", "strftime  %Y-%m-%dT%H:%M:%S%z", 1) : "")
+                 #         NB - two spaces --------^^
     exit __exit_code
 }
 
@@ -957,8 +962,6 @@ function initialize_debugging()
     dbg_set_level("trace",      5)
     dbg_set_level("while",      5)
     dbg_set_level("xeq",        5)
-
-    sym_ll_write("__SYNC__",      "", GLOBAL_NAMESPACE, SYNC_LINE)
 }
 
 
@@ -966,7 +969,6 @@ function clear_debugging(    dsys)
 {
     for (dsys in __dbg_sysnames)
         sym_ll_write("__DBG__", dsys, GLOBAL_NAMESPACE, 0)
-    # sym_ll_write("__SYNC__",      "", GLOBAL_NAMESPACE, SYNC_FILE)
 }
 
 
@@ -1598,7 +1600,7 @@ function ppf__user(user_block,
 {
     if ((blk_type(user_block) != BLK_USER) ||
         (blktab[user_block, 0, "valid"] != TRUE))
-        error("(ppf__user) Bad user_block config")
+        panic("(ppf__user) Bad user_block config")
 
     name = blktab[user_block, 0, "name"]
     params = ""
@@ -1890,7 +1892,7 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
     retval = FALSE
 
     while (TRUE) {
-        dbg_print("parse", 4, sprintf("(parse) [%s] TOP OF LOOP: ____ %s  LINE=%d  ________________________________",
+        dbg_print("parse", 4, sprintf("(parse) [%s] TOP OF LOOP: ____ %s  LINE %d ________________________________",
                                      parser_label, FILE(), LINE()+1)) # LINE will be +1 after upcoming readline()
 
         rstat = readline()   # OKAY, EOF, ERROR
@@ -3325,10 +3327,8 @@ function sym_store(sym, new_val,
         print_debugfile(sprintf("(sym_store) START sym='%s'", sym))
 
     # Scan sym => name, key
-    if ((nparts = nam__scan(sym, info)) == ERROR) {
-        #error("(sym_store) Scan error; bad characters in '" sym "'")
-        error("Scan error, " __m2_msg)
-    }
+    if ((nparts = nam__scan(sym, info)) == ERROR)
+        error("(sym_store) Scan error: " __m2_msg)
     name = info["name"]
     key  = info["key"]
 
@@ -4240,7 +4240,7 @@ function xeq__BLK_CASE(case_block,
     dbg_print_block("case", 7, case_block, "(xeq__BLK_CASE) case_block")
     if ((blk_type(case_block) != BLK_CASE) ||  \
         (blktab[case_block, 0, "valid"] != TRUE))
-        error("(xeq__BLK_CASE) Bad config")
+        panic("(xeq__BLK_CASE) Bad case_block config")
 
     # Check if the case variable value matches any @of values
     casevar = blktab[case_block, 0, "casevar"]
@@ -4482,7 +4482,6 @@ function xeq_cmd__divert(name, cmdline,
                                    curr_dstblk(), NF, cmdline))
     new_stream = (NF == 0) ? "0" : dosubs($1)
     if (!integerp(new_stream))
-        # error(sprintf("Value '%s' must be integer:", new_stream) $0)
         return
     if (new_stream > MAX_STREAM)
         error("Bad parameters:" $0)
@@ -4682,11 +4681,9 @@ function dump__symtab(type, include_sys, # caller names this "all_flag"
                     keys[++cnt] = x[1] "[" i "]"
                 }
             continue
-        } else if (x[4] != "symval") {
+        } else if (x[4] != "symval")
             panic(sprintf("(dump__symtab) Unexpected elem type: ['%s','%s',%d,%s]",
                           x[1], x[2], x[3], x[4]))
-            continue
-        }
 
         # It's a regular symbol so process it
         if (((flag_1true_p(code, TYPE_SYMBOL) && x[2] == EMPTY) ||
@@ -5245,7 +5242,7 @@ function xeq__BLK_FOR(for_block,
     dbg_print_block("for", 7, for_block, "(xeq__BLK_FOR) for_block")
     if ((block_type != BLK_FOR) || \
         (blktab[for_block, 0, "valid"] != TRUE))
-        error("(xeq__BLK_FOR) Bad config")
+        panic("(xeq__BLK_FOR) Bad for_block config")
 
     if (blktab[for_block, 0, "loop_type"] == "each")
         if (blktab[for_block, 0, "array_type"] == "normal")
@@ -5517,7 +5514,7 @@ function xeq__BLK_IF(if_block,
     dbg_print_block("if", 7, if_block, "(xeq__BLK_IF) if_block")
     if ((block_type != BLK_IF) || \
         (blktab[if_block, 0, "valid"] != TRUE))
-        error("(xeq__BLK_IF) Bad config")
+        panic("(xeq__BLK_IF) Bad if_block config")
 
     # Evaluate condition, determine if TRUE/FALSE and also
     # which block to follow.  For now, always take TRUE path
@@ -5567,10 +5564,8 @@ function evaluate_condition(cond, negate,
                             nparts, arr, key, info, level, lhs, rhs, lval, rval)
 {
     dbg_print("if", 7, sprintf("(evaluate_condition) START cond='%s'", cond))
-    if (cond == EMPTY) {
+    if (cond == EMPTY)
         error("@if: Condition cannot be empty")
-        return ERROR
-    }
 
     retval = ERROR
     if (first(cond) == "!") {
@@ -5997,7 +5992,7 @@ function xeq__BLK_LONGDEF(longdef_block,
     dbg_print_block("sym", 7, longdef_block, "(xeq__BLK_LONGDEF) longdef_block")
     if ((block_type != BLK_LONGDEF) ||
         (blktab[longdef_block, 0, "valid"] != TRUE))
-        error("(xeq__BLK_LONGDEF) Bad config")
+        panic("(xeq__BLK_LONGDEF) Bad longdef_block config")
 
     name = blktab[longdef_block, 0, "name"]
     assert_sym_okay_to_define(name)
@@ -6206,7 +6201,7 @@ function xeq__BLK_USER(newcmd_block,
     dbg_print_block("cmd", 7, newcmd_block, "(xeq__BLK_USER) newcmd_block")
     if ((block_type != BLK_USER) ||
         (blktab[newcmd_block, 0, "valid"] != TRUE))
-        error("(xeq__BLK_USER) Bad config")
+        panic("(xeq__BLK_USER) Bad newcmd_block config")
 
     # Instantiate command, but do not run.  "@newcmd FOO" is just declaring FOO.
     # @FOO{...} actually ships it out (and is done under ship_out/xeq_user).
@@ -6239,7 +6234,7 @@ function execute__user(name, cmdline,
     if ((level = nam_lookup(info)) == ERROR)
         error("(execute__user) nam_lookup failed")
     if (flag_1false_p((code = nam_ll_read(name, level)), TYPE_USER))
-        error("(execute__user) " name " seems to no longer be a command")
+        panic("(execute__user) " name " seems to no longer be a command")
 
     user_block = cmd_ll_read(name, level)
     dbg_print_block("xeq", 7, user_block, "(execute__user) user_block")
@@ -6273,7 +6268,7 @@ function execute__user_body(user_block, args,
     dbg_print_block("cmd", 7, user_block, "(execute__user_body) user_block")
     if ((block_type != BLK_USER) ||
         (blktab[user_block, 0, "valid"] != TRUE))
-        error("(execute__user_body) Bad config")
+        panic("(execute__user_body) Bad user_block config")
 
     # Always raise namespace level, even if nparam == 0
     # because user-mode might run @local
@@ -7069,7 +7064,7 @@ function xeq__BLK_WHILE(while_block,
     dbg_print_block("while", 7, while_block, "(xeq__BLK_WHILE) while_block")
     if ((block_type != BLK_WHILE) || \
         (blktab[while_block, 0, "valid"] != TRUE))
-        error("(xeq__BLK_WHILE) Bad config")
+        panic("(xeq__BLK_WHILE) Bad while_block config")
 
     # Evaluate condition, determine if TRUE/FALSE and also
     # which block to follow.  For now, always take TRUE path
@@ -8343,7 +8338,7 @@ function xeq_fn__ifx(fn, m, nparam, param,
 
     # Get if_clause
     if (!match(m, "^{[^}]*}"))
-        error("(ifx) Bad ifcond in '" m "':" $0)
+        error("(ifx) Bad if_clause in '" m "':" $0)
     ifcond = substr(m, RSTART+1, RLENGTH-2)
     dbg_print("dosubs", 7, "(ifx) ifcond='" ifcond "'")
     m = substr(m, RSTART+RLENGTH)
@@ -9387,7 +9382,9 @@ function end_program(diverted_streams_final_disposition,
         timestamp = secure_level() < 2 ? \
             xeq_fn__date("strftime", "strftime  %Y-%m-%dT%H:%M:%S%z", 1) : ""
         #             NB - two spaces --------^^
-        print_debugfile("m2:END M2" timestamp)
+        print_debugfile(sprintf("m2:%s%s",
+                                __exit_code == EX_M2_ERROR ? "ERROR" : "END",
+                                timestamp))
     }
     exit __exit_code
 }

@@ -1324,19 +1324,60 @@ Q.\ What is the difference between
 and
 .Ql @newcmd ?
 .br
-A.\ @define (and @longdef) create a symbol whose value can be substituted
-in-line whenever you wish, by surrounding it with "@" characters, as in:
+A.\ @define (and @longdef) create a
+.Em symbol
+whose value can be expanded by surrounding it with "@" characters, as in:
 .br
 .Bd -literal -offset indent -compact
 Hello @name@, I just got a great deal on this new @item@ !!!
 .Ed
-You can also invoke mini "functions", little in-line functions that may
-take parameters but generally produce or modify output in some way.
+You can also define and invoke
+.Em functions ,
+such as
+.Ql @getenv@
+or
+.Ql @ifelse@ ,
+which are symbols that may optionally accept parameters.
+Symbols and functions can be used in-line with other text and generally
+produce or modify output in some way.
 .Pp
-Names declared with @newcmd are recognized and run in the procedure
-that processes the control commands (@if, @define, etc).
-These things can only be on a line of their own and (mostly) do not
-produce output.
+@newcmd creates a new user
+.Em command
+which is recognized and executed like other built-in commands (such as
+.Ql @if ,
+.Ql @define ,
+etc).
+Commands can only appear on a line of their own
+and may or may not produce output.
+Their definitions may include complex logic.
+.Pp
+.Em Example :
+.Bd -literal -offset indent -compact
+@newcmd line{n}
+| @format %2d @{n}@ | @format %7.4f @{expr sqrt(n)}@ |
+@endcmd
+@@
+@newcmd table
+|  N | sqrt(N) |
+|----|---------|
+@for N 1 9
+@line{@{N}}
+@next N
+@endcmd
+@@
+@table
+\ \ \ => |  N | sqrt(N) |
+\ \ \ => |----|---------|
+\ \ \ => |  1 |  1.0000 |
+\ \ \ => |  2 |  1.4142 |
+\ \ \ => |  3 |  1.7321 |
+\ \ \ => |  4 |  2.0000 |
+\ \ \ => |  5 |  2.2361 |
+\ \ \ => |  6 |  2.4495 |
+\ \ \ => |  7 |  2.6458 |
+\ \ \ => |  8 |  2.8284 |
+\ \ \ => |  9 |  3.0000 |
+.Ed
 .Ss Debugging
 Symbol
 .Va __DEBUG__

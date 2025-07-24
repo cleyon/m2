@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-07-23 23:17:16 cleyon>
+#  Time-stamp:  <2025-07-24 00:00:11 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -3073,6 +3073,7 @@ function sym_destroy(name, key, level)
     # if !A & B         syntax error: NAME is not an array and cannot be deindexed
     # if !A & !B        (normal symbol) delete symtab[name, "", level, "symval"];
     #                                   delete namtab[name]
+    delete namtab[name, level]
     delete symtab[name, key, level, "agg_block"]
     delete symtab[name, key, level, "deferred_arg"]
     delete symtab[name, key, level, "deferred_prog"]
@@ -3178,6 +3179,28 @@ function sym_deferred_define_now(sym,
     nam_ll_write(sym, GLOBAL_NAMESPACE, flag_set_clear(code, EMPTY, FLAG_DEFERRED))
     delete symtab[sym, "", GLOBAL_NAMESPACE, "deferred_prog"]
     delete symtab[sym, "", GLOBAL_NAMESPACE, "deferred_arg"]
+}
+
+
+function sym_destroy_all_deferred(    x, k, def_list, sym, code)
+{
+    dbg_print("nam", 5, "(sym_destroy_all_deferred) BEGIN")
+
+    for (k in namtab) {
+        split(k, x, SUBSEP)
+        sym = x[1]
+        code = nam_ll_read(sym, GLOBAL_NAMESPACE)
+        if (flag_1true_p(code, FLAG_DEFERRED)) {
+            dbg_print("nam", 7, "(sym_destroy_all_deferred) Want to destroy deferred " sym)
+            def_list[sym] = TRUE
+        }
+    }
+
+    for (sym in def_list) {
+        dbg_print("nam", 5, "(sym_destroy_all_deferred) Destroying deferred " sym)
+        sym_destroy(sym, "", GLOBAL_NAMESPACE)
+    }
+    dbg_print("nam", 5, "(sym_destroy_all_deferred) END")
 }
 
 
@@ -3422,16 +3445,19 @@ function sym_ll_write(name, key, level, val)
         !nam_system_p(name))
         print_debugfile(sprintf("(sym_ll_write) symtab[\"%s\", \"%s\", %d, \"symval\"] = %s", name, key, level, val))
 
-    # Trigger debugging setup
-    if (name == "__DEBUG__" && sym_ll_read("__DEBUG__", "", GLOBAL_NAMESPACE) == FALSE &&
-        val != FALSE)
+    # Run triggers for various special symbols
+    if (name == "__DEBUG__" &&
+        sym_ll_read("__DEBUG__", "", GLOBAL_NAMESPACE) == FALSE &&
+        val != FALSE) {
         initialize_debugging()
-    else if (name == "__SECURE__") {
+    } else if (name == "__SECURE__") {
         val = max(secure_level(), val) # Don't allow __SECURE__ to decrease
-        #print_debugfile(sprintf("New __SECURE__ = %d", val))
-    }
-    # Maintain equivalence:  __FMT__[number] === CONVFMT
-    if (name == "__FMT__" && key == "number" && level == GLOBAL_NAMESPACE) {
+        if (val >= 2)
+            sym_destroy_all_deferred()
+    } else if (name == "__FMT__" &&
+               key == "number" &&
+               level == GLOBAL_NAMESPACE) {
+        # Maintain equivalence:  __FMT__[number] === CONVFMT
         if (sym_ll_in("__DBG__", "sym", GLOBAL_NAMESPACE) &&
             sym_ll_read("__DBG__", "sym", GLOBAL_NAMESPACE) >= 6)
             print_debugfile(sprintf("(sym_ll_write) Setting CONVFMT to %s", val))

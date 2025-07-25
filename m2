@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-07-25 12:42:35 cleyon>
+#  Time-stamp:  <2025-07-25 13:56:31 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -5778,6 +5778,8 @@ function search_file(f,
                      pe, icount, paths, p, i)
 {
     f = rm_quotes(dosubs(f))
+    if (f == "-")
+        f = "/dev/stdin"
     if ((pe = path_exists_p(f)) == TRUE)
         return f
     if (first(f) == "/")
@@ -9326,7 +9328,7 @@ BEGIN {
                 }
                 load_init_files()
                 if (! dofile(_loadfile)) {
-                    warn("Problem parsing file '" _arg "'", "ARGV", _i)
+                    warn("Problem parsing file '" _loadfile "'", "ARGV", _i)
                     __exit_code = EX_M2_ERROR
                 }
             }
@@ -9402,7 +9404,7 @@ function end_program(diverted_streams_final_disposition,
             xeq_fn__date("strftime", "strftime  %Y-%m-%dT%H:%M:%S%z", 1) : ""
         #             NB - two spaces --------^^
         print_debugfile(sprintf("m2:%s%s",
-                                __exit_code == EX_M2_ERROR ? "ERROR" : "END",
+                                __exit_code == EX_NOINPUT ? "NOFILE" : __exit_code == EX_OK ? "END" : "ERROR",
                                 timestamp))
     }
     exit __exit_code

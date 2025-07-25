@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-07-24 17:14:31 cleyon>
+#  Time-stamp:  <2025-07-24 20:08:52 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -79,16 +79,11 @@ BEGIN {
 # DO NOT CHANGE anything below this line
 
 BEGIN {
-    TRUE = OKAY      =  1
-    FALSE = EOF      =  0
-    ERROR = DISCARD  = -1
-    EMPTY            = ""
-    GLOBAL_NAMESPACE =  0
-    NULL             = "/dev/null"
-    STDIN            = "/dev/stdin"
-    STDOUT           = "/dev/stdout"
-    STDERR           = "/dev/stderr"
-    TTY              = "/dev/tty"
+    TRUE  = OKAY     =  1;              NULL   = "/dev/null"
+    FALSE = EOF      =  0;              STDIN  = "/dev/stdin"
+    ERROR = DISCARD  = -1;              STDOUT = "/dev/stdout"
+    EMPTY            = "";              STDERR = "/dev/stderr"
+    GLOBAL_NAMESPACE =  0;              TTY    = "/dev/tty"
 
     # Exit codes
     EX_OK            =  0;              __exit_code = EX_OK
@@ -97,25 +92,25 @@ BEGIN {
     EX_NOINPUT       = 66
     EX_SOFTWARE      = 70
 
-    # Flags
-    TYPE_ANY         = "*";             FLAG_BLKARRAY    = "K"
-    TYPE_ARRAY       = "A";             FLAG_BOOLEAN     = "B"
-    TYPE_COMMAND     = "C";             FLAG_DEFERRED    = "D"
-    TYPE_FUNCTION    = "F";             FLAG_IMMEDIATE   = "!"
-    TYPE_INTERNAL    = "_";             FLAG_INTEGER     = "I"
-    TYPE_SEQUENCE    = "Q";             FLAG_NUMERIC     = "N"
-    TYPE_SYMBOL      = "S";             FLAG_READONLY    = "R"
-    TYPE_USER        = "U";             FLAG_TRACING     = "T"
-                                        FLAG_WRITABLE    = "W"
-                                        FLAG_SYSTEM      = "Y"
+    # Types & Flags
+    TYPE_ANY         = "*";             FLAG_BLKARRAY  = "K"
+                                        FLAG_BOOLEAN   = "B"
+    TYPE_ARRAY       = "A";             FLAG_DEFERRED  = "D"
+    TYPE_COMMAND     = "C";             FLAG_IMMEDIATE = "!"
+    TYPE_FUNCTION    = "F";             FLAG_INTEGER   = "I"
+    TYPE_INTERNAL    = "_";             FLAG_NUMERIC   = "N"
+    TYPE_SEQUENCE    = "Q";             FLAG_READONLY  = "R"
+    TYPE_SYMBOL      = "S";             FLAG_TRACING   = "T"
+    TYPE_USER        = "U";             FLAG_WRITABLE  = "W"
+                                        FLAG_SYSTEM    = "Y"
 
-    FLAGS_READONLY_INTEGER = TYPE_SYMBOL FLAG_INTEGER FLAG_READONLY FLAG_SYSTEM
-    FLAGS_READONLY_NUMERIC = TYPE_SYMBOL FLAG_NUMERIC FLAG_READONLY FLAG_SYSTEM
-    FLAGS_READONLY_SYMBOL  = TYPE_SYMBOL              FLAG_READONLY FLAG_SYSTEM
+    FLAGS_READONLY_INTEGER = TYPE_SYMBOL FLAG_READONLY FLAG_INTEGER FLAG_SYSTEM
+    FLAGS_READONLY_NUMERIC = TYPE_SYMBOL FLAG_READONLY FLAG_NUMERIC FLAG_SYSTEM
+    FLAGS_READONLY_SYMBOL  = TYPE_SYMBOL FLAG_READONLY              FLAG_SYSTEM
 
-    FLAGS_WRITABLE_INTEGER = TYPE_SYMBOL FLAG_INTEGER FLAG_WRITABLE FLAG_SYSTEM
-    FLAGS_WRITABLE_SYMBOL  = TYPE_SYMBOL              FLAG_WRITABLE FLAG_SYSTEM
-    FLAGS_WRITABLE_BOOLEAN = TYPE_SYMBOL FLAG_BOOLEAN FLAG_WRITABLE FLAG_SYSTEM
+    FLAGS_WRITABLE_INTEGER = TYPE_SYMBOL FLAG_WRITABLE FLAG_INTEGER FLAG_SYSTEM
+    FLAGS_WRITABLE_SYMBOL  = TYPE_SYMBOL FLAG_WRITABLE              FLAG_SYSTEM
+    FLAGS_WRITABLE_BOOLEAN = TYPE_SYMBOL FLAG_WRITABLE FLAG_BOOLEAN FLAG_SYSTEM
 }
 
 
@@ -194,12 +189,14 @@ function rtrim(s)
 # }
 
 
-# Return N spaces
-function spaces(n,
+# Return N spaces (or other character)
+function spaces(n,    c,
                 s)
 {
+    if (c == EMPTY)
+        c = TOK_SPACE
     while (n-- > 0)
-        s = s TOK_SPACE
+        s = s c
     return s
 }
 
@@ -544,7 +541,6 @@ function ppf__mode(mode)
     else if (mode == MODE_STREAMS_SHIP_OUT) return "ShipOutStream"
     else
         panic("(ppf__mode) Unknown mode '" mode "'")
-#    else return "UnknownMode('" mode "')"
 }
 
 
@@ -575,7 +571,7 @@ function lower_namespace()
 #       3       Depth problem mismatch
 # In error cases, warning messages are printed.
 function check__parse_stack(expected_block_type,
-                                btop)
+                            btop)
 {
     if (stk_empty_p(__parse_stack)) {
         __m2_msg = "Empty parse stack"
@@ -644,6 +640,7 @@ function expand_braces(s,    atbr, cb, ltext, mtext, rtext)
 # DESCRIPTION
 #     Given a starting point (position of @{ in string), move forward
 #     and return position of closing }.  Nested @{...} are accounted for.
+#     If \} is encountered, continue scanning - \} is converted to } elsewhere.
 #     If closing } is not found, return EOF.  On other error, return ERROR.
 #
 # PARAMETERS
@@ -652,13 +649,13 @@ function expand_braces(s,    atbr, cb, ltext, mtext, rtext)
 #               for which we need to find the closing brace.
 #
 # LOCAL VARIABLES
-#     offset    Counter of current offset into s from start.
+#     offset    Current offset, counting characters from start in s.
 #               Initially offset=0.  As we scan right, offset is incremented.
-#     c         The current character, at position offset.
+#     c         The current character, at position offset from start in s.
 #                   c = substr(s, start+offset, 1)
-#     nc        The next character past c, at position offset+1.
+#     nc        Next character beyond c, at position offset+1 from start in s.
 #                   nc = substr(s, start+offset+1, 1)
-#     cb        Position of inner "}" found via recursion.
+#     cb        Closing brace - position of inner "}" found via recursion.
 #     slen      Length of s.  s is not modified so its length is constant.
 #
 # RETURN VALUE
@@ -764,6 +761,7 @@ function flush_stdout(flushlev)
         fflush(STDOUT)
         # Reputed to be more portable:
         #    system("")
+        # ----------------
         # Also, fflush("") will flush ALL files and pipes.  (gawk-specific?)
         # ----------------
         # From https://wiki.alpinelinux.org/wiki/Awk
@@ -796,8 +794,7 @@ function warn(text, file, line)
 
 # error() is used when m2 cannot continue processing due to a logical
 # error, invalid syntax, math error, etc, something from user code that
-# doesn't work.  The end_program() routine undiverts any streams, executes
-# any wraps, and exits with code 1.
+# doesn't work.  The end_program() executes any wraps and exits with code 1.
 function error(text, file, line)
 {
     warn(text, file, line)
@@ -809,8 +806,7 @@ function error(text, file, line)
 # panic() is more extreme than error().  It should not be possible to
 # induce a panic merely by executing user code.  It is used when there
 # is an internal error, a logical inconsistency, or a "can't happen"
-# situation.  It prints its message and, without undiverting any streams
-# or executing any wraps, exits immediately with code 70.
+# situation.  It prints its message and exits immediately with code 70.
 function panic(text, file, line,
                timestamp)
 {
@@ -839,7 +835,7 @@ function readline(    getstat, i)
     if (!emptyp(__buffer)) {
         dbg_print("io", 6, "(readline) __buffer not empty so using its contents")
         # Return the buffer even if somehow it doesn't end with a newline
-        if ((i = index(__buffer, TOK_NEWLINE)) == IDX_NOT_FOUND) {
+        if ((i = index(__buffer, TOK_NEWLINE)) == NOT_FOUND) {
             $0 = __buffer
             __buffer = EMPTY
         } else {
@@ -1052,8 +1048,6 @@ function print_debugfile(text,
 function dbg_print(dsys, lev, text,
                    retval)
 {
-    if (lev == 1)
-        warn("(dbg_print) dsys=" dsys "; level 1 reserved for @debug")
     if (dbg(dsys, lev))
         print_debugfile(text)
 }
@@ -1062,8 +1056,6 @@ function dbg_print(dsys, lev, text,
 function dbg_print_block(dsys, lev, blknum, description,
                          block_type, blk_label, text)
 {
-    if (lev == 1)
-        warn("(dbg_print_block) dsys=" dsys "; level 1 reserved for @debug")
     if (! dbg(dsys, lev))
         return
 ##    blknum = blknum+0
@@ -1916,7 +1908,7 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
         dbg_print("parse", 5, "(parse) [" parser_label "] readline() okay; $0='" $0 "'")
 
         # Maybe short-circuit and ship line out now
-        if (curr_atmode() == MODE_AT_LITERAL || index($0, TOK_AT) == IDX_NOT_FOUND) {
+        if (curr_atmode() == MODE_AT_LITERAL || index($0, TOK_AT) == NOT_FOUND) {
             dbg_print("parse", 3, sprintf("(parse) [%s, short circuit] CALLING ship_out(OBJ_TEXT, '%s')",
                                          parser_label, $0))
             ship_out(OBJ_TEXT, $0)
@@ -2333,7 +2325,7 @@ function ppf__SRC_FILE(blknum)
 function flag_1false_p(code, single_f)
 {
     if (single_f == TYPE_ANY) return FALSE
-    return index(code, single_f) == IDX_NOT_FOUND
+    return index(code, single_f) == NOT_FOUND
 }
 
 
@@ -3662,7 +3654,7 @@ function sym_definition_ppf(sym,
     definition = sym_fetch(sym)
     if (emptyp(definition))
         return "@null "    sym
-    else if (index(definition, TOK_NEWLINE) == IDX_NOT_FOUND)
+    else if (index(definition, TOK_NEWLINE) == NOT_FOUND)
         return "@define "  sym TOK_TAB definition
     else
         return "@longdef " sym TOK_NEWLINE \
@@ -6032,6 +6024,8 @@ function ppf__BLK_LONGDEF(longdef_block)
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
+#       Undocumented - Reserved for internal use
+#
 #       @m2ctl booltest                 Scan boolean expr from user
 #       @m2ctl clear_debugging          Clear debugging
 #       @m2ctl dbg_namespace            Debug namespaces
@@ -6043,8 +6037,6 @@ function ppf__BLK_LONGDEF(longdef_block)
 #       @m2ctl set_dbg DSYS LEVEL       Set debug level directly
 #
 #*****************************************************************************
-
-# Undocumented - Reserved for internal use
 # @m2ctl                ARGS
 function xeq_cmd__m2ctl(name, cmdline,
                         getstat, input, e, dsys, lev, blk)
@@ -7577,7 +7569,7 @@ function dosubs(s,
         if (index(r, "@{") > 0)
             r = expand_braces(r)
 
-        if ((i = index(r, TOK_AT)) == IDX_NOT_FOUND)
+        if ((i = index(r, TOK_AT)) == NOT_FOUND)
             break
 
         dbg_print("dosubs", 7, (sprintf("(dosubs) Top of loop: l='%s', r='%s'", l, r)))
@@ -7586,7 +7578,7 @@ function dosubs(s,
 
         # Look for a second "@" beyond the first one.  If not found,
         # this can't be a valid m2 substitution.  Ignore it, we're done.
-        if ((i = index(r, TOK_AT)) == IDX_NOT_FOUND) {
+        if ((i = index(r, TOK_AT)) == NOT_FOUND) {
             l = l TOK_AT
             break
         }
@@ -8374,7 +8366,8 @@ function xeq_fn__ifx(fn, m, nparam, param,
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
 #       index: Location of substring
-#         NB - Awk index() returns 1 and so do we.  Different from m4.
+#         NB - Awk index() returns 1-based values and so do we.
+#              Different from m4 which is zero-based.
 #
 #*****************************************************************************
 # @index SYM SUBSTR@
@@ -8842,11 +8835,11 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
 {
     # Constants
     E                           = exp(1)
-    IDX_NOT_FOUND               = 0
     LOG2                        = log(2)
     LOG10                       = log(10)
     MAX_DBG_LEVEL               = 10
     MAX_PARAM                   = 20
+    NOT_FOUND                   = 0
     PI                          = atan2(0, -1)
     SEQ_DEFAULT_INCR            = 1
     SEQ_DEFAULT_INIT            = 0
@@ -8869,14 +8862,12 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     SRC_FILE                    = "F"; __blk_label[SRC_FILE]     = "FILE"
     SRC_STRING                  = "S"; __blk_label[SRC_STRING]   = "STRING"
 
-    # Errors                          # ERRORS
+    # Errors
     ERR_OKAY                    =   0
-
     ERR_PARSE                   = 100
     ERR_PARSE_STACK             = 101
     ERR_PARSE_MISMATCH          = 102
     ERR_PARSE_DEPTH             = 103
-
     ERR_SCAN                    = 200
     ERR_SCAN_INVALID_NAME       = 201
 
@@ -8925,7 +8916,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
    #TRACE_SHOW_CALL_ID          = "x" # show unique call id (may not be used)
     TRACE_WILDCARD_ALL_FLAGS    = "V" # shorthand for all of above options
     #
-    TRACE_DEFAULT_SET           = TRACE_ARGUMENTS  TRACE_EXPANSION
+    TRACE_DEFAULT_SET           = TRACE_ARGUMENTS      TRACE_EXPANSION
     TRACE_ALL_SET               = TRACE_ARGUMENTS      TRACE_EXPANSION      \
                                   TRACE_INPUT_FILE_CHG TRACE_SHOW_FILE_NAME \
                                   TRACE_SHOW_LINE_NUM  TRACE_COMMAND        \

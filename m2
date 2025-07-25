@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-07-25 11:29:18 cleyon>
+#  Time-stamp:  <2025-07-25 12:42:35 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -1819,7 +1819,7 @@ function parse__file(    filename, file_block1, file_block2, pstat, d)
     if (filename in __active_files)
         error("Cannot recursively read '" filename "':" $0)
     __active_files[filename] = TRUE
-    sym_increment("__NFILE__", 1)
+    sym_increment("__NFILE__", 1); __rnf++
     blktab[file_block1, 0, "open"]          = TRUE
     blktab[file_block1, 0, "old.buffer"]    = __buffer
     blktab[file_block1, 0, "old.file"]      = FILE()
@@ -9027,7 +9027,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     sym_ll_fiat("__LINE__",         "", FLAGS_READONLY_INTEGER, 0)
     sym_ll_fiat("__M2_UUID__",      "", FLAGS_READONLY_SYMBOL,  uuid())
     sym_ll_fiat("__M2_VERSION__",   "", FLAGS_READONLY_SYMBOL,  M2_VERSION)
-    sym_ll_fiat("__NFILE__",        "", FLAGS_READONLY_INTEGER, 0)
+    sym_ll_fiat("__NFILE__",        "", FLAGS_READONLY_INTEGER, 0); __rnf = 0
     sym_ll_fiat("__NLINE__",        "", FLAGS_READONLY_INTEGER, 0)
     sym_ll_fiat("__MAX_STREAM__",   "", FLAGS_READONLY_INTEGER, MAX_STREAM)
     sym_ll_fiat("__STRICT__",   "bool", "",                     TRUE)
@@ -9242,12 +9242,15 @@ BEGIN {
         load_init_files()
         __exit_code = dofile("-") ? EX_OK : EX_NOINPUT
 
-    # Else, process all command line files/macro definitions.  ARGC is never zero,
-    # so if it's not 1 (no command line args), there must be parameters.
+    # Else, process all command line arguments.  These might be file
+    # names to process, or user settings of the form NAME=VALUE.  ARGC
+    # is never zero, so if it's not 1 (no command line args, checked
+    # above), there must be parameters.
     } else {
         # Delay loading $HOME/.m2rc as long as possible.  This allows us
         # to set symbols on the command line which will have taken effect
         # by the time the init file loads.
+        _nfile = 0
         for (_i = 1; _i < ARGC; _i++) {
             # Show each arg as we process it
             _arg = ARGV[_i]
@@ -9255,9 +9258,14 @@ BEGIN {
 
             # If it's a definition on the command line, define it
             if (_arg ~ /^([^= ][^= ]*)=(.*)/) {
-                _eq = index(_arg, "=")
+                _eq   = index(_arg, "=")
                 _name = substr(_arg, 1, _eq-1)
-                _val = substr(_arg, _eq+1)
+                _val  = substr(_arg, _eq+1)
+
+                # Some args like debug and trace are merely aliases for other,
+                # harder-to-type symbol names.  They just get re-written.
+                # Other args like init or U trigger actions which are executed
+                # immediately, and then the loop continues with the next arg.
                 if (_name == "debug") {
                     _name = "__DEBUG__"
                 } else if (_name == "fs") {
@@ -9271,7 +9279,7 @@ BEGIN {
                 } else if (_name == "init") {   # init=<VAL>
                     if (_val > 0)
                         # Positive value loads init files immediately
-                        # without providing a command-line file.
+                        # without needing to providing a command-line file.
                         load_init_files()
                     else
                         # Do not load the init files.  Inhibit init file
@@ -9296,8 +9304,9 @@ BEGIN {
                     xeq_cmd__undefine("undefine", _val)
                     continue
                 }
-                # Documentation states "NAME=" on command line
-                # defines with empty value.
+                # If we reach here, we still have our NAME=VAL arg to process,
+                # and we haven't broken off taking some arg-triggered action.
+                # Remember, "NAME=" on command line defines with empty value.
                 if (emptyp(_val)) {
                     dbg__print("args", 3, "BEGIN: Setting '" _name "' to @null")
                     xeq_cmd__null("null", _name)
@@ -9306,27 +9315,39 @@ BEGIN {
                     xeq_cmd__define("define", _name TOK_SPACE _val)
                 }
 
-            # Otherwise load a file
+            # If not NAME=VAL, try to load arg as a file.
             } else {
-                load_init_files()
+                _nfile++
                 _loadfile = search_file(_arg)
-                if (emptyp(_loadfile) || !dofile(_loadfile)) {
+                if (emptyp(_loadfile)) {
                     warn("File '" _arg "' not found", "ARGV", _i)
                     __exit_code = EX_NOINPUT
+                    continue
+                }
+                load_init_files()
+                if (! dofile(_loadfile)) {
+                    warn("Problem parsing file '" _arg "'", "ARGV", _i)
+                    __exit_code = EX_M2_ERROR
                 }
             }
         }
 
-        # If we get here with __NFILE__ still zero, that means
-        # we used up every ARGV defining symbols and didn't specify any
-        # files.  Not specifying any input files, like ARGC==1, means to
-        # read standard input, so that is what we must now do.
-        # (Buggy old version checked __init_files_loaded, but that meant
-        #    m2 init=0
-        # would do nothing rather than read standard input as it should.)
-        if (sym_fetch("__NFILE__") == 0) {
-            load_init_files()
-            __exit_code = dofile("-") ? EX_OK : EX_NOINPUT
+        # If we get here with __rnf still zero, that means we used
+        # up every ARGV defining symbols and didn't specify any files.
+        # (Well that used to be true, but if you can also get here by
+        # specifying files that don't exist.)  So we check the number of
+        # files we've processed vs the number we were requested to handle.
+        #print_stderr("_nfile=" _nfile "  __rnf=" __rnf)
+        if (__rnf == 0) {
+            # Not specifying any input files, like the ARGC==1 situation,
+            # means to read standard input, so that is what we must now do.
+            if (_nfile == 0) {
+                load_init_files()
+                __exit_code = dofile("-") ? EX_OK : EX_NOINPUT
+            } else {
+                # User specified file(s) but not one of them existed.
+                __exit_code = EX_NOINPUT
+            }
         }
     }
 
@@ -9338,7 +9359,7 @@ BEGIN {
     # that routine might be called during execution with parsers still
     # present on the stack.
     if (stk_depth(__parse_stack) != 1) {
-        warn("(main) Parse stack is not empty!")
+        print_stderr("(main) Parse stack is not empty!")
         dump_parse_stack()
     }
 

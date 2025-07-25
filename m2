@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-07-24 23:39:42 cleyon>
+#  Time-stamp:  <2025-07-25 11:29:18 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -1702,7 +1702,8 @@ function execute__command(name, cmdline,
         panic("(execute__command) Unrecognized command '" name "' in '" cmdline "'")
 
     if (__namespace != old_level)
-        panic("(execute__command) @%s %s: Namespace level mismatch")
+        panic(sprintf("(execute__command) [@%s] Namespace level mismatch; old_level=%d, __namespace=%d",
+                      name, old_level, __namespace))
 }
 
 
@@ -2653,8 +2654,11 @@ function nam_lookup(info,
             info["tracing"] = flag_1true_p(code, FLAG_TRACING)
             info["level"]   = level
             info["type"]    = first(code)
-            dbg__print("nam", 2, sprintf("(nam_lookup) END name '%s', level=%d, code=%s=%s Found in namtab => %d",
-                                         name, level, code, nam_ppf_name_level(name, level), level))
+            dbg__print("nam", 2, sprintf("(nam_lookup) END name '%s', level=%d, code=%s=%s Found in namtab => %s",
+                                         name, level, code,
+                                         nam_ppf_name_level(name, level),
+                                         (level == 0 ? "GLOBAL_NAMESPACE" \
+                                             : sprintf("Level %d", level))))
             return level
         }
     dbg__print("nam", 2, sprintf("(nam_lookup) END Could not find name '%s' on any level in namtab => ERROR", name))
@@ -6239,7 +6243,7 @@ function execute__user(name, cmdline,
     while (match(cmdline, "{[^}]*}")) {
         arg = ++narg
         argval = substr(cmdline, RSTART+1, RLENGTH-2)
-        dbg__print("parse", 5, sprintf("[@%s] Scan arg %d : %s",
+        dbg__print("parse", 5, sprintf("(execute__user) [@%s] Scan arg %d : %s",
                                       name, arg, argval))
         #print_debugfile("args[" arg "] = " argval)
         args[arg] = argval
@@ -6249,7 +6253,8 @@ function execute__user(name, cmdline,
     old_level = __namespace
     execute__user_body(user_block, args)
     if (__namespace != old_level)
-        panic("(execute__user) @%s %s: Namespace level mismatch")
+        panic(sprintf("(execute__user) [@%s] user_block=%d: Namespace level mismatch; old_level=%d, __namespace=%d",
+                      name, user_block, old_level, __namespace))
 }
 
 

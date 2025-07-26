@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-07-25 13:56:31 cleyon>
+#  Time-stamp:  <2025-07-26 00:39:18 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -851,12 +851,15 @@ function readline(    getstat, i)
             __buffer = substr(__buffer, i+1)
         }
 
+    } else if (stk_empty_p(__source_stack)) {
+        panic("(readline) Source stack empty")
+
     } else if (blk_type(stk_top(__source_stack)) == SRC_STRING) {
         dbg__print("io", 6, "(readline) [STRING] RETURNING EOF")
         return EOF
 
     } else {
-        dbg__print("io", 8, "source_stack count = " stk_depth(__source_stack))
+        dbg__print("io", 8, "(readline) source_stack count = " stk_depth(__source_stack))
         dbg__print_block("io", 7, stk_top(__source_stack), "(readline) About to call getline < FILE()...")
         getstat = getline < FILE()
         dbg__print("io", 7, "(readline) getstat=" getstat)
@@ -866,7 +869,7 @@ function readline(    getstat, i)
         } else if (getstat == ERROR) {
             warn("(readline) getline=>Error reading file '" FILE() "'")
         } else if (getstat != EOF)
-            panic("getline returned strange value: " getstat)
+            panic("(readline) getline returned strange value: " getstat)
     }
     dbg__print("io", 3, sprintf("(readline) RETURNING %d, $0='%s'", getstat, $0))
     return getstat
@@ -933,7 +936,7 @@ BEGIN {
 
 # This function is called automagically (it's baked into sym_ll_write())
 # every time a non-zero value is stored into __DEBUG__.
-function dbg__all_lev_max()
+function dbg__all_lev_standard()
 {
     dbg__set_level("args",       0)
     dbg__set_level("block",      0)
@@ -951,8 +954,8 @@ function dbg__all_lev_max()
     dbg__set_level("io",         3)
     dbg__set_level("nam",        3)
     dbg__set_level("namespace",  5)
-    dbg__set_level("read",       0)
     dbg__set_level("parse",      7)
+    dbg__set_level("read",       0)
     dbg__set_level("seq",        3)
     dbg__set_level("ship_out",   3)
     dbg__set_level("stk",        5)
@@ -1246,6 +1249,7 @@ function blk_new(block_type,
     new_blknum = ++__block_cnt
     blktab[new_blknum, 0, "depth"] = stk_depth(__parse_stack)
     blktab[new_blknum, 0, "type"] = block_type
+
     if (block_type == BLK_AGG)
         blktab[new_blknum, 0, "count"] = 0
     else if (block_type == BLK_CASE)
@@ -1260,15 +1264,32 @@ function blk_new(block_type,
         blktab[new_blknum, 0, "terminator"] = ""
         blktab[new_blknum, 0, "oob_terminator"] = "EOS"
     } else if (block_type == BLK_FOR)
+        # [0, "array_type"]     each    block | normal
+        # [0, "body_block"]     *
+        # [0, "dstblk"]         *
+        # [0, "level"]          each
+        # [0, "loop_array_name] each
+        # [0, "loop_end"]       iter
+        # [0, "loop_incr"]      iter
+        # [0, "loop_start"]     iter
+        # [0, "loop_type"]      *       iter | each
+        # [0, "loop_var"]       *
         blktab[new_blknum, 0, "terminator"] = "^@next"
+        # [0, "valid"]          *
     else if (block_type == BLK_LONGDEF)
         blktab[new_blknum, 0, "terminator"] = "^@endlong(def)?"
     else if (block_type == BLK_TERMINAL) {
         blktab[new_blknum, 0, "dstblk"] = TERMINAL
         blktab[new_blknum, 0, "terminator"] = ""
-    } else if (block_type == BLK_USER)
+    } else if (block_type == BLK_USER) {
+        # [0, "body_block"]
+        # [0, "dstblk"]
+        # [0, "name"]
+        # [0, "nparam"]
+        # [N, "param_name"]
         blktab[new_blknum, 0, "terminator"] = "^@endcmd"
-    else if (block_type == BLK_WHILE)
+        # [0, "valid"]
+    } else if (block_type == BLK_WHILE)
         blktab[new_blknum, 0, "terminator"] = "^@(endwhile|wend)"
     else
         panic("(blk_new) Uncaught block_type '" block_type "'")
@@ -1361,7 +1382,7 @@ function blk_dump_block_raw(blknum,
         split(k, x, SUBSEP)
         blk = x[1] + 0
         if (blk == blknum) {
-            #print_debugfile(k)
+            dbg__print("xeq", 9, "(blk_dump_block_raw) k=" k)
             slot_type_str = ""
             if (x[3] == "slot_type")
                 slot_type_str = " (" ppf__block_type(blktab[x[1], x[2], x[3]]) ")"
@@ -1457,7 +1478,7 @@ function execute__block(blknum,
                         block_type, old_level)
 {
     block_type = blk_type(blknum)
-    dbg__print("xeq", 3, sprintf("(execute__block) START blknum=%d, type=%s",
+    dbg__print("xeq", 1, sprintf("(execute__block) START blknum=%d, type=%s",
                                 blknum, ppf__block_type(block_type)))
     if (__xeq_ctl != XEQ_NORMAL) {
         dbg__print("xeq", 3, "(execute__block) NOP due to __xeq_ctl=" __xeq_ctl)
@@ -1479,6 +1500,7 @@ function execute__block(blknum,
     if (__namespace != old_level)
         panic(sprintf("(execute__block) blknum=%d, type=%s: %s; old_level=%d, __namespace=%d",
                       blknum, ppf__block_type(block_type), "Namespace level mismatch", old_level, __namespace))
+    dbg__print("xeq", 1, "(execute__block) END")
 }
 
 
@@ -1601,7 +1623,7 @@ function ppf__user(user_block,
         params = params TOK_LBRACE blktab[user_block, i, "param_name"] TOK_RBRACE
     dbg__print("cmd", 5, "params='" params "'") # probably 7 or 8
 
-    return "@newcmd " name params                             TOK_NEWLINE \
+    return "@newcmd " name params                           TOK_NEWLINE \
               ppf__agg(blktab[user_block, 0, "body_block"]) TOK_NEWLINE \
            "@endcmd"
 }
@@ -1735,12 +1757,12 @@ function dump_parse_stack(    level, block, block_type)
 {
     print_debugfile("(dump_parse_stack) BEGIN")
     if (stk_depth(__parse_stack) == 0)
-        print_debugfile("Parse stack is empty")
+        print_debugfile("(dump_parse_stack) Parse stack is empty")
     else
         for (level = stk_depth(__parse_stack); level > 0; level--) {
             block = __parse_stack[level]
             block_type = blk_type(block)
-            print_debugfile("Level " level ", block # " block ", type=" block_type )
+            print_debugfile("(dump_pars_stack) Level " level ", block # " block ", type=" block_type )
             dbg__print_block("xeq", -1, block)
         }
     print_debugfile("(dump_parse_stack) END")
@@ -1864,7 +1886,7 @@ function parse__file(    filename, file_block1, file_block2, pstat, d)
 # PARSE
 function parse(    code, terminator, rstat, name, retval, new_block, fc,
                    info, level, parser, parser_type, parser_label, i, scnt, found,
-                   new_cmd_name, clevel, cmdline, src_block, l2)
+                   new_cmd_name, clevel, cmdline, src_block, l2, _)
 {
     dbg__print("parse", 3, "(parse) START dstblk=" curr_dstblk() ", mode=" ppf__mode(curr_atmode()))
 
@@ -1935,7 +1957,10 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
         # inline "sym-function" to be resolved by dosubs().  It has a @
         # in column one, but that's just a coincidence.
         # WART:  Loses on  @somecommand A B @symbol@
-        if (first($1) == TOK_AT && last($1) != TOK_AT) { # looks like it might be a command
+        if (first($1) == TOK_AT &&
+            last($1)  != TOK_AT &&
+            match($1, "^@[A-Za-z#_]"))          # skip "@{"
+            # Looks like it might be a command.
             # Winnow out the primary name.  Be sure to handle
             # "@myfn{aaa}{ccc ddd}".  (Naive old code name=$1 resulted
             # in $1 being "@myfn{aaa}{ccc" which wrecks havoc.)
@@ -1992,12 +2017,12 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
 
                     } else if (name == "else") {
                         dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__else(dstblk=" curr_dstblk() ")"))
-                        parse__else()
+                        _ = parse__else()
                         dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__else() : dstblk => " curr_dstblk()))
 
                     } else if (name == "endcase" || name == "esac") {
                         dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__endcase(dstblk=" curr_dstblk() ")"))
-                        parse__endcase()
+                        _ = parse__endcase()
                         dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__endcase() : dstblk => " curr_dstblk()))
                         if (match($1, terminator)) {
                             dbg__print("parse", 5, "(parse) [" parser_label "] END; @endcase matched terminator => TRUE")
@@ -2039,7 +2064,7 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
 
                     } else if (name == "endif" || name == "fi") {
                         dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__endif(dstblk=" curr_dstblk() ")"))
-                        parse__endif()
+                        _ = parse__endif()
                         dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__endif() : dstblk => " curr_dstblk()))
                         if (match($1, terminator)) {
                             dbg__print("parse", 5, "(parse) [" parser_label "] END; @endif matched terminator => TRUE")
@@ -2049,7 +2074,7 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
 
                     } else if (name == "endlong" || name == "endlongdef") {
                         dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__endlongdef(dstblk=" curr_dstblk() ")"))
-                        parse__endlongdef()
+                        _ = parse__endlongdef()
                         dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__endlongdef() : dstblk => " curr_dstblk()))
                         if (match($1, terminator)) {
                             dbg__print("parse", 5, "(parse) [" parser_label "] END; @endlongdef matched terminator => TRUE")
@@ -2059,7 +2084,7 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
 
                     } else if (name == "endwhile" || name == "wend") {
                         dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__endwhile(dstblk=" curr_dstblk() ")"))
-                        parse__endwhile()
+                        _ = parse__endwhile()
                         dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__endwhile() : dstblk => " curr_dstblk()))
                         if (match($1, terminator)) {
                             dbg__print("parse", 5, "(parse) [" parser_label "] END; @endwhile matched terminator => TRUE")
@@ -2103,7 +2128,7 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
                     } else if (name == "next") {
                         dbg__print("parse", 5, sprintf("(parse) [%s] dstblk=%d; CALLING parse__next()",
                                                      parser_label, curr_dstblk()))
-                        parse__next()
+                        _ = parse__next()
                         dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__next() : dstblk => " curr_dstblk()))
                         if (match($1, terminator)) {
                             dbg__print("parse", 5, "(parse) [" parser_label "] END Matched terminator => TRUE")
@@ -2113,12 +2138,12 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
 
                     } else if (name == "of") {
                         dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__of(dstblk=" curr_dstblk() ")"))
-                        parse__of()
+                        _ = parse__of()
                         dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__of() : dstblk => " curr_dstblk()))
 
                     } else if (name == "otherwise") {
                         dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__otherwise(dstblk=" curr_dstblk() ")"))
-                        parse__otherwise()
+                        _ = parse__otherwise()
                         dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__otherwise() : dstblk => " curr_dstblk()))
 
                     } else if (name == "return") {
@@ -2178,7 +2203,7 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
             }
             # It's okay to reach here with no actions taken.  In this
             # case, just process the line as normal text.
-        } # doesn't look like a command - ship it out as text
+         # doesn't look like a command - ship it out as text
         dbg__print("parse", 3, sprintf("(parse) [%s] CALLING ship_out(OBJ_TEXT, '%s')", parser_label, $0))
         ship_out(OBJ_TEXT, $0)
         dbg__print("parse", 3, "(parse) [" parser_label "] RETURNED FROM ship_out()")
@@ -2210,8 +2235,8 @@ function scan__usercmd_call(    s, name, obj, i, oldi, c, nc, narg, nlbr,
     # Read cmd name
     c = substr(s, (oldi = ++i), 1)
     while (c != "" && c != TOK_LBRACE) {
-        # print_debugfile(sprintf("(scan__usercmd_call) LOOP: i=%d, c='%s', nam='%s'",
-        #                      i, c, substr(s, 2, i-2)))
+        dbg__print("parse", 7, sprintf("(scan__usercmd_call) SCAN FWD: i=%d, c='%s', nam='%s'",
+                             i, c, substr(s, 2, i-2)))
         c = substr(s, ++i, 1)
     }
     name = substr(s, oldi, i-oldi)
@@ -2228,7 +2253,7 @@ function scan__usercmd_call(    s, name, obj, i, oldi, c, nc, narg, nlbr,
     oldi = ++i
     c = substr(s, i, 1)
     while (nlbr >= 0) {
-        #print_debugfile(sprintf("(scan__usercmd_call) TOP, i=%d, c='%s', nlbr now=%d", i, c, nlbr))
+        dbg__print("parse", 7, sprintf("(scan__usercmd_call) BRACE LOOP TOP, i=%d, c='%s', nlbr now=%d", i, c, nlbr))
         if (i > 255)
             error(sprintf("(scan__usercmd_call) ERROR, i too big: i=%d, c='%s'", i, c))
         else if (c == "") {
@@ -2241,7 +2266,7 @@ function scan__usercmd_call(    s, name, obj, i, oldi, c, nc, narg, nlbr,
             readstat = readline()
             if (readstat <= 0)
                 error(sprintf("(scan__usercmd_call) ERROR, missing '}': i=%d, c='%s'", i, c))
-            #print_debugfile("just read = >" $0 "<")
+            dbg__print("parse", 9, "just read = >" $0 "<")
             s = s TOK_NEWLINE $0
             c = substr(s, i, 1)
             dbg__print("parse", 7, sprintf("(scan__usercmd_call) After readline, i=%d, c='%s', nlbr now=%d, s='%s'", i, c, nlbr, s))
@@ -2501,7 +2526,7 @@ function nam__scan(text, info,
     }
 
     count = split(text, part, "(\\[|\\])")
-    if (dbg__sys_level_p("nam", 8)) {
+    if (dbg__sys_level_p("nam", 7)) {
         print_debugfile("'split(" text ")' ==> " count " fields:")
         for (i = 1; i <= count; i++)
             print_debugfile(i " = '" part[i] "'")
@@ -2571,10 +2596,9 @@ function nam_dump_namtab(filter_fs, include_sys,
             #print_debugfile("system filter failed")
             continue
         }
-        print_debugfile("namtab:" nam_ppf_name_level(name, level))
-        # print_debugfile("----------------")
+        print_debugfile("(nam_dump_namtab) " nam_ppf_name_level(name, level))
     }
-    print_debugfile("End namtab")
+    print_debugfile("(nam_dump_namtab) End namtab")
 }
 
 
@@ -3447,7 +3471,7 @@ function sym_ll_write(name, key, level, val)
     if (name == "__DEBUG__" &&
         sym_ll_read("__DEBUG__", "", GLOBAL_NAMESPACE) == FALSE &&
         val != FALSE) {
-        dbg__all_lev_max()
+        dbg__all_lev_standard()
     } else if (name == "__SECURE__") {
         val = max(secure_level(), val) # Don't allow __SECURE__ to decrease
         if (val >= 2)
@@ -3457,7 +3481,7 @@ function sym_ll_write(name, key, level, val)
                level == GLOBAL_NAMESPACE) {
         # Maintain equivalence:  __FMT__[number] === CONVFMT
         if (sym_ll_in("__DBG__", "sym", GLOBAL_NAMESPACE) &&
-            sym_ll_read("__DBG__", "sym", GLOBAL_NAMESPACE) >= 6)
+            sym_ll_read("__DBG__", "sym", GLOBAL_NAMESPACE) >= 7)
             print_debugfile(sprintf("(sym_ll_write) Setting CONVFMT to %s", val))
         CONVFMT = val
     }
@@ -3537,9 +3561,10 @@ function sym_fetch(sym,
             break # - - - - - - - - - - - - - - - - - - - - - - - - - -
         }
 
+        panic(sprintf("(sym_fetch) LOOP BOTTOM: sym='%s', name='%s', key='%s', level=%d, code='%s'",
+                      sym, name, key, level, code))
         # print_debugfile(sprintf("(sym_fetch) LOOP BOTTOM: sym='%s', name='%s', key='%s', level=%d, code='%s'",
         #                      sym, name, key, level, code))
-
     } while (FALSE)
 
     if (flag_1true_p(code, FLAG_DEFERRED))
@@ -4518,7 +4543,7 @@ function xeq_cmd__dump(name, cmdline,
         $1 = ""
         sub("^[ \t]*", "")
         dumpfile = rm_quotes(dosubs($0))
-        # print_debugfile(sprintf("dumpfile = '%s'", dumpfile))
+        dbg__print("sym", 5, sprintf("dumpfile = '%s'", dumpfile))
     }
 
     if (what ~ /sym(bol)?s?/) {
@@ -4539,12 +4564,12 @@ function xeq_cmd__dump(name, cmdline,
         buf = blk_dump_blktab()
     } else if (what ~ /[0-9]+/) {
         what_type = TYPE_ANY    # There is no "block" type
-        #print_debugfile("Dump of block # " what)
+        dbg__print("sym", 9, "Dump of block # " what)
         if (! ((what, 0, "type") in blktab))
             panic("(xeq_cmd__dump) No 'type' field for block " what)
         block_type = blk_type(what)
         blk_label = ppf__block_type(block_type)
-        # print_debugfile("(xeq_cmd__dump) block_type = " block_type)
+        dbg__print("sym", 7, "(xeq_cmd__dump) block_type = " block_type)
         desc = ppf__BLK(what)
         buf = sprintf("Block # %d, Type=%s:\n", what, blk_label)
         if (!emptyp(desc))
@@ -4823,9 +4848,16 @@ function xeq_cmd__dumpdef(name, cmdline,
 #
 # debug, error and warn "format" the message, adorning it with with
 # current file name, line number, etc.  echo and errprint do no
-# additional formatting.  @debug only prints its message if debugging is
-# enabled.  The user can control this since __DEBUG__ is an unprotected
-# symbol.  @debug is purposefully not given access to the various __DBG__
+# additional formatting.
+#
+# @debug only prints its message if debugging is enabled.
+# Note that this prints to debugfile directly and is controlled by
+# debugp() alone, and has nothing to do with any "system" or "levels".
+# The user can control this since __DEBUG__ is an unprotected symbol.
+# The user does a
+#       @define __DEBUG__ 1
+# and all of a sudden his @debug messages spring to life.
+# @debug is purposefully not given access to the various __DBG__
 # keys and levels.
 #
 #       | Cmd      | Format? | Exit? | Notes              |
@@ -4920,7 +4952,7 @@ function xeq_cmd__eval(name, cmdline)
 {
     $1 = ""
     sub("^[ \t]*", "")
-    # print_debugfile("@eval: '" $0 "'")
+    dbg__print("parse", 5, "(xeq_cmd__eval) '" $0 "'")
     dostring($0)
 }
 
@@ -5171,7 +5203,7 @@ function parse__for(                  for_block, body_block, pstat, incr, info, 
     blktab[for_block, 0, "loop_var"] = $2
 
     if ($1 == "@for") {
-        #print_debugfile("(parse__for) Found FOR: " $0)
+        dbg__print("for", 9, "(parse__for) Found FOR: " $0)
         blktab[for_block, 0, "loop_type"] = "iter"
         blktab[for_block, 0, "loop_start"] = $3 + 0
         blktab[for_block, 0, "loop_end"] = $4 + 0
@@ -5180,7 +5212,7 @@ function parse__for(                  for_block, body_block, pstat, incr, info, 
             error("(parse__for) Increment value cannot be zero!")
 
     } else if ($1 == "@foreach") {
-        #print_debugfile("(parse__for) Found FOREACH: " $0)
+        dbg__print("for", 9, "(parse__for) Found FOREACH: " $0)
         if ((nparts = nam__scan($3, info)) != 1)
             error("[@for] Scan error, " __m2_msg)
         level = nam_lookup(info)
@@ -6035,10 +6067,13 @@ function ppf__BLK_LONGDEF(longdef_block)
 #       Undocumented - Reserved for internal use
 #
 #       @m2ctl booltest                 Scan boolean expr from user
-#       @m2ctl clear_debugging          Clear debugging
+#       @m2ctl dbg_max                  All 9s
 #       @m2ctl dbg_namespace            Debug namespaces
 #       @m2ctl dbg_params               Debug function parameters
+#       @m2ctl dbg_reset                Reset all dbg levels to standard
 #       @m2ctl dbg_ship_out
+#       @m2ctl dbg_user                 Debug @newcmd, user_blocks
+#       @m2ctl dbg_zero                 Clear debugging
 #       @m2ctl dump_block BLOCK         Raw dump block #
 #       @m2ctl dump_namtab              Dump of name table (non-system)
 #       @m2ctl dump_parse_stack         Dump parse stack
@@ -6069,13 +6104,14 @@ function xeq_cmd__m2ctl(name, cmdline,
             __bf = 1
             e = bool__scan_expr(input)
             if (e == ERROR)
-                warn(sprintf("(xeq_cmd__m2ctl) bool__scan_expr('%s') returned ERROR - should exit?", input))
+                print_stderr(sprintf("(xeq_cmd__m2ctl) bool__scan_expr('%s') returned ERROR - should exit?", input))
             else
-                print_debugfile(sprintf("(xeq_cmd__m2ctl) __bf=%d,__bnf=%d; FINAL ANSWER: %d == %s", __bf, __bnf, e, ppf__bool(e)))
+                print_stderr(sprintf("(xeq_cmd__m2ctl) __bf=%d,__bnf=%d; FINAL ANSWER: %d == %s", __bf, __bnf, e, ppf__bool(e)))
         } while (TRUE)
 
-    } else if ($1 == "clear_debugging") {
-        dbg__all_lev_zero()
+    } else if ($1 == "dbg_max") {
+        for (dsys in __dbg_sysnames)
+            sym_ll_write("__DBG__", dsys, GLOBAL_NAMESPACE, 9)
 
     } else if ($1 == "dbg_namespace") {
         # Debug namespaces
@@ -6094,9 +6130,24 @@ function xeq_cmd__m2ctl(name, cmdline,
         # dbg__set_level("nam",       3)
         dbg__set_level("sym",       5)
 
+    } else if ($1 == "dbg_reset") {
+        dbg__all_lev_standard()
+
     } else if ($1 == "dbg_ship_out") {
         dbg__all_lev_zero()
         dbg__set_level("ship_out",   3)
+
+    } else if ($1 == "dbg_user") {
+        dbg__all_lev_zero()
+        dbg__set_level("cmd",     7)
+        dbg__set_level("dosubs",  7)
+        dbg__set_level("for",     8)
+        dbg__set_level("parse",   9)
+        dbg__set_level("ship_out",5)
+        dbg__set_level("xeq",     7)
+
+    } else if ($1 == "dbg_zero") {
+        dbg__all_lev_zero()
 
     } else if ($1 == "dump_block") {
         blk = $2 + 0
@@ -6109,12 +6160,12 @@ function xeq_cmd__m2ctl(name, cmdline,
         dump_parse_stack()
 
     } else if ($1 == "incpath") {
-        print_debugfile("__inc_path = " __inc_path)
+        print_stderr("__inc_path = " __inc_path)
 
     } else if ($1 == "set_dbg") { # Set __DBG__[dsys] level directly
         dsys = $2                 # Note, does not affect __DEBUG__
         lev = $3
-        print_debugfile(sprintf("Setting __DBG__[%s] to %d", dsys, lev))
+        print_stderr(sprintf("Setting __DBG__[%s] to %d", dsys, lev))
         dbg__set_level(dsys, lev)
 
     } else
@@ -6131,7 +6182,7 @@ function xeq_cmd__m2ctl(name, cmdline,
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
 #*****************************************************************************
-function parse__newcmd(                     name, newcmd_block, body_block, pstat, nparam, p, pname)
+function parse__newcmd(    name, user_block, body_block, pstat, nparam, p, pname)
 {
     nparam = 0
     dbg__print("cmd", 5, "(parse__newcmd) START dstblk=" curr_dstblk() ", mode=" ppf__mode(curr_atmode()) "; $0='" $0 "'")
@@ -6139,8 +6190,8 @@ function parse__newcmd(                     name, newcmd_block, body_block, psta
     raise_namespace()
 
     # Create two new blocks: one for the "new command" block, other for command body
-    newcmd_block = blk_new(BLK_USER)
-    dbg__print("cmd", 5, "(parse__newcmd) New block # " newcmd_block " type " ppf__block_type(blk_type(newcmd_block)))
+    user_block = blk_new(BLK_USER)
+    dbg__print("cmd", 5, "(parse__newcmd) New block # " user_block " type " ppf__block_type(blk_type(user_block)))
     body_block = blk_new(BLK_AGG)
     dbg__print("cmd", 5, "(parse__newcmd) New block # " body_block " type " ppf__block_type(blk_type(body_block)))
 
@@ -6151,18 +6202,18 @@ function parse__newcmd(                     name, newcmd_block, body_block, psta
         pname = substr(name, RSTART+1, RLENGTH-2)
         dbg__print("cmd", 5, sprintf("(parse__newcmd) Parameter %d : %s",
                                      p, pname))
-        blktab[newcmd_block, p, "param_name"] = pname
+        blktab[user_block, p, "param_name"] = pname
         name = substr(name, 1, RSTART-1) substr(name, RSTART+RLENGTH)
     }
     assert_cmd_okay_to_define(name)
 
-    blktab[newcmd_block, 0, "name"] = name
-    blktab[newcmd_block, 0, "body_block"] = body_block
-    blktab[newcmd_block, 0, "dstblk"] = body_block
-    blktab[newcmd_block, 0, "valid"] = FALSE
-    blktab[newcmd_block, 0, "nparam"] = nparam
-    dbg__print_block("cmd", 7, newcmd_block, "(parse__newcmd) newcmd_block")
-    stk_push(__parse_stack, newcmd_block) # Push it on to the parse_stack
+    blktab[user_block, 0, "name"] = name
+    blktab[user_block, 0, "body_block"] = body_block
+    blktab[user_block, 0, "dstblk"] = body_block
+    blktab[user_block, 0, "valid"] = FALSE
+    blktab[user_block, 0, "nparam"] = nparam
+    dbg__print_block("cmd", 7, user_block, "(parse__newcmd) user_block")
+    stk_push(__parse_stack, user_block) # Push it on to the parse_stack
 
     dbg__print("cmd", 5, "(parse__newcmd) CALLING parse()")
     pstat = parse() # parse() should return after it encounters @endcmd
@@ -6170,8 +6221,8 @@ function parse__newcmd(                     name, newcmd_block, body_block, psta
     if (!pstat)
         error("[@newcmd] Parse error")
 
-    dbg__print("cmd", 5, "(parse__newcmd) END => " newcmd_block)
-    return newcmd_block
+    dbg__print("cmd", 5, "(parse__newcmd) END => " user_block)
+    return user_block
 }
 
 
@@ -6196,7 +6247,7 @@ function xeq__BLK_USER(newcmd_block,
                        block_type, name)
 {
     block_type = blk_type(newcmd_block)
-    dbg__print("cmd", 3, sprintf("(xeq__BLK_USER) START dstblk=%d, newcmd_block=%d, type=%s",
+    dbg__print("cmd", 1, sprintf("(xeq__BLK_USER) START dstblk=%d, newcmd_block=%d, type=%s",
                                  curr_dstblk(), newcmd_block, ppf__block_type(block_type)))
     dbg__print_block("cmd", 7, newcmd_block, "(xeq__BLK_USER) newcmd_block")
     if ((block_type != BLK_USER) ||
@@ -6211,7 +6262,7 @@ function xeq__BLK_USER(newcmd_block,
     nam_ll_write(name, __namespace, TYPE_USER)
     cmd_ll_write(name, __namespace, newcmd_block)
 
-    dbg__print("cmd", 2, "(xeq__BLK_USER) END")
+    dbg__print("cmd", 1, "(xeq__BLK_USER) END")
 }
 
 
@@ -6245,9 +6296,8 @@ function execute__user(name, cmdline,
     while (match(cmdline, "{[^}]*}")) {
         arg = ++narg
         argval = substr(cmdline, RSTART+1, RLENGTH-2)
-        dbg__print("parse", 5, sprintf("(execute__user) [@%s] Scan arg %d : %s",
-                                      name, arg, argval))
-        #print_debugfile("args[" arg "] = " argval)
+        dbg__print("parse", 5, sprintf("(execute__user) [@%s] Scan args[%d] = '%s'",
+                                       name, arg, argval))
         args[arg] = argval
         cmdline = substr(cmdline, 1, RSTART-1) substr(cmdline, RSTART+RLENGTH)
     }
@@ -6314,13 +6364,13 @@ function ppf__BLK_USER(blknum,
     }
     return sprintf("  name       : %s\n" \
                    "  valid      : %s\n" \
-                   "  nparam     : %d\n" \
                    "  body_block : %d\n" \
+                   "  nparam     : %d\n" \
                    "%s",
                    blktab[blknum, 0, "name"],
                    ppf__bool(blktab[blknum, 0, "valid"]),
-                   nparam,
                    blktab[blknum, 0, "body_block"],
+                   nparam,
                    chomp(param_desc))
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
@@ -7221,6 +7271,7 @@ function ship_out(obj_type, obj,
 }
 
 
+# Given an agg_block, print each of its slots to a file.
 function ship_out_file(block, file,
                        i, lim, slot_type, value)
 {
@@ -7401,7 +7452,7 @@ function _c3_factor3(    e, fun, e2)
             e = _c3_calculate_function(fun, e)
         } else if (fun ~ /^defined\(/) {
             e2 = substr(e, 9, length(e)-9)
-            #print_debugfile(sprintf("defined(): e2='%s'", e2))
+            dbg__print("expr", 7, sprintf("defined(): e2='%s'", e2))
             _c3__f += length(e2)
             e = sym_defined_p(e2) ? TRUE : FALSE
         } else if (fun ~ /^(atan2|hypot|max|min|pow)\(/) {
@@ -7652,23 +7703,29 @@ function dosubs(s,
             }
             if (!emptyp(wrkm))
                 error("(dosubs) Text remains after scanning params")
-            # print_debugfile("nparam=" nparam "; param[]:")
-            # for (x in param) print_debugfile(x "\t" param[x])
-            # print_debugfile("End param[]")
+            if (dbg__sys_level_p("dosubs", 7)) {
+                print_debugfile("(dosubs) nparam=" nparam)
+                for (x in param)
+                    print_debugfile(sprintf("(dosubs) param[%d] = '%s'", x, param[x]))
+                print_debugfile("(dosubs) End param[]")
+            }
         } else {
-            # print_debugfile("No brace; fn='" fn "'")
+            dbg__print("dosubs", 5, "No brace; fn='" fn "'")
             nparam--
-            # print_debugfile("nparam=" nparam "; param[]:")
+            dbg__print("dosubs", 7, "(dosubs) nparam=" nparam)
             for (j = 1; j <= nparam; j++)
                 param[j] = param[j+1]
             delete param[nparam + 1]
             param[0] = fn
-            # for (x in param) print_debugfile(x "\t" param[x])
-            # print_debugfile("End param[]")
+            if (dbg__sys_level_p("dosubs", 7)) {
+                for (x in param)
+                    print_debugfile(sprintf("(dosubs) param[%d] = '%s'", x, param[x]))
+                print_debugfile("(dosubs) End param[]")
+            }
         }
         lfn = length(fn)
 
-        dbg__print("dosubs", 7, sprintf("(dosubs) fn=%s, nparam=%d; l='%s', m='%s', r='%s'", fn, nparam, l, m, r))
+        dbg__print("dosubs", 6, sprintf("(dosubs) fn=%s, nparam=%d; l='%s', m='%s', r='%s'", fn, nparam, l, m, r))
 
         # Check for sequence modifiers.  First one wins, and
         # invalid syntax is silently ignored.

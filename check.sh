@@ -1,35 +1,63 @@
 #!/bin/sh
 
-# check script for GNU ed - The GNU line editor
-# Copyright (C) 2006-2023 Antonio Diaz Diaz.
-# This script is free software; you have unlimited permission
-# to copy, distribute, and modify it.
+# check.sh - run m2 test suite
 #
+# DESCRIPTION
+# ===========
+# Run the *.m2 "scripts" in the "tests" subdirectory.  For each run,
+# compare current m2 output against the contents of TESTNAME.out, which
+# contains the expected/correct output.
 #
-# CATEGORY/SERIES/TESTNAME              (CATEGORY/SERIES is called test_id)
+# USAGE
+# =====
+#       $ check.sh                              # Run all tests! - in "tests" subdir
+#       $ check.sh CATEGORY                     # Run all tests in all series in CATEGORY
+#       $ check.sh CATEGORY/SERIES              # Run all tests in CATEGORY/SERIES
+#       $ check.sh CATEGORY/SERIES/TESTNAME     # Run one specific test, file TESTNAME.m2
+#
+# CATEGORY/SERIES/TESTNAME
 # ========================
-# Run the *.m2 "scripts" and compare their output against the TESTNAME.out files,
-# which contain the correct output.
+# Tests are separated into broad CATEGORIES which cover all major system
+# commands and functions, such as: file include/paste, comment handling,
+# diversions, subshell handling, defining new new commands, etc.
+# Categories are short names in all caps.
 #
+# Each category is divided into a SERIES of tests, each of which
+# exercise one specific functional component.  For example, one series
+# might include a few checks for when a command when supplied with too
+# few, correct number, or too many arguments.  Another series might test
+# undefined or anomalous behavior.  Perhaps the author was up late and
+# though of a few new interesting things to test.  The tests in a series
+# should relate to a similar theme.  Each series is a three-digit number,
+# starting at either 000 or 001 depending on the test writer's temperament.
+#
+# TESTNAME is the base file name for the test, which has an .m2 extension.
+#       TESTNAME.m2         Input stream to evaluate
+#       TESTNAME.out        Expected output
+#
+# EXIT CODE
+# =========
 # It is expected that m2 will succeed and exit with a zero status.  If
 # that is not the case (i.e., you expect the test to fail and exit with
-# a non-zero status), the expected code should be put in TESTNAME.exit
-#
+# a non-zero status), the expected code must be put in TESTNAME.exit.
+# If you expect error messages to be be printed, they must go into
+# TESTNAME.err (NB - *not* TESTNAME.out!)  The test will fail if errors
+# occur and these files are missing or empty.
 #
 # FILE NAMING CONVENTION
 # ======================
 # User-specified config files:
 # ----------------------------
-# TESTNAME.disabled         If present, TESTNAME is not executed for testing
-# TESTNAME.err              If present, expected m2 error text.  Default ""
-# TESTNAME.exit             If present, expected m2 exit code.  Default 0
+# TESTNAME.disabled         If present, TESTNAME is not executed for testing.
+# TESTNAME.err              If present, expected m2 error text.  Default "".
+# TESTNAME.exit             If present, expected m2 exit code.  Default 0.
 # TESTNAME.m2               m2 input file, obviously required.
-# TESTNAME.out              Expected m2 standard output.  Required to exist even if empty
+# TESTNAME.out              Expected m2 standard output.  Required to exist even if empty.
 #                           This catches random .m2 files being interpreted as tests, and
 #                           also requires a test to positively specify "no output expected".
 # TESTNAME.sh               If present, this script will be invoked with sh to run the test.
 # TESTNAME.showdiff         If present, show diff of expected/actual output on failure.
-#                           Diff file is always created, this just controls what is shown
+#                           (Diff file is always created, this just controls what is shown.)
 #
 # Temporary working files, deleted after test run:
 # ------------------------------------------------
@@ -41,32 +69,52 @@
 # TESTNAME.expected_exit    Copy of desired exit code
 # TESTNAME.expected_out     Copy of desired output text, if any, default blank
 #
+# TEST OUTPUT
+# ===========
+# Framework control messages begin with "!!!" and a keyword describing the message.
+#       !!! BEGIN - Starting test runs
+#       !!! SUMMARY - 6 total tests: 5 passed (83.3%), 1 failed (16.7%)
+# Test ids and results are shown on lines beginning and ending with "***":
+#       *** NEWCMD/004/simple ... PASS ***
+# Exit status codes and data streams are shown in sections whose titles appear
+#       >>> LIKE THIS <<<
 #
 # EXIT STATUS
 # ===========
 # 0     all tests passed
 # 127   at least one test failed
-
-
-# These two variables are user settable:
+#
+# ORIGINAL CODE & AUTHOR
+# ======================
+# check script for GNU ed - The GNU line editor
+# Copyright (C) 2006-2023 Antonio Diaz Diaz.
+# This script is free software; you have unlimited permission
+# to copy, distribute, and modify it.
+#
+# USER CONFIGURABLE SETTINGS
+# ==========================
+# These two variables are user-settable:
 debug="false"		# set to "true" for extra messages
 busybox_awk="false"	# set to "true" to invoke m2 as "busybox awk -f ..."
 
-
+#
+##      Noli me tangere
+#
 LC_ALL=C
 export LC_ALL
 rc=0
 ntest=0
 npass=0
+nskip=0
 nfail=0
 
 
 framework_error()
 {
     if [ $# -eq 0 ]; then
-        echo "!!! Failure in testing framework" 1>&2
+        echo "!!! ERROR - Failure in testing framework"
     else
-        echo "!!! Failure in testing framework: $1" 1>&2
+        echo "!!! ERROR - Failure in testing framework: $*"
     fi
     exit 1
 }
@@ -74,16 +122,35 @@ framework_error()
 
 summarize_tests()
 {
-    local pass_pct
-    local fail_pct
-    pass_pct=0.0
-    fail_pct=0.0
+    local pass_pct=0.0
+    local skip_pct=0.0
+    local fail_pct=0.0
+    local int_pct=0.0
+    local chk
+    local intr="false"
+    chk=$(expr $npass + $nskip + $nfail - $ntest)
+    if [ $chk -eq -1 ]; then
+        intr="true"
+    elif [ $chk -ne 0 ]; then
+        framework_error "npass+nskip+nfail-ntest = ${chk}"
+    fi
+
     if [ $ntest -ne 0 ]; then
         pass_pct=`echo "scale=3; $npass*100/$ntest" | bc`
+        skip_pct=`echo "scale=3; $nskip*100/$ntest" | bc`
         fail_pct=`echo "scale=3; $nfail*100/$ntest" | bc`
+        if [ $intr = "true" ]; then
+            int_pct=`echo "scale=3; 1*100/$ntest" | bc`
+        fi
     fi
-    printf "!!! SUMMARY - %d total tests: %d passed (%.1f%%), %d failed (%.1f%%)\n" \
-           $ntest $npass $pass_pct $nfail $fail_pct
+    echo   "!!! END - Stopping test runs"
+    if [ $intr = "true" ]; then
+        printf "!!! SUMMARY - %d total tests: %d passed (%.1f%%), %d skipped (%.1f%%), %d failed (%.1f%%), 1 interrupted (%.1f%%)\n" \
+               $ntest $npass $pass_pct $nskip $skip_pct $nfail $fail_pct $int_pct
+    else
+        printf "!!! SUMMARY - %d total tests: %d passed (%.1f%%), %d skipped (%.1f%%), %d failed (%.1f%%)\n" \
+               $ntest $npass $pass_pct $nskip $skip_pct $nfail $fail_pct
+    fi
 }
 
 
@@ -135,7 +202,7 @@ test_series()
     cd $SERIES
     local test_id=`echo $CATEGORY/$SERIES | sed "s,${testdir}/,,"`
     if [ -f test.disabled ]; then
-        echo "*** $test_id ... Series disabled, skipping"
+        echo "*** $test_id ... Series disabled, skipping ***"
         cd ..
         return
     fi
@@ -154,8 +221,10 @@ run_test()
     local SERIES=$2
     local M2_FILE=$3
 
+    local fail=0
     local test_id=`echo $CATEGORY/$SERIES | sed "s,${testdir}/,,"`
     local TESTNAME
+    local diderr=0
 
     if [ ! -f $M2_FILE ]; then
         M2_FILE="${M2_FILE}.m2"
@@ -164,31 +233,40 @@ run_test()
 
     TESTNAME=`echo "$M2_FILE" | sed 's,^.*/,,;s,\.m2$,,'`   # remove CATEGORY and ext
     [ $debug = "true" ] && echo "TESTNAME is $TESTNAME"
-
     printf "*** $test_id/$TESTNAME ... "
+    ntest=$(expr $ntest + 1)
 
-    [ -f ${TESTNAME}.disabled ] && { echo "SKIP - Test disabled"; return; }
-    [ -s "$M2_FILE" ] || { echo "SKIP - Empty test file"; return; }
+    if [ ! -s "$M2_FILE" ]; then
+        echo "*** SKIP - Empty test file ***"
+        nskip=$(expr $nskip + 1)
+        return
+    fi
+    if [ -f ${TESTNAME}.disabled ]; then
+        echo "*** SKIP - Test disabled ***"
+        nskip=$(expr $nskip + 1)
+        return
+    fi
 
     rm -f ${TESTNAME}.expected_out ${TESTNAME}.expected_err ${TESTNAME}.expected_exit
     rm -f ${TESTNAME}.run_out      ${TESTNAME}.run_err      ${TESTNAME}.run_exit        ${TESTNAME}.run_diff
-   #trap 'rm -f ${TESTNAME}.expected_out ${TESTNAME}.expected_err ${TESTNAME}.expected_exit ${TESTNAME}.run_out ${TESTNAME}.run_err ${TESTNAME}.run_exit ${TESTNAME}.run_diff; summarize_tests; exit' 1 2 3 15
     trap 'rm -f ${TESTNAME}.expected_* ${TESTNAME}.run_*; summarize_tests; exit' 1 2 3 15
-    ntest=$(expr $ntest + 1)
 
     if [ ! -r "$M2_FILE" ]; then
-        echo "FAIL - Unreadable test file"
+        echo "*** FAIL - Unreadable test file ***"
         nfail=$(expr $nfail + 1)
         rc=127
         return
     fi
     if [ ! -f ${TESTNAME}.out ]; then
-        echo "FAIL - ${TESTNAME}.out does not exist!"
+        echo "*** FAIL - ${TESTNAME}.out does not exist ***"
         nfail=$(expr $nfail + 1)
         rc=127
         return
     fi
 
+    #
+    ##  Stash any expected error output and exit code
+    #
     cp ${TESTNAME}.out ${TESTNAME}.expected_out
     if [ -f ${TESTNAME}.exit ]; then
         cp ${TESTNAME}.exit ${TESTNAME}.expected_exit
@@ -201,6 +279,9 @@ run_test()
         cp /dev/null ${TESTNAME}.expected_err
     fi
 
+    #
+    ##  Run the test here
+    #
     if [ -r ${TESTNAME}.sh ]; then
         # Since we set up stdout and stderr here,
         # don't try to change them in TESTNAME.sh
@@ -212,16 +293,40 @@ run_test()
     fi
     echo $? >${TESTNAME}.run_exit
 
-    if ! cmp -s ${TESTNAME}.run_exit ${TESTNAME}.expected_exit; then
-        echo "FAIL - Unexpected exit code"
-        echo "    Exit code `cat ${TESTNAME}.run_exit`;  wanted `cat ${TESTNAME}.expected_exit`"
-        nfail=$(expr $nfail + 1)
+    #
+    ##  Check error messages
+    #
+    if ! cmp -s ${TESTNAME}.run_err ${TESTNAME}.expected_err; then
+        echo "*** FAIL - Unexpected error messages ***"
+        echo "    (file $CATEGORY/$SERIES/$M2_FILE)"
+        fail=$(expr $fail + 1)
+        echo ">>> EXPECTED ERRORS <<<"
+        cat ${TESTNAME}.expected_err
+        echo ">>> ACTUAL ERRORS <<<"
+        cat ${TESTNAME}.run_err
+        diderr=1
         rc=127
     fi
-    if ! cmp -s ${TESTNAME}.run_out ${TESTNAME}.expected_out; then
-        echo "FAIL - Unexpected output"
+    #
+    ##  Check exit code
+    #
+    if ! cmp -s ${TESTNAME}.run_exit ${TESTNAME}.expected_exit; then
+        echo "*** FAIL - Unexpected exit code ***"
         echo "    (file $CATEGORY/$SERIES/$M2_FILE)"
-        nfail=$(expr $nfail + 1)
+        fail=$(expr $fail + 1)
+        echo ">>> EXPECTED EXIT CODE <<<"
+        cat ${TESTNAME}.expected_exit
+        echo ">>> ACTUAL EXIT CODE <<<"
+        cat ${TESTNAME}.run_exit
+        rc=127
+    fi
+    #
+    ##  Check actual output
+    #
+    if ! cmp -s ${TESTNAME}.run_out ${TESTNAME}.expected_out; then
+        echo "*** FAIL - Unexpected output ***"
+        echo "    (file $CATEGORY/$SERIES/$M2_FILE)"
+        fail=$(expr $fail + 1)
         # Always create diff file
         diff -c ${TESTNAME}.expected_out ${TESTNAME}.run_out > ${TESTNAME}.run_diff
 
@@ -235,25 +340,19 @@ run_test()
             echo ">>> ACTUAL OUTPUT TEXT <<<"
             cat ${TESTNAME}.run_out
         fi
-        if [ -s ${TESTNAME}.run_err ]; then
+        if [ $diderr -eq 0 -a -s ${TESTNAME}.run_err ]; then
             echo ">>> ERRORS <<<"
             cat ${TESTNAME}.run_err
         fi
         rc=127
-    elif ! cmp -s ${TESTNAME}.run_err ${TESTNAME}.expected_err; then
-        echo "FAIL - Unexpected error messages"
-        echo "    (file $CATEGORY/$SERIES/$M2_FILE)"
-        nfail=$(expr $nfail + 1)
-        echo ">>> EXPECTED ERRORS <<<"
-        cat ${TESTNAME}.expected_err
-        echo ">>> ACTUAL ERRORS <<<"
-        cat ${TESTNAME}.run_err
-        rc=127
-    else
-        echo "PASS"
+    fi
+    if [ $fail -eq 0 ]; then
+        echo "PASS ***"
         npass=$(expr $npass + 1)
        #rm -f ${TESTNAME}.run_out ${TESTNAME}.run_err
         rm -f ${TESTNAME}.run_*
+    else
+        nfail=$(expr $nfail + 1)
     fi
 
     # Retain ${TESTNAME}.run_* for further investigation
@@ -273,6 +372,7 @@ test_something()
     local category
     local series
     local file
+
     case $slashes in
         0) category=$testwhat
            cd "$testdir"
@@ -300,14 +400,18 @@ test_something()
 [ $debug = "true" ] && echo "cwd     is `pwd`"
 [ $debug = "true" ] && echo "I see $# arguments"
 case $# in
-    0) test_all_categories ;;
-    1) test_something $1 ;;
+    0) echo "!!! BEGIN - Starting test runs"
+       test_all_categories ;;
+    1) echo "!!! BEGIN - Starting test runs"
+       test_something $1 ;;
     *) framework_error "Invocation error: Bad # parameters" ;;
 esac
 
 
 if [ ${rc} -eq 0 ] ; then
-    echo "!!! SUCCESS - Tests completed successfully"
+    echo "!!! SUCCESS - All tests completed successfully"
+elif [ $nfail -eq $ntest ]; then
+    echo "!!! DISASTER - All tests failed"
 else
     echo "!!! FAILURE - Some tests failed"
 fi

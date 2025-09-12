@@ -74,12 +74,15 @@ tags:
 
 check-verbose test-verbose verbose-check verbose-test:
 	@date
-	@echo "!!! BEGIN - Starting test runs"
 	@time ./check.sh
 	@date
 
 check test check-quiet test-quiet quiet-check quiet-test:
 	@date
-	@echo "!!! BEGIN - Starting test runs"
-	@time ./check.sh | grep -v 'PASS$$'
+	@time ./check.sh | grep -v 'PASS \*\*\*$$'
+	@date
+
+testlog:
+	@date
+	@timeout 90 time nice ./check.sh </dev/null >test.log.`ts` 2>&1
 	@date

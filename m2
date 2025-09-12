@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-07-26 00:39:18 cleyon>
+#  Time-stamp:  <2025-09-12 10:30:31 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -43,7 +43,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "4.0.6"
+    M2_VERSION = "4.0.7"
 
     # Customize these paths as needed for correct operation on your system.
     # If a program is not available, it's okay to remove the entry entirely.
@@ -215,6 +215,194 @@ function rm_quotes(s)
     if (length(s) >= 2 && first(s) == "\"" && last(s) == "\"")
         s = substr(s, 2, length(s) - 2)
     return s
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       J U L I A N   D A Y   F U N C T I O N S
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#       https://aa.usno.navy.mil/data/JulianDate
+#
+#       https://quasar.as.utexas.edu/BillInfo/JulianDatesG.html
+#
+#       Return value is for 00:00h GMT, which means 0.5 fractional part.
+#
+#*****************************************************************************
+#
+# ALGORITHM:
+# 1) Express the date as Y M D, where Y is the year, M is the month
+# number (Jan = 1, Feb = 2, etc.), and D is the day in the month.
+#
+# 2) If the month is January or February, subtract 1 from the year to
+# get a new Y, and add 12 to the month to get a new M.  (Thus, we are
+# thinking of January and February as being the 13th and 14th month of
+# the previous year).
+#
+# 3) Dropping the fractional part of all results of all multiplications
+# and divisions, let:
+#   A = Y/100
+#   B = A/4
+#   C = 2-A+B
+#   E = 365.25x(Y+4716)
+#   F = 30.6001x(M+1)
+#   JD= C+D+E+F-1524.5
+#
+# This is the Julian Day Number for the beginning of the date in
+# question at 0 hours, Greenwich time.  Note that this always gives you
+# a half day extra.  That is because the Julian Day begins at noon,
+# Greenwich time.  This is convenient for astronomers (who until
+# recently only observed at night), but it is confusing.
+#
+# Example: If the date is 1582 October 15,
+#   Y = 1582
+#   M = 10
+#   D = 15
+#   A = 15
+#   B = 3
+#   C = -10
+#   E = 2300344
+#   F = 336
+#   JD = 2299160.5
+#*****************************************************************************
+function jd(Y, M, D,
+            A, B, C, E, F, JD)
+{
+    if (M == 1 || M == 2) {
+        Y = Y - 1
+        M = M + 12
+    }
+    A = int(Y / 100)
+    B = int(A / 4)
+    C = 2 - A + B
+    E = int(365.25 * (Y + 4716))
+    F = int(30.6001 * (M + 1))
+    JD = C + D + E + F - 1524.5
+    return JD
+}
+
+
+# Modified Julian Day
+# Return the number of days since midnight on November 17, 1858.
+function mjd(y, m, d)
+{
+    return int(jd(y, m, d) - JD_MJD_DIFF)
+}
+
+
+# To convert a Julian Day Number to a Gregorian date, assume that it is
+# for 0 hours, Greenwich time, so that it ends in xxxx.5.  Argument "jd"
+# is assumed to be this way, so its value should therefore end in ".5"
+# [jd() gives you this .5.]
+#
+# NOTE: This method will not give dates accurately on the Gregorian
+# Proleptic Calendar, i.e., the calendar you get by extending the
+# Gregorian calendar backwards to years earlier than 1582. using the
+# Gregorian leap year rules. In particular, the method fails if Y<400.
+#
+# Do the following calculations, again dropping the fractional part of
+# all multiplications and divisions:
+#   Q = JD+0.5
+#   Z = Integer part of Q
+#   W = (Z - 1867216.25)/36524.25
+#   X = W/4
+#   A = Z+1+W-X
+#   B = A+1524
+#   C = (B-122.1)/365.25
+#   D = 365.25xC
+#   E = (B-D)/30.6001
+#   F = 30.6001xE
+#   Day of month = B-D-F+(Q-Z)
+#   Month = E-1 or E-13 (must get number less than or equal to 12)
+#   Year = C-4715 (if Month is January or February) or C-4716 (otherwise)
+#
+# Example: Check the first calculation by starting with JD = 2299160.5
+#   Q = 2299161
+#   Z = 2299161
+#   W = 11
+#   X = 2
+#   A = 2299171
+#   B = 2300695
+#   C = 6298
+#   D = 2300344
+#   E = 11
+#   F = 336
+#   Day of Month = 15
+#   Month = 10
+#   Year = 1582
+function greg(JD,
+              Q,Z,W,X,A,B,C,D,E,F,DOM,MON,YEAR,
+              dbg)
+{
+    #dbg = FALSE
+    Q = JD + 0.5;                         #if (dbg) printf("Q = %d\n", Q)
+    Z = int(Q);                           #if (dbg) printf("Z = %d\n", Z)
+    W = int( (Z - 1867216.25)/36524.25 ); #if (dbg) printf("W = %d\n", W)
+    X = int( W/4 );                       #if (dbg) printf("X = %d\n", X)
+    A = Z + 1 + W - X;                    #if (dbg) printf("A = %d\n", A)
+    B = A + 1524;                         #if (dbg) printf("B = %d\n", B)
+    C = int( (B-122.1)/365.25 );          #if (dbg) printf("C = %d\n", C)
+    D = int( 365.25 * C);                 #if (dbg) printf("D = %d\n", D)
+    E = int( (B-D)/30.6001 );             #if (dbg) printf("E = %d\n", E)
+    F = int( 30.6001 * E );               #if (dbg) printf("F = %d\n", F)
+    DOM = B - D - F + (Q - Z)
+    #if (dbg) printf("Day of Month = %d\n", DOM)
+    if (E > 13) # MON = E-1 or E-13 (must get number less than or equal to 12)
+        MON = E - 13
+    else
+        MON = E - 1
+    #if (dbg) printf("Month = %d\n", MON)
+    if (MON == 1 || MON == 2)   # if Month is January or February
+        YEAR = C - 4715
+    else
+        YEAR = C - 4716
+    #if (dbg) printf("Year = %d\n", YEAR)
+    return sprintf("%04d-%02d-%02d", YEAR, MON, DOM)
+}
+
+
+function date_valid_p(year, month, day,
+                      leap)
+{
+    if (   year  < 1858 || year  > 2099 \
+        || month <    1 || month >   12 \
+        || day   <    1)
+        return FALSE
+    leap = leap_year_p(year)
+    if (day > __monthdays[month, leap])
+        return FALSE
+    # Reject dates prior to MJD 0
+    if (year == 1858 &&
+        (month < 11 || (month == 11 && day < 17)))
+        return FALSE
+
+    return TRUE
+}
+
+
+function leap_year_p(year)
+{
+    # NB This algorithm is only valid for the Gregorian calendar.
+    # For the Julian version, uncomment the following line:
+    #return year % 4 == 0
+
+    # 1. If the year is evenly divisible by 400, it is a leap year
+    if (year % 400 == 0) return TRUE
+
+    # 2. If the year is not divisible by 400, but is divisible by 100,
+    #    it is not a leap year
+    if (year % 100 == 0) return FALSE
+
+    # 3. If the year is not divisible by 400, and also not divisible by
+    #    100, but is divisible by 4, it is a leap year
+    if (year % 4 == 0) return TRUE
+
+    # 4. Otherwise it is not a leap year
+    return FALSE
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -434,7 +622,7 @@ function secure_level()
 
 function LINE()
 {
-    return sym_ll_read("__LINE__", "", GLOBAL_NAMESPACE)
+    return sym_ll_read("__LINE__", "", GLOBAL_NAMESPACE) + 0
 }
 
 
@@ -820,10 +1008,10 @@ function panic(text, file, line,
 {
     warn(text, file, line)
     __exit_code = EX_SOFTWARE
-    flush_stdout(SYNC_FORCE)
     print_stderr("m2:PANIC" secure_level() < 2 ? \
                  xeq_fn__date("strftime", "strftime  %Y-%m-%dT%H:%M:%S%z", 1) : "")
                  #         NB - two spaces --------^^
+    flush_stdout(SYNC_FORCE)
     exit __exit_code
 }
 
@@ -957,7 +1145,7 @@ function dbg__all_lev_standard()
     dbg__set_level("parse",      7)
     dbg__set_level("read",       0)
     dbg__set_level("seq",        3)
-    dbg__set_level("ship_out",   3)
+    dbg__set_level("ship_out",   5)
     dbg__set_level("stk",        5)
     dbg__set_level("sym",        3)
     dbg__set_level("trace",      5)
@@ -970,6 +1158,14 @@ function dbg__all_lev_zero(    dsys)
 {
     for (dsys in __dbg_sysnames)
         sym_ll_write("__DBG__", dsys, GLOBAL_NAMESPACE, 0)
+}
+
+
+# NB - This function writes directly to the symbol table.  It does not
+# use sym_ll_write(), and does not trigger special __DEBUG__ handling.
+function enable_debugging()
+{
+    symtab["__DEBUG__", "",  GLOBAL_NAMESPACE, "symval"] = TRUE
 }
 
 
@@ -1058,7 +1254,7 @@ function dbg__print(dsys, lev, text,
 
 
 function dbg__print_block(dsys, lev, blknum, description,
-                         block_type, blk_label, text)
+                          block_type, blk_label, text, body_block)
 {
     if (! dbg__sys_level_p(dsys, lev))
         return
@@ -1072,6 +1268,11 @@ function dbg__print_block(dsys, lev, blknum, description,
 
     print_debugfile(sprintf("Block # %d, Type=%s: %s", blknum, blk_label, description))
     print_debugfile(ppf__BLK(blknum))
+    if (((blknum, 0, "body_block") in blktab)) {
+        body_block = blktab[blknum, 0, "body_block"]
+        print_debugfile(sprintf("Block # %d, %s", body_block, blk_label, "body_ block from above"))
+        print_debugfile(ppf__BLK(body_block))
+    }
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -1330,6 +1531,8 @@ function blk_ll_slot_value(blknum, slot)
 
 function blk_ll_write(blknum, slot, type, new_val)
 {
+    # print_stderr(sprintf("(blk_ll_write) blktab[%d, %d]; slot_type=%s, slot_value=%s",
+    #                      blknum, slot, type, new_val))
     blktab[blknum, slot, "slot_type"]  = type
     blktab[blknum, slot, "slot_value"] = new_val
     return new_val
@@ -1337,8 +1540,10 @@ function blk_ll_write(blknum, slot, type, new_val)
 
 
 function blk_append(blknum, slot_type, value,
-                     slot)
+                    slot)
 {
+    if (!integerp(blknum))
+        panic(sprintf("(blk_append) Block '%s' is not an integer", blknum))
     if (blk_type(blknum) != BLK_AGG)
         panic(sprintf("(blk_append) Block %d has type %s, not AGG",
                       blknum, ppf__block_type(blk_type(blknum))))
@@ -1435,13 +1640,13 @@ function ppf__block(blknum,
 
     if      (block_type == BLK_AGG)       buf = ppf__agg(blknum)
     else if (block_type == BLK_CASE)      buf = ppf__case(blknum)
-    else if (block_type == SRC_FILE)      buf = EMPTY
     else if (block_type == BLK_FOR)       buf = ppf__for(blknum)
     else if (block_type == BLK_IF)        buf = ppf__if(blknum)
     else if (block_type == BLK_LONGDEF)   buf = ppf__longdef(blknum)
     else if (block_type == BLK_TERMINAL)  buf = EMPTY
     else if (block_type == BLK_USER)      buf = ppf__user(blknum)
     else if (block_type == BLK_WHILE)     buf = ppf__while(blknum)
+    else if (block_type == SRC_FILE)      buf = EMPTY
     else
         panic(sprintf("(ppf__block) Block # %d: type %s (%s) not handled",
                       blknum, block_type, ppf__block_type(block_type)))
@@ -1786,7 +1991,7 @@ function prep_file(filename,
 
 
 function dofile(filename,
-                file_block, retval)
+                file_block, retval, p)
 {
     dbg__print("parse", 5, "(dofile) START filename='" filename "'")
 
@@ -1803,8 +2008,8 @@ function dofile(filename,
 
     # Clean up
     # (parse_file() pops the source stack)
-    stk_pop(__parse_stack)
-
+    p = stk_pop(__parse_stack)
+    dbg__print("parse", 7, "(dofile) popped parse_stack => " p)
     dbg__print("parse", 5, "(dofile) END => " ppf__bool(retval))
     return retval
 }
@@ -1959,7 +2164,7 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
         # WART:  Loses on  @somecommand A B @symbol@
         if (first($1) == TOK_AT &&
             last($1)  != TOK_AT &&
-            match($1, "^@[A-Za-z#_]"))          # skip "@{"
+            match($1, "^@[A-Za-z#_]")) {        # skip "@{"
             # Looks like it might be a command.
             # Winnow out the primary name.  Be sure to handle
             # "@myfn{aaa}{ccc ddd}".  (Naive old code name=$1 resulted
@@ -2039,6 +2244,10 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
 
                         if (match($1, terminator)) {
                             dbg__print("parse", 5, "(parse) [" parser_label "] END; @endcmd matched terminator => TRUE")
+                            if (dbg__sys_level_p("parse", 7)) {
+                                print_debugfile("(parse) [" parser_label "] new_block=" new_block)
+                                ppf__block(new_block)
+                            }
 
                             # Create an entry for the new command name.
                             # We do this at Parse time so that future
@@ -2053,8 +2262,8 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
                             # happens in xeq__BLK_USER.)
                             if (! nam_ll_in(name, __namespace)) {
                                 new_cmd_name = blktab[new_block, 0, "name"]
-                                dbg__print("parse", 3, sprintf("Declaring new user command '%s' at level %d",
-                                                             new_cmd_name, __namespace))
+                                dbg__print("parse", 3, sprintf("(parse) [" parser_label "] Declaring new user command '%s' at level %d",
+                                                               new_cmd_name, __namespace))
                                 nam_ll_write(new_cmd_name, __namespace, TYPE_USER)
                             }
                             return TRUE
@@ -2203,7 +2412,8 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
             }
             # It's okay to reach here with no actions taken.  In this
             # case, just process the line as normal text.
-         # doesn't look like a command - ship it out as text
+        }
+        # doesn't look like a command - ship it out as text
         dbg__print("parse", 3, sprintf("(parse) [%s] CALLING ship_out(OBJ_TEXT, '%s')", parser_label, $0))
         ship_out(OBJ_TEXT, $0)
         dbg__print("parse", 3, "(parse) [" parser_label "] RETURNED FROM ship_out()")
@@ -2570,7 +2780,7 @@ function nam_purge(level,
                                      x[1], x[2]))
         delete namtab[x[1], x[2]]
     }
-    dbg__print("nam", 7, "(nam_purge) START")
+    dbg__print("nam", 7, "(nam_purge) END")
 }
 
 
@@ -2814,11 +3024,17 @@ function stk_depth(stack)
 }
 
 
-function stk_push(stack, new_elem)
+function stk_push(stack, new_elem,
+                  siz)
 {
     if (stack["name"] == "source_stack")
         trace(TRACE_INPUT_FILE_CHG, EMPTY,
               sprintf("Input file now '%s'", blktab[new_elem, 0, "filename"]))
+    if (dbg__sys_level_p("stk", 5)) {
+        siz = stack[0]
+        print_debugfile(sprintf("(stk_push) %s -> %s[%d]",
+                                 new_elem, stack["name"], siz+1))
+    }
     return stack[++stack[0]] = new_elem
 }
 
@@ -2838,15 +3054,20 @@ function stk_top(stack)
 
 
 function stk_pop(stack,
-                 old_top, new_top)
+                 old_top, new_top, siz)
 {
     if (stk_empty_p(stack))
         panic("(stk_pop) Empty stack")
+    siz = stack[0]
     old_top = stack[stack[0]--]
     if (!stk_empty_p(stack) && stack["name"] == "source_stack") {
         new_top = stack[stack[0]]
         trace(TRACE_INPUT_FILE_CHG, EMPTY,
               sprintf("Input file now '%s'", blktab[new_top, 0, "filename"]))
+    }
+    if (dbg__sys_level_p("stk", 5)) {
+        print_debugfile(sprintf("(stk_pop) %s[%d] -> %s",
+                                stack["name"], siz, old_top))
     }
     return old_top
 }
@@ -2925,15 +3146,15 @@ function undivert_all(    stream)
 # stream.  Negative streams and current diversion are silently ignored.
 # Buffer text is not re-scanned for macros, and buffer is cleared after
 # injection into target stream.
-function undivert_file(stream, file,
-                       count, i)
+function undivert_to_file(stream, file,
+                          count, i)
 {
-    dbg__print("divert", 2, sprintf("(undivert_file) START; stream=%d, file='%s'", stream, file))
+    dbg__print("divert", 2, sprintf("(undivert_to_file) START; stream=%d, file='%s'", stream, file))
     if (blk_type(stream) != BLK_AGG)
-        panic(sprintf("(undivert_file) Block %d has type %s, not AGG",
+        panic(sprintf("(undivert_to_file) Block %d has type %s, not AGG",
                       stream, ppf__block_type(blk_type(stream))))
     if ((count = blktab[stream, 0, "count"]) > 0) {
-        ship_out_file(stream, file)
+        ship_out_to_file(stream, file)
         cleardivert(stream)
     }
 }
@@ -3461,7 +3682,7 @@ function sym_ll_write(name, key, level, val)
 {
     if (level == EMPTY)
         panic("sym_ll_write: LEVEL missing")
-    # Can't call normal dbg__XXX() functions here, mutually recursive
+    # Can't call normal dbg__*() functions here, mutually recursive
     if (sym_ll_in("__DBG__", "sym", GLOBAL_NAMESPACE) &&
         sym_ll_read("__DBG__", "sym", GLOBAL_NAMESPACE) >= 5 &&
         !nam_system_p(name))
@@ -3776,7 +3997,7 @@ function assert_sym_valid_name(sym)
 function execute__text(text,
                        stream)
 {
-    dbg__print("xeq", 3, sprintf("(execute__text) START; text='%s'", text))
+    dbg__print("xeq", 1, sprintf("(execute__text) START; text='%s'", text))
     if (__xeq_ctl != XEQ_NORMAL) {
         dbg__print("xeq", 3, "(execute__text) NOP due to __xeq_ctl=" __xeq_ctl)
         return
@@ -3787,12 +4008,12 @@ function execute__text(text,
         return
 
     if (curr_atmode() == MODE_AT_PROCESS) {
-        dbg__print("xeq", 7, sprintf("(execute__text) Calling dosubs('%s')", text))
+        dbg__print("xeq", 5, sprintf("(execute__text) Calling dosubs('%s')", text))
         text = dosubs(text)
     }
 
     if (stream > TERMINAL) {
-        dbg__print("ship_out", 5, sprintf("(execute__text) END Appending text to stream %d", stream))
+        dbg__print("ship_out", 1, sprintf("(execute__text) END Appending text to stream %d", stream))
         blk_append(stream, OBJ_TEXT, text)
         return
     }
@@ -4092,7 +4313,7 @@ function bool__scan_factor(    e, r,         # ! factor | variable | ( expressio
 
     } else {
         # Boolean evaluation would normally fail here, but we'll pass it along to 'evaluate_condition'
-        dbg__print("bool", 5, sprintf("bool__scan_factor) Did not match __bf=%d, __btoken[]='%s', e='%s'", __bf, __btoken[__bf], e))
+        dbg__print("bool", 5, sprintf("(bool__scan_factor) Did not match __bf=%d, __btoken[]='%s', e='%s'", __bf, __btoken[__bf], e))
         r = evaluate_condition(__btoken[__bf], FALSE)
         if (r == ERROR)
             warn("(bool__scan_factor) Evaluate_condition('" __btoken[__bf] "') returned ERROR")
@@ -4247,6 +4468,7 @@ function parse__endcase(                case_block) # OK
         error("[@endcase] Parse error; " __m2_msg)
 
     case_block = stk_pop(__parse_stack)
+    dbg__print("parse", 7, "(parse__endcase) popped parse_stack => " case_block)
     blktab[case_block, 0, "valid"] = TRUE
     lower_namespace()
     return case_block
@@ -4958,7 +5180,7 @@ function xeq_cmd__eval(name, cmdline)
 
 
 function dostring(str,
-                string_block, term2, retval)
+                  string_block, term2, retval, p)
 {
     dbg__print("parse", 5, "(dostring) START str='" str "'")
 
@@ -4974,8 +5196,8 @@ function dostring(str,
     dbg__print("parse", 5, "(dostring) CALLING parse__string()")
     retval = parse__string()
     dbg__print("parse", 5, "(dostring) RETURNED FROM parse__string()")
-    stk_pop(__parse_stack) # Pop the terminal parser; parse_string() pops the source stack
-
+    p = stk_pop(__parse_stack) # Pop the terminal parser; parse_string() pops the source stack
+    dbg__print("parse", 7, "(dostring) popped parse_stack => " p)
     dbg__print("parse", 5, "(dostring) END => " ppf__bool(retval))
     return retval
 }
@@ -4989,10 +5211,10 @@ function parse__string(    str, string_block1, string_block2, pstat, d)
     str = blktab[string_block1, 0, "str"]
 
     dbg__print("parse", 2, sprintf("(parse__string) str='%s', dstblk=%d, mode=%s",
-                                  str, curr_dstblk(),
-                                  ppf__mode(blktab[string_block1, 0, "atmode"])))
+                                   str, curr_dstblk(),
+                                   ppf__mode(blktab[string_block1, 0, "atmode"])))
 
-    blktab[string_block1, 0, "old.buffer"]    = __buffer
+    blktab[string_block1, 0, "old.buffer"] = __buffer
     dbg__print_block("ship_out", 7, string_block1, "(parse__string) string_block1")
 
     # Set up new file context
@@ -5065,9 +5287,9 @@ function xeq_cmd__exit(name, cmdline)
 # The first is the declaration that creates an entry in the name table.
 # The second command performs the block creation and file reading.
 function xeq_cmd__filedata(name, cmdline,
-                            arr, filename, line, getstat, line_cnt, silent, level,
-                            nparts, info, code, key,
-                            file_block, agg_block, rc, error_text    )
+                           arr, filename, line, getstat, line_cnt, silent, level,
+                           nparts, info, code, key,
+                           file_block, agg_block, rc, error_text, p)
 {
     $0 = cmdline
     dbg__print("xeq", 2, sprintf("(xeq_cmd__filedata) START dstblk=%d, name=%s, cmdline='%s'",
@@ -5112,8 +5334,8 @@ function xeq_cmd__filedata(name, cmdline,
     rc = parse__file()
     dbg__print("parse", 5, "(xeq_cmd__filedata) RETURNED FROM parse__file()")
     # parse__file pops the source stack
-    stk_pop(__parse_stack)
-
+    p = stk_pop(__parse_stack)
+    dbg__print("parse", 7, "(xeq_cmd__filedata) popped parse_stack => " p)
     if (!rc) {
         if (silent) return
         error_text = "File '" filename "' does not exist:" $0
@@ -5250,6 +5472,7 @@ function parse__next(                   for_block)
     if (check__parse_stack(BLK_FOR) != 0)
         error("[@next] Parse error; " __m2_msg)
     for_block = stk_pop(__parse_stack)
+    dbg__print("parse", 7, "(parse__next) popped parse_stack => " for_block)
 
     if (blktab[for_block, 0, "loop_var"] != $2)
         error(sprintf("(parse__next) Variable mismatch; '%s' specified, but '%s' was expected",
@@ -5528,6 +5751,7 @@ function parse__endif(                    if_block)
         error("[@endif] Parse error; " __m2_msg)
 
     if_block = stk_pop(__parse_stack)
+    dbg__print("parse", 7, "(parse__endif) popped parse_stack => " if_block)
     blktab[if_block, 0, "valid"] = TRUE
     lower_namespace()
     return if_block
@@ -6008,7 +6232,7 @@ function parse__endlongdef(    sym_block)
     if (check__parse_stack(BLK_LONGDEF) != 0)
         error("[@endlongdef] Parse error; " __m2_msg)
     sym_block = stk_pop(__parse_stack)
-
+    dbg__print("parse", 7, "(parse__endlongdef) popped parse_stack => " sym_block)
     blktab[sym_block, 0, "valid"] = TRUE
     dbg__print("sym", 3, sprintf("(parse__endlongdef) END => %d", sym_block))
     return sym_block
@@ -6110,11 +6334,14 @@ function xeq_cmd__m2ctl(name, cmdline,
         } while (TRUE)
 
     } else if ($1 == "dbg_max") {
+        enable_debugging()
         for (dsys in __dbg_sysnames)
             sym_ll_write("__DBG__", dsys, GLOBAL_NAMESPACE, 9)
 
     } else if ($1 == "dbg_namespace") {
+        enable_debugging()
         # Debug namespaces
+        dbg__all_lev_zero()
         dbg__set_level("for",       5)
         dbg__set_level("namespace", 5)
         dbg__set_level("cmd",       5)
@@ -6122,6 +6349,7 @@ function xeq_cmd__m2ctl(name, cmdline,
         dbg__set_level("sym",       5)
 
     } else if ($1 == "dbg_params") {
+        enable_debugging()
         # Debug function params: help scan @foo a b c@ and @foo{a}{b}{c}@
         dbg__all_lev_zero()
         dbg__set_level("dosubs",    7)
@@ -6134,8 +6362,27 @@ function xeq_cmd__m2ctl(name, cmdline,
         dbg__all_lev_standard()
 
     } else if ($1 == "dbg_ship_out") {
+        enable_debugging()
         dbg__all_lev_zero()
-        dbg__set_level("ship_out",   3)
+        dbg__set_level("dosubs",    7)
+        dbg__set_level("parse",   9)
+        dbg__set_level("io",   5)
+        dbg__set_level("ship_out",   9)
+        dbg__set_level("stk", 5)
+
+    } else if ($1 == "dbg_user") {
+        enable_debugging()
+        dbg__all_lev_zero()
+        dbg__set_level("cmd",     7)
+        dbg__set_level("dosubs",  7)
+        dbg__set_level("for",     8)
+        dbg__set_level("parse",   9)
+        dbg__set_level("ship_out",5)
+        dbg__set_level("xeq",     7)
+
+    } else if ($1 == "dbg_zero") {
+        # NB - __DEBUG__ unchanged
+        dbg__all_lev_zero()
 
     } else if ($1 == "dbg_user") {
         dbg__all_lev_zero()
@@ -6233,7 +6480,7 @@ function parse__endcmd(                     newcmd_block)
     if (check__parse_stack(BLK_USER) != 0)
         error("[@endcmd] Parse error; " __m2_msg)
     newcmd_block = stk_pop(__parse_stack)
-
+    dbg__print("parse", 7, "(parse__endcmd) popped parse_stack => " newcmd_block)
     blktab[newcmd_block, 0, "valid"] = TRUE
     lower_namespace()
 
@@ -7037,8 +7284,8 @@ function xeq_cmd__undivert(name, cmdline,
         if (stream > MAX_STREAM)
             error("Bad parameters:" $0)
         sub(/^[^ \t]+[ \t]+/, "", cmdline) # a + this time because ARG is required
-        dbg__print("divert", 5, sprintf("(xeq_cmd__undivert) CALLING undivert_file(%d,'%s')", stream, cmdline))
-        undivert_file(stream, cmdline)
+        dbg__print("divert", 5, sprintf("(xeq_cmd__undivert) CALLING undivert_to_file(%d,'%s')", stream, cmdline))
+        undivert_to_file(stream, cmdline)
     } else {
         error("@undivert: Bad form")
     }
@@ -7130,7 +7377,7 @@ function xeq__BLK_WHILE(while_block,
     while (condval) {
         raise_namespace()
         dbg__print("while", 5, sprintf("(xeq__BLK_WHILE) CALLING execute__block(%d)",
-                                   body_block))
+                                       body_block))
         execute__block(body_block)
         dbg__print("while", 5, sprintf("(xeq__BLK_WHILE) RETURNED FROM execute__block()"))
         lower_namespace()
@@ -7272,20 +7519,20 @@ function ship_out(obj_type, obj,
 
 
 # Given an agg_block, print each of its slots to a file.
-function ship_out_file(block, file,
+function ship_out_to_file(block, file,
                        i, lim, slot_type, value)
 {
-    dbg__print("ship_out", 3, sprintf("(ship_out_file) START; block=%d, file='%s'",
+    dbg__print("ship_out", 3, sprintf("(ship_out_to_file) START; block=%d, file='%s'",
                                      block, file))
     if (blk_type(block) != BLK_AGG)
-        panic(sprintf("(ship_out_file) Block %d has type %s, not AGG",
+        panic(sprintf("(ship_out_to_file) Block %d has type %s, not AGG",
                       block, ppf__block_type(blk_type(block))))
 
     lim = blktab[block, 0, "count"]
     for (i = 1; i <= lim; i++) {
         slot_type = blk_ll_slot_type(block, i)
         if (slot_type != OBJ_TEXT)
-            panic(sprintf("(ship_out_file) Block %d slot %d has type %s, not TEXT",
+            panic(sprintf("(ship_out_to_file) Block %d slot %d has type %s, not TEXT",
                           block, i, ppf__block_type(slot_type)))
 
         value = blk_ll_slot_value(block, i)
@@ -7474,7 +7721,7 @@ function _c3_factor3(    e, fun, e2)
     # predefined, symbol, or sequence name
     if (match(e, /^[A-Za-z#_][A-Za-z#_0-9]*/)) {
         e2 = _c3_advance()
-        if      (e2 == "e")   return E
+        if      (e2 == "e")   return EULER
         else if (e2 == "pi")  return PI
         else if (e2 == "tau") return TAU
         else if (sym_valid_p(e2) && sym_defined_p(e2)) {
@@ -7710,7 +7957,7 @@ function dosubs(s,
                 print_debugfile("(dosubs) End param[]")
             }
         } else {
-            dbg__print("dosubs", 5, "No brace; fn='" fn "'")
+            dbg__print("dosubs", 5, "(dosubs) No brace; fn='" fn "'")
             nparam--
             dbg__print("dosubs", 7, "(dosubs) nparam=" nparam)
             for (j = 1; j <= nparam; j++)
@@ -7762,14 +8009,16 @@ function dosubs(s,
                 expand = xeq_fn__date(fn, m, nparam, param)
             else if (fn == "dirname")
                 expand = xeq_fn__dirname(fn, m, nparam, param)
-            else if (fn == "daynum")
-                expand = xeq_fn__daynum(fn, m, nparam, param)
+            else if (fn == "dow")
+                expand = xeq_fn__dow(fn, m, nparam, param)
             else if (fn == "expr" || fn == "sexpr")
                 expand = xeq_fn__expr(fn, m, nparam, param)
             else if (fn == "format")
                 expand = xeq_fn__format(fn, m, nparam, param)
             else if (fn == "getenv" || fn == "sgetenv")
                 expand = xeq_fn__getenv(fn, m, nparam, param)
+            else if (fn == "gregdate")
+                expand = xeq_fn__gregdate(fn, m, nparam, param)
             else if (fn == "ifdef" || fn == "ifndef")
                 expand = xeq_fn__ifdef(fn, m, nparam, param)
             else if (fn == "ifelse")
@@ -7787,6 +8036,8 @@ function dosubs(s,
                 expand = xeq_fn__lrc(fn, m, nparam, param)
             else if (fn == "mid" || fn == "substr")
                 expand = xeq_fn__mid(fn, m, nparam, param)
+            else if (fn == "mjd")
+                expand = xeq_fn__mjd(fn, m, nparam, param)
             else if (fn == "ord")
                 expand = xeq_fn__ord(fn, m, nparam, param)
             else if (fn == "rem" || fn == "srem") {
@@ -8067,56 +8318,6 @@ function xeq_fn__date(fn, m, nparam, param,
 
 #*****************************************************************************
 #
-#       @  D A Y N U M  @
-#
-#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-#
-#       Compute number of days since 01-JAN-1901.
-#       http://www.netlib.org/research/awkbookcode/ch3
-#
-#*****************************************************************************
-# @daynum [YEAR MONTH DAY]@
-function xeq_fn__daynum(fn, m, nparam, param,
-                        year, month, day, monthdays, i, n,
-                        count, date)
-{
-    if (secure_level() >= 2)
-        error(sprintf("(%s) Security violation", fn))
-    if (nparam == 0) {
-        date  = sym_fetch("__DATE__")
-        year  = 0 + substr(date, 1, 4)
-        month = 0 + substr(date, 5, 2)
-        day   = 0 + substr(date, 7, 2)
-    } else if (nparam == 3) {
-        year  = 0 + param[1]
-        month = 0 + param[2]
-        day   = 0 + param[3]
-    } else
-        error("Bad parameters in '" m "':" $0)
-    dbg__print("dosubs", 7, "(xeq_fn__daynum) year=" year ", month=" month ", day=" day)
-
-    # Check date - not perfect, but should catch gross errors
-    if (   year  < 1901 || year  > 2099 \
-        || month <    1 || month >   12 \
-        || day   <    1 || day   >   31)
-        error("Bad date: Year=" year ", Month=" month ", Day=" day)
-
-    # 1 == Jan 1, 1901
-    split("31 28 31 30 31 30 31 31 30 31 30 31", monthdays)
-    # 365 days a year, plus one for each leap year
-    count = (year-1901) * 365 + int((year-1901)/4)
-    if (year % 4 == 0) # leap year from 1901 to 2099
-        monthdays[2]++
-    for (i = 1; i < month; i++)
-        count += monthdays[i]
-    return "" (count + day)
-}
-# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
-
-
-
-#*****************************************************************************
-#
 #       @  D I R N A M E  @
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -8140,6 +8341,43 @@ function xeq_fn__dirname(fn, m, nparam, param,
 
     x = rm_quotes(sym_fetch(p))
     return sub(/\/[^\/]*$/, "", x) ? x : "."
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  D O W  @
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#       dow [MJD] : Dow of Week
+#
+#*****************************************************************************
+# @dow SYM@
+function xeq_fn__dow(fn, m, nparam, param,
+                     MJD, date, year, month, day)
+{
+    if (nparam == 0) {
+        if (secure_level() >= 2)
+            error(sprintf("(%s) Security violation", fn))
+        date  = sym_fetch("__DATE__")
+        year  = 0 + substr(date, 1, 4)
+        month = 0 + substr(date, 5, 2)
+        day   = 0 + substr(date, 7, 2)
+        MJD = mjd(year, month, day)
+    } else if (nparam == 1) {
+        MJD = param[1]
+    } else if (nparam == 3) {
+        year  = 0 + param[1]
+        month = 0 + param[2]
+        day   = 0 + param[3]
+        MJD = mjd(year, month, day)
+    } else
+        error("Bad parameters in '" m "':" $0)
+
+    return (MJD % 7 + 2) % 7 + 1
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -8229,6 +8467,31 @@ function xeq_fn__getenv(fn, m, nparam, param,
     if (strictp("env") && !silent)
         error("Environment variable '" p "' not defined (__STRICT__[env] is True):" $0)
     return ""
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  G R E G D A T E  @
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#       gregdate : Convert MJD number to Gregorian calendar YYYY-MM-DD
+#
+#*****************************************************************************
+# @gregdate MJD@
+function xeq_fn__gregdate(fn, m, nparam, param,
+                          p, JD)
+{
+    if (nparam != 1)
+        error("Bad parameters in '" m "':" $0)
+    p = param[1]
+    if (! integerp(p))
+        error("Parameter must be integer: '" m "':" $0)
+    JD = 0 + p + JD_MJD_DIFF
+    return greg(JD)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -8670,6 +8933,43 @@ function xeq_fn__mid(fn, m, nparam, param,
 
 #*****************************************************************************
 #
+#       @  M J D  @
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#       Modified Julian Day
+#
+#*****************************************************************************
+# @mjd [YYYY MM DD]@
+function xeq_fn__mjd(fn, m, nparam, param,
+                        year, month, day, monthdays, i, n, date)
+{
+    if (nparam == 3) {
+        year  = 0 + param[1]
+        month = 0 + param[2]
+        day   = 0 + param[3]
+    } else if (nparam == 0) {
+        if (secure_level() >= 2)
+            error(sprintf("(%s) Security violation", fn))
+        date  = sym_fetch("__DATE__")
+        year  = 0 + substr(date, 1, 4)
+        month = 0 + substr(date, 5, 2)
+        day   = 0 + substr(date, 7, 2)
+    } else
+        error("Bad parameters in '" m "':" $0)
+
+    dbg__print("dosubs", 7, "(xeq_fn__mjd) year=" year ", month=" month ", day=" day)
+    if (! date_valid_p(year, month, day))
+        error(sprintf("(%s) Bad date; Year=%d, Month=%d, Day=%d",
+                      fn, year, month, day))
+    return "" mjd(year, month, day)
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
 #       @  O R D  @
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -8897,10 +9197,12 @@ function xeq_fn__xname(fn, m, nparam, param,
 #       Nothing in this function is user-customizable, so don't touch
 #
 #*****************************************************************************
-function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
+function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
+                        monthdays, month, leap)
 {
     # Constants
-    E                           = exp(1)
+    EULER                       = exp(1)
+    JD_MJD_DIFF                 = 2400000.5
     LOG2                        = log(2)
     LOG10                       = log(10)
     MAX_DBG_LEVEL               = 10
@@ -9010,6 +9312,14 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     srand()                     # Seed random number generator
     initialize_prog_paths()
     __inc_path = "M2PATH" in ENVIRON ? ENVIRON["M2PATH"] : ""
+
+    # Initialize days per month
+    split("31 31 28 29 31 31 30 30 31 31 30 30 31 31 31 31 30 30 31 31 30 30 31 31", monthdays)
+    for (i = 0; i < 24; i++) {
+        month = int(i/2) + 1
+        leap  = i % 2
+        __monthdays[month, leap] = monthdays[i+1]
+    }
 
     if (secure_level() < 2) {
         # Set up some symbols that depend on external programs
@@ -9126,9 +9436,9 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok)
     # They are similar to symbols but with optional parameter handling
     # Also need to add handler in dosubs()  [search: SYMFUNC]
     # Functions cannot be used as symbol or sequence names.
-    split("basename boolval center chr date daynum dirname epoch expr format" \
-          " getenv ifdef ifelse ifndef ifx index join lc left len ljust" \
-          " ltrim mid ord rem right rjust rot13 rtrim scenter sexpr sgetenv" \
+    split("basename boolval center chr date dirname dow epoch expr format" \
+          " getenv gregdate ifdef ifelse ifndef ifx index join lc left len ljust" \
+          " ltrim mid mjd ord rem right rjust rot13 rtrim scenter sexpr sgetenv" \
           " sjoin sljust spaces srem srjust strftime substr time trim tz uc" \
           " utc uuid xbasename xdirname",
           array, TOK_SPACE)

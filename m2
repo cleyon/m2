@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-09-12 10:30:31 cleyon>
+#  Time-stamp:  <2025-09-12 11:23:08 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -6382,18 +6382,6 @@ function xeq_cmd__m2ctl(name, cmdline,
 
     } else if ($1 == "dbg_zero") {
         # NB - __DEBUG__ unchanged
-        dbg__all_lev_zero()
-
-    } else if ($1 == "dbg_user") {
-        dbg__all_lev_zero()
-        dbg__set_level("cmd",     7)
-        dbg__set_level("dosubs",  7)
-        dbg__set_level("for",     8)
-        dbg__set_level("parse",   9)
-        dbg__set_level("ship_out",5)
-        dbg__set_level("xeq",     7)
-
-    } else if ($1 == "dbg_zero") {
         dbg__all_lev_zero()
 
     } else if ($1 == "dump_block") {

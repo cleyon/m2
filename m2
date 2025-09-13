@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-09-12 11:23:08 cleyon>
+#  Time-stamp:  <2025-09-12 22:36:11 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -9314,13 +9314,14 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
 
         # Current date & time
         if ("date" in PROG) {
-            # Capture m2 run start time.                 1  2  3  4  5  6  7  8
-            get_date_cmd = build_prog_cmdline("date", "+'%Y %m %d %H %M %S %z %s'", MODE_IO_CAPTURE)
+            # Capture m2 run start time.                 1  2  3  4  5  6  7  8  9
+            get_date_cmd = build_prog_cmdline("date", "+'%Y %m %d %H %M %S %z %s %a'", MODE_IO_CAPTURE)
             get_date_cmd | getline dateout
             close(get_date_cmd)
             split(dateout, d)
 
             sym_ll_fiat("__DATE__",         "", FLAGS_READONLY_INTEGER, d[1] d[2] d[3])
+            sym_ll_fiat("__DOW__",          "", FLAGS_READONLY_SYMBOL,  d[9])
             sym_ll_fiat("__EPOCH__",        "", FLAGS_READONLY_INTEGER, d[8])
             sym_ll_fiat("__TIME__",         "", FLAGS_READONLY_SYMBOL,  d[4] d[5] d[6]) # not an INTEGER because I want leading 0 if before 12:00
             sym_ll_fiat("__TIMESTAMP__",    "", FLAGS_READONLY_SYMBOL,  d[1] "-" d[2] "-" d[3] \

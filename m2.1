@@ -587,6 +587,8 @@ See also
 Return the ISO day number corresponding to the date specified,
 where 1=Monday, 2=Tuesday, ..., 7=Sunday.
 With no parameters, use current date.
+See also
+.Va __DOW__ .
 .It @epoch@
 Unix epoch time, the number of non-leap seconds which
 have passed since 00:00:00\ UTC on Thursday, 1\ January\ 1970.
@@ -1183,6 +1185,10 @@ Current stream number.
 Integer values between 0 and
 .Va __MAX_STREAM__
 are valid.
+.It __DOW__
+Abbreviated weekday name (Sun, Mon, Tue, etc).
+See also
+.Va @dow@ .
 .It __EPOCH__
 Seconds since Epoch at m2 run start time.
 See section

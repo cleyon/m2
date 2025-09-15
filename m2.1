@@ -1649,6 +1649,11 @@ command in input.
 A file specified on command line could not be read.
 .It Li 70
 An internal error, not from user code, caused m2 to abend.
+.It Li 77
+Security violation caused by attempting an operation forbidden
+at current
+.Va __SECURE__
+value.
 .El
 .Sh EXAMPLES
 The following example demonstrates arrays, conditionals, and
@@ -1894,6 +1899,12 @@ In particular, this allows the
 and
 .Ql @esyscmd
 commands to attempt execution of any program the user specifies.
+Additionally, certain commands may create user-specified external
+files, for example by using
+.Ql @undivert
+or storing a path into symbol
+.Va __DEBUGFILE__ .
+.Pp
 At secure level 1, those commands are disabled entirely.
 It also prevents creation of additional files, so
 undiverting a stream to an output file is prohibited,
@@ -1904,6 +1915,7 @@ operation (as defined in the
 .Va PROG
 array) are still permitted, since the user cannot modify them and they
 are presumably safe to invoke.
+.Pp
 At level 2, all external programs are prohibited, including those
 normally considered safe, such as
 .Xr date 1

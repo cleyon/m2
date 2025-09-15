@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-09-12 22:36:11 cleyon>
+#  Time-stamp:  <2025-09-14 22:36:01 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -43,7 +43,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "4.0.7"
+    M2_VERSION = "4.0.8"
 
     # Customize these paths as needed for correct operation on your system.
     # If a program is not available, it's okay to remove the entry entirely.
@@ -59,16 +59,18 @@ BEGIN {
     PROG["tput"]     = "/usr/bin/tput"
     PROG["uname"]    = "/usr/bin/uname"
 
-    # Secure level 0 (default) allows user-code to run arbitrary
-    # programs in a sub-shell.  This allows the @shell command to
-    # function.  Secure level 1 prevents this, but does allow m2 to
-    # utilise the (presumably secure) utilities listed above in PROG.
-    # These are used to support more advanced m2 features, but are not
-    # necessary for basic operation.  Secure level 2 prevents invoking
-    # any programs, and will terminate with a security violation error
-    # if an attempt is made.  At level 2, m2 does not know the current
-    # time or date, host or user name, etc.
-    __secure_level = 0
+    # See the "SECURITY CONSIDERATIONS" section of the manual for more info:
+    SEC_NORMAL       = 0 # Secure level 0 allows user-code to run
+                         # arbitrary programs; this allows the @shell
+                         # command to function.
+    SEC_SECURE       = 1 # Secure level 1 prevents this, but does allow
+                         # m2 to utilise the (presumably secure)
+                         # utilities specified in the PROG array.
+    SEC_PARANOID     = 2 # Secure level 2 prevents invoking any
+                         # programs, and will terminate if an attempt is
+                         # made.  At level 2, m2 does not know the
+                         # current time or date, host or user name, etc.
+    __secure_level   = SEC_NORMAL
 
     # Largest legal diversion (stream) number.  Traditional m4 supports
     # nine diversions, but GNU m4 greatly increases that limit.  Despite
@@ -89,8 +91,9 @@ BEGIN {
     EX_OK            =  0;              __exit_code = EX_OK
     EX_M2_ERROR      =  1
     EX_USER_REQUEST  =  2
-    EX_NOINPUT       = 66
-    EX_SOFTWARE      = 70
+    EX_NOINPUT       = 66       # fail to process any files
+    EX_SOFTWARE      = 70       # panic()
+    EX_NOPERM        = 77       # security violations
 
     # Types & Flags
     TYPE_ANY         = "*";             FLAG_BLKARRAY  = "K"
@@ -450,7 +453,7 @@ function to_bool(x)
 
 function ppf__bool(x)
 {
-    return (x == 0 || x == "") ? "False" : "True"
+    return (x == FALSE || x == "") ? "False" : "True"
 }
 
 
@@ -516,7 +519,7 @@ function path_exists_p(path,
     #print_stderr("(path_exists_p) START; path=" path)
     if (path == STDIN)
         return TRUE
-    if (secure_level() < 2)
+    if (secure_level() < SEC_PARANOID)
         return exec_prog_cmdline("stat", path) == EX_OK
 
     # At security level 2+, exec_prog_cmdline() is disallowed,
@@ -526,15 +529,12 @@ function path_exists_p(path,
     # unreadable files.
     status = (getline not_used < path)
 
-    if (status > 0) {           # Found
+    if (status >= 0) {          # >0 -> Found, ==0 -> Empty but readable
         close(path)
         return TRUE
-    } else if (status == 0) {   # Empty but readable
-        close(path)
-        return TRUE
-    } else {                    # Error: non-existent or unreadable
-        return FALSE
     }
+    # <0 -> Non-existent or unreadable
+    return FALSE
 }
 
 
@@ -637,7 +637,7 @@ function strictp(ssys)
     if (ssys == EMPTY)
         panic("(strictp) ssys cannot be empty!")
     # Use low-level function here, not sym_true_p(), to prevent infinite loop
-    return sym_ll_read("__STRICT__", ssys, GLOBAL_NAMESPACE) != 0
+    return sym_ll_read("__STRICT__", ssys, GLOBAL_NAMESPACE) != FALSE
 }
 
 
@@ -655,8 +655,8 @@ function build_prog_cmdline(prog, arg, mode)
 
 function exec_prog_cmdline(prog, arg,    sym)
 {
-    if (secure_level() >= 2)
-        error("(exec_prog_cmdline) Security violation")
+    if (secure_level() >= SEC_PARANOID)
+        security_violation("(exec_prog_cmdline) Forbidden")
 
     if (! sym_ll_in("__PROG__", prog, GLOBAL_NAMESPACE))
         # This should be same as assert_[n]sym_defined()
@@ -999,20 +999,38 @@ function error(text, file, line)
 }
 
 
+# Abending prints a quick note, then exits immediately without any
+# streams or wraps.
+function abend(code, tag)
+{
+    if (tag == EMPTY)
+        tag = "ABEND"
+    if (code == 0)
+        code = EX_SOFTWARE
+
+    print_stderr(sprintf("m2:%s", tag))
+    flush_stdout(SYNC_FORCE)
+    exit code
+}
+
+
 # panic() is more extreme than error().  It should not be possible to
 # induce a panic merely by executing user code.  It is used when there
 # is an internal error, a logical inconsistency, or a "can't happen"
 # situation.  It prints its message and exits immediately with code 70.
-function panic(text, file, line,
-               timestamp)
+function panic(text, file, line)
 {
     warn(text, file, line)
-    __exit_code = EX_SOFTWARE
-    print_stderr("m2:PANIC" secure_level() < 2 ? \
-                 xeq_fn__date("strftime", "strftime  %Y-%m-%dT%H:%M:%S%z", 1) : "")
-                 #         NB - two spaces --------^^
-    flush_stdout(SYNC_FORCE)
-    exit __exit_code
+    abend(EX_SOFTWARE, "PANIC")
+}
+
+
+# A security violation exists when an otherwise valid opertion is
+# denied due to a heightened __SECURE__ level.
+function security_violation(text, file, line)
+{
+    warn(text, file, line)
+    abend(EX_NOPERM, "SECURITY VIOLATION")
 }
 
 
@@ -1238,7 +1256,7 @@ function dbg__set_level(dsys, lev)
 function print_debugfile(text,
                          debugfile)
 {
-    debugfile = secure_level() == 0 \
+    debugfile = secure_level() == SEC_NORMAL \
         ? sym_ll_read("__DEBUGFILE__", "", GLOBAL_NAMESPACE) \
         : STDERR
     printf "%s\n", text > debugfile
@@ -3378,7 +3396,7 @@ function sym_deferred_p(sym,
 function sym_define_all_deferred(    x, k, def_list, sym, code)
 {
     dbg__print("nam", 5, "(sym_define_all_deferred) BEGIN")
-    if (secure_level() >= 2)
+    if (secure_level() >= SEC_PARANOID)
         return
 
     for (k in namtab) {
@@ -3403,8 +3421,8 @@ function sym_define_all_deferred(    x, k, def_list, sym, code)
 function sym_deferred_define_now(sym,
                                  code, deferred_prog, deferred_arg, cmdline, output)
 {
-    if (secure_level() >= 2)
-        error("(sym_deferred_define_now) Security violation")
+    if (secure_level() >= SEC_PARANOID)
+        security_violation("(sym_deferred_define_now) Forbidden")
 
     code = nam_ll_read(sym, GLOBAL_NAMESPACE)
     deferred_prog = symtab[sym, "", GLOBAL_NAMESPACE, "deferred_prog"]
@@ -3695,7 +3713,7 @@ function sym_ll_write(name, key, level, val)
         dbg__all_lev_standard()
     } else if (name == "__SECURE__") {
         val = max(secure_level(), val) # Don't allow __SECURE__ to decrease
-        if (val >= 2)
+        if (val >= SEC_PARANOID)
             sym_destroy_all_deferred()
     } else if (name == "__FMT__" &&
                key == "number" &&
@@ -4415,7 +4433,7 @@ function parse__of(                case_block, of_block, of_val)
 {
     dbg__print("case", 3, sprintf("(parse__of) START dstblk=%d, mode=%s, $0='%s'",
                                  curr_dstblk(), ppf__mode(curr_atmode()), $0))
-    if (check__parse_stack(BLK_CASE) != 0)
+    if (check__parse_stack(BLK_CASE) != ERR_OKAY)
         error("[@of] Parse error; " __m2_msg)
     case_block = stk_top(__parse_stack)
 
@@ -4439,7 +4457,7 @@ function parse__otherwise(                case_block, otherwise_block)
 {
     dbg__print("case", 3, sprintf("(parse__otherwise) START dstblk=%d, mode=%s",
                                curr_dstblk(), ppf__mode(curr_atmode())))
-    if (check__parse_stack(BLK_CASE) != 0)
+    if (check__parse_stack(BLK_CASE) != ERR_OKAY)
         error("[@otherwise] Parse error; " __m2_msg)
     case_block = stk_top(__parse_stack)
 
@@ -4464,7 +4482,7 @@ function parse__endcase(                case_block) # OK
 {
     dbg__print("case", 3, sprintf("(parse__endcase) START dstblk=%d, mode=%s",
                                curr_dstblk(), ppf__mode(curr_atmode())))
-    if (check__parse_stack(BLK_CASE) != 0)
+    if (check__parse_stack(BLK_CASE) != ERR_OKAY)
         error("[@endcase] Parse error; " __m2_msg)
 
     case_block = stk_pop(__parse_stack)
@@ -4758,10 +4776,8 @@ function xeq_cmd__dump(name, cmdline,
     $0 = cmdline
     what = (NF == 0) ? "symbols" : tolower($1)
     if (NF > 1) {
-        if (secure_level() >= 1) {
-            warn("(@dump) Security violation: Dumpfile not allowed")
-            return
-        }
+        if (secure_level() >= SEC_SECURE)
+            security_violation("(@dump) Dumpfile not allowed")
         $1 = ""
         sub("^[ \t]*", "")
         dumpfile = rm_quotes(dosubs($0))
@@ -5128,10 +5144,8 @@ function xeq_cmd__esyscmd(name, cmdline,
                           rc, shell_cmdline, output_file, getstat, line, output_text)
 {
     dbg__print("cmd", 3, sprintf("(xeq_cmd__esyscmd) START; cmdline='%s'", cmdline))
-    if (secure_level() >= 1) {
-        warn("(@esyscmd) Security violation")
-        return
-    }
+    if (secure_level() >= SEC_SECURE)
+        security_violation("(@esyscmd) Forbidden")
 
     output_file = sprintf("%sm2-%d.esyscmd-%s",
                           tmpdir(), sym_fetch("__PID__"), "out")
@@ -5264,8 +5278,8 @@ function xeq_cmd__exit(name, cmdline)
     # consistent results across different operating systems.
     if (__exit_code < 0 || __exit_code > 126)
         __exit_code = 1
-    end_program(__exit_code == 0 ? MODE_STREAMS_SHIP_OUT \
-                                 : MODE_STREAMS_DISCARD)
+    end_program(__exit_code == EX_OK ? MODE_STREAMS_SHIP_OUT \
+                                     : MODE_STREAMS_DISCARD)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -5469,7 +5483,7 @@ function parse__next(                   for_block)
 {
     dbg__print("for", 3, sprintf("(parse__next) START dstblk=%d, mode=%s, $0='%s'",
                                 curr_dstblk(), ppf__mode(curr_atmode()), $0))
-    if (check__parse_stack(BLK_FOR) != 0)
+    if (check__parse_stack(BLK_FOR) != ERR_OKAY)
         error("[@next] Parse error; " __m2_msg)
     for_block = stk_pop(__parse_stack)
     dbg__print("parse", 7, "(parse__next) popped parse_stack => " for_block)
@@ -5722,7 +5736,7 @@ function parse__else(                   if_block, false_block)
 {
     dbg__print("if", 3, sprintf("(parse__else) START dstblk=%d, mode=%s",
                                curr_dstblk(), ppf__mode(curr_atmode())))
-    if (check__parse_stack(BLK_IF) != 0)
+    if (check__parse_stack(BLK_IF) != ERR_OKAY)
         error("[@else] Parse error; " __m2_msg)
     if_block = stk_top(__parse_stack)
 
@@ -5747,7 +5761,7 @@ function parse__endif(                    if_block)
 {
     dbg__print("if", 3, sprintf("(parse__endif) START dstblk=%d, mode=%s",
                                curr_dstblk(), ppf__mode(curr_atmode())))
-    if (check__parse_stack(BLK_IF) != 0)
+    if (check__parse_stack(BLK_IF) != ERR_OKAY)
         error("[@endif] Parse error; " __m2_msg)
 
     if_block = stk_pop(__parse_stack)
@@ -6229,7 +6243,7 @@ function parse__endlongdef(    sym_block)
 {
     dbg__print("sym", 3, sprintf("(parse__endlongdef) START dstblk=%d, mode=%s",
                                  curr_dstblk(), ppf__mode(curr_atmode())))
-    if (check__parse_stack(BLK_LONGDEF) != 0)
+    if (check__parse_stack(BLK_LONGDEF) != ERR_OKAY)
         error("[@endlongdef] Parse error; " __m2_msg)
     sym_block = stk_pop(__parse_stack)
     dbg__print("parse", 7, "(parse__endlongdef) popped parse_stack => " sym_block)
@@ -6465,7 +6479,7 @@ function parse__endcmd(                     newcmd_block)
 {
     dbg__print("cmd", 3, sprintf("(parse__endcmd) START dstblk=%d, mode=%s",
                                  curr_dstblk(), ppf__mode(curr_atmode())))
-    if (check__parse_stack(BLK_USER) != 0)
+    if (check__parse_stack(BLK_USER) != ERR_OKAY)
         error("[@endcmd] Parse error; " __m2_msg)
     newcmd_block = stk_pop(__parse_stack)
     dbg__print("parse", 7, "(parse__endcmd) popped parse_stack => " newcmd_block)
@@ -6866,10 +6880,8 @@ function xeq_cmd__shell(name, cmdline,
 
     # Postpone checking security level until now so we can properly read
     # to the delimiter.
-    if (secure_level() >= 1) {
-        warn("(@shell) Security violation")
-        return
-    }
+    if (secure_level() >= SEC_SECURE)
+        security_violation("(@shell) Forbidden")
 
     shell_text_in = blk_to_string(shell_data_blk)
     dbg__print("parse", 5, sprintf("(xeq_cmd__shell) shell_text_in='%s'", shell_text_in))
@@ -6989,10 +7001,8 @@ function xeq_cmd__syscmd(name, cmdline,
 {
     cmdline = sprintf("%s >%s 2>%s" , cmdline, NULL, NULL)
     dbg__print("cmd", 3, sprintf("(xeq_cmd__syscmd) START; cmdline='%s'", cmdline))
-    if (secure_level() >= 1) {
-        warn("@syscmd: Security violation")
-        return
-    }
+    if (secure_level() >= SEC_SECURE)
+        security_violation("@syscmd: Forbidden")
 
     flush_stdout(SYNC_FORCE)
     rc = system(cmdline)
@@ -7264,10 +7274,8 @@ function xeq_cmd__undivert(name, cmdline,
         }
     } else if (cmdline ~ "^[0-9]+[ \t]+.*[^0-9]") {
         # @undivert N FILE : process one stream, output to FILE
-        if (secure_level() >= 1) {
-            warn("@undivert: Security violation")
-            return
-        }
+        if (secure_level() >= SEC_SECURE)
+            security_violation("@undivert: Forbidden")
         stream = $1
         if (stream > MAX_STREAM)
             error("Bad parameters:" $0)
@@ -7330,7 +7338,7 @@ function parse__endwhile(                    while_block)
 {
     dbg__print("while", 3, sprintf("(parse__endwhile) START dstblk=%d, mode=%s",
                                curr_dstblk(), ppf__mode(curr_atmode())))
-    if (check__parse_stack(BLK_WHILE) != 0)
+    if (check__parse_stack(BLK_WHILE) != ERR_OKAY)
         error("[@endwhile] Parse error; " __m2_msg)
     while_block = stk_pop(__parse_stack)
 
@@ -8286,8 +8294,8 @@ function xeq_fn__chr(fn, m, nparam, param,
 function xeq_fn__date(fn, m, nparam, param,
                       y, cmdline, result)
 {
-    if (secure_level() >= 2)
-        error(sprintf("(%s) Security violation", fn))
+    if (secure_level() >= SEC_PARANOID)
+        security_violation(sprintf("(%s) Forbidden", fn))
     if (fn == "strftime" && nparam == 0)
         error("Bad parameters in '" m "':" $0)
     y = fn == "strftime" ? substr(m, length(fn)+2) \
@@ -8348,8 +8356,8 @@ function xeq_fn__dow(fn, m, nparam, param,
                      MJD, date, year, month, day)
 {
     if (nparam == 0) {
-        if (secure_level() >= 2)
-            error(sprintf("(%s) Security violation", fn))
+        if (secure_level() >= SEC_PARANOID)
+            security_violation(sprintf("(%s) Forbidden", fn))
         date  = sym_fetch("__DATE__")
         year  = 0 + substr(date, 1, 4)
         month = 0 + substr(date, 5, 2)
@@ -8937,8 +8945,8 @@ function xeq_fn__mjd(fn, m, nparam, param,
         month = 0 + param[2]
         day   = 0 + param[3]
     } else if (nparam == 0) {
-        if (secure_level() >= 2)
-            error(sprintf("(%s) Security violation", fn))
+        if (secure_level() >= SEC_PARANOID)
+            security_violation(sprintf("(%s) Forbidden", fn))
         date  = sym_fetch("__DATE__")
         year  = 0 + substr(date, 1, 4)
         month = 0 + substr(date, 5, 2)
@@ -9159,8 +9167,8 @@ function xeq_fn__trim(fn, m, nparam, param,
 function xeq_fn__xname(fn, m, nparam, param,
                        p, cmdline, expand)
 {
-    if (secure_level() >= 2)
-        error("(" fn ") Security violation")
+    if (secure_level() >= SEC_PARANOID)
+        security_violation(sprintf("(%s) Forbidden", fn))
     if (nparam != 1)
         error("(" fn ") Bad parameters in '" m "':" $0)
     p = param[1]
@@ -9309,7 +9317,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
         __monthdays[month, leap] = monthdays[i+1]
     }
 
-    if (secure_level() < 2) {
+    if (secure_level() < SEC_PARANOID) {
         # Set up some symbols that depend on external programs
 
         # Current date & time
@@ -9354,13 +9362,13 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
 
     if ("COLUMNS" in ENVIRON)
       sym_ll_fiat("__COLUMNS__",    "", FLAGS_WRITABLE_INTEGER, ENVIRON["COLUMNS"])
-    else if (secure_level() < 2 && ("tput" in PROG))
+    else if (secure_level() < SEC_PARANOID && ("tput" in PROG))
       sym_deferred_symbol("__COLUMNS__",FLAGS_WRITABLE_INTEGER, "tput", "cols")
     else
       sym_ll_fiat("__COLUMNS__",    "", FLAGS_WRITABLE_INTEGER, 80)
     if ("PWD" in ENVIRON)
       sym_ll_fiat("__CWD__",        "", FLAGS_READONLY_SYMBOL,  with_trailing_slash(ENVIRON["PWD"]))
-    else if (secure_level() < 2 && ("pwd" in PROG))
+    else if (secure_level() < SEC_PARANOID && ("pwd" in PROG))
       sym_deferred_symbol("__CWD__",    FLAGS_READONLY_SYMBOL,  "pwd", "")
     sym_ll_fiat("__DIVNUM__",       "", FLAGS_READONLY_INTEGER, 0)
     sym_ll_fiat("__DEBUGFILE__",    "", FLAGS_WRITABLE_SYMBOL,  STDERR)
@@ -9733,7 +9741,7 @@ BEGIN {
 function end_program(diverted_streams_final_disposition,
                      i, timestamp)
 {
-    if (__exit_code                        == EX_OK &&
+    if (__exit_code == EX_OK &&
         diverted_streams_final_disposition == MODE_STREAMS_SHIP_OUT) {
 
         # In the normal case of MODE_STREAMS_SHIP_OUT, ship out any remaining
@@ -9754,15 +9762,10 @@ function end_program(diverted_streams_final_disposition,
         for (i = 1; i <= __wrap_cnt; i++)
             dostring(__wrap_text[i])
 
+    if (debugp())
+        print_debugfile(sprintf("m2:%s",
+                                __exit_code == EX_NOINPUT ? "NOFILE" : __exit_code == EX_OK ? "END" : "ERROR"))
     flush_stdout(SYNC_FORCE)
-    if (debugp()) {
-        timestamp = secure_level() < 2 ? \
-            xeq_fn__date("strftime", "strftime  %Y-%m-%dT%H:%M:%S%z", 1) : ""
-        #             NB - two spaces --------^^
-        print_debugfile(sprintf("m2:%s%s",
-                                __exit_code == EX_NOINPUT ? "NOFILE" : __exit_code == EX_OK ? "END" : "ERROR",
-                                timestamp))
-    }
     exit __exit_code
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =

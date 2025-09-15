@@ -237,12 +237,12 @@ run_test()
     ntest=$(expr $ntest + 1)
 
     if [ ! -s "$M2_FILE" ]; then
-        echo "*** SKIP - Empty test file ***"
+        echo "SKIP - Empty test file ***"
         nskip=$(expr $nskip + 1)
         return
     fi
     if [ -f ${TESTNAME}.disabled ]; then
-        echo "*** SKIP - Test disabled ***"
+        echo "SKIP - Test disabled ***"
         nskip=$(expr $nskip + 1)
         return
     fi
@@ -252,13 +252,13 @@ run_test()
     trap 'rm -f ${TESTNAME}.expected_* ${TESTNAME}.run_*; summarize_tests; exit' 1 2 3 15
 
     if [ ! -r "$M2_FILE" ]; then
-        echo "*** FAIL - Unreadable test file ***"
+        echo "FAIL - Unreadable test file ***"
         nfail=$(expr $nfail + 1)
         rc=127
         return
     fi
     if [ ! -f ${TESTNAME}.out ]; then
-        echo "*** FAIL - ${TESTNAME}.out does not exist ***"
+        echo "FAIL - ${TESTNAME}.out does not exist ***"
         nfail=$(expr $nfail + 1)
         rc=127
         return
@@ -297,7 +297,7 @@ run_test()
     ##  Check error messages
     #
     if ! cmp -s ${TESTNAME}.run_err ${TESTNAME}.expected_err; then
-        echo "*** FAIL - Unexpected error messages ***"
+        echo "FAIL - Unexpected error messages ***"
         echo "    (file $CATEGORY/$SERIES/$M2_FILE)"
         fail=$(expr $fail + 1)
         echo ">>> EXPECTED ERRORS <<<"
@@ -311,7 +311,7 @@ run_test()
     ##  Check exit code
     #
     if ! cmp -s ${TESTNAME}.run_exit ${TESTNAME}.expected_exit; then
-        echo "*** FAIL - Unexpected exit code ***"
+        echo "FAIL - Unexpected exit code ***"
         echo "    (file $CATEGORY/$SERIES/$M2_FILE)"
         fail=$(expr $fail + 1)
         echo ">>> EXPECTED EXIT CODE <<<"
@@ -324,7 +324,7 @@ run_test()
     ##  Check actual output
     #
     if ! cmp -s ${TESTNAME}.run_out ${TESTNAME}.expected_out; then
-        echo "*** FAIL - Unexpected output ***"
+        echo "FAIL - Unexpected output ***"
         echo "    (file $CATEGORY/$SERIES/$M2_FILE)"
         fail=$(expr $fail + 1)
         # Always create diff file

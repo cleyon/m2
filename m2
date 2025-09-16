@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-09-14 22:36:01 cleyon>
+#  Time-stamp:  <2025-09-16 09:37:03 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -43,21 +43,30 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "4.0.8"
+    M2_VERSION = "4.1.0"
 
     # Customize these paths as needed for correct operation on your system.
+    # They are assumed to be safe to run even at secure level 1 (but not 2).
     # If a program is not available, it's okay to remove the entry entirely.
-    PROG["basename"] = "/usr/bin/basename"
-    PROG["date"]     = "/bin/date"
-    PROG["dirname"]  = "/usr/bin/dirname"
-    PROG["hostname"] = "/bin/hostname"
-    PROG["id"]       = "/usr/bin/id"
-    PROG["pwd"]      = "/bin/pwd"
-    PROG["rm"]       = "/bin/rm"
-    PROG["sh"]       = "/bin/sh"
-    PROG["stat"]     = "/usr/bin/stat"
-    PROG["tput"]     = "/usr/bin/tput"
-    PROG["uname"]    = "/usr/bin/uname"
+    split( "/usr/bin/basename" \
+          " /bin/date"         \
+          " /usr/bin/dirname"  \
+          " /bin/hostname"     \
+          " /usr/bin/id"       \
+          " /bin/pwd"          \
+          " /bin/rm"           \
+          " /bin/sh"           \
+          " /usr/bin/stat"     \
+          " /usr/bin/tput"     \
+          " /usr/bin/uname", _progs, " ")
+    for (_prog in _progs)
+        if (awk_stat(_progs[_prog]))
+            PROG[awk_basename(_progs[_prog])] = _progs[_prog]
+        else
+            # It's appropriate to print a message here because the
+            # user can't fix the problem (__PROG__ is protected),
+            # so the administrator ought to fix the path.
+            print_stderr("External program '" _progs[_prog] "' not found")
 
     # See the "SECURITY CONSIDERATIONS" section of the manual for more info:
     SEC_NORMAL       = 0 # Secure level 0 allows user-code to run
@@ -513,28 +522,60 @@ function assert_valid_env_var_name(var)
 }
 
 
-function path_exists_p(path,
-                       status, not_used)
+# See if a file exists with pure Awk, no external program.
+# WARNING: this code does not distinguish between non-existent and
+# unreadable files.
+function awk_stat(path,
+                  status, not_used)
+{
+    status = (getline not_used < path)
+
+    # Use literal numbers; TRUE/FALSE might not be defined yet
+    if (status >= 0) {          #  > 0 -> Found
+        close(path)             # == 0 -> Empty but readable
+        return 1
+    }
+    # <0 -> Non-existent or unreadable
+    return 0
+}
+
+
+function path_exists_p(path)
 {
     #print_stderr("(path_exists_p) START; path=" path)
     if (path == STDIN)
         return TRUE
-    if (secure_level() < SEC_PARANOID)
+    if (secure_level() < SEC_PARANOID && ("stat" in PROG))
         return exec_prog_cmdline("stat", path) == EX_OK
 
     # At security level 2+, exec_prog_cmdline() is disallowed,
     # so we'll use this workaround.
-    #
-    # WARNING: this code does not distinguish between non-existent and
-    # unreadable files.
-    status = (getline not_used < path)
+    return awk_stat(path)
+}
 
-    if (status >= 0) {          # >0 -> Found, ==0 -> Empty but readable
-        close(path)
-        return TRUE
+
+# Construct a unique file path which does not currently exist.
+# The path_template is expected to end in one or more "X" characters,
+# which are replaced by random (hex) characters.  Unlike standard
+# mktemp(1), this function does not actually create the file; it merely
+# returns its path.  It makes no guarantees that such a file path can
+# actually be created or used, so the caller must still take care.  This
+# is less robust than the system version but hopefully still good enough.
+function mktemp(path_template,
+                leading_elements, file_path, tries)
+{
+    if (match(path_template, "X+$") == NOT_FOUND)
+        error("(mktemp) Invalid template '" path_template "': missing X")
+    # Leading elements are everything up to but not including trailing "X"s
+    leading_elements = substr(path_template, 1, RSTART - 1)
+    tries = 10
+    while (tries-- > 0) {
+        file_path = leading_elements  hex_digits(RLENGTH)
+        if (path_exists_p(file_path))
+            continue
+        return file_path
     }
-    # <0 -> Non-existent or unreadable
-    return FALSE
+    panic("(mktemp) Could not create temporary file name")
 }
 
 
@@ -1187,7 +1228,7 @@ function enable_debugging()
 }
 
 
-function debugp()
+function debugging_enabled_p()
 {
     return sym_ll_read("__DEBUG__", "", GLOBAL_NAMESPACE)+0 > 0
 }
@@ -1204,7 +1245,7 @@ function dbg__sys_level_p(dsys, lev)
     if (dsys == EMPTY)          panic("(dbg) dsys cannot be empty")
     if (! (dsys in __dbg_sysnames)) panic("(dbg) Unknown dsys name '" dsys "' (lev=" lev "): " $0)
     if (lev < 0)                return TRUE
-    if (!debugp())              return FALSE
+    if (!debugging_enabled_p()) return FALSE
     if (lev == 0)               return TRUE # Don't combine with .-2; this allows negative levels to print regardless of __DEBUG__
     if (lev > MAX_DBG_LEVEL)    lev = MAX_DBG_LEVEL
     if (!sym_ll_in("__DBG__", dsys, GLOBAL_NAMESPACE))
@@ -1226,7 +1267,7 @@ function dbg__get_level(dsys)
     if (!sym_ll_in("__DBG__", dsys, GLOBAL_NAMESPACE))
         return 0
     return (sym_ll_read("__DBG__", dsys, GLOBAL_NAMESPACE)+0) \
-         * (debugp() ? 1 : -1)
+         * (debugging_enabled_p() ? 1 : -1)
 }
 
 
@@ -5087,14 +5128,12 @@ function xeq_cmd__dumpdef(name, cmdline,
 # debug, error and warn "format" the message, adorning it with with
 # current file name, line number, etc.  echo and errprint do no
 # additional formatting.
-#
-# @debug only prints its message if debugging is enabled.
-# Note that this prints to debugfile directly and is controlled by
-# debugp() alone, and has nothing to do with any "system" or "levels".
-# The user can control this since __DEBUG__ is an unprotected symbol.
-# The user does a
+# @debug only prints its message if debugging is enabled.  Note that
+# this prints to debugfile directly and depends on debugging_enabled_p()
+# alone, and has nothing to do with any "system" or "levels".  The user
+# can control this since __DEBUG__ is an unprotected symbol; merely say:
 #       @define __DEBUG__ 1
-# and all of a sudden his @debug messages spring to life.
+# and all of a sudden the @debug messages spring to life.
 # @debug is purposefully not given access to the various __DBG__
 # keys and levels.
 #
@@ -5112,7 +5151,7 @@ function xeq_cmd__error(name, cmdline,
 {
     m2_will_exit = (name == "error" || name == "serror")
     do_format = (name == "debug" || name == "error" || name == "warn")
-    do_print  = (name != "debug" || debugp())
+    do_print  = (name != "debug" || debugging_enabled_p())
     message = dosubs(cmdline)
     if (do_format)
         message = format_message(message)
@@ -5147,8 +5186,7 @@ function xeq_cmd__esyscmd(name, cmdline,
     if (secure_level() >= SEC_SECURE)
         security_violation("(@esyscmd) Forbidden")
 
-    output_file = sprintf("%sm2-%d.esyscmd-%s",
-                          tmpdir(), sym_fetch("__PID__"), "out")
+    output_file = mktemp(tmpdir() "m2-esyscmd.out.XXXXXX")
     shell_cmdline = sprintf("%s -c '%s' <%s >%s",
                             default_shell(), cmdline, NULL, output_file)
     flush_stdout(SYNC_FORCE)
@@ -5164,7 +5202,10 @@ function xeq_cmd__esyscmd(name, cmdline,
         output_text = output_text line TOK_NEWLINE # Read a line
     }
     close(output_file)
-    exec_prog_cmdline("rm", ("-f " output_file))
+    if ("rm" in PROG)
+        exec_prog_cmdline("rm", ("-f " output_file))
+    else if (debugging_enabled_p())
+        warn("(@esyscmd) PROG[rm] not defined; '" output_file "' not deleted")
 
     output_text = chomp(output_text)
     dbg__print("cmd", 5, sprintf("(xeq_cmd__esyscmd) output_text='%s'", output_text))
@@ -6849,7 +6890,7 @@ function xeq_cmd__sequence(name, cmdline,
 # Set symbol "M2_SHELL" to override.
 function xeq_cmd__shell(name, cmdline,
                         delim, save_line, save_lineno, shell_text_in, input_file,
-                        output_text, output_file, sendto, path_fmt, getstat,
+                        output_text, output_file, sendto, getstat,
                         shell_cmdline, line, shell_data_blk, readstat)
 {
     # The sendto program defaults to a reasonable shell but you can
@@ -6886,9 +6927,8 @@ function xeq_cmd__shell(name, cmdline,
     shell_text_in = blk_to_string(shell_data_blk)
     dbg__print("parse", 5, sprintf("(xeq_cmd__shell) shell_text_in='%s'", shell_text_in))
 
-    path_fmt    = sprintf("%sm2-%d.shell-%%s", tmpdir(), sym_fetch("__PID__"))
-    input_file  = sprintf(path_fmt, "in")
-    output_file = sprintf(path_fmt, "out")
+    input_file  = mktemp(tmpdir() "m2-shell.in.XXXXXX")
+    output_file = mktemp(tmpdir() "m2-shell.out.XXXXXX")
     print dosubs(shell_text_in) > input_file
     close(input_file)
 
@@ -6906,9 +6946,13 @@ function xeq_cmd__shell(name, cmdline,
         output_text = output_text line TOK_NEWLINE # Read a line
     }
     close(output_file)
-    exec_prog_cmdline("rm", ("-f " input_file))
-    exec_prog_cmdline("rm", ("-f " output_file))
-
+    if ("rm" in PROG) {
+        exec_prog_cmdline("rm", ("-f " input_file))
+        exec_prog_cmdline("rm", ("-f " output_file))
+    } else if (debugging_enabled_p()) {
+        warn("(@shell) PROG[rm] not defined; '"  input_file "' not deleted")
+        warn("(@shell) PROG[rm] not defined; '" output_file "' not deleted")
+    }
     output_text = chomp(output_text)
     dbg__print("cmd", 5, sprintf("(xeq_cmd__shell) output_text='%s'", output_text))
     if (!emptyp(output_text))
@@ -8172,6 +8216,13 @@ function substitute_params(str, nparam, param,
 
 
 
+function awk_basename(s)
+{
+    sub(/^.*\//, "", s)
+    return s
+}
+
+
 #*****************************************************************************
 #
 #       @  B A S E N A M E  @
@@ -8187,16 +8238,15 @@ function substitute_params(str, nparam, param,
 #*****************************************************************************
 # @basename SYM@
 function xeq_fn__basename(fn, m, nparam, param,
-                          p, result)
+                          p, path)
 {
     if (nparam != 1)
         error("Bad parameters in '" m "':" $0)
     p = param[1]
     assert_sym_valid_name(p)
     assert_sym_defined(p, fn)
-    result = rm_quotes(sym_fetch(p))
-    sub(/^.*\//, "", result)
-    return result
+    path = rm_quotes(sym_fetch(p))
+    return awk_basename(path)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -8296,6 +8346,8 @@ function xeq_fn__date(fn, m, nparam, param,
 {
     if (secure_level() >= SEC_PARANOID)
         security_violation(sprintf("(%s) Forbidden", fn))
+    if (! ("date" in PROG))
+        error(sprintf("(%s) PROG[date] not defined; Cannot tell time", fn))
     if (fn == "strftime" && nparam == 0)
         error("Bad parameters in '" m "':" $0)
     y = fn == "strftime" ? substr(m, length(fn)+2) \
@@ -9762,7 +9814,7 @@ function end_program(diverted_streams_final_disposition,
         for (i = 1; i <= __wrap_cnt; i++)
             dostring(__wrap_text[i])
 
-    if (debugp())
+    if (debugging_enabled_p())
         print_debugfile(sprintf("m2:%s",
                                 __exit_code == EX_NOINPUT ? "NOFILE" : __exit_code == EX_OK ? "END" : "ERROR"))
     flush_stdout(SYNC_FORCE)

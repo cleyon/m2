@@ -73,7 +73,9 @@
 # ===========
 # Framework control messages begin with "!!!" and a keyword describing the message.
 #       !!! BEGIN - Starting test runs
-#       !!! SUMMARY - 6 total tests: 5 passed (83.3%), 1 failed (16.7%)
+#       !!! SUMMARY - 6 tests:
+#       !!!       5 passed (83.3%)
+#       !!!       1 failed (16.7%)
 # Test ids and results are shown on lines beginning and ending with "***":
 #       *** NEWCMD/004/simple ... PASS ***
 # Exit status codes and data streams are shown in sections whose titles appear
@@ -125,7 +127,7 @@ summarize_tests()
     local pass_pct=0.0
     local skip_pct=0.0
     local fail_pct=0.0
-    local int_pct=0.0
+    local intr_pct=0.0
     local chk
     local intr="false"
     chk=$(expr $npass + $nskip + $nfail - $ntest)
@@ -140,17 +142,16 @@ summarize_tests()
         skip_pct=`echo "scale=3; $nskip*100/$ntest" | bc`
         fail_pct=`echo "scale=3; $nfail*100/$ntest" | bc`
         if [ $intr = "true" ]; then
-            int_pct=`echo "scale=3; 1*100/$ntest" | bc`
+            intr_pct=`echo "scale=3; 1*100/$ntest" | bc`
         fi
     fi
     echo   "!!! END - Stopping test runs"
-    if [ $intr = "true" ]; then
-        printf "!!! SUMMARY - %d total tests: %d passed (%.1f%%), %d skipped (%.1f%%), %d failed (%.1f%%), 1 interrupted (%.1f%%)\n" \
-               $ntest $npass $pass_pct $nskip $skip_pct $nfail $fail_pct $int_pct
-    else
-        printf "!!! SUMMARY - %d total tests: %d passed (%.1f%%), %d skipped (%.1f%%), %d failed (%.1f%%)\n" \
-               $ntest $npass $pass_pct $nskip $skip_pct $nfail $fail_pct
-    fi
+
+    printf "!!! SUMMARY - %d tests:\n" $ntest
+    [ $npass -gt 0 ]   && printf "!!!     %3d passed (%.1f%%)\n"  $npass $pass_pct
+    [ $nfail -gt 0 ]   && printf "!!!     %3d failed (%.1f%%)\n"  $nfail $fail_pct
+    [ $nskip -gt 0 ]   && printf "!!!     %3d skipped (%.1f%%)\n" $nskip $skip_pct
+    [ $intr = "true" ] && printf "!!!     %3d interrupted (%.1f%%)\n"  1 $intr_pct
 }
 
 

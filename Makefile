@@ -64,7 +64,7 @@ vars:
 	$(GAWK) -d -f m2 /dev/null >/dev/null
 
 clean:
-	rm -f  m2.cat1  tests/*/*/*.run_*
+	rm -f  m2.cat1  test.log.*  tests/*/*/*.run_*
 
 lint:
 	$(GAWK) --lint --posix -f m2 /dev/null

@@ -5,18 +5,18 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-09-16 09:37:03 cleyon>
+#  Time-stamp:  <2025-09-16 22:09:13 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
 #
 #  USAGE
-#       m2 [NAME=VAL ...] [file ...]
+#       m2 [NAME=[VALUE] ...] [file ...]
 #
 #  DESCRIPTION
 #       Line-oriented macro processor
 #
-#  Copyright (c) 2025, Christopher Leyon
+#  Copyright (c) 2025 Christopher Leyon
 #  All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
@@ -43,7 +43,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "4.1.0"
+    M2_VERSION = "4.1.1"
 
     # Customize these paths as needed for correct operation on your system.
     # They are assumed to be safe to run even at secure level 1 (but not 2).
@@ -102,7 +102,7 @@ BEGIN {
     EX_USER_REQUEST  =  2
     EX_NOINPUT       = 66       # fail to process any files
     EX_SOFTWARE      = 70       # panic()
-    EX_NOPERM        = 77       # security violations
+    EX_NOPERM        = 77       # security violation
 
     # Types & Flags
     TYPE_ANY         = "*";             FLAG_BLKARRAY  = "K"
@@ -198,15 +198,6 @@ function rtrim(s)
     sub(/[ \t]+$/, "", s)
     return s
 }
-
-
-# trim() - Remove whitespace on left and right
-# function trim(s)
-# {
-#     sub(/^[ \t]+/, "", s)
-#     sub(/[ \t]+$/, "", s)
-#     return s
-# }
 
 
 # Return N spaces (or other character)
@@ -1399,11 +1390,32 @@ function trace(event, sym, message,
 #
 #       A R R A Y   A P I
 #
-#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-#
-#       Check that arr is really an ARRAY and that it's writable
-#
 #*****************************************************************************
+function arrayp(arr,
+                nparts, level, info, code)
+{
+    # Check namtab
+    if ((nparts = nam__scan(arr, info)) == ERROR)
+        error("(arrayp) Scan error, " __m2_msg)
+    if (nparts == 2)
+        return FALSE
+
+    # Now call nam_lookup(info).  Must be TYPE_ARRAY && !FLAG_SYSTEM
+    level = nam_lookup(info)
+    if (level == ERROR)
+        return FALSE
+    if (info["isarray"] != TRUE)
+        return FALSE
+    code = info["code"]
+    if (flag_1true_p(code, FLAG_SYSTEM))
+        return FALSE
+
+    # Maybe more checks later as I think of them
+    return TRUE
+}
+
+
+# Check that arr is really an ARRAY and that it's writable
 function assert_array_okay_to_define(arr,
                                      nparts, level, info, code)
 {
@@ -8104,6 +8116,12 @@ function dosubs(s,
                 panic("(dosubs) Function '" fn "' not handled")
 
             # Maybe trace this function, then do the actual change
+            trace(TRACE_EXPANSION, fn, sprintf("'%s' => '%s'", m, expand))
+            r = expand r
+
+        # Check if it's an array
+        } else if (sym_valid_p(fn) && arrayp(fn)) {
+            expand = sym_fetch(fn)
             trace(TRACE_EXPANSION, fn, sprintf("'%s' => '%s'", m, expand))
             r = expand r
 

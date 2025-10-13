@@ -1,4 +1,4 @@
-@array foo
+@list foo
 @filedata foo d1.dat
 @foo[1]@
 @foo[2]@

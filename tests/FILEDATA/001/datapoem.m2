@@ -1,4 +1,4 @@
-@array lines
+@list lines
 @data lines
 I met a traveller from an antique land
 Who said: Two vast and trunkless legs of stone

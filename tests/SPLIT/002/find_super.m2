@@ -1,5 +1,5 @@
-@array PASSWD
-@array fld
+@list PASSWD
+@list fld
 @sfiledata PASSWD /etc/passwd
 @foreach user PASSWD
 @define line @PASSWD[@{user}]@

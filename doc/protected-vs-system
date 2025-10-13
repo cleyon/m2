@@ -4,7 +4,7 @@ ever one version of a system symbol -- they are automatically placed in
 the global namespace.  User code cannot create *new* system-looking symbol
 names, and they are never valid names for user-defined sequences,
 functions, or commands.  System symbols cannot be @undefine'd even if
-the symbol is not protected.
+the symbol itself is unprotected.
 
 Protected means "read-only", but with a bit of reserved nameness thrown
 in.  Most system symbols are protected (read-only) and connot be

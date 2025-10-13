@@ -1,5 +1,5 @@
 @define DATA aaa
-@array  ARR
+@list  ARR
 DATA='@DATA@'
 @split DATA ARR
 @dump

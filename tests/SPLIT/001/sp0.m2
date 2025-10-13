@@ -1,5 +1,5 @@
 @null DATA
-@array  ARR
+@list  ARR
 DATA='@DATA@'
 @split DATA ARR
 @dump

@@ -1,5 +1,5 @@
 @comment	"Dreams" by Langston Hughes
-@array dreams
+@list dreams
 @data dreams
 Hold fast to dreams
 For if dreams die

@@ -41,12 +41,12 @@
 @@
 @comment        Read list of hosts and their IDs from hosts.dat
 @@
-@array     host_list
-@filedata host_list    hosts.dat
+@list      host_list
+@filedata  host_list    hosts.dat
 @@
 @comment        Write a config file for each host in the host_list
 @@
-@array     fields
+@list      fields
 @foreach   line         host_list
 @local     hostline
 @local     hostname

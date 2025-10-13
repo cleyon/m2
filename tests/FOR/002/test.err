@@ -1,1 +1,1 @@
-m2:test.m2:5:Name 'X' not defined (__STRICT__[def] is True):Out of loop, X=@X@
+m2:test.m2:5:@X@: Name 'X' not defined

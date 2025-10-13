@@ -1,4 +1,4 @@
-@array A
+@list A
 @data A
 One
 Two

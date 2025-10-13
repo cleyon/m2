@@ -1,4 +1,4 @@
-@array ARR
+@list ARR
 @define DATA One:Two:Three:Four:Five
 @split DATA ARR
 @foreach i ARR

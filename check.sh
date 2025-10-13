@@ -98,6 +98,8 @@
 # These two variables are user-settable:
 debug="false"		# set to "true" for extra messages
 busybox_awk="false"	# set to "true" to invoke m2 as "busybox awk -f ..."
+gawk_trad="false"       # set to "true" to invoke m2 as "gawk --traditional"
+mawk_trad="false"       # set to "true" to invoke m2 as "mawk -W traditional"
 
 #
 ##      Noli me tangere
@@ -122,14 +124,28 @@ framework_error()
 }
 
 
+cat_or_nodata()
+{
+    local file
+    file="$1"
+    [ ! -f "$file" ] && framework_error "Expected file '$file' does not exist"
+    [ -s "$file" ] && cat "$file" || echo "[NO_DATA]"
+}
+
+
 summarize_tests()
 {
-    local pass_pct=0.0
-    local skip_pct=0.0
-    local fail_pct=0.0
-    local intr_pct=0.0
+    local pass_pct
+    local skip_pct
+    local fail_pct
+    local intr_pct
+    local intr
     local chk
-    local intr="false"
+    pass_pct=0.0
+    skip_pct=0.0
+    fail_pct=0.0
+    intr_pct=0.0
+    intr="false"
     chk=$(expr $npass + $nskip + $nfail - $ntest)
     if [ $chk -eq -1 ]; then
         intr="true"
@@ -155,14 +171,22 @@ summarize_tests()
 }
 
 
+# Check if we can run M2.  The *actual* test invocation is performed in
+# function run_test() below.
 objdir=`pwd`
 [ $debug = "true" ] && echo "objdir  is $objdir"
 new_M2="${objdir}"/m2
 if [ $busybox_awk = "true" ]; then
     busybox awk -f $new_M2 /dev/null >/dev/null 2>&1
     [ $? -eq 0 ] || framework_error "Error executing \"busybox awk -f $new_M2\""
+elif [ $gawk_trad = "true" ]; then
+    gawk --traditional -f $new_M2 /dev/null >/dev/null 2>&1
+    [ $? -eq 0 ] || framework_error "Error executing \"gawk --traditional -f $new_M2\""
+elif [ $mawk_trad = "true" ]; then
+    mawk -W traditional -f $new_M2 /dev/null >/dev/null 2>&1
+    [ $? -eq 0 ] || framework_error "Error executing \"mawk -W traditional -f $new_M2\""
 else
-    [ -f "${new_M2}" -a -x "${new_M2}" ] || framework_error "${new_M2}: Cannot execute"
+    [ -f "${new_M2}" -a -x "${new_M2}" ] || framework_error "Error executing \"${new_M2}\""
 fi
 
 testdir="`pwd`/tests"
@@ -182,8 +206,8 @@ test_all_categories()
 
 test_category()
 {
-    local CATEGORY=$1
-
+    local CATEGORY
+    CATEGORY="$1"
     [ -d $CATEGORY ] || framework_error "$CATEGORY is not a directory"
     cd "$CATEGORY"
     for SERIES in ???; do
@@ -196,12 +220,15 @@ test_category()
 
 test_series()
 {
-    local CATEGORY=$1
-    local SERIES=$2
+    local CATEGORY
+    local SERIES
+    local test_id
+    CATEGORY="$1"
+    SERIES="$2"
 
     [ -d $SERIES ] || framework_error "$SERIES is not a directory"
     cd $SERIES
-    local test_id=`echo $CATEGORY/$SERIES | sed "s,${testdir}/,,"`
+    test_id=`echo $CATEGORY/$SERIES | sed "s,${testdir}/,,"`
     if [ -f test.disabled ]; then
         echo "*** $test_id ... Series disabled, skipping ***"
         cd ..
@@ -218,14 +245,20 @@ test_series()
 
 run_test()
 {
-    local CATEGORY=$1
-    local SERIES=$2
-    local M2_FILE=$3
-
-    local fail=0
-    local test_id=`echo $CATEGORY/$SERIES | sed "s,${testdir}/,,"`
+    local CATEGORY
+    local SERIES
+    local M2_FILE
+    local fail
+    local test_id
+    local diderr
     local TESTNAME
-    local diderr=0
+
+    CATEGORY="$1"
+    SERIES="$2"
+    M2_FILE="$3"
+    fail=0
+    test_id=`echo $CATEGORY/$SERIES | sed "s,${testdir}/,,"`
+    diderr=0
 
     if [ ! -f $M2_FILE ]; then
         M2_FILE="${M2_FILE}.m2"
@@ -289,6 +322,10 @@ run_test()
         /bin/sh ${TESTNAME}.sh "$new_M2" "$M2_FILE" > ${TESTNAME}.run_out 2> ${TESTNAME}.run_err
     elif [ $busybox_awk = "true" ]; then
         busybox awk -f $new_M2 $M2_FILE > ${TESTNAME}.run_out 2> ${TESTNAME}.run_err
+    elif [ $gawk_trad = "true" ]; then
+        gawk --traditional -f $new_M2 $M2_FILE > ${TESTNAME}.run_out 2> ${TESTNAME}.run_err
+    elif [ $mawk_trad = "true" ]; then
+        mawk -W traditional -f $new_M2 $M2_FILE > ${TESTNAME}.run_out 2> ${TESTNAME}.run_err
     else
         $new_M2 $M2_FILE > ${TESTNAME}.run_out 2> ${TESTNAME}.run_err
     fi
@@ -302,9 +339,9 @@ run_test()
         echo "    (file $CATEGORY/$SERIES/$M2_FILE)"
         fail=$(expr $fail + 1)
         echo ">>> EXPECTED ERRORS <<<"
-        cat ${TESTNAME}.expected_err
+        cat_or_nodata ${TESTNAME}.expected_err
         echo ">>> ACTUAL ERRORS <<<"
-        cat ${TESTNAME}.run_err
+        cat_or_nodata ${TESTNAME}.run_err
         diderr=1
         rc=127
     fi
@@ -316,9 +353,9 @@ run_test()
         echo "    (file $CATEGORY/$SERIES/$M2_FILE)"
         fail=$(expr $fail + 1)
         echo ">>> EXPECTED EXIT CODE <<<"
-        cat ${TESTNAME}.expected_exit
+        cat_or_nodata ${TESTNAME}.expected_exit
         echo ">>> ACTUAL EXIT CODE <<<"
-        cat ${TESTNAME}.run_exit
+        cat_or_nodata ${TESTNAME}.run_exit
         rc=127
     fi
     #
@@ -334,16 +371,16 @@ run_test()
         if [ -f ${TESTNAME}.showdiff ]; then
             echo ">>> DIFF EXPECTED/ACTUAL OUTPUT TEXT <<<"
             echo diff -c ${TESTNAME}.expected_out ${TESTNAME}.run_out
-            cat ${TESTNAME}.run_diff
+            cat_or_nodata ${TESTNAME}.run_diff
         else
             echo ">>> EXPECTED OUTPUT TEXT <<<"
-            cat ${TESTNAME}.expected_out
+            cat_or_nodata ${TESTNAME}.expected_out
             echo ">>> ACTUAL OUTPUT TEXT <<<"
-            cat ${TESTNAME}.run_out
+            cat_or_nodata ${TESTNAME}.run_out
         fi
         if [ $diderr -eq 0 -a -s ${TESTNAME}.run_err ]; then
             echo ">>> ERRORS <<<"
-            cat ${TESTNAME}.run_err
+            cat_or_nodata ${TESTNAME}.run_err
         fi
         rc=127
     fi
@@ -364,15 +401,16 @@ run_test()
 test_something()
 {
     local slashes
+    local category
+    local series
+    local file
+
     # Consolidate, remove trailing, then count slashes
     testwhat=`echo "$1" | tr -s /`
     testwhat=${testwhat%/}
     slashes=`echo "$testwhat" | tr -dc / | wc -c | tr -dc [0-9]`
     [ $debug = "true" ] && echo "slashes=$slashes"
 
-    local category
-    local series
-    local file
 
     case $slashes in
         0) category=$testwhat
@@ -398,8 +436,10 @@ test_something()
 }
 
 
-[ $debug = "true" ] && echo "cwd     is `pwd`"
-[ $debug = "true" ] && echo "I see $# arguments"
+if [ $debug = "true" ]; then
+    echo "cwd     is `pwd`"
+    echo "I see $# arguments"
+fi
 case $# in
     0) echo "!!! BEGIN - Starting test runs"
        test_all_categories ;;
@@ -407,7 +447,6 @@ case $# in
        test_something $1 ;;
     *) framework_error "Invocation error: Bad # parameters" ;;
 esac
-
 
 if [ ${rc} -eq 0 ] ; then
     echo "!!! SUCCESS - All tests completed successfully"

@@ -1,5 +1,5 @@
 @define __FS__ @chr 10@
-@array lines
+@list lines
 @data lines
 Line one
 Line two

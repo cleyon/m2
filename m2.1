@@ -77,7 +77,9 @@ Different streams may be saved to different files.
 .El
 .Pp
 .Nm
-does not scan tokens or replace unadorned text: macro
+does not scan
+.Qq tokens
+or replace unadorned text: macro
 substitution must be explicitly requested by enclosing the macro
 name in
 .Qq @
@@ -92,7 +94,7 @@ identifiers to protect against unwanted or inadvertent replacement,
 which, depending upon the insistence of
 .Em other
 macro processors, may
-present a challenge.
+present quite a challenge.
 Substitutions can occur multiple times in a line.
 .Pp
 .Em Example :
@@ -113,7 +115,7 @@ Using the same character to delimit both the beginning and end of macro
 invocations was a conscious design decision by m1's author, but it
 presents challenges when attempting to parse more advanced syntax, such
 as invoking macros in a nested fashion.
-It is difficult to distinguish, purely lexically:\" in Awk!
+It is difficult to distinguish, purely lexically:
 .Bd -literal -offset indent -compact
 This is @one and 2@ AND ALSO @three and 4@.
 This is @mid mySym @myBegPos1 Field1@ myLen@.
@@ -167,9 +169,13 @@ evaluate, control, or define macros for subsequent processing:
 .\" This table could use a little formatting TLC...
 .Bl -tag -width @if(_not)_defined -offset indent
 .It @append NAME TEXT
-Add TEXT to an already defined macro NAME.
+Add TEXT to an already defined NAME.
+If NAME is a Symbol, TEXT is textually appended to its definition.
+If NAME is a List, TEXT is added as the next element.
 .It @array ARR
-Declare ARR to be an array.
+Declare ARR to be an Array.
+See also
+.Va @list .
 .It @break
 Interrupt execution of enclosing loop.
 @break is only valid inside a @for, @foreach, or @while block.
@@ -206,17 +212,20 @@ are recognized as comments whenever they appear in columns 1 and 2.
 .It @continue
 Continue next iteration of enclosing loop.
 @continue is only valid inside a @for, @foreach, or @while block.
-.It @data ARR ... @enddata
+.It @data LIS ... @enddata
 Store all lines until
 .Ql @enddata
-into array
-.Va ARR .
-Any previously existing array entries are deleted.
-ARR must declared as an array.
+into list
+.Va LIS .
+Any previously existing list entries are deleted.
+LIS must declared with
+.Va @list .
 See also
-.Va @array , @filedata .
+.Va @filedata .
 .It @debug [TEXT]
 If debugging, send TEXT to the debug file.
+See also
+.Va __DEBUG__ .
 .It @decr NAME [N]
 Subtract N (default 1) from an already defined NAME.  See note at @incr.
 .It @default NAME VAL
@@ -274,7 +283,7 @@ Also called @fi, keeping the dream alive.
 Indicate the end of a multi-line @longdef.
 .It @endwhile
 Indicate the end of a @while or @until loop.
-Also called @wend.
+Also called @wend, by few.
 .It @error [TEXT]
 Send TEXT to standard error; exit code 2.
 Any diverted streams are discarded, although any wrapped text is evaluated.
@@ -298,14 +307,14 @@ If N is omitted, the default value is 0.
 Negative values or values greater than 126 are changed to 1.
 If N is non-zero, diverted streams are discarded.
 Commands deferred with @wrap are processed regardless of N value.
-.It @filedata ARR FILE
-Read each line from FILE into array ARR.
-Any previously existing array entries are deleted before reading file contents.
+.It @filedata LIS FILE
+Read each line from FILE into list LIS.
+Any previously existing list entries are deleted before reading file contents.
 Variant
 .Ql @sfiledata
 does not print an error message if FILE does not exist.
-ARR must be declared as an array, therefore user code must say
-.Ql @array ARR
+LIS must be declared as a list, therefore user code must say
+.Ql @list LIS
 before @filedata can be used.
 See also
 .Va @data .
@@ -325,12 +334,12 @@ See also
 Execute a loop with VAR taking on successive
 integer values specified by START and END.
 Default INCR is 1.
-.It @foreach VAR ARR ... @next VAR
+.It @foreach VAR ARR|LIS ... @next VAR
 Execute a loop with VAR taking on successive values of
 .Em keys
-to an array.
-NOTE: Different Awk implementations may return keys in differing order.
-However, arrays created with
+to an array or list.
+NOTE: Different Awk implementations may return array keys in differing order.
+However, lists and data created with
 .Ql @data
 or
 .Ql @filedata
@@ -360,6 +369,10 @@ Read a single line from keyboard to define NAME.
 No prompt is issued; if you want one, use @echo.
 If NAME is omitted, value is stored in symbol
 .Va __INPUT__ .
+.It @list LIS
+Declare LIS to be a List.
+See also
+.Va @array .
 .It @literal PATTERN
 Read and print input literally, without interpretation, until line that
 matches regular expression PATTERN.
@@ -419,9 +432,9 @@ reader, or /usr/bin/bc.
 It must be a program that functions as a filter (in the Unix sense,
 i.e., reading from standard input and writing to standard output).
 Standard error is not redirected, so any errors will appear on the terminal.
-.It @split NAME ARR [FS]
-Split value of NAME into N fields, storing them in ARR elements 1..N.
-Any previous entries in ARR are deleted.
+.It @split NAME LIS [FS]
+Split value of NAME into N individual fields, storing them in LIS elements 1..N.
+Any previous entries in LIS are deleted.
 If
 .Va FS
 is specified, use it as field separator.
@@ -432,7 +445,7 @@ If neither condition is true, use Awk's default
 .Va FS ,
 which means fields will be split on whitespace.
 See also
-.Va @join@ .
+.Va @join@ , @list .
 .It @syscmd CMDLINE ...
 Execute CMDLINE using Awk's system() function.
 Standard output and standard error are both discarded.
@@ -606,6 +619,8 @@ Directory name of SYM implemented in Awk, assuming Unix style path
 separators.
 See also
 .Va @xdirname .
+.It @divlines STREAM@
+Return the number of lines in STREAM, or zero if empty.
 .It @dow [MJD | YYYY MM DD]@
 Return the ISO day number corresponding to the date specified,
 where 1=Monday, 2=Tuesday, ..., 7=Sunday.
@@ -617,8 +632,15 @@ Unix epoch time, the number of non-leap seconds which
 have passed since 00:00:00\ UTC on Thursday, 1\ January\ 1970.
 See section
 .Sx Dates and Times .
+.It @executable PROGRAM@
+Return expanded path to PROGRAM, printing a warning if program is not found.
+Variant
+.Ql @sexecutable@
+does not print a warning.
+See also
+.Va canrun() .
 .It @expr MATH@
-Evaluate mathematical expression.
+Evaluate and print mathematical expression.
 Variant
 .Ql @sexpr@
 performs the same calculations but does not output the result.
@@ -629,9 +651,9 @@ is still set.
 .\" Six is entirely arbitrary, limited only by my patience
 .\" for repeatedly typing printf()'s for cases that will likely
 .\" never be used.  If you need monster @format ...@, go for it!
-Using the first argument as a format specification for
-.Fn sprintf ,
-print from zero to five additional arguments (args 2..6),
+Print up to five parameters (args 2..6),
+using the first argument as a format specification for
+.Fn sprintf .
 Arguments must be compatible with format string,
 otherwise you get to keep all the pieces.
 .It @getenv VAR@
@@ -682,9 +704,9 @@ Note that
 .Nm
 follows the Awk convention of numbering characters in a string from 1;
 this is different from m4, which is zero-based.
-If SUBSTRING is not found, the returned value is 0.
-.It @join ARR [FS]@
-Concatenate each element of ARR into a single string,
+If SUBSTR is not found, the returned value is 0.
+.It @join LIS [FS]@
+Concatenate each element of LIS into a single string,
 inserting FS between elements to separate them.
 If FS is omitted, then the value of
 .Va __FS__
@@ -747,10 +769,16 @@ does not truncate output.
 Output value of SYM (or literal string if SYM not defined) with rot13 text.
 .It @rtrim SYM@
 Remove trailing whitespace.
-.It @spaces [N]@
-Output N space characters (default 1).
+.It @space [N]@
+Output N (default 1) space characters, ASCII 0x20.
+Also called
+.Ql @spaces@ .
 .It @strftime FMT@
 Current date/time in user-specified format.
+.It @tab [N]@
+Output N (default 1) tab characters, ASCII 0x09.
+Also called
+.Ql @tabs@ .
 .It @time@
 Current time (format as __FMT__[time]).
 See section
@@ -764,9 +792,11 @@ See section
 .It @uc SYM@
 Upper case.
 .It @utc@
-Current timestamp in UTC time zone, displayed in ISO\ 8601 format (format as __FMT__[utc]).
+Current timestamp in UTC time zone, displayed in ISO\ 8601 format
+(format as __FMT__[utc]).
 .It @uuid@
-Something that resembles a UUID: C3525388\&-E400\&\-43A7\&-BC95\&\-9DF5FA3C4A52
+UUID (Universally Unique Identifier) version 4, such as
+c3525388\&-e400\&\-43a7\&-bc95\&\-9df5fa3c4a52.
 .It @xbasename SYM@
 Base (file) name of SYM determined by external program.
 .It @xdirname SYM@
@@ -990,7 +1020,7 @@ will increment the value and return it in decimal without special formatting.
 \ \ \ => # 1=First header
 \ \ \ => # 2=Second header
 .Ed
-.Ss Arrays
+.Ss Arrays and Lists
 User arrays must be declared before use
 by executing the command
 .Ql @array
@@ -1018,7 +1048,7 @@ file, use
 .Ql @filedata .
 Data loaded in this way are assigned integer
 keys from 1 to the number records.
-Arrays can also be created with
+Lists can also be created with
 .Ql @split .
 .Ss Mathematical Expressions
 The
@@ -1051,9 +1081,9 @@ supports the following functions:
 .It abs(x)
 Absolute value of x, |x|
 .It acos(x)
-Arc-cosine of x (\-1 \*(Le x \*(Le 1)
+Arc-cosine of x, \-1 \*(Le x \*(Le 1
 .It asin(x)
-Arc-sine of x (\-1 \*(Le x \*(Le 1)
+Arc-sine of x, \-1 \*(Le x \*(Le 1
 .It atan2(y,x)
 Arctangent of y/x, \-\*(Pi \*(Le atan2 \*(Le \*(Pi
 .It ceil(x)
@@ -1150,19 +1180,28 @@ and not evaluate their right-hand side terms if the result is
 determined by the left-hand side term.
 Parentheses may be used to enforce evaluation order.
 .Pp
-The following boolean functions and syntax are supported:
+The following boolean predicate functions return either True or False.
+Arguments to these functions are scanned for macro expansion.
 .Pp
-.Bl -tag -width elem_IN_array____ -compact -offset indent
+.Bl -tag -width elem_IN_array____ -offset indent
+.It canrun(PROGRAM)
+True if PROGRAM can be executed; checked with
+.Xr sh 1
+.Qq "command -v" .
+See also
+.Va @executable@ .
 .It defined(SYMBOL)
-True if SYMBOL is defined
+True if SYMBOL is defined.
 .It env(VAR)
-True if variable VAR is defined in process environment
+True if variable VAR is defined in process environment.
 .It exists(FILE)
-True if FILE exists
-.It elem IN array
-True if array contains elem
+True if FILE exists.
 .El
 .Pp
+Another syntax available in a boolean expression is
+.Dl elem IN Array | List
+which return True if array or list contains elem
+and False if not.
 Any other expression is evaluated as a mathematical expression and
 considered True if the result is non-zero.
 .Ss System Symbols
@@ -1323,10 +1362,15 @@ If non-strict (False), attempts to read non-existent files result in a warning m
 For completely silent behavior, use
 .Ql @sinclude .
 User modifiable.
+.It __STRICT__[key]
+If True (the default), it is an error to specify a non-existent key when
+indexing an array or list.
+If non-strict (False), reading a non-existing index will return the
+empty string.
 .It __STRICT__[name]
 If True (the default), symbol names are limited to the following syntax for names:
 .Dl /^[A\-Za\-z#_][A\-Za\-z#_0\-9]*$/
-If non-strict (False), symbol names are much more liberal!
+If non-strict (False), symbol names are much more liberal.
 User modifiable.
 .It __SYNC__
 Frequency to flush output (0..2).
@@ -1527,11 +1571,11 @@ only the T and V flags can change it.
 These flags control and format trace output:
 .Bl -tag -width indent -offset indent
 .It f   \" BSD & GNU
-Show the name of the current input file in each trace output line.
+Show the current input file name in each trace output line.
 .It l   \" BSD & GNU
-Show the the current input line number in each trace output line.
+Show the current input line number in each trace output line.
 .It t   \" BSD & GNU
-Trace all macro calls made in this invocation of m4.
+Trace all macro calls.
 .It T
 When encountered as an unadorned flag letter or with "+",
 .Va __TRACE__

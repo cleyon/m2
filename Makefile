@@ -74,15 +74,20 @@ tags:
 
 check-verbose test-verbose verbose-check verbose-test:
 	@date
-	@time ./check.sh
+	@/usr/bin/time ./check.sh
 	@date
 
 check test check-quiet test-quiet quiet-check quiet-test:
 	@date
-	@time ./check.sh | grep -v 'PASS \*\*\*$$'
+	@/usr/bin/time ./check.sh </dev/null 2>&1 | grep -v 'PASS \*\*\*$$'
 	@date
 
-testlog:
+testlog-verbose:
 	@date
-	@timeout 90 time nice ./check.sh </dev/null >test.log.`ts` 2>&1
+	@timeout 90 /usr/bin/time nice ./check.sh </dev/null >test.log.`ts` 2>&1
+	@date
+
+testlog testlog-quiet:
+	@date
+	@timeout 90 /usr/bin/time nice ./check.sh </dev/null | grep -v 'PASS \*\*\*$$' >test.log.`ts` 2>&1
 	@date

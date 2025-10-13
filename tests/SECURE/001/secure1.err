@@ -1,2 +1,2 @@
-m2:secure1.m2:10:(@shell) Forbidden
+m2:secure1.m2:10:@shell: Forbidden
 m2:SECURITY VIOLATION

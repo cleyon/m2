@@ -1,5 +1,5 @@
 @newcmd check_backdoor{line}
-@array fld
+@list fld
 @split line fld :
 @if @fld@ != 7
 @return
@@ -9,7 +9,7 @@ Found superuser "@fld[1]@", with shell = @fld[7]@
 @fi
 @endcmd
 @@
-@array PASSWD
+@list PASSWD
 @sfiledata PASSWD /etc/passwd
 @foreach user PASSWD
 @define line @PASSWD[@{user}]@

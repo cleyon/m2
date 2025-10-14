@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-10-14 00:07:50 cleyon>
+#  Time-stamp:  <2025-10-14 02:50:10 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -870,9 +870,12 @@ function check__parse_stack(expected_block_type,
 }
 
 
-function expand_braces(s,    atbr, cb, ltext, mtext, rtext)
+function expand_braces(s,
+                       atbr, cb, ltext, mtext, rtext,
+                       macro)
 {
     dbg__print("braces", 3, (">> expand_braces(s='" s "'"))
+    macro["okay"] = FALSE       # Make sure Awk knows macro[] is an array
 
     while ((atbr = index(s, TOK_AT_BRACE)) > 0) {
         # There's a @{ somewhere in the string.  Find the matching
@@ -897,8 +900,15 @@ function expand_braces(s,    atbr, cb, ltext, mtext, rtext)
 
         while (length(mtext) >= 2 && first(mtext) == TOK_AT && last(mtext) == TOK_AT)
             mtext = substr(mtext, 2, length(mtext) - 2)
-        s = !emptyp(mtext) ? ltext dosubs(TOK_AT mtext TOK_AT) rtext \
-                           : ltext                             rtext
+
+        macro_setup(macro, mtext)
+        if (!emptyp(mtext)) {
+            macro_expand(macro)
+            if (!macro["okay"] && strictp("def"))
+                error(sprintf("@%s@: Name '%s' not defined",
+                              macro["urtext"], macro["fn"]))
+        }
+        s = ltext macro["expansion"] rtext
     }
 
     dbg__print("braces", 3, ("<< expand_braces: => '" s "'"))
@@ -1760,7 +1770,7 @@ function info__satisfies_type(info, type_target,
 
 function info__gate_resolve(retval, caller, info, assert_true_or_exit, errtext)
 {
-    if (! emptyp(errtext)) {
+    if (errtext != "") {
         info["error"] = TRUE
         info["errtext"] = errtext
     }
@@ -9288,326 +9298,349 @@ function _c3_advance(    tmp)
 #
 #*****************************************************************************
 function dosubs(s,
-                expand, i, j, l, m, nparam, p, pval, param, r, fn,
+                expand, i, j, L, M, nparam, p, pval, param, R, fn,
                 x, inc_dec, pre_post, subcmd, br, lfn, incr, wrkm,
-                fninfo, level)
+                fninfo, level, macro)
 {
     trace(TRACE_COMMAND, "dosubs", sprintf("dosubs('%s')", s))
     dbg__print("dosubs", 5, sprintf("(dosubs) START s='%s'", s))
-    l = ""                   # Left of current pos  - ready for output
-    r = s                    # Right of current pos - as yet unexamined
-    inc_dec = pre_post = 0   # track ++ or -- on sequences
+    inc_dec = pre_post = 0      # track ++ or -- on sequences
+    macro["okay"] = FALSE       # Make sure Awk knows macro is an array
 
+    L = EMPTY                   # Left of current pos  - ready for output
+    R = s                       # Right of current pos - as yet unexamined
     while (TRUE) {
-        # Check entire string for recursive evaluation
-        if (index(r, TOK_AT_BRACE) > 0)
-            r = expand_braces(r)
+        # Check entire string for recursive evaluation:  @{...}
+        if (index(R, TOK_AT_BRACE) > 0)
+            R = expand_braces(R)
 
-        if ((i = index(r, TOK_AT)) == NOT_FOUND)
+        if ((i = index(R, TOK_AT)) == NOT_FOUND)
             break
 
-        dbg__print("dosubs", 7, (sprintf("(dosubs) Top of loop: l='%s', r='%s'", l, r)))
-        l = l substr(r, 1, i-1)
-        r = substr(r, i+1)      # Currently scanning @
+        # While R contains an "@" sign
+        dbg__print("dosubs", 7, (sprintf("(dosubs) Top of loop: L='%s', R='%s'", L, R)))
+        L = L substr(R, 1, i-1)
+        R = substr(R, i+1)      # Currently scanning @
 
         # Look for a second "@" beyond the first one.  If not found,
         # this can't be a valid m2 substitution.  Ignore it, we're done.
-        if ((i = index(r, TOK_AT)) == NOT_FOUND) {
-            l = l TOK_AT
+        if ((i = index(R, TOK_AT)) == NOT_FOUND) {
+            L = L TOK_AT
             break
         }
 
         # A lone "@" followed by whitespace is not valid syntax.  Ignore it,
         # but keep processing the line.
-        if (isspace(first(r))) {
-            l = l TOK_AT
+        if (isspace(first(R))) {
+            L = L TOK_AT
             continue
         }
 
-        m = substr(r, 1, i-1)   # Middle
-        dbg__print("dosubs", 6, sprintf("(dosubs) m='%s'", m))
-        r = substr(r, i+1)
+        M = substr(R, 1, i-1)   # Middle
+        dbg__print("dosubs", 6, sprintf("(dosubs) M='%s'", M))
+        R = substr(R, i+1)
 
         # s == L  @  M  @  R
         #               ^---i
 
-        # In the code that follows:
-        # - m :: Entire text between @'s.  Example: "mid foo 3".
-        # - fn :: The name of the "function" to call.  The first element
-        #         of m.  Example: "mid".
-        # - nparam :: Number of parameters supplied to the function.
-        #     @mid@         -> nparam == 0      param[0] == mid
-        #     @mid foo@     -> nparam == 1      param[1] == foo
-        #     @mid foo 3@   -> nparam == 2      param[2] == 3
-        # A function's parameter N is available in variable param[N].
-        #   Consider "mid foo 3".  nparam is 2.
-        #   The function name is found in param[0].
-        #   The symbol (foo) is at param[1] and integer (3) is at param[2].
-        # Each function condition eventually executes
-        #     r = <SOMETHING> r
-        #   which injects <SOMETHING> just before the current value of
-        #   r.  (r is defined above.)  r is what is to the right of the
-        #   current position and contains as yet unexamined text that
-        #   needs to be evaluated for possible macro processing.  This
-        #   is the data we were going to evaluate anyway.  In other
-        #   words, this injects the result of "invoking" fn.
-        # Eventually this big while loop exits and we return "l r".
-
-        nparam = split(m, param)
-        fn = param[1]
-
-        # Check for @foo{...} -- isolate fn to scan @foo{a}{b}{c}...@ better
-        if ((br = index(fn, TOK_LBRACE)) > 0) {
-            fn = substr(fn, 1, br-1)
-            dbg__print("dosubs", 6, sprintf("(dosubs) fn='%s'", fn))
-
-            # Re-create nparam and param[] according to braces,
-            # not split() on whitespace
-            split("", param)       # Start by deleting all entries
-            param[nparam = 0] = fn # 1st element is function name
-            wrkm = substr(m, length(fn) + 1)
-            dbg__print("dosubs", 6, sprintf("(dosubs) Before loop, wrkm='%s'", wrkm))
-            while (match(wrkm, "^{[^}]*}")) {
-                dbg__print("dosubs", 6, sprintf("(dosubs) Top of loop, wrkm='%s'", wrkm))
-                p = ++nparam
-                pval = substr(wrkm, RSTART+1, RLENGTH-2)
-                dbg__print("dosubs", 6, sprintf("(dosubs) Parameter %d : %s", p, pval))
-                param[p] = pval
-                wrkm = substr(wrkm, RLENGTH+1)
-            }
-            if (!emptyp(wrkm))
-                error("(dosubs) Text remains after scanning params")
-            if (dbg__sys_level_p("dosubs", 7)) {
-                print_debugfile("(dosubs) nparam=" nparam)
-                for (x in param)
-                    print_debugfile(sprintf("(dosubs) param[%d] = '%s'", x, param[x]))
-                print_debugfile("(dosubs) End param[]")
-            }
+        macro_setup(macro, M)
+        macro_expand(macro)
+        if (macro["okay"] == TRUE) {
+            # Kluge for @srem ...@ to remove preceding whitespace
+            if (macro["fn"] == "srem")
+                sub(/[ \t]+$/, "", L)
+            trace(TRACE_EXPANSION, macro["fn"], sprintf("@%s@ => '%s'",
+                                                        macro["urtext"], macro["expansion"]))
+            R = macro["expansion"] R
         } else {
-            dbg__print("dosubs", 5, "(dosubs) No brace; fn='" fn "'")
-            nparam--
-            dbg__print("dosubs", 7, "(dosubs) nparam=" nparam)
-            for (j = 1; j <= nparam; j++)
-                param[j] = param[j+1]
-            delete param[nparam + 1]
-            param[0] = fn
-            if (dbg__sys_level_p("dosubs", 7)) {
-                for (x in param)
-                    print_debugfile(sprintf("(dosubs) param[%d] = '%s'", x, param[x]))
-                print_debugfile("(dosubs) End param[]")
-            }
+            # If undefined symbol, throw an error (if __STRICT__[def] is
+            # True, the default) or pass through the urtext (M) unchanged.
+            if (strictp("def"))
+                error(sprintf("@%s@: Name '%s' not defined",
+                              macro["urtext"], macro["fn"]))
+            L = L TOK_AT M
+            R =   TOK_AT R
         }
-        lfn = length(fn)
-
-        dbg__print("dosubs", 6, sprintf("(dosubs) fn=%s, nparam=%d; l='%s', m='%s', r='%s'", fn, nparam, l, m, r))
-
-        # Check for sequence modifiers.  First one wins, and
-        # invalid syntax is silently ignored.
-        if (substr(fn, 1, 2) == "++") {
-            inc_dec  = +1
-            pre_post = -1
-            fn = substr(fn, 3)
-        } else if (substr(fn, 1, 2) == "--") {
-            inc_dec  = -1
-            pre_post = -1
-            fn = substr(fn, 3)
-        } else if (substr(fn, lfn-1, 2) == "++") {
-            inc_dec  = +1
-            pre_post = +1
-            fn = substr(fn, 1, lfn-2)
-        } else if (substr(fn, lfn-1, 2) == "--") {
-            inc_dec  = -1
-            pre_post = +1
-            fn = substr(fn, 1, lfn-2)
-        }
-
-        # Check if it's a known function (formerly SYMFUNC)
-        level = info__create_from_text(fn, fninfo)
-        #print_stderr("(dosubs) fninfo[" info__get(fninfo, "name") "] => " info__get(fninfo, "type"))
-
-        if (nam_ll_in(fn, GLOBAL_NAMESPACE) &&
-            flag_1true_p((nam_ll_read(fn, GLOBAL_NAMESPACE)), TYPE_FUNCTION)) {
-            # Quick check to make sure fninfo is okay
-            if (info__get(fninfo, "type") != TYPE_FUNCTION)
-                panic("(dosubs) not TYPE_FUNCTION?")
-            if (fn == "basename")
-                expand = xeq_fn__basename(fn, m, nparam, param)
-            else if (fn == "boolval")
-                expand = xeq_fn__boolval(fn, m, nparam, param)
-            else if (fn == "chr")
-                expand = xeq_fn__chr(fn, m, nparam, param)
-            else if (fn == "date"     || fn == "epoch" ||
-                     fn == "strftime" || fn == "time"  ||
-                     fn == "tz"       || fn == "utc")
-                expand = xeq_fn__date(fn, m, nparam, param)
-            else if (fn == "dirname")
-                expand = xeq_fn__dirname(fn, m, nparam, param)
-            else if (fn == "divlines")
-                expand = xeq_fn__divlines(fn, m, nparam, param)
-            else if (fn == "dow")
-                expand = xeq_fn__dow(fn, m, nparam, param)
-            else if (fn == "executable" || fn == "sexecutable")
-                expand = xeq_fn__executable(fn, m, nparam, param)
-            else if (fn == "expr" || fn == "sexpr")
-                expand = xeq_fn__expr(fn, m, nparam, param)
-            else if (fn == "format")
-                expand = xeq_fn__format(fn, m, nparam, param)
-            else if (fn == "getenv" || fn == "sgetenv")
-                expand = xeq_fn__getenv(fn, m, nparam, param)
-            else if (fn == "gregdate")
-                expand = xeq_fn__gregdate(fn, m, nparam, param)
-            else if (fn == "ifdef" || fn == "ifndef")
-                expand = xeq_fn__ifdef(fn, m, nparam, param)
-            else if (fn == "ifelse")
-                expand = xeq_fn__ifelse(fn, m, nparam, param)
-            else if (fn == "ifx")
-                expand = xeq_fn__ifx(fn, m, nparam, param)
-            else if (fn == "index")
-                expand = xeq_fn__index(fn, m, nparam, param)
-            else if (fn == "join" || fn == "sjoin")
-                expand = xeq_fn__join(fn, m, nparam, param)
-            else if (fn == "left")
-                expand = xeq_fn__left(fn, m, nparam, param)
-            else if (fn == "ljust"  || fn == "rjust"  || fn == "center" || \
-                     fn == "sljust" || fn == "srjust" || fn == "scenter")
-                expand = xeq_fn__lrc(fn, m, nparam, param)
-            else if (fn == "mid" || fn == "substr")
-                expand = xeq_fn__mid(fn, m, nparam, param)
-            else if (fn == "mjd")
-                expand = xeq_fn__mjd(fn, m, nparam, param)
-            else if (fn == "ord")
-                expand = xeq_fn__ord(fn, m, nparam, param)
-            else if (fn == "rem" || fn == "srem") {
-                # @rem ...@  is considered an in-line comment and ignored
-                # @srem ...@ like @rem, but preceding whitespace is discarded
-                expand = EMPTY
-                if (first(fn) == "s")
-                    sub(/[ \t]+$/, "", l)
-            } else if (fn == "right")
-                expand = xeq_fn__right(fn, m, nparam, param)
-            else if (fn == "rot13")
-                expand = xeq_fn__rot13(fn, m, nparam, param)
-            else if (fn == "space" || fn == "spaces" ||
-                     fn == "tab"   || fn == "tabs")
-                expand = xeq_fn__spaces(fn, m, nparam, param)
-            else if (fn == "lc" || fn == "len" || fn == "uc")
-                expand = xeq_fn__str_fn(fn, m, nparam, param)
-            else if (fn == "trim" || fn == "ltrim" || fn == "rtrim")
-                expand = xeq_fn__trim(fn, m, nparam, param)
-            else if (fn == "uuid")
-                expand = uuid()
-            else if (fn == "xbasename" || fn == "xdirname")
-                expand = xeq_fn__xname(fn, m, nparam, param)
-            else
-                panic("(dosubs) Function '" fn "' not handled")
-
-            # Maybe trace this function, then do the actual change
-            trace(TRACE_EXPANSION, fn, sprintf("@%s@ => '%s'", m, expand))
-            r = expand r
-
-        # Check if it's an array
-        } else if (sym_valid_p(fn) && arrayp(fn)) {
-            expand = sym_fetch(fn)
-            trace(TRACE_EXPANSION, fn, sprintf("@%s@ => '%s'", m, expand))
-            r = expand r
-
-        # <SOMETHING ELSE> : Call a user-defined macro, handles arguments
-        } else if (sym_valid_p(fn) && (sym_defined_p(fn) || sym_deferred_p(fn))) {
-            expand = substitute_params(sym_fetch(fn), nparam, param)
-            trace(TRACE_EXPANSION, fn, sprintf("@%s@ => '%s'", m, expand))
-            r = expand r
-
-        # Check if it's a sequence
-        } else if (seq_valid_p(fn) && seq_defined_p(fn)) {
-            dbg__print("dosubs", 3, "(dosubs) It's a sequence")
-            # Check for pre/post increment/decrement.
-            # This is only performed on a bare reference.
-            if (nparam == 0) {
-                #   |          | pre_post | inc_dec |
-                #   |----------+----------+---------|
-                #   | foo      |        0 |     n/a |
-                #   | --foo    |       -1 |      -1 |
-                #   | ++foo    |       -1 |      +1 |
-                #   | foo--    |       +1 |      -1 |
-                #   | foo++    |       +1 |      +1 |
-                incr = seqtab[fn, "incr"]
-                # Handle prefix increment/decrement
-                if (pre_post == -1)
-                    seq_ll_incr(fn, incr * inc_dec)
-                # Insert current value with desired formatting
-                expand = sprintf(seqtab[fn, "fmt"], seq_ll_read(fn))
-                # Handle postfix increment/decrement
-                if (pre_post == +1)
-                    seq_ll_incr(fn, incr * inc_dec)
-            } else {
-                if (pre_post != 0)
-                    error("Bad parameters in '" m "':" $0)
-                subcmd = param[1]
-                # @ID currval@ and @ID nextval@ are similar to @ID@ and
-                # @++ID@ but {curr,next}val eschew any formatting.
-                if (nparam == 1) {
-                    # These subcommands do not take any parameters
-                    if (subcmd == "currval") {
-                        # - currval :: Return current value of counter
-                        # without modifying it.  Also, no prefix/suffix.
-                        # (This reference to "prefix/suffix" is of
-                        # historical interest: it refers to an earlier
-                        # version of m2 which did not have full sequence
-                        # value formatting.  Instead, you had two strings
-                        # which printed before and after the value.)
-                        expand = seq_ll_read(fn)
-                    } else if (subcmd == "nextval") {
-                        # - nextval :: Increment and return new value of
-                        # counter.  No prefix/suffix.
-                        seq_ll_incr(fn, seqtab[fn, "incr"])
-                        expand = seq_ll_read(fn)
-                    } else
-                        error("Bad parameters in '" m "':" $0)
-                } else {
-                    # These take one or more params.  Nothing here!
-                    error("Bad parameters in '" m "':" $0)
-                }
-            }
-
-            trace(TRACE_EXPANSION, fn, sprintf("@%s@ => '%s'", m, expand))
-            r = expand r
-
-        # Check fninfo for ARRAY[] or LIST[]
-        } else if ( \
-            info__get(fninfo, "valid") == TRUE &&
-            (info__get(fninfo, "type") == TYPE_ARRAY || info__get(fninfo, "type") == TYPE_LIST) &&
-            info__get(fninfo, "nparts") == 2 &&
-            length(info__get(fninfo, "key")) > 0 &&
-            info__get(fninfo, "level") != NAME_NOT_FOUND) {
-            expand = array_deref_info(fninfo, "@" m "@")
-            trace(TRACE_EXPANSION, fn, sprintf("@%s@ => '%s'", m, expand))
-            r = expand r
-
-        # Check fninfo for ARRAY or LIST
-        } else if ( \
-            info__get(fninfo, "valid") == TRUE &&
-            (info__get(fninfo, "type") == TYPE_ARRAY || info__get(fninfo, "type") == TYPE_LIST) &&
-            info__get(fninfo, "nparts") == 1 &&
-            length(info__get(fninfo, "key")) == 0 &&
-            info__get(fninfo, "level") != NAME_NOT_FOUND) {
-
-            expand = idx__size(info__get(fninfo, "name"), level, info__get(fninfo, "code"))
-            trace(TRACE_EXPANSION, fn, sprintf("@%s@ => '%s'", m, expand))
-            r = expand r
-
-        # Throw an error on undefined symbol (strict-only)
-        } else if (strictp("def")) {
-            error(sprintf("@%s@: Name '%s' not defined", # __STRICT__[def] is True
-                          m, fn))
-        } else {
-            l = l TOK_AT m
-            r = TOK_AT r
-        }
-        i = index(r, TOK_AT)
+        i = index(R, TOK_AT)
     }
 
-    dbg__print("dosubs", 3, sprintf("(dosubs) END; Out of loop => '%s'", l r))
-    return l r
+    dbg__print("dosubs", 3, sprintf("(dosubs) END; Out of loop => '%s'", L R))
+    return L R
+}
+
+
+# macro["expansion"] = macro expansion text
+# macro["fn"] = function name, 1st param
+# macro["okay"] = TRUE/FALSE
+# macro["urtext"] = original M text
+function macro_expand(macro,
+                      i, j, l, M, nparam, p, pval, param, r, fn,
+                      x, inc_dec, pre_post, subcmd, br, lfn, incr, wrkm,
+                      fninfo, level)
+{
+    # In the code that follows:
+    # - M :: Entire text between @'s.  Example: "mid foo 3".
+    # - fn :: The name of the "function" to call.  The first element
+    #         of M.  Example: "mid".
+    # - nparam :: Number of parameters supplied to the function.
+    #     @mid@         -> nparam == 0      param[0] == mid
+    #     @mid foo@     -> nparam == 1      param[1] == foo
+    #     @mid foo 3@   -> nparam == 2      param[2] == 3
+    # A function's parameter N is available in variable param[N].
+    #   Consider "mid foo 3".  nparam is 2.
+    #   The function name is found in param[0].
+    #   The symbol (foo) is at param[1] and integer (3) is at param[2].
+    # Each function condition eventually executes
+    #     R = <SOMETHING> R
+    #   which injects <SOMETHING> just before the current value of
+    #   R.  (R is defined above.)  R is what is to the right of the
+    #   current position and contains as yet unexamined text that
+    #   needs to be evaluated for possible macro processing.  This
+    #   is the data we were going to evaluate anyway.  In other
+    #   words, this injects the result of "invoking" fn.
+    # Eventually this big while loop exits and we return "l r".
+
+    M = macro["urtext"]
+    nparam = split(M, param)
+    fn = param[1]
+    macro["fn"] = fn
+
+    # Check for @foo{...} -- isolate fn to scan @foo{a}{b}{c}...@ better
+    if ((br = index(fn, TOK_LBRACE)) > 0) {
+        fn = substr(fn, 1, br-1)
+        dbg__print("dosubs", 6, sprintf("(macro_expand) fn='%s'", fn))
+
+        # Re-create nparam and param[] according to braces,
+        # not split() on whitespace
+        split("", param)       # Start by deleting all entries
+        param[nparam = 0] = fn # 1st element is function name
+        wrkM = substr(M, length(fn) + 1)
+        dbg__print("dosubs", 6, sprintf("(macro_expand) Before loop, wrkM='%s'", wrkM))
+        while (match(wrkM, "^{[^}]*}")) {
+            dbg__print("dosubs", 6, sprintf("(macro_expand) Top of loop, wrkM='%s'", wrkM))
+            p = ++nparam
+            pval = substr(wrkM, RSTART+1, RLENGTH-2)
+            dbg__print("dosubs", 6, sprintf("(macro_expand) Parameter %d : %s", p, pval))
+            param[p] = pval
+            wrkM = substr(wrkM, RLENGTH+1)
+        }
+        if (!emptyp(wrkM))
+            error("(macro_expand) Text remains after scanning params")
+        if (dbg__sys_level_p("dosubs", 7)) {
+            print_debugfile("(macro_expand) nparam=" nparam)
+            for (x in param)
+                print_debugfile(sprintf("(macro_expand) param[%d] = '%s'", x, param[x]))
+            print_debugfile("(macro_expand) End param[]")
+        }
+    } else {
+        dbg__print("dosubs", 5, "(macro_expand) No brace; fn='" fn "'")
+        nparam--
+        dbg__print("dosubs", 7, "(macro_expand) nparam=" nparam)
+        for (j = 1; j <= nparam; j++)
+            param[j] = param[j+1]
+        delete param[nparam + 1]
+        param[0] = fn
+        if (dbg__sys_level_p("dosubs", 7)) {
+            for (x in param)
+                print_debugfile(sprintf("(macro_expand) param[%d] = '%s'", x, param[x]))
+            print_debugfile("(macro_expand) End param[]")
+        }
+    }
+    lfn = length(fn)
+
+    dbg__print("dosubs", 6, sprintf("(macro_expand) fn=%s, nparam=%d; M='%s", fn, nparam, M))
+
+    # Check for sequence modifiers.  First one wins, and
+    # invalid syntax is silently ignored.
+    if (substr(fn, 1, 2) == "++") {
+        inc_dec  = +1
+        pre_post = -1
+        fn = substr(fn, 3)
+    } else if (substr(fn, 1, 2) == "--") {
+        inc_dec  = -1
+        pre_post = -1
+        fn = substr(fn, 3)
+    } else if (substr(fn, lfn-1, 2) == "++") {
+        inc_dec  = +1
+        pre_post = +1
+        fn = substr(fn, 1, lfn-2)
+    } else if (substr(fn, lfn-1, 2) == "--") {
+        inc_dec  = -1
+        pre_post = +1
+        fn = substr(fn, 1, lfn-2)
+    }
+
+    # Check if it's a known function (formerly SYMFUNC)
+    level = info__create_from_text(fn, fninfo)
+    #print_stderr("(macro_expand) fninfo[" info__get(fninfo, "name") "] => " info__get(fninfo, "type"))
+
+    if (nam_ll_in(fn, GLOBAL_NAMESPACE) &&
+        flag_1true_p((nam_ll_read(fn, GLOBAL_NAMESPACE)), TYPE_FUNCTION)) {
+        # Quick check to make sure fninfo is okay
+        if (info__get(fninfo, "type") != TYPE_FUNCTION)
+            panic("(macro_expand) not TYPE_FUNCTION?")
+        if (fn == "basename")
+            macro_set_expansion(macro, xeq_fn__basename(fn, M, nparam, param))
+        else if (fn == "boolval")
+            macro_set_expansion(macro, xeq_fn__boolval(fn, M, nparam, param))
+        else if (fn == "chr")
+            macro_set_expansion(macro, xeq_fn__chr(fn, M, nparam, param))
+        else if (fn == "date"     || fn == "epoch" ||
+                 fn == "strftime" || fn == "time"  ||
+                 fn == "tz"       || fn == "utc")
+            macro_set_expansion(macro, xeq_fn__date(fn, M, nparam, param))
+        else if (fn == "dirname")
+            macro_set_expansion(macro, xeq_fn__dirname(fn, M, nparam, param))
+        else if (fn == "divlines")
+            macro_set_expansion(macro, xeq_fn__divlines(fn, M, nparam, param))
+        else if (fn == "dow")
+            macro_set_expansion(macro, xeq_fn__dow(fn, M, nparam, param))
+        else if (fn == "executable" || fn == "sexecutable")
+            macro_set_expansion(macro, xeq_fn__executable(fn, M, nparam, param))
+        else if (fn == "expr" || fn == "sexpr")
+            macro_set_expansion(macro, xeq_fn__expr(fn, M, nparam, param))
+        else if (fn == "format")
+            macro_set_expansion(macro, xeq_fn__format(fn, M, nparam, param))
+        else if (fn == "getenv" || fn == "sgetenv")
+            macro_set_expansion(macro, xeq_fn__getenv(fn, M, nparam, param))
+        else if (fn == "gregdate")
+            macro_set_expansion(macro, xeq_fn__gregdate(fn, M, nparam, param))
+        else if (fn == "ifdef" || fn == "ifndef")
+            macro_set_expansion(macro, xeq_fn__ifdef(fn, M, nparam, param))
+        else if (fn == "ifelse")
+            macro_set_expansion(macro, xeq_fn__ifelse(fn, M, nparam, param))
+        else if (fn == "ifx")
+            macro_set_expansion(macro, xeq_fn__ifx(fn, M, nparam, param))
+        else if (fn == "index")
+            macro_set_expansion(macro, xeq_fn__index(fn, M, nparam, param))
+        else if (fn == "join" || fn == "sjoin")
+            macro_set_expansion(macro, xeq_fn__join(fn, M, nparam, param))
+        else if (fn == "left")
+            macro_set_expansion(macro, xeq_fn__left(fn, M, nparam, param))
+        else if (fn == "ljust"  || fn == "rjust"  || fn == "center" || \
+                 fn == "sljust" || fn == "srjust" || fn == "scenter")
+            macro_set_expansion(macro, xeq_fn__lrc(fn, M, nparam, param))
+        else if (fn == "mid" || fn == "substr")
+            macro_set_expansion(macro, xeq_fn__mid(fn, M, nparam, param))
+        else if (fn == "mjd")
+            macro_set_expansion(macro, xeq_fn__mjd(fn, M, nparam, param))
+        else if (fn == "ord")
+            macro_set_expansion(macro, xeq_fn__ord(fn, M, nparam, param))
+        else if (fn == "rem" || fn == "srem")
+            macro_set_expansion(macro, EMPTY)
+        else if (fn == "right")
+            macro_set_expansion(macro, xeq_fn__right(fn, M, nparam, param))
+        else if (fn == "rot13")
+            macro_set_expansion(macro, xeq_fn__rot13(fn, M, nparam, param))
+        else if (fn == "space" || fn == "spaces" ||
+                 fn == "tab"   || fn == "tabs")
+            macro_set_expansion(macro, xeq_fn__spaces(fn, M, nparam, param))
+        else if (fn == "lc" || fn == "len" || fn == "uc")
+            macro_set_expansion(macro, xeq_fn__str_fn(fn, M, nparam, param))
+        else if (fn == "trim" || fn == "ltrim" || fn == "rtrim")
+            macro_set_expansion(macro, xeq_fn__trim(fn, M, nparam, param))
+        else if (fn == "uuid")
+            macro_set_expansion(macro, uuid())
+        else if (fn == "xbasename" || fn == "xdirname")
+            macro_set_expansion(macro, xeq_fn__xname(fn, M, nparam, param))
+        else
+            panic("(macro_expand) Function '" fn "' not handled")
+
+    # Check if it's an array
+    } else if (sym_valid_p(fn) && arrayp(fn)) {
+        macro_set_expansion(macro, sym_fetch(fn))
+
+    # <SOMETHING ELSE> : Call a user-defined macro, handles arguments
+    } else if (sym_valid_p(fn) && (sym_defined_p(fn) || sym_deferred_p(fn))) {
+        macro_set_expansion(macro, substitute_params(sym_fetch(fn), nparam, param))
+
+    # Check if it's a sequence
+    } else if (seq_valid_p(fn) && seq_defined_p(fn)) {
+        dbg__print("dosubs", 3, "(macro_expand) It's a sequence")
+        # Check for pre/post increment/decrement.
+        # This is only performed on a bare reference.
+        if (nparam == 0) {
+            #   |          | pre_post | inc_dec |
+            #   |----------+----------+---------|
+            #   | foo      |        0 |     n/a |
+            #   | --foo    |       -1 |      -1 |
+            #   | ++foo    |       -1 |      +1 |
+            #   | foo--    |       +1 |      -1 |
+            #   | foo++    |       +1 |      +1 |
+            incr = seqtab[fn, "incr"]
+            # Handle prefix increment/decrement
+            if (pre_post == -1)
+                seq_ll_incr(fn, incr * inc_dec)
+            # Insert current value with desired formatting
+            macro_set_expansion(macro, sprintf(seqtab[fn, "fmt"], seq_ll_read(fn)))
+            # Handle postfix increment/decrement
+            if (pre_post == +1)
+                seq_ll_incr(fn, incr * inc_dec)
+        } else {
+            if (pre_post != 0)
+                error("Bad parameters in '" M "':" $0)
+            subcmd = param[1]
+            # @ID currval@ and @ID nextval@ are similar to @ID@ and
+            # @++ID@ but {curr,next}val eschew any formatting.
+            if (nparam == 1) {
+                # These subcommands do not take any parameters
+                if (subcmd == "currval") {
+                    # - currval :: Return current value of counter
+                    # without modifying it.  Also, no prefix/suffix.
+                    # (This reference to "prefix/suffix" is of
+                    # historical interest: it refers to an earlier
+                    # version of m2 which did not have full sequence
+                    # value formatting.  Instead, you had two strings
+                    # which printed before and after the value.)
+                    macro_set_expansion(macro, seq_ll_read(fn))
+                } else if (subcmd == "nextval") {
+                    # - nextval :: Increment and return new value of
+                    # counter.  No prefix/suffix.
+                    seq_ll_incr(fn, seqtab[fn, "incr"])
+                    macro_set_expansion(macro, seq_ll_read(fn))
+                } else
+                    error("Bad parameters in '" M "':" $0)
+            } else {
+                # These take one or more params.  Nothing here!
+                error("Bad parameters in '" M "':" $0)
+            }
+        }
+
+    # Check fninfo for ARRAY[] or LIST[]
+    } else if ( \
+        info__get(fninfo, "valid") == TRUE &&
+        (info__get(fninfo, "type") == TYPE_ARRAY || info__get(fninfo, "type") == TYPE_LIST) &&
+        info__get(fninfo, "nparts") == 2 &&
+        length(info__get(fninfo, "key")) > 0 &&
+        info__get(fninfo, "level") != NAME_NOT_FOUND) {
+
+        macro_set_expansion(macro, array_deref_info(fninfo, "@" M "@"))
+
+    # Check fninfo for ARRAY or LIST
+    } else if ( \
+        info__get(fninfo, "valid") == TRUE &&
+        (info__get(fninfo, "type") == TYPE_ARRAY || info__get(fninfo, "type") == TYPE_LIST) &&
+        info__get(fninfo, "nparts") == 1 &&
+        length(info__get(fninfo, "key")) == 0 &&
+        info__get(fninfo, "level") != NAME_NOT_FOUND) {
+
+        macro_set_expansion(macro, idx__size(info__get(fninfo, "name"), level, info__get(fninfo, "code")))
+    }
+}
+
+
+function macro_setup(macro, urtext)
+{
+    macro["okay"] = FALSE
+    macro["urtext"] = urtext
+    macro["fn"] = macro["expansion"] = EMPTY
+}
+
+
+function macro_set_expansion(macro, expanded_text)
+{
+    macro["okay"] = TRUE
+    macro["expansion"] = expanded_text
 }
 
 
@@ -9667,14 +9700,14 @@ function awk_basename(s)
 #
 #*****************************************************************************
 # @basename SYM@
-function xeq_fn__basename(fn, m, nparam, param,
+function xeq_fn__basename(fn, M, nparam, param,
                           p, path)
 {
     if (nparam != 1)
-        error("Bad parameters in '" m "':" $0)
+        error("Bad parameters in '" M "':" $0)
     p = param[1]
-    assert_sym_valid_name(p, "@" m "@")
-    assert_sym_defined(p, "@" m "@")
+    assert_sym_valid_name(p, "@" M "@")
+    assert_sym_defined(p, "@" M "@")
     path = rm_quotes(sym_fetch(p))
     return awk_basename(path)
 }
@@ -9693,7 +9726,7 @@ function xeq_fn__basename(fn, m, nparam, param,
 #
 #*****************************************************************************
 # @boolval SYM@
-function xeq_fn__boolval(fn, m, nparam, param,
+function xeq_fn__boolval(fn, M, nparam, param,
                          p, result)
 {
     if (nparam == 0)
@@ -9739,19 +9772,19 @@ function xeq_fn__boolval(fn, m, nparam, param,
 #
 #*****************************************************************************
 # @chr SYM@
-function xeq_fn__chr(fn, m, nparam, param,
+function xeq_fn__chr(fn, M, nparam, param,
                      p)
 {
     if (nparam != 1)
-        error("Bad parameters in '" m "':" $0)
+        error("Bad parameters in '" M "':" $0)
     p = param[1]
     if (sym_valid_p(p)) {
-        assert_sym_defined(p, "@" m "@")
+        assert_sym_defined(p, "@" M "@")
         return sprintf("%c", sym_fetch(p)+0)
     } else if (integerp(p) && p >= 0 && p <= 255)
         return sprintf("%c", p+0)
     else
-        error("Bad parameters in '" m "':" $0)
+        error("Bad parameters in '" M "':" $0)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -9771,16 +9804,16 @@ function xeq_fn__chr(fn, m, nparam, param,
 #
 #*****************************************************************************
 # @date@
-function xeq_fn__date(fn, m, nparam, param,
+function xeq_fn__date(fn, M, nparam, param,
                       y, cmdline, result)
 {
     if (secure_level() >= SEC_PARANOID)
         security_violation(sprintf("@%s@: Forbidden", fn))
     if (! ("date" in PROG))
-        error(sprintf("%s: PROG[date] not defined, cannot tell time", "@" m "@"))
+        error(sprintf("%s: PROG[date] not defined, cannot tell time", "@" M "@"))
     if (fn == "strftime" && nparam == 0)
-        error("Bad parameters in '" m "':" $0)
-    y = fn == "strftime" ? substr(m, length(fn)+2) \
+        error("Bad parameters in '" M "':" $0)
+    y = fn == "strftime" ? substr(M, length(fn)+2) \
         : sym_ll_read("__FMT__", fn)
     gsub(/"/, "\\\"", y)
     cmdline = build_prog_cmdline("date", "+\"" y "\"", MODE_IO_CAPTURE)
@@ -9808,14 +9841,14 @@ function xeq_fn__date(fn, m, nparam, param,
 #
 #*****************************************************************************
 # @dirname SYM@
-function xeq_fn__dirname(fn, m, nparam, param,
+function xeq_fn__dirname(fn, M, nparam, param,
                          p, x)
 {
     if (nparam != 1)
-        error("Bad parameters in '" m "':" $0)
+        error("Bad parameters in '" M "':" $0)
     p = param[1]
-    assert_sym_valid_name(p, "@" m "@")
-    assert_sym_defined(p, "@" m "@")
+    assert_sym_valid_name(p, "@" M "@")
+    assert_sym_defined(p, "@" M "@")
 
     x = rm_quotes(sym_fetch(p))
     return sub(/\/[^\/]*$/, "", x) ? x : "."
@@ -9834,14 +9867,14 @@ function xeq_fn__dirname(fn, m, nparam, param,
 #
 #*****************************************************************************
 # @divlines STREAM@
-function xeq_fn__divlines(fn, m, nparam, param,
+function xeq_fn__divlines(fn, M, nparam, param,
                           stream)
 {
     if (nparam != 1)
-        error("Bad parameters in '" m "':" $0)
+        error("Bad parameters in '" M "':" $0)
     stream = param[1]
     if (! integerp(stream))
-        error("Parameter must be integer: '" m "':" $0)
+        error("Parameter must be integer: '" M "':" $0)
     if (stream <= TERMINAL) return 0
     if (stream > MAX_STREAM)
         error(sprintf("@%s@: Bad parameters", fn))
@@ -9861,7 +9894,7 @@ function xeq_fn__divlines(fn, m, nparam, param,
 #
 #*****************************************************************************
 # @dow SYM@
-function xeq_fn__dow(fn, m, nparam, param,
+function xeq_fn__dow(fn, M, nparam, param,
                      MJD, date, year, month, day)
 {
     if (nparam == 0) {
@@ -9880,7 +9913,7 @@ function xeq_fn__dow(fn, m, nparam, param,
         day   = 0 + param[3]
         MJD = mjd(year, month, day)
     } else
-        error("Bad parameters in '" m "':" $0)
+        error("Bad parameters in '" M "':" $0)
 
     return (MJD % 7 + 2) % 7 + 1
 }
@@ -9898,7 +9931,7 @@ function xeq_fn__dow(fn, m, nparam, param,
 #
 #*****************************************************************************
 # @executable PROG@
-function xeq_fn__executable(fn, m, nparam, param,
+function xeq_fn__executable(fn, M, nparam, param,
                             p, silent, cmdline, result)
 {
     if (secure_level() >= SEC_PARANOID)
@@ -9906,7 +9939,7 @@ function xeq_fn__executable(fn, m, nparam, param,
     # S variant won't warn about not being found
     silent = first(fn) == "s"
     if (nparam != 1)
-        error("Bad parameters in '" m "':" $0)
+        error("Bad parameters in '" M "':" $0)
     p = param[1]
 
     cmdline = build_prog_cmdline("sh", sprintf("-c 'command -v %s' 2>%s", p, NULL))
@@ -9930,14 +9963,14 @@ function xeq_fn__executable(fn, m, nparam, param,
 #
 #*****************************************************************************
 # @expr ...@
-function xeq_fn__expr(fn, m, nparam, param,
+function xeq_fn__expr(fn, M, nparam, param,
                       silent, result)
 {
     # S variant won't automatically print result
     silent = first(fn) == "s"
-    sub(/^s?expr[ \t]*/, "", m) # clean up expression to evaluate
-    result = calc3_eval(m)
-    dbg__print("expr", 3, sprintf("(xeq_fn__expr) expr{%s} = %s", m, result))
+    sub(/^s?expr[ \t]*/, "", M) # clean up expression to evaluate
+    result = calc3_eval(M)
+    dbg__print("expr", 3, sprintf("(xeq_fn__expr) expr{%s} = %s", M, result))
     sym_ll_write("__EXPR__", "", GLOBAL_NAMESPACE, result+0)
     return silent ? "" : result
 }
@@ -9955,11 +9988,11 @@ function xeq_fn__expr(fn, m, nparam, param,
 #
 #*****************************************************************************
 # @format FMT SYM...@
-function xeq_fn__format(fn, m, nparam, param,
+function xeq_fn__format(fn, M, nparam, param,
                         fmt, i, arg, result)
 {
     if (nparam < 1 || nparam > 6)
-        error("Bad parameters in '" m "':" $0)
+        error("Bad parameters in '" M "':" $0)
     fmt = sym_value_or_literal(param[1])
     for (i = 2; i <= 6; i++)
         arg[i] = sym_value_or_literal(param[i])
@@ -9991,14 +10024,14 @@ function xeq_fn__format(fn, m, nparam, param,
 #
 #*****************************************************************************
 # @getenv ENV@
-function xeq_fn__getenv(fn, m, nparam, param,
+function xeq_fn__getenv(fn, M, nparam, param,
                         p, silent)
 {
     silent = first(fn) == "s"
     if (nparam != 1)
-        error("Bad parameters in '" m "':" $0)
+        error("Bad parameters in '" M "':" $0)
     p = param[1]
-    assert_valid_env_var_name(p, "@" m "@")
+    assert_valid_env_var_name(p, "@" M "@")
     if (p in ENVIRON)
         return ENVIRON[p]
     if (strictp("env") && !silent)
@@ -10019,14 +10052,14 @@ function xeq_fn__getenv(fn, m, nparam, param,
 #
 #*****************************************************************************
 # @gregdate MJD@
-function xeq_fn__gregdate(fn, m, nparam, param,
+function xeq_fn__gregdate(fn, M, nparam, param,
                           p, JD)
 {
     if (nparam != 1)
-        error("Bad parameters in '" m "':" $0)
+        error("Bad parameters in '" M "':" $0)
     p = param[1]
     if (! integerp(p))
-        error("Parameter must be integer: '" m "':" $0)
+        error("Parameter must be integer: '" M "':" $0)
     JD = 0 + p + JD_MJD_DIFF
     return greg(JD)
 }
@@ -10044,44 +10077,44 @@ function xeq_fn__gregdate(fn, m, nparam, param,
 #
 #*****************************************************************************
 # @ifdef{FOO}{True text}{False text}@
-function xeq_fn__ifdef(fn, m, nparam, param,
+function xeq_fn__ifdef(fn, M, nparam, param,
                        x, ifcond, init_negate, true_text, false_text, result)
 {
-    if (   match(m, "^ifdef{[^}][^}]*}{[^}]*}{[^}]*}$") \
-        || match(m, "^ifndef{[^}][^}]*}{[^}]*}{[^}]*}$"))
+    if (   match(M, "^ifdef{[^}][^}]*}{[^}]*}{[^}]*}$") \
+        || match(M, "^ifndef{[^}][^}]*}{[^}]*}{[^}]*}$"))
         ;          # Three-brace expr is well-formed
-    else if (   match(m, "^ifdef{[^}][^}]*}{[^}]*}$") \
-             || match(m, "^ifndef{[^}][^}]*}{[^}]*}$"))
-        m = m "{}" # Two-brace expr can be fixed to use empty FALSE string
+    else if (   match(M, "^ifdef{[^}][^}]*}{[^}]*}$") \
+             || match(M, "^ifndef{[^}][^}]*}{[^}]*}$"))
+        M = M "{}" # Two-brace expr can be fixed to use empty FALSE string
     else
-        error("(ifdef) Bad ifdef in '" m "':" $0)
+        error("(ifdef) Bad ifdef in '" M "':" $0)
 
     # Get symbol name (x) which will be handed to defined()
-    m = substr(m, index(m, TOK_LBRACE)) # strip fn name
-    if (!match(m, "^{[^}]*}"))
-        error("(ifdef) Bad ifdef symbol in '" m "':" $0)
-    x = substr(m, RSTART+1, RLENGTH-2)
-    assert_sym_valid_name(x, "@" m "@")
+    M = substr(M, index(M, TOK_LBRACE)) # strip fn name
+    if (!match(M, "^{[^}]*}"))
+        error("(ifdef) Bad ifdef symbol in '" M "':" $0)
+    x = substr(M, RSTART+1, RLENGTH-2)
+    assert_sym_valid_name(x, "@" M "@")
     ifcond = "defined(" x ")"
     init_negate = fn == "ifndef"
     dbg__print("dosubs", 7, "(ifdef) ifcond='" ifcond "'")
-    m = substr(m, RSTART+RLENGTH)
+    M = substr(M, RSTART+RLENGTH)
 
     # Get true_text
-    if (!match(m, "^{[^}]*}"))
-        error("(ifdef) Bad true_text in '" m "':" $0)
-    true_text = substr(m, RSTART+1, RLENGTH-2)
+    if (!match(M, "^{[^}]*}"))
+        error("(ifdef) Bad true_text in '" M "':" $0)
+    true_text = substr(M, RSTART+1, RLENGTH-2)
     dbg__print("dosubs", 7, "(ifdef) true_text='" true_text "'")
-    m = substr(m, RSTART+RLENGTH)
+    M = substr(M, RSTART+RLENGTH)
 
     # Get false_text
-    if (!match(m, "^{[^}]*}"))
-        error("(ifdef) Bad false_text in '" m "':" $0)
-    false_text = substr(m, RSTART+1, RLENGTH-2)
+    if (!match(M, "^{[^}]*}"))
+        error("(ifdef) Bad false_text in '" M "':" $0)
+    false_text = substr(M, RSTART+1, RLENGTH-2)
     dbg__print("dosubs", 7, "(ifdef) if_false='" false_text "'")
-    m = substr(m, RSTART+RLENGTH)
-    if (!emptyp(m))
-        error("(ifdef) Extra text in ifdef: m='" m "'")
+    M = substr(M, RSTART+RLENGTH)
+    if (!emptyp(M))
+        error("(ifdef) Extra text in ifdef: M='" M "'")
 
     result = evaluate_boolean(ifcond, init_negate) ? true_text : false_text
     dbg__print("dosubs", 7, "(xeq_fn__ifdef) Calling dosubs('" result "')")
@@ -10111,25 +10144,25 @@ function xeq_fn__ifdef(fn, m, nparam, param,
 #
 #*****************************************************************************
 # @ifelse{S1}{S2}{True text}{False text}...@
-function xeq_fn__ifelse(fn, m, nparam, param,
+function xeq_fn__ifelse(fn, M, nparam, param,
                         arg, j, result)
 {
-    m = substr(m, 7)    # strip away "ifelse"
+    M = substr(M, 7)    # strip away "ifelse"
     arg[1] = arg[2] = arg[3] = ""
     while (TRUE) {
-        dbg__print("dosubs", 5, "(ifelse) TOP; m=" m)
+        dbg__print("dosubs", 5, "(ifelse) TOP; M=" M)
 
         # Check that at least three pairs of braces are present,
         # and whatever remains are also well-formed brace pairs.
         # Pathological syntax (like {..\}..} will cause problems.
-        if (! match(m, "^{[^}][^}]*}{[^}]*}{[^}]*}")) # used to include ({[^}]*})*$ at end of regexp but Busybox Awk doesn't like that
-            error("(ifelse) Bad parameters in '" m "':" $0)
+        if (! match(M, "^{[^}][^}]*}{[^}]*}{[^}]*}")) # used to include ({[^}]*})*$ at end of regexp but Busybox Awk doesn't like that
+            error("(ifelse) Bad parameters in '" M "':" $0)
 
         # Grab the first three arguments
         for (j = 1; j <= 3; j++) {
-            match(m, "{[^}]*}")
-            arg[j] = substr(m, RSTART+1, RLENGTH-2)
-            m = substr(m, RSTART+RLENGTH)
+            match(M, "{[^}]*}")
+            arg[j] = substr(M, RSTART+1, RLENGTH-2)
+            M = substr(M, RSTART+RLENGTH)
             dbg__print("dosubs", 7, sprintf("(ifelse) arg[%d]='%s'",
                                            j, arg[j]))
         }
@@ -10142,16 +10175,16 @@ function xeq_fn__ifelse(fn, m, nparam, param,
             break
         }
         # At this point, the three required args have been
-        # stripped out of m.  What remains in m could be:
+        # stripped out of M.  What remains in M could be:
         # 1. Empty - no fourth argument, so use empty string.
-        if (emptyp(m)) {
+        if (emptyp(M)) {
             result = ""
             break
         }
         # 2. Exactly one brace clause remains; it is the fourth
         # (last) argument, so use it.
-        if (match(m, "^{[^}]*}$")) {
-            result = substr(m, 2, length(m) - 2)
+        if (match(M, "^{[^}]*}$")) {
+            result = substr(M, 2, length(M) - 2)
             break
         }
         # 3. If there are more than four args, there have to be a
@@ -10161,8 +10194,8 @@ function xeq_fn__ifelse(fn, m, nparam, param,
         # which means that just one or two pairs of braces
         # constitute invalid syntax.  The one pair case was
         # caught in choice 2 just above, so we check for two pairs
-        if (match(m, "^{[^}][^}]*}{[^}]*}$"))   # Busybox Awk does not support +
-            error("(ifelse) Bad parameters in '" m "':" $0)
+        if (match(M, "^{[^}][^}]*}{[^}]*}$"))   # Busybox Awk does not support +
+            error("(ifelse) Bad parameters in '" M "':" $0)
 
         # # If not, and if there are more than four arguments,
         #    the process is repeated with arguments 4, 5, 6, and 7.
@@ -10186,36 +10219,36 @@ function xeq_fn__ifelse(fn, m, nparam, param,
 #
 #*****************************************************************************
 # @ifx{Boolean expr}{True text}{False text}@
-function xeq_fn__ifx(fn, m, nparam, param,
+function xeq_fn__ifx(fn, M, nparam, param,
                      ifcond, init_negate, true_text, false_text, result)
 {
-    if (!match(m, "^ifx{[^}][^}]*}{[^}]*}{[^}]*}$"))   # Busybox Awk does not support +
-        error("(ifx) Bad ifx in '" m "':" $0)
-    m = substr(m, index(m, TOK_LBRACE)) # strip fn name
+    if (!match(M, "^ifx{[^}][^}]*}{[^}]*}{[^}]*}$"))   # Busybox Awk does not support +
+        error("(ifx) Bad ifx in '" M "':" $0)
+    M = substr(M, index(M, TOK_LBRACE)) # strip fn name
     init_negate = FALSE
 
     # Get if_clause
-    if (!match(m, "^{[^}]*}"))
-        error("(ifx) Bad if_clause in '" m "':" $0)
-    ifcond = substr(m, RSTART+1, RLENGTH-2)
+    if (!match(M, "^{[^}]*}"))
+        error("(ifx) Bad if_clause in '" M "':" $0)
+    ifcond = substr(M, RSTART+1, RLENGTH-2)
     dbg__print("dosubs", 7, "(ifx) ifcond='" ifcond "'")
-    m = substr(m, RSTART+RLENGTH)
+    M = substr(M, RSTART+RLENGTH)
 
     # Get true_text
-    if (!match(m, "^{[^}]*}"))
-        error("(ifx) Bad true_text in '" m "':" $0)
-    true_text = substr(m, RSTART+1, RLENGTH-2)
+    if (!match(M, "^{[^}]*}"))
+        error("(ifx) Bad true_text in '" M "':" $0)
+    true_text = substr(M, RSTART+1, RLENGTH-2)
     dbg__print("dosubs", 7, "(ifx) true_text='" true_text "'")
-    m = substr(m, RSTART+RLENGTH)
+    M = substr(M, RSTART+RLENGTH)
 
     # Get false_text
-    if (!match(m, "^{[^}]*}"))
-        error("(ifx) Bad false_text in '" m "':" $0)
-    false_text = substr(m, RSTART+1, RLENGTH-2)
+    if (!match(M, "^{[^}]*}"))
+        error("(ifx) Bad false_text in '" M "':" $0)
+    false_text = substr(M, RSTART+1, RLENGTH-2)
     dbg__print("dosubs", 7, "(ifx) if_false='" false_text "'")
-    m = substr(m, RSTART+RLENGTH)
-    if (!emptyp(m))
-        error("(ifx) Extra text in ifx: m='" m "'")
+    M = substr(M, RSTART+RLENGTH)
+    if (!emptyp(M))
+        error("(ifx) Extra text in ifx: M='" M "'")
 
     result = evaluate_boolean(ifcond, init_negate) ? true_text : false_text
     dbg__print("dosubs", 7, "(xeq_fn__ifx) Calling dosubs('" result "')")
@@ -10237,14 +10270,14 @@ function xeq_fn__ifx(fn, m, nparam, param,
 #
 #*****************************************************************************
 # @index SYM SUBSTR@
-function xeq_fn__index(fn, m, nparam, param,
+function xeq_fn__index(fn, M, nparam, param,
                        p, x)
 {
     if (nparam != 2)
-        error("Bad parameters in '" m "':" $0)
+        error("Bad parameters in '" M "':" $0)
     p = param[1]
-    assert_sym_valid_name(p, "@" m "@")
-    assert_sym_defined(p, "@" m "@")
+    assert_sym_valid_name(p, "@" M "@")
+    assert_sym_defined(p, "@" M "@")
     x = param[2]
     return index(sym_fetch(p), x)
 }
@@ -10260,11 +10293,11 @@ function xeq_fn__index(fn, m, nparam, param,
 #
 #*****************************************************************************
 # @{s,}join LIS [FS]
-function xeq_fn__join(fn, m, nparam, param,
+function xeq_fn__join(fn, M, nparam, param,
                       info, nparts, level, s, lis, fs, fslen, silent,
                       code, size, k, x, keys, i, agg_block, me)
 {
-    me = "@" m "@"
+    me = "@" M "@"
     # S variant appends a final separator as a terminator
     silent = first(fn) == "s"
     if (nparam == 0)
@@ -10294,14 +10327,14 @@ function xeq_fn__join(fn, m, nparam, param,
         error("(xeq_fn__join) Scan error, " __m2_msg)
     if (nparts == 2)
         error(sprintf("%s: Array name '%s' cannot have subscripts",
-                      "@" m "@", lis))
+                      "@" M "@", lis))
 
     # Now call nam__lookup(info).  Must be TYPE_ARRAY && !FLAG_SYSTEM
     level = nam__lookup(info)
     if (level == NAME_NOT_FOUND)
-        error(sprintf("%s: Name '%s' not found", "@" m "@", lis))
+        error(sprintf("%s: Name '%s' not found", "@" M "@", lis))
     if (info__get(info, "idxable") == FALSE)
-        error(sprintf("%s: Name '%s' has type %s, not Array or List", "@" m "@", lis, info__get(info, "type")))
+        error(sprintf("%s: Name '%s' has type %s, not Array or List", "@" M "@", lis, info__get(info, "type")))
     code = info["code"]
     size = idx__size(lis, level, code)
 
@@ -10358,14 +10391,14 @@ function xeq_fn__join(fn, m, nparam, param,
 #
 #*****************************************************************************
 # @left SYMBOL[, LENGTH]@
-function xeq_fn__left(fn, m, nparam, param,
+function xeq_fn__left(fn, M, nparam, param,
                       p, x)
 {
     if (nparam < 1 || nparam > 2)
-        error("Bad parameters in '" m "':" $0)
+        error("Bad parameters in '" M "':" $0)
     p = param[1]
-    assert_sym_valid_name(p, "@" m "@")
-    assert_sym_defined(p, "@" m "@")
+    assert_sym_valid_name(p, "@" M "@")
+    assert_sym_defined(p, "@" M "@")
     x = 1
     if (nparam == 2) {
         x = param[2]
@@ -10392,14 +10425,14 @@ function xeq_fn__left(fn, m, nparam, param,
 # @ljust  SYM [WID]@
 # @rjust  SYM [WID]@
 # @center SYM [WID]@
-function xeq_fn__lrc(fn, m, nparam, param,
+function xeq_fn__lrc(fn, M, nparam, param,
                      silent, p, width, s, slen, x, sp)
 {
     if (nparam < 1 || nparam > 2)
-        error("Bad parameters in '" m "':" $0)
+        error("Bad parameters in '" M "':" $0)
     p = param[1]
-    assert_sym_valid_name(p, "@" m "@")
-    assert_sym_defined(p, "@" m "@")
+    assert_sym_valid_name(p, "@" M "@")
+    assert_sym_defined(p, "@" M "@")
     if (nparam == 2) {
         width = param[2]
         if (!integerp(width))
@@ -10453,14 +10486,14 @@ function xeq_fn__lrc(fn, m, nparam, param,
 #
 #*****************************************************************************
 # @mid SYMBOL, START[, LENGTH]
-function xeq_fn__mid(fn, m, nparam, param,
+function xeq_fn__mid(fn, M, nparam, param,
                      p, x, y, result)
 {
     if (nparam < 2 || nparam > 3)
-        error("Bad parameters in '" m "':" $0)
+        error("Bad parameters in '" M "':" $0)
     p = param[1]
-    assert_sym_valid_name(p, "@" m "@")
-    assert_sym_defined(p, "@" m "@")
+    assert_sym_valid_name(p, "@" M "@")
+    assert_sym_defined(p, "@" M "@")
     x = param[2]
     if (!integerp(x))
         error("Value '" x "' must be numeric:" $0)
@@ -10488,7 +10521,7 @@ function xeq_fn__mid(fn, m, nparam, param,
 #
 #*****************************************************************************
 # @mjd [YYYY MM DD]@
-function xeq_fn__mjd(fn, m, nparam, param,
+function xeq_fn__mjd(fn, M, nparam, param,
                         year, month, day, monthdays, i, n, date)
 {
     if (nparam == 3) {
@@ -10503,12 +10536,12 @@ function xeq_fn__mjd(fn, m, nparam, param,
         month = 0 + substr(date, 5, 2)
         day   = 0 + substr(date, 7, 2)
     } else
-        error("Bad parameters in '" m "':" $0)
+        error("Bad parameters in '" M "':" $0)
 
     dbg__print("dosubs", 7, "(xeq_fn__mjd) year=" year ", month=" month ", day=" day)
     if (! date_valid_p(year, month, day))
         error(sprintf("%s: Bad date; Year=%d, Month=%d, Day=%d",
-                      "@" m "@", year, month, day))
+                      "@" M "@", year, month, day))
     return "" mjd(year, month, day)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
@@ -10528,11 +10561,11 @@ function xeq_fn__mjd(fn, m, nparam, param,
 #
 #*****************************************************************************
 # @ord SYM@
-function xeq_fn__ord(fn, m, nparam, param,
+function xeq_fn__ord(fn, M, nparam, param,
                      p)
 {
     if (nparam != 1)
-        error("Bad parameters in '" m "':" $0)
+        error("Bad parameters in '" M "':" $0)
     if (! __ord_initialized)
         initialize_ord()
     p = param[1]
@@ -10555,14 +10588,14 @@ function xeq_fn__ord(fn, m, nparam, param,
 #
 #*****************************************************************************
 # @right SYM N@
-function xeq_fn__right(fn, m, nparam, param,
+function xeq_fn__right(fn, M, nparam, param,
                        x, p)
 {
     if (nparam < 1 || nparam > 2)
-        error("Bad parameters in '" m "':" $0)
+        error("Bad parameters in '" M "':" $0)
     p = param[1]
-    assert_sym_valid_name(p, "@" m "@")
-    assert_sym_defined(p, "@" m "@")
+    assert_sym_valid_name(p, "@" M "@")
+    assert_sym_defined(p, "@" M "@")
     x = length(sym_fetch(p))
     if (nparam == 2) {
         x = param[2]
@@ -10588,16 +10621,16 @@ function xeq_fn__right(fn, m, nparam, param,
 #
 #*****************************************************************************
 # @rot13 SYM@
-function xeq_fn__rot13(fn, m, nparam, param,
+function xeq_fn__rot13(fn, M, nparam, param,
                        p, i, c, result)
 {
     if (! __rot13_initialized)
         initialize_rot13()
     if (nparam == 0)
-        error("Bad parameters in '" m "':" $0)
+        error("Bad parameters in '" M "':" $0)
     p = param[1]
     p = (sym_valid_p(p) && sym_defined_p(p)) \
-        ? sym_fetch(p) : substr(m, length(fn)+2)
+        ? sym_fetch(p) : substr(M, length(fn)+2)
     result = ""
 
     for (i = 1; i <= length(p); i++) {
@@ -10622,11 +10655,11 @@ function xeq_fn__rot13(fn, m, nparam, param,
 #*****************************************************************************
 # @spaces N@
 # @tabs N@
-function xeq_fn__spaces(fn, m, nparam, param,
+function xeq_fn__spaces(fn, M, nparam, param,
                         n, c)
 {
     if (nparam > 1)
-        error("Bad parameters in '" m "':" $0)
+        error("Bad parameters in '" M "':" $0)
     if (nparam == 1) {
         n = param[1]
         if (!integerp(n))
@@ -10657,14 +10690,14 @@ function xeq_fn__spaces(fn, m, nparam, param,
 #         @len ALPHABET@ => 26
 #
 #*****************************************************************************
-function xeq_fn__str_fn(fn, m, nparam, param,
+function xeq_fn__str_fn(fn, M, nparam, param,
                         p, result)
 {
     if (nparam != 1)
-        error("Bad parameters in '" m "':" $0)
+        error("Bad parameters in '" M "':" $0)
     p = param[1]
-    assert_sym_valid_name(p, "@" m "@")
-    assert_sym_defined(p, "@" m "@")
+    assert_sym_valid_name(p, "@" M "@")
+    assert_sym_defined(p, "@" M "@")
     if (fn == "lc")
         result = tolower(sym_fetch(p))
     else if (fn == "len")
@@ -10691,15 +10724,15 @@ function xeq_fn__str_fn(fn, m, nparam, param,
 #       rtrim SYM: Remove trailing whitespace
 #
 #*****************************************************************************
-function xeq_fn__trim(fn, m, nparam, param,
+function xeq_fn__trim(fn, M, nparam, param,
                       p, result)
 {
     if (nparam != 1)
-        error("Bad parameters in '" m "':" $0)
+        error("Bad parameters in '" M "':" $0)
     result = ""
     p = param[1]
-    assert_sym_valid_name(p, "@" m "@")
-    assert_sym_defined(p, "@" m "@")
+    assert_sym_valid_name(p, "@" M "@")
+    assert_sym_defined(p, "@" M "@")
     result = sym_fetch(p)
     if (fn == "trim" || fn == "ltrim")
         result = ltrim(result)
@@ -10723,16 +10756,16 @@ function xeq_fn__trim(fn, m, nparam, param,
 #*****************************************************************************
 # @xbasename SYM@
 # @xdirname SYM@
-function xeq_fn__xname(fn, m, nparam, param,
+function xeq_fn__xname(fn, M, nparam, param,
                        p, cmdline, expand)
 {
     if (secure_level() >= SEC_PARANOID)
         security_violation(sprintf("@%s@: Forbidden", fn))
     if (nparam != 1)
-        error("(" fn ") Bad parameters in '" m "':" $0)
+        error("(" fn ") Bad parameters in '" M "':" $0)
     p = param[1]
-    assert_sym_valid_name(p, "@" m "@")
-    assert_sym_defined(p, "@" m "@")
+    assert_sym_valid_name(p, "@" M "@")
+    assert_sym_defined(p, "@" M "@")
     cmdline = build_prog_cmdline(fn, rm_quotes(sym_fetch(p)), MODE_IO_CAPTURE)
     cmdline | getline expand
     close(cmdline)

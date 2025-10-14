@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-10-13 23:09:12 cleyon>
+#  Time-stamp:  <2025-10-14 00:07:50 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -7330,43 +7330,44 @@ function xeq_cmd__ignore(cmd, cmdline,
 #*****************************************************************************
 # @{s,}{include,paste}  FILE
 function xeq_cmd__include(cmd, cmdline,
-                          error_text, filename, silent, file_block, rc)
+                          error_text, filename, silent, file_block, rc,
+                          me)
 {
+    me = "@" cmd
+    rc = FALSE
     dbg__print("parse", 5, sprintf("(xeq_cmd__include) cmd='%s', cmdline='%s'",
-                                 cmd, cmdline))
+                                   cmd, cmdline))
     if (cmdline == EMPTY)
-        error("Bad parameters:" $0)
+        error(me ": Bad parameters")
     # S variants mute file errors, even in strict mode
     silent = (first(cmd) == "s")
 
-    filename = search_file(cmdline)
-    if (emptyp(filename)) {
-        if (silent) return
-        error_text = "File '" cmdline "' not found:" $0
-        if (strictp("file"))
-            error(error_text)
-        else
-            warn(error_text)
-    }
-    file_block = prep_file(filename)
-    blktab[file_block, 0, "atmode"] = substr(cmd, length(cmd)-4) == "paste" \
-                                      ? MODE_AT_LITERAL : MODE_AT_PROCESS
-    # prep_file doesn't push the SRC_FILE onto the __source_stack,
-    # so we have to do that ourselves due to customization
-    dbg__print("parse", 7, sprintf("(xeq_cmd__include) Pushing file block %d (%s) onto source_stack", file_block, filename))
-    stk_push(__source_stack, file_block)
+    # error_text is set aggressively, but only is seen if rc is FALSE
+    do {
+        error_text = me ": File '" cmdline "' not found"
+        filename = search_file(cmdline)
+        if (emptyp(filename))
+            break
+        file_block = prep_file(filename)
+        blktab[file_block, 0, "atmode"] = substr(cmd, length(cmd)-4) == "paste" \
+                                          ? MODE_AT_LITERAL : MODE_AT_PROCESS
+        # prep_file doesn't push the SRC_FILE onto the __source_stack,
+        # so we have to do that ourselves due to customization
+        dbg__print("parse", 7, sprintf("(xeq_cmd__include) Pushing file block %d (%s) onto source_stack", file_block, filename))
+        stk_push(__source_stack, file_block)
 
-    dbg__print("parse", 5, "(xeq_cmd__include) CALLING parse__file()")
-    rc = parse__file()
-    dbg__print("parse", 5, "(xeq_cmd__include) RETURNED FROM parse__file()")
-    if (!rc) {
-        if (silent) return
-        error_text = "File '" filename "' does not exist:" $0
+        error_text = me ": File '" filename "' not found"
+        dbg__print("parse", 5, "(xeq_cmd__include) CALLING parse__file()")
+        rc = parse__file()
+        dbg__print("parse", 5, "(xeq_cmd__include) RETURNED FROM parse__file()")
+    } while (FALSE)
+
+    if (!rc && !silent) {
         if (strictp("file"))
             error(error_text)
-        else
-            warn(error_text)
+        warn(error_text)
     }
+    dbg__print("parse", 5, sprintf("(xeq_cmd__include) END"))
 }
 
 

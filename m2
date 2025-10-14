@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-10-12 20:54:00 cleyon>
+#  Time-stamp:  <2025-10-13 21:34:46 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -60,8 +60,8 @@ BEGIN {
 
     # Customize these paths as needed for correct operation on your
     # system.  They are assumed to be safe to run even at secure level
-    # SECURE (but not PARANOID).  If a program is not available, it is
-    # fine to remove the entry entirely.
+    # SECURE (but not PARANOID).  If a program is not available, simply
+    # remove the entry entirely.
     split("/usr/bin/basename" \
              " /bin/date"     \
          " /usr/bin/dirname"  \
@@ -2150,7 +2150,7 @@ function blk_new(block_type,
         # [0, "loop_end"]       iter
         # [0, "loop_incr"]      iter
         # [0, "loop_start"]     iter
-        # [0, "loop_type"]      *       iter | each
+        # [0, "loop_type"]      *       @for, @foreach, @sforeach
         # [0, "loop_var"]       *
         blktab[new_blknum, 0, "terminator"] = "^@next"
         # [0, "valid"]          *
@@ -2817,7 +2817,9 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
         dbg__print("parse", 5, "(parse) [" parser_label "] readline() okay; $0='" $0 "'")
 
         # Maybe short-circuit and ship line out now
-        if (curr_atmode() == MODE_AT_LITERAL || index($0, TOK_AT) == NOT_FOUND) {
+        if (curr_atmode() == MODE_AT_LITERAL ||
+            index($0, TOK_AT) == NOT_FOUND ||
+            first($0) != TOK_AT) {
             dbg__print("parse", 3, sprintf("(parse) [%s, short circuit] CALLING ship_out(OBJ_TEXT, '%s')",
                                          parser_label, $0))
             ship_out(OBJ_TEXT, $0)
@@ -3633,7 +3635,7 @@ function nam_ll_in(name, level)
 {
     if (level == EMPTY)
         panic("(nam_ll_in) LEVEL missing")
-    if (name != "__LINE__" && name != "__NLINE__")
+    if (name != "__LINE__" && name != "__NLINE__" && name != "__DBG__")
         dbg__print("sym", 5, sprintf("(nam_ll_in) Looking for '%s' at level %d", name, level))
     return (name, level) in namtab
 }
@@ -6741,7 +6743,7 @@ function parse__for(                  for_block, body_block, pstat, incr, info, 
 
     if (cmd == "@for") {
         dbg__print("for", 9, "(parse__for) Found FOR: " $0)
-        blktab[for_block, 0, "loop_type"] = "iter"
+        blktab[for_block, 0, "loop_type"] = cmd
         blktab[for_block, 0, "loop_start"] = $3 + 0
         blktab[for_block, 0, "loop_end"] = $4 + 0
         blktab[for_block, 0, "loop_incr"] = incr = NF >= 5 ? ($5 + 0) : 1
@@ -6758,7 +6760,7 @@ function parse__for(                  for_block, body_block, pstat, incr, info, 
         if (! info__get(info, "idxable"))
             error(sprintf("%s: Name '%s' has type %s, not an Array or List",
                           cmd, info__get(info, "type"), info__get(info, "name")))
-        blktab[for_block, 0, "loop_type"] = "each"
+        blktab[for_block, 0, "loop_type"] = cmd
         blktab[for_block, 0, "loop_array_name"] = $3
         blktab[for_block, 0, "array_type"] = info__get(info, "type") # (flag_1true_p(info["code"], FLAG_BLKARRAY)) ? "block" : "normal"
         blktab[for_block, 0, "level"] = level
@@ -6813,16 +6815,10 @@ function xeq__BLK_FOR(for_block,
         (blktab[for_block, 0, "valid"] != TRUE))
         panic("(xeq__BLK_FOR) Bad for_block config")
 
-    if (blktab[for_block, 0, "loop_type"] == "each")
-        if (blktab[for_block, 0, "array_type"] == TYPE_ARRAY)
-            execute__foreach_array(for_block)
-        else if (blktab[for_block, 0, "array_type"] == TYPE_LIST)
-            execute__foreach_list(for_block)
-        else
-            panic(sprintf("(xeq__BLK_FOR) Bad array_type '%s' in each loop for_block %d",
-                          blktab[for_block, 0, "array_type"], for_block))
-    else
+    if (blktab[for_block, 0, "loop_type"] == "@for" )
         execute__for(for_block)
+    else
+        execute__foreach(for_block)
 }
 
 
@@ -6875,8 +6871,21 @@ function execute__for(for_block,
 }
 
 
+function execute__foreach(for_block,
+                          arrtype)
+{
+    arrtype = blktab[for_block, 0, "array_type"]
+    if (arrtype == TYPE_ARRAY)
+        execute__foreach_array(for_block)
+    else if (arrtype == TYPE_LIST)
+        execute__foreach_list(for_block)
+    else
+        panic(sprintf("(execute__foreach) Bad array_type '%s' in each loop for_block %d",
+                      arrtype, for_block))
+}
+
 function execute__foreach_array(for_block,
-                                 loopvar, arrname, level, keys, x, k, body_block, new_level)
+                                loopvar, arrname, level, keys, x, k, body_block, new_level)
 {
     loopvar = blktab[for_block, 0, "loop_var"]
     arrname = blktab[for_block, 0, "loop_array_name"]
@@ -6916,10 +6925,9 @@ function execute__foreach_array(for_block,
     dbg__print("for", 2, "(execute__foreach_array) END")
 }
 
-
 function execute__foreach_list(for_block,
-                                   arrname, level, loopvar, start, count, done,
-                                   counter, body_block, new_level, agg_block)
+                               arrname, level, loopvar, start, count, done,
+                               counter, body_block, new_level, agg_block)
 {
     loopvar = blktab[for_block, 0, "loop_var"]
     arrname = blktab[for_block, 0, "loop_array_name"]
@@ -6962,12 +6970,18 @@ function execute__foreach_list(for_block,
 
 
 function ppf__for(for_block,
-                  buf)
+                  buf, ltype)
 {
-    if (blktab[for_block, 0, "loop_type"] == "each")
-        buf = "@foreach " blktab[for_block, 0, "loop_var"] TOK_SPACE blktab[for_block, 0, "loop_array_name"] TOK_NEWLINE
-    else
-        buf = "@for " blktab[for_block, 0, "loop_var"] TOK_SPACE blktab[for_block, 0, "loop_start"] TOK_SPACE blktab[for_block, 0, "loop_end"] TOK_SPACE blktab[for_block, 0, "loop_incr"] TOK_NEWLINE
+    ltype = blktab[for_block, 0, "loop_type"]
+    buf = ltype TOK_SPACE \
+          blktab[for_block, 0, "loop_var"] TOK_SPACE
+    if (ltype == "@for")
+        buf = buf blktab[for_block, 0, "loop_start"] TOK_SPACE \
+                  blktab[for_block, 0, "loop_end"]   TOK_SPACE \
+                  blktab[for_block, 0, "loop_incr"]
+    else                        # foreach
+        buf = buf blktab[for_block, 0, "loop_array_name"]
+    buf = buf TOK_NEWLINE
     buf = buf ppf__block(blktab[for_block, 0, "body_block"]) TOK_NEWLINE
     buf = buf "@next "  blktab[for_block, 0, "loop_var"]
     return buf
@@ -6977,12 +6991,14 @@ function ppf__for(for_block,
 function ppf__BLK_FOR(blknum)
 {
     return sprintf("  valid   : %s\n" \
+                   "  type    : %s\n"       \
                    "  loopvar : %s\n"       \
                    "  start   : %d\n"       \
                    "  end     : %d\n"       \
                    "  incr    : %d\n"       \
                    "  body    : %d",
                    ppf__bool(blktab[blknum, 0, "valid"]),
+                   blktab[blknum, 0, "loop_type"],
                    blktab[blknum, 0, "loop_var"],
                    blktab[blknum, 0, "loop_start"],
                    blktab[blknum, 0, "loop_end"],

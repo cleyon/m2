@@ -851,6 +851,9 @@ Stream 0 is interpreted as resuming printing to standard output.
 Text diverted to a negative stream is discarded.
 The current stream number is available in the system symbol
 .Va __DIVNUM__ .
+In the descriptions below, stream number N is assumed to be in the range
+1 \*(Le N \*(Le
+.Va __MAX_STREAM__ .
 .Bl -inset
 .It Em Divert :
 No error message or action if argument is not an integer.
@@ -862,34 +865,31 @@ Same as
 All subsequent output is discarded.
 .It @divert 0
 Resume normal output: all subsequent output is sent
-to standard output (aka stream # 0)
+to standard output (aka stream # 0).
 .It @divert N
-All subsequent output is sent to stream N (1 \*(Le N \*(Le
-.Va __MAX_STREAM__ )
-.It @divert N1 N2 ...
+All subsequent output is sent to stream N.
+.It @divert N1 N2...
 Error!  Multiple arguments are not allowed.
 .El
 .It Em Undivert :
 After a stream has been undiverted, it is implicitly cleared.
 .Bl -tag -width @undivert_-1____ -compact -offset indent
 .It @undivert
-Inject all diversions, in numerical order, into current stream.
+Inject all diversions, in numerical order, into the current stream.
 .It @undivert \-1
 No effect.
 .It @undivert 0
 No effect.
 .It @undivert N
-Inject only the numbered diversion into current stream.
-(1 \*(Le N \*(Le
-.Va __MAX_STREAM__ )
-.It @undivert N1 N2 ...
+Inject only stream N into the current stream.
+.It @undivert N1 N2...
 Inject all specified diversions (in argument order, not numerical
-order), if legal, into current stream.
+order), into current stream.
 .It @undivert N FILE
 As an extension to m4's undivert, m2 allows you to
 output a stream's collected text directly to a file.
 Only one stream number may be specified this way.
-This form is only available at security level zero.
+This form is only available at standard security level.
 .El
 .It Em Example :
 .br
@@ -901,6 +901,11 @@ Hello,
 \ \ \ => Hello,
 \ \ \ => world!
 .Ed
+.Pp
+The number of lines stored in a diversion is available with the function
+.Ql @divlines N@ ,
+which allows the user to alter processing depending on the availability
+of text in a stream.
 .It Em End-of-Data Processing :
 There is an implicit
 .Ql @divert 0

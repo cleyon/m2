@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-10-13 21:34:46 cleyon>
+#  Time-stamp:  <2025-10-13 23:09:12 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -874,7 +874,7 @@ function expand_braces(s,    atbr, cb, ltext, mtext, rtext)
 {
     dbg__print("braces", 3, (">> expand_braces(s='" s "'"))
 
-    while ((atbr = index(s, "@{")) > 0) {
+    while ((atbr = index(s, TOK_AT_BRACE)) > 0) {
         # There's a @{ somewhere in the string.  Find the matching
         # closing brace and expand the enclosed text.
         cb = find_closing_brace(s, atbr)
@@ -944,7 +944,7 @@ function find_closing_brace(s, start,
 
     # Check that we have at least two characters, and start points to "@{"
     slen = length(s)
-    if (slen - start + 1 < 2 || substr(s, start, 2) != "@{")
+    if (slen - start + 1 < 2 || substr(s, start, 2) != TOK_AT_BRACE)
         return ERROR
 
     # At this point, we've verified that we're looking at @{, so there
@@ -1217,7 +1217,7 @@ BEGIN {
 
 
 # This function is called automagically (it's baked into sym_ll_write())
-# every time a non-zero value is stored into __DEBUG__.
+# every time __DEBUG__ transitions from zero to a non-zero value.
 function dbg__all_lev_standard()
 {
     dbg__set_level("args",       0)
@@ -5270,6 +5270,11 @@ function execute__text(text,
         text = dosubs(text)
     }
 
+    # Currently, ship_out() is the only caller of execute_text() -- and
+    # it ensures that dstblk is == TERMINAL.  So at the moment, this
+    # check can't happen.  However, in the future some other caller may
+    # call execute_text() directly.  In this case, we may want to do
+    # this section first, *BEFORE* dosubs().
     if (stream > TERMINAL) {
         dbg__print("ship_out", 1, sprintf("(execute__text) END Appending text to stream %d", stream))
         blk_append(stream, OBJ_TEXT, text)
@@ -9294,7 +9299,7 @@ function dosubs(s,
 
     while (TRUE) {
         # Check entire string for recursive evaluation
-        if (index(r, "@{") > 0)
+        if (index(r, TOK_AT_BRACE) > 0)
             r = expand_braces(r)
 
         if ((i = index(r, TOK_AT)) == NOT_FOUND)
@@ -10811,6 +10816,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     # Tokens used in boolean expression evaluation
     TOK_AND                     = "&&"
     TOK_AT                      = "@"
+    TOK_AT_BRACE                = "@{"
     TOK_CANRUN_P                = "?R"; __predicate_token["canrun"]  = TOK_CANRUN_P
     TOK_COLON                   = ":"
     TOK_DEFINED_P               = "?D"; __predicate_token["defined"] = TOK_DEFINED_P

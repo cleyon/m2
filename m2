@@ -9370,36 +9370,48 @@ function dosubs(s,
 
 
 # macro["expansion"] = macro expansion text
-# macro["fn"] = function name, 1st param
-# macro["okay"] = TRUE/FALSE
-# macro["urtext"] = original M text
+# macro["fn"]        = function name, 1st param
+# macro["okay"]      = TRUE/FALSE
+# macro["urtext"]    = original M text
+function macro_setup(macro, urtext)
+{
+    macro["okay"] = FALSE
+    macro["urtext"] = urtext
+    macro["fn"] = macro["expansion"] = EMPTY
+}
+
+
+# In the code that follows:
+#
+# - M :: Entire text between @'s.  Example: "mid foo 3".
+# - fn :: The name of the "function" to call.  The first element
+#         of M.  Example: "mid".
+# - nparam :: Number of parameters supplied to the function.
+#     @mid@         -> nparam == 0      param[0] == mid
+#     @mid foo@     -> nparam == 1      param[1] == foo
+#     @mid foo 3@   -> nparam == 2      param[2] == 3
+#
+# A function's parameter N is available in zero-based array param[N].
+#   Consider "mid foo 3".  nparam is 2.
+#   The function name is found in param[0].
+#   The symbol (foo) is at param[1] and integer (3) is at param[2].
+#
+# After an expansion is set with macro_set_expansion(),
+#   macro["okay"] becomes True, allowing dosubs() to execute
+#       R = macro["expansion"] R
+#   which injects the expansion text just before the current value
+#   of R.  (R is local to dosubs(), not this function.)  It is what
+#   is to the right of the current position and contains as yet
+#   unexamined text that needs to be evaluated for possible macro
+#   processing.  This is the data we were going to evaluate anyway.
+#   In other words, this injects the result of "invoking" fn.
+#
+# Eventually the big while loop exits and dosubs() returns "L R".
 function macro_expand(macro,
                       i, j, l, M, nparam, p, pval, param, r, fn,
                       x, inc_dec, pre_post, subcmd, br, lfn, incr, wrkm,
                       fninfo, level)
 {
-    # In the code that follows:
-    # - M :: Entire text between @'s.  Example: "mid foo 3".
-    # - fn :: The name of the "function" to call.  The first element
-    #         of M.  Example: "mid".
-    # - nparam :: Number of parameters supplied to the function.
-    #     @mid@         -> nparam == 0      param[0] == mid
-    #     @mid foo@     -> nparam == 1      param[1] == foo
-    #     @mid foo 3@   -> nparam == 2      param[2] == 3
-    # A function's parameter N is available in variable param[N].
-    #   Consider "mid foo 3".  nparam is 2.
-    #   The function name is found in param[0].
-    #   The symbol (foo) is at param[1] and integer (3) is at param[2].
-    # Each function condition eventually executes
-    #     R = <SOMETHING> R
-    #   which injects <SOMETHING> just before the current value of
-    #   R.  (R is defined above.)  R is what is to the right of the
-    #   current position and contains as yet unexamined text that
-    #   needs to be evaluated for possible macro processing.  This
-    #   is the data we were going to evaluate anyway.  In other
-    #   words, this injects the result of "invoking" fn.
-    # Eventually this big while loop exits and we return "l r".
-
     M = macro["urtext"]
     nparam = split(M, param)
     fn = param[1]
@@ -9626,14 +9638,6 @@ function macro_expand(macro,
 
         macro_set_expansion(macro, idx__size(info__get(fninfo, "name"), level, info__get(fninfo, "code")))
     }
-}
-
-
-function macro_setup(macro, urtext)
-{
-    macro["okay"] = FALSE
-    macro["urtext"] = urtext
-    macro["fn"] = macro["expansion"] = EMPTY
 }
 
 

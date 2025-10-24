@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-10-14 02:50:10 cleyon>
+#  Time-stamp:  <2025-10-24 12:21:35 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -43,7 +43,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "5.0.0pre1"
+    M2_VERSION = "5.0.0pre2"
 
     # Specify a shell for m2 to use for running utility program.  It
     # will be used for the safe_shell() function.  Requirements:
@@ -154,13 +154,14 @@ BEGIN {
     PTYPE_WRITABLE_INTEGER = TYPE_SYMBOL FLAG_SYSTEM FLAG_WRITABLE FLAG_INTEGER
     PTYPE_WRITABLE_BOOLEAN = TYPE_SYMBOL FLAG_SYSTEM FLAG_WRITABLE FLAG_BOOLEAN
 
-    # Configure security level early
-    namtab["__SECURE__",     GLOBAL_NAMESPACE] = PTYPE_WRITABLE_INTEGER
-    symtab["__SECURE__", "", GLOBAL_NAMESPACE, "symval"] = __secure_level
-
-    # Set up debugging configuration.  Fine-grained debug levels in __DBG__[]
+    # Set up critical symbols early
     namtab["__DEBUG__",      GLOBAL_NAMESPACE] = PTYPE_WRITABLE_BOOLEAN
-    symtab["__DEBUG__", "",  GLOBAL_NAMESPACE, "symval"] = FALSE
+    namtab["__SECURE__",     GLOBAL_NAMESPACE] = PTYPE_WRITABLE_INTEGER
+    namtab["__TRACE__",      GLOBAL_NAMESPACE] = PTYPE_WRITABLE_BOOLEAN
+    #
+    symtab["__DEBUG__",  "", GLOBAL_NAMESPACE, "symval"] = FALSE
+    symtab["__SECURE__", "", GLOBAL_NAMESPACE, "symval"] = __secure_level
+    symtab["__TRACE__",  "", GLOBAL_NAMESPACE, "symval"] = FALSE
 }
 
 
@@ -502,6 +503,40 @@ function floatp(pat)
 function with_trailing_slash(s)
 {
     return s ((last(s) != "/") ? "/" : EMPTY)
+}
+
+
+function split_subsep(s, item_arr,
+                      nitem, i, retval)
+{
+    while (length(s) > 0) {
+        nitem++
+        if ((i = index(s, SUBSEP)) > 0) {
+            item_arr[nitem] = substr(s, 1, i-1)
+            s = substr(s, i+1)
+        } else {
+            item_arr[nitem] = s
+            break
+        }
+    }
+    return nitem
+}
+
+
+function ppf__sepstr(s,
+                     i, retval)
+{
+    while (length(s) > 0) {
+        if ((i = index(s, SUBSEP)) > 0) {
+            retval = retval "ELEM: " substr(s, 1, i-1) TOK_NEWLINE
+            retval = retval "SUBSEP" TOK_NEWLINE
+            s = substr(s, i+1)
+        } else {
+            retval = retval "REST: " s TOK_NEWLINE
+            break
+        }
+    }
+    return chop(retval)
 }
 
 
@@ -880,7 +915,7 @@ function expand_braces(s,
     while ((atbr = index(s, TOK_AT_BRACE)) > 0) {
         # There's a @{ somewhere in the string.  Find the matching
         # closing brace and expand the enclosed text.
-        cb = find_closing_brace(s, atbr)
+        cb = find_closing_brace(s, atbr, TOK_AT_BRACE)
         if (cb <= 0)
             error("Bad @{...} expansion:" s)
         dbg__print("braces", 5, ("   expand_braces: in loop, atbr=" atbr ", cb=" cb))
@@ -890,7 +925,7 @@ function expand_braces(s,
         #                        ^---cb
         ltext = substr(s, 1,      atbr-1)
         mtext = substr(s, atbr+2, cb-atbr-2)
-                gsub(/\\}/, "}", mtext)
+                gsub(/\\}/, "}", mtext) # Fix quoted brace
         rtext = substr(s, cb+1)
         if (dbg__sys_level_p("braces", 7)) {
             print_debugfile("   expand_braces: ltext='" ltext "'")
@@ -929,6 +964,8 @@ function expand_braces(s,
 #     s         String to examine.
 #     start     The position in s, not necessarily 1, of the "@{"
 #               for which we need to find the closing brace.
+#     tok_opt   (optional) Start string.  Check that we are initially
+#               looking at this.  Usual values: TOK_LBRACE, TOK_AT_BRACE
 #
 # LOCAL VARIABLES
 #     offset    Current offset, counting characters from start in s.
@@ -947,21 +984,23 @@ function expand_braces(s,
 #     start+offset > length(s)), return EOF as a "failure code".  If the
 #     initial conditions are bad, return ERROR.
 #
-function find_closing_brace(s, start,
-                            offset, c, nc, cb, slen)
+function find_closing_brace(s, start, tok_opt,
+                            offset, c, nc, cb, slen, toklen)
 {
     dbg__print("braces", 3, (">> find_closing_brace(s='" s "', start=" start))
 
-    # Check that we have at least two characters, and start points to "@{"
+    # Check that s[start] points to the optional starting token and that
+    # the size is large enough to hold it.
     slen = length(s)
-    if (slen - start + 1 < 2 || substr(s, start, 2) != TOK_AT_BRACE)
+    toklen = length(tok_opt)
+    if (toklen > 0 && (slen - start + 1 < toklen || substr(s, start, toklen) != tok_opt))
         return ERROR
 
-    # At this point, we've verified that we're looking at @{, so there
-    # are at least two characters in the string.  Let's move along...
-    # Look at the character (c) immediately following "@{", and also the
+    # At this point, we've verified that we're looking at the starting token,
+    # so there are at least toklen characters in the string.  Moving along...
+    # Look at the character (c) immediately following token, and also the
     # next character (nc) after that.  One or both might be empty string.
-    offset = 2
+    offset = toklen
     c  = substr(s, start+offset,   1)
     nc = substr(s, start+offset+1, 1)
 
@@ -975,11 +1014,12 @@ function find_closing_brace(s, start,
         } else if (c == "\\" && nc == TOK_RBRACE) {
             # "\}" in expansion text will result in a single close brace
             # without ending the expansion text parser.  Skip over }
-            # and do not return yet.  "\}" is fixed in expand_braces().
+            # and do not return yet.  "\}" is fixed in calling routine.
             offset++; nc = substr(s, start+offset+1, 1)
-        } else if (c == TOK_AT && nc == TOK_LBRACE) {
-            # "@{" in expansion text will invoke a recursive scan.
-            cb = find_closing_brace(s, start+offset)
+        } else if (tok_opt == TOK_AT_BRACE && c == TOK_AT && nc == TOK_LBRACE) {
+            # If the start token was "@{", then @{ in expansion text
+            # will invoke a recursive scan.
+            cb = find_closing_brace(s, start+offset, TOK_AT_BRACE)
             if (cb <= 0)
                 return cb       # propagate failure/error
 
@@ -989,8 +1029,19 @@ function find_closing_brace(s, start,
             # from that closing brace back to "start".
             offset = cb - start
             nc = substr(s, start+offset+1, 1)
-            dbg__print("braces", 5, ("   find_closing_brace: (recursive) cb=" cb \
-                                    ".  Now, offset=" offset ", nc=" nc))
+            dbg__print("braces", 5, ("   find_closing_brace: (recursive '@{') cb=" cb \
+                                     ".  Now, offset=" offset ", nc=" nc))
+        } else if (c == TOK_LBRACE) {
+            # In the general case, encountering an additional "{" means
+            # we have to scan for *its* closing brace before we can
+            # resume searching for the *current* closing brace.
+            cb = find_closing_brace(s, start+offset, TOK_LBRACE)
+            if (cb <= 0)
+                return cb       # propagate failure/error
+            offset = cb - start
+            nc = substr(s, start+offset+1, 1)
+            dbg__print("braces", 5, ("   find_closing_brace: (recursive '{') cb=" cb \
+                                     ".  Now, offset=" offset ", nc=" nc))
         }
 
         # Advance to next character
@@ -1397,8 +1448,10 @@ function tracingp(sym,
 
     if (nam__scan(sym, info) == ERROR)
         error("(tracingp) Scan error, '" sym "'")
-    if (nam__lookup(info) == NAME_NOT_FOUND)
-        error("(tracingp) nam__lookup(info) failed")
+    if (nam__lookup(info) == NAME_NOT_FOUND) {
+        dbg__print("trace", 7, sprintf("(tracingp) nam__lookup() failed: " sym))
+        return FALSE
+    }
     return info__get(info, "tracing")
 }
 
@@ -1417,25 +1470,25 @@ function trace_prefix(    prefix,
 
 
 function trace(event, sym, message,
-               trace_mode, prefix)
+               trace_mode)
 {
-    if (sym_ll_read("__TRACE__", "", GLOBAL_NAMESPACE) == FALSE)
+    if (index(TRACE_VALID_EVENTS, event) == NOT_FOUND)
+        panic("(trace) Unrecognized trace event '" event "'")
+    if (double_underscores_p(sym) ||
+        sym_ll_read("__TRACE__", "", GLOBAL_NAMESPACE) == FALSE)
         return
+
     trace_mode = sym_ll_read("__TRACEMODE__", "", GLOBAL_NAMESPACE)
-    if (event == TRACE_COMMAND) {
-        if ( flag_1true_p(trace_mode, TRACE_ALL) ||
-            (flag_1true_p(trace_mode, TRACE_COMMAND) && tracingp(sym)))
-            print_debugfile(trace_prefix() " " message)
-    } else if (event == TRACE_EXPANSION) {
-        if ( flag_1true_p(trace_mode, TRACE_ALL) ||
-            (flag_1true_p(trace_mode, TRACE_EXPANSION) && tracingp(sym)))
-            print_debugfile(trace_prefix() " " message)
-    } else if (event == TRACE_INPUT_FILE_CHG ||
-               event == TRACE_PATH_SEARCH) {
-        if (flag_1true_p(trace_mode, event))
-            print_debugfile(trace_prefix() " " message)
-    } else
-        panic("(trace) Unrecognized trace event " event)
+    if (((event == TRACE_COMMAND) &&
+         (flag_1true_p(trace_mode, TRACE_ALL) || (flag_1true_p(trace_mode, TRACE_COMMAND) && tracingp(sym)))) ||
+        ((event == TRACE_EXPANSION) &&
+         (flag_1true_p(trace_mode, TRACE_ALL) || (flag_1true_p(trace_mode, TRACE_EXPANSION) && tracingp(sym)))) ||
+        ((event == TRACE_SYMBOL_READ_WRITE) &&
+         (flag_1true_p(trace_mode, TRACE_ALL) || (flag_1true_p(trace_mode, TRACE_SYMBOL_READ_WRITE) && tracingp(sym)))) ||
+        ((event == TRACE_INPUT_FILE_CHG || event == TRACE_PATH_SEARCH) &&
+         (flag_1true_p(trace_mode, event))))
+
+        print_debugfile(trace_prefix() " " message)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -2432,11 +2485,11 @@ function ppf__agg(agg_block,
 
         if (slot_type == OBJ_BLKNUM)
             buf = buf ppf__block(value) TOK_NEWLINE
-        else if (slot_type == OBJ_CMD  ||
-                 slot_type == OBJ_TEXT ||
-                 slot_type == OBJ_USER) {
+        else if (slot_type == OBJ_USER)
+            buf = buf ppf__user_call(value) TOK_NEWLINE
+        else if (slot_type == OBJ_CMD || slot_type == OBJ_TEXT)
             buf = buf value TOK_NEWLINE
-        } else
+        else
             panic(sprintf("(ppf__agg) Bad slot type %s", slot_type))
     }
 
@@ -2502,6 +2555,24 @@ function cmd_definition_ppf(name,
 }
 
 
+# s is the encoded version of the invocation:
+#       <name> SUBSEP <args> [ SUBSEP <arg-N> ... ]
+function ppf__user_call(s,
+                        nitem, citem, arg, retval)
+{
+    # print_stderr(ppf__sepstr(s))
+    nitem = split_subsep(s, citem)
+    if (nitem < 2 || nitem != 2+citem[2])
+        panic(sprintf("(execute__user) split_subsep() returned strange value: %d\n>>%s<<",
+                      nitem, ppf__sepstr(s)))
+
+    retval = TOK_AT citem[1]
+    for (arg = 3; arg <= nitem; arg++)
+        retval = retval TOK_LBRACE citem[arg] TOK_RBRACE
+    return retval
+}
+
+
 function ppf__user(user_block,
                    name, params, i)
 {
@@ -2559,7 +2630,7 @@ function execute__command(name, cmdline,
         return
     }
 
-    trace(TRACE_COMMAND, name, sprintf("@%s %s", name, cmdline))
+    trace(TRACE_COMMAND, name, sprintf("[Execute] @%s %s", name, cmdline))
     old_level = __namespace
 
     # DISPATCH
@@ -2781,7 +2852,7 @@ function parse__file(    filename, file_block1, file_block2, pstat, d)
 # PARSE
 function parse(    code, terminator, rstat, name, retval, new_block, fc,
                    info, level, parser, parser_type, parser_label, i, scnt, found,
-                   new_cmd_name, clevel, cmdline, src_block, l2, _)
+                   new_cmd_name, clevel, call_details, src_block, l2, _)
 {
     dbg__print("parse", 3, "(parse) START dstblk=" curr_dstblk() ", mode=" ppf__mode(curr_atmode()))
 
@@ -2952,6 +3023,10 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
                             # only being declared, not defined, and it's
                             # not ready to run yet.  (That next bit
                             # happens in xeq__BLK_USER.)
+                            #
+                            # XXX There should be a gate here.  It should not
+                            # be possible to shadow an existing name, unless
+                            # you are re-defining a command.
                             if (! nam_ll_in(name, __namespace)) {
                                 new_cmd_name = blktab[new_block, 0, "name"]
                                 dbg__print("parse", 3, sprintf("(parse) [" parser_label "] Declaring new user command '%s' at level %d",
@@ -3095,9 +3170,9 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
                     # *not* NAME_NOT_FOUND, something *was* found at "level".  See
                     # if it's a user command and ship it out if so.
                     if (flag_1true_p((code = nam_ll_read(name, level)), TYPE_USER)) {
-                        cmdline = scan__usercmd_call()
-                        dbg__print("parse", 3, sprintf("(parse) [%s] CALLING ship_out(OBJ_USER, '%s')", parser_label, cmdline))
-                        ship_out(OBJ_USER, cmdline)
+                        call_details = scan__usercmd_call()
+                        dbg__print("parse", 3, sprintf("(parse) [%s] CALLING ship_out(OBJ_USER, '%s')", parser_label, call_details))
+                        ship_out(OBJ_USER, call_details)
                         dbg__print("parse", 3, "(parse) [" parser_label "] RETURNED FROM ship_out()")
                         continue
                     }
@@ -3122,73 +3197,74 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
 #       @mycmd{Title}{A very very very
 #       very long title}
 # Call readline() repeatedly until braces are closed properly.
-# This function returns its command line, possibly appended to by readline().
+#
+# More details on why it is possible to call readline() and and not call
+# it from dosubs().  This is because the only caller of
+# scan__usercmd_call is parse() -- specifically, in parse's main loop
+# where it is also executing readline().  An extra readline here in an
+# auxiliary function to help finish a command doesn't hurt things.
+#
+# dosubs() *cannot* call readline() [to assist in scanning multi-line
+# @ifelse@, perhaps] because readline's may be long over.  dosubs() is
+# often called on a static string, for example.
+#
+# This function returns an encoded version of the user command call.
+#     <name> SUBSEP <narg> [ SUBSEP <argN> ... ]
+# When the call details are eventually decoded in execute__user(), the
+# OBJ_USER value is passed to split_subsep() to access individual items.
 function scan__usercmd_call(    s, name, obj, i, oldi, c, nc, narg, nlbr,
-                                  readstat)
+                                readstat, arg, inarg, thisi, retval, j,
+                                brpos, cb)
 {
     s = $0
     narg = 0
     dbg__print("parse", 5, "(scan__usercmd_call) s='" s "'")
-
-    i = 1
-    c = substr(s, i, 1)
-    if (c != TOK_AT)
+    if (emptyp(s))
+        panic("(scan__usercmd_call) s cannot be empty!")
+    if (first(s) != TOK_AT)
         error(sprintf("(scan__usercmd_call) Doesn't start with @: s='%s'", s))
-
-    # Read cmd name
-    c = substr(s, (oldi = ++i), 1)
-    while (c != "" && c != TOK_LBRACE) {
-        dbg__print("parse", 7, sprintf("(scan__usercmd_call) SCAN FWD: i=%d, c='%s', nam='%s'",
-                             i, c, substr(s, 2, i-2)))
-        c = substr(s, ++i, 1)
-    }
-    name = substr(s, oldi, i-oldi)
-    dbg__print("parse", 3, sprintf("(scan__usercmd_call) OUT: name='%s'", name))
-
-    if (c != TOK_LBRACE) {
-        # It's just @Foo, no braces, no scanning needed
-        dbg__print("parse", 2, sprintf("(scan__usercmd_call) END 1: narg=%d, name='%s', s='%s'", narg, name, s))
-        return s
+    if ((brpos = index(s, TOK_LBRACE)) == NOT_FOUND) {
+        name = substr(s, 2)
+        dbg__print("parse", 3, sprintf("(scan__usercmd_call) OUT: name='%s'", name))
+        return name SUBSEP narg
     }
 
-    # It *IS* a brace, so set things up that way
-    narg = nlbr = 1
-    oldi = ++i
-    c = substr(s, i, 1)
-    while (nlbr >= 0) {
-        dbg__print("parse", 7, sprintf("(scan__usercmd_call) BRACE LOOP TOP, i=%d, c='%s', nlbr now=%d", i, c, nlbr))
-        if (i > 255)
-            error(sprintf("(scan__usercmd_call) ERROR, i too big: i=%d, c='%s'", i, c))
-        else if (c == "") {
-            if (nlbr == 0) {
-                dbg__print("parse", 2, sprintf("(scan__usercmd_call) END 2 (eos, {} bal): narg=%d, s='%s'", narg, s))
-                return s
-            }
-            # We ran out of characters looking for a }
-            # Try reading some more lines to fill our need
+    # Read cmd name between @ and {
+    name = substr(s, 2, brpos - 2)
+    dbg__print("parse", 3, sprintf("(scan__usercmd_call) name='%s'", name))
+
+    # Remove everything that came before.  We are now left with (hopefully)
+    # a series of brace-enclosed arguments.
+    s = substr(s, brpos)        # s == "{..."
+    while (substr(s, 1, 1) == TOK_LBRACE) {
+        cb = find_closing_brace(s, 1, TOK_LBRACE)
+        if (cb == ERROR)
+            error("(scan__usercmd_call) Could not find closing brace: " s)
+        else if (cb == EOF) {
+            # We ran out of characters looking for a "}".
+            # Try reading some more lines to fill our need.
             readstat = readline()
             if (readstat <= 0)
-                error(sprintf("(scan__usercmd_call) ERROR, missing '}': i=%d, c='%s'", i, c))
+                error(sprintf("(scan__usercmd_call) ERROR, missing '}'"))
             dbg__print("parse", 9, "just read = >" $0 "<")
             s = s TOK_NEWLINE $0
-            c = substr(s, i, 1)
-            dbg__print("parse", 7, sprintf("(scan__usercmd_call) After readline, i=%d, c='%s', nlbr now=%d, s='%s'", i, c, nlbr, s))
+            dbg__print("parse", 7, sprintf("(scan__usercmd_call) After readline, s='%s'", s))
             continue
-        } else if (c == TOK_LBRACE) {
-            nlbr++
-            narg++
-            dbg__print("parse", 5, sprintf("(scan__usercmd_call) Found '{': i=%d, c='%s', nlbr now=%d", i, c, nlbr))
-            oldi = i+1
-        } else if (c == TOK_RBRACE) {
-            nlbr--
-            dbg__print("parse", 5, sprintf("(scan__usercmd_call) found '}': i=%d, c='%s', nlbr now=%d", i, c, nlbr))
-            dbg__print("parse", 3, sprintf("(scan__usercmd_call) Arg[%d]='%s'", narg, substr(s, oldi, i-oldi)))
+        } else {
+            # Found a }
+            dbg__print("parse", 5, ("   (scan__usercmd_call) in loop, cb=" cb))
+            inarg = substr(s, 2, cb - 2)
+            gsub(/\\}/, "}", inarg) # Fix quoted brace
+            arg[++narg] = inarg
+            s = substr(s, cb + 1)
         }
-        # else normal character
-        c = substr(s, ++i, 1)
     }
+
     dbg__print("parse", 2, sprintf("(scan__usercmd_call) END 3: narg=%d, s='%s'", narg, s))
-    return s
+    retval = name SUBSEP narg SUBSEP
+    for (j = 1; j <= narg; j++)
+        retval = retval arg[j] SUBSEP
+    return chop(retval)
 }
 
 
@@ -3462,7 +3538,7 @@ function nam__scan(text, info,
             print_debugfile(i " = '" part[i] "'")
     }
     if (count < 1 || count > 3) # assert count in [1,2,3]
-        panic("(nam__scan) split() returned strange value " count)
+        panic("(nam__scan) split() returned strange value: " count)
     if (count == 3 && !emptyp(part[3]))
         panic("(nam__scan) split() part[3] should be empty")
     if (count >= 2) {
@@ -3581,6 +3657,8 @@ function nam_purge(level,
         split(k, x, SUBSEP)
         dbg__print("nam", 3, sprintf("(nam_purge) Delete namtab['%s', %d]",
                                      x[1], x[2]))
+        trace(TRACE_SYMBOL_READ_WRITE, x[1],
+              sprintf("[Name Delete] \"%s\" (lev:%d)", x[1], x[2]))
         delete namtab[x[1], x[2]]
     }
     dbg__print("nam", 7, "(nam_purge) END")
@@ -3661,6 +3739,10 @@ function nam_ll_write(name, level, code,
     if (sym_ll_in("__DBG__", "nam", GLOBAL_NAMESPACE) &&
         sym_ll_read("__DBG__", "nam", GLOBAL_NAMESPACE) >= 5)
         print_debugfile(sprintf("(nam_ll_write) namtab[\"%s\", %d] = %s", name, level, code))
+
+    trace(TRACE_SYMBOL_READ_WRITE, name,
+          sprintf("[Name Write] \"%s\" (lev:%d) := Code '%s'",
+                  name, level, code))
     return namtab[name, level] = code
 }
 
@@ -3866,11 +3948,11 @@ function stk_push(stack, new_elem,
 {
     if (stack["name"] == "source_stack")
         trace(TRACE_INPUT_FILE_CHG, EMPTY,
-              sprintf("Input file now '%s'", blktab[new_elem, 0, "filename"]))
+              sprintf("[File] Input file now '%s'", blktab[new_elem, 0, "filename"]))
     if (dbg__sys_level_p("stk", 5)) {
         siz = stack[0]
-        print_debugfile(sprintf("(stk_push) %s -> %s[%d]",
-                                 new_elem, stack["name"], siz+1))
+        print_debugfile(sprintf("(stk_push) %s[%d] := %s",
+                                stack["name"], siz+1, new_elem))
     }
     return stack[++stack[0]] = new_elem
 }
@@ -3900,7 +3982,7 @@ function stk_pop(stack,
     if (!stk_empty_p(stack) && stack["name"] == "source_stack") {
         new_top = stack[stack[0]]
         trace(TRACE_INPUT_FILE_CHG, EMPTY,
-              sprintf("Input file now '%s'", blktab[new_top, 0, "filename"]))
+              sprintf("[File] Input file now '%s'", blktab[new_top, 0, "filename"]))
     }
     if (dbg__sys_level_p("stk", 5)) {
         print_debugfile(sprintf("(stk_pop) %s[%d] -> %s",
@@ -4175,6 +4257,8 @@ function sym_destroy(name, key, level)
     # if !A & !B        (normal symbol) delete symtab[name, "", level, "symval"];
     #                                   delete namtab[name]
     delete namtab[name, level]
+    trace(TRACE_SYMBOL_READ_WRITE, name,
+          sprintf("[Name Delete] \"%s\" (lev:%d)", name, level))
     delete symtab[name, key, level, "agg_block"]
     delete symtab[name, key, level, "deferred_arg"]
     delete symtab[name, key, level, "deferred_prog"]
@@ -4393,43 +4477,16 @@ function syminfo_defined_p(info,
 # and overriding level to zero if appropriate.  This code does
 # not make any assumptions about name/levels.
 function sym_info_defined_lev_p(info, level,
-                                 name, key, code,
-                                 x, k, thought_so)
+                                name, key)
 {
     name = info["name"]
     key  = info["key"]
-    # code = info["code"]
     dbg__print("sym", 5, sprintf("(sym_info_defined_lev_p) sym='%s' START", name))
 
-
-    if (emptyp(key)) {
-        if ((name, "", 0+level, "symval") in symtab) {
-            dbg__print("sym", 5, sprintf("(sym_info_defined_lev_p) END [\"%s\",\"%s\",%d,\"symval\"] Found in symtab => TRUE", name, key, level))
-            return TRUE
-        }
-        dbg__print("sym", 5, sprintf("(sym_info_defined_lev_p) END [\"%s\",\"%s\",%d,\"symval\"] Not found => FALSE", name, key, level))
-        return FALSE
+    if ((name, key, 0+level, "symval") in symtab) {
+        dbg__print("sym", 5, sprintf("(sym_info_defined_lev_p) END [\"%s\",\"%s\",%d,\"symval\"] Found in symtab => TRUE", name, key, level))
+        return TRUE
     } else {
-        # Non-empty key means we have to sequential search through table
-        # Eh, why is that?
-        if ((name, key, 0+level, "symval") in symtab)
-            thought_so = TRUE
-
-        for (k in symtab) {
-            split(k, x, SUBSEP)
-            if (x[1]   != name  ||
-                x[2]   != key   ||
-                x[3]+0 != level ||
-                x[4]   != "symval")
-                continue
-            # Everything matches
-            if (! thought_so)
-                warn("(sym_info_defined_lev_p) I didn't think you'd find a match")
-            dbg__print("sym", 5, sprintf("(sym_info_defined_lev_p) END [\"%s\",\"%s\",%d,\"symval\"] Found in symtab => TRUE", name, key, level))
-            return TRUE
-        }
-        if (thought_so)
-            warn("sym_info_defined_lev_p) But...  I thought you'd find a match")
         dbg__print("sym", 5, sprintf("(sym_info_defined_lev_p) END [\"%s\",\"%s\",%d,\"symval\"] Not found => FALSE", name, key, level))
         return FALSE
     }
@@ -4633,12 +4690,29 @@ function syminfo_store(info, new_val,
 }
 
 
-function sym_ll_read(name, key, level)
+function sym_ll_read(name, key, level,
+                     retval)
 {
     if (level == EMPTY) level = GLOBAL_NAMESPACE
     # if key == EMPTY that's probaby just fine.
     # if name == EMPTY that's probably NOT fine.
-    return symtab[name, key, level, "symval"] # returns value
+    if (name == EMPTY)
+        panic("(sym_ll_read) Name cannot be empty!")
+    if (double_underscores_p(name))
+        return symtab[name, key, level, "symval"]
+
+    if (! sym_ll_in(name, key, level))
+        panic(sprintf("(sym_ll_read) symtab['%s','%s',%d,'symval'] does not exist",
+                      name, key, level))
+    retval = symtab[name, key, level, "symval"]
+
+    #print_stderr("ll_read: name='" name "'")
+    if (! double_underscores_p(name))
+        trace(TRACE_SYMBOL_READ_WRITE, name,
+              sprintf("[Symbol Read] %s (lev:%d) == '%s'",
+                      sprintf("\"%s%s\"", name, (key ? "[" key "]" : "")),
+                      level, retval))
+    return retval
 }
 
 
@@ -4679,6 +4753,10 @@ function sym_ll_write(name, key, level, val)
         CONVFMT = val
     }
 
+    trace(TRACE_SYMBOL_READ_WRITE, name,
+          sprintf("[Symbol Write] %s (lev:%d) := Val '%s'",
+                  sprintf("\"%s%s\"", name, !emptyp(key) ? "[" key "]" : ""),
+                  level, val))
     return symtab[name, key, level, "symval"] = val
 }
 
@@ -4736,7 +4814,7 @@ function lis__ll_incr(lis, idx, level, incr,
 
 function sym_fetch(sym,
                    nparts, info, name, key, icode, level, val, good,
-                   agg_block, count)
+                   agg_block, count, i)
 {
     dbg__print("sym", 5, sprintf("(sym_fetch) START; sym='%s'", sym))
 
@@ -4830,7 +4908,8 @@ function sym_fetch(sym,
     } else {
         # It's a normal symbol
         if (! sym_ll_in(name, key, level))
-            error("(sym_fetch) Not in symtab: NAME='" name "', KEY='" key "'")
+            error(sprintf("(sym_fetch) Not in symtab: name='%s', key='%s', level=%d",
+                          name, key, level))
         val = sym_ll_read(name, key, level)
     }
 
@@ -7397,7 +7476,7 @@ function search_file(f,
         p = with_trailing_slash(paths[i]) f
         if (path_exists_p(p)) {
             trace(TRACE_PATH_SEARCH, EMPTY,
-                  sprintf("Path search for '%s' found '%s'", f, p))
+                  sprintf("[Path Search] '%s' found '%s'", f, p))
             return p
         }
     }
@@ -7915,18 +7994,24 @@ function xeq__BLK_USER(newcmd_block,
 }
 
 
-function execute__user(name, cmdline,
+function execute__user(user_invocation,
                        level, info, code,
-                       old_level,
-                       user_block,
+                       old_level, user_block,
+                       nitem, citem, name,
                        args, arg, narg, argval)
 {
-    dbg__print("xeq", 3, sprintf("(execute__user) START name='%s', cmdline='%s'",
-                                name, cmdline))
+    dbg__print("xeq", 3, sprintf("(execute__user) START"))
     if (__xeq_ctl != XEQ_NORMAL) {
         dbg__print("xeq", 3, "(execute__user) NOP due to __xeq_ctl=" __xeq_ctl)
         return
     }
+
+    # print_stderr(ppf__sepstr(user_invocation))
+    nitem = split_subsep(user_invocation, citem)
+    if (nitem < 2 || nitem != 2+citem[2])
+        panic(sprintf("(execute__user) split_subsep() returned strange value: %d\n>>%s<<",
+                      nitem, ppf__sepstr(user_invocation)))
+    name = citem[1]
 
     # See if it's a user command
     if (nam__scan(name, info) == ERROR)
@@ -7940,19 +8025,8 @@ function execute__user(name, cmdline,
     dbg__print_block("xeq", 7, user_block, "(execute__user) user_block")
     dbg__print_block("xeq", 7, blktab[user_block, 0, "body_block"], "(execute__user) body_block")
 
-    # Check for cmd arguments
-    narg = 0
-    while (match(cmdline, "{[^}]*}")) {
-        arg = ++narg
-        argval = substr(cmdline, RSTART+1, RLENGTH-2)
-        dbg__print("parse", 5, sprintf("(execute__user) [@%s] Scan args[%d] = '%s'",
-                                       name, arg, argval))
-        args[arg] = argval
-        cmdline = substr(cmdline, 1, RSTART-1) substr(cmdline, RSTART+RLENGTH)
-    }
-
     old_level = __namespace
-    execute__user_body(user_block, args)
+    execute__user_body(user_block, citem)
     if (__namespace != old_level)
         panic(sprintf("(execute__user) [@%s] user_block=%d: Namespace level mismatch; old_level=%d, __namespace=%d",
                       name, user_block, old_level, __namespace))
@@ -7960,7 +8034,7 @@ function execute__user(name, cmdline,
 
 
 function execute__user_body(user_block, args,
-                       block_type, new_level, i, p, body_block)
+                            block_type, new_level, i, p, body_block)
 {
     block_type = blk_type(user_block)
     dbg__print("cmd", 3, sprintf("(execute__user_body) START dstblk=%d, user_block=%d, type=%s",
@@ -7969,18 +8043,27 @@ function execute__user_body(user_block, args,
     if ((block_type != BLK_USER) ||
         (blktab[user_block, 0, "valid"] != TRUE))
         panic("(execute__user_body) Bad user_block config")
-
-    # Always raise namespace level, even if nparam == 0
-    # because user-mode might run @local
-    new_level = raise_namespace()
     body_block = blktab[user_block, 0, "body_block"]
     dbg__print_block("cmd", 7, body_block, "(execute__user_body) body_block")
+
+    # Always raise namespace level (even if nparam == 0) because
+    # user code might run @local.
+    new_level = raise_namespace()
+
+    # Evaluate arguments before any parameter instantiations.  It is
+    # critical to do this first (and not all together in a loop as
+    # before), because invoking nam_ll_write() before sym_ll_write()
+    # will LOSE if a parameter has the same name as a global variable
+    # due to namtab[] mismatch.
+    for (i = 1; i <= blktab[user_block, 0, "nparam"]; i++)
+        # +2 to skip past first two entries (cmdname, nargs)
+        args[i + 2] = dosubs(args[i + 2])
 
     # Instantiate parameters
     for (i = 1; i <= blktab[user_block, 0, "nparam"]; i++) {
         p = blktab[user_block, i, "param_name"]
         nam_ll_write(p, new_level, TYPE_SYMBOL)
-        sym_ll_write(p, "", new_level, args[i])
+        sym_ll_write(p, "", new_level, args[i + 2])
         dbg__print("cmd", 6, sprintf("(execute__user_body) Setting param %s to '%s'", p, args[i]))
     }
 
@@ -8460,7 +8543,7 @@ function xeq_cmd__tracemode(cmd, cmdline,
     }
 
     letters = $1
-    if (letters !~ /^[-+aeiflmptTV][-+aeiflmptTV]*$/)
+    if (letters !~ /^[-+aeiflmpstTV][-+aeiflmpstTV]*$/)
         error("@tracemode: Bad parameters")
 
     add_rem = TRUE              # add_rem == TRUE  -> Adding flags
@@ -8924,20 +9007,14 @@ function ship_out(obj_type, obj,
                                          name))
 
     } else if (obj_type == OBJ_TEXT) {
-        dbg__print("ship_out", 5, sprintf("(ship_out) CALLING execute__text()"))
+        dbg__print("ship_out", 5, sprintf("(ship_out) CALLING execute__text(obj)"))
         execute__text(obj)
-        dbg__print("ship_out", 5, sprintf("(ship_out) RETURNED FROM execute__text()"))
+        dbg__print("ship_out", 5, sprintf("(ship_out) RETURNED FROM execute__text(obj)"))
 
     } else if (obj_type == OBJ_USER) {
-        name = extract_cmd_name(obj)
-        #sub(/^[ \t]*[^ \t]+[ \t]*/, "", obj)   # OBJ_CMD does this but not here, ???
-        dbg__print("ship_out", 7, "(ship_out) [OBJ_USER] Calling dosubs('" obj "')")
-        obj = dosubs(obj)
-        dbg__print("ship_out", 3, sprintf("(ship_out) CALLING execute__user('%s', '%s')",
-                                         name, obj))
-        execute__user(name, obj)
-        dbg__print("ship_out", 3, sprintf("(ship_out) RETURNED FROM execute__user('%s', ...)",
-                                         name))
+        dbg__print("ship_out", 3, sprintf("(ship_out) CALLING execute__user(obj)"))
+        execute__user(obj)
+        dbg__print("ship_out", 3, sprintf("(ship_out) RETURNED FROM execute__user(obj)"))
 
     } else
         panic("(ship_out) Unrecognized obj_type '" obj_type "'")
@@ -9296,13 +9373,15 @@ function _c3_advance(    tmp)
 #                       R = "@" R
 #               return L R
 #
+#       Note use of macro_*() functions, described below.
+#
 #*****************************************************************************
 function dosubs(s,
                 expand, i, j, L, M, nparam, p, pval, param, R, fn,
                 x, inc_dec, pre_post, subcmd, br, lfn, incr, wrkm,
                 fninfo, level, macro)
 {
-    trace(TRACE_COMMAND, "dosubs", sprintf("dosubs('%s')", s))
+    trace(TRACE_COMMAND, "dosubs", sprintf("[Execute] dosubs('%s')", s))
     dbg__print("dosubs", 5, sprintf("(dosubs) START s='%s'", s))
     inc_dec = pre_post = 0      # track ++ or -- on sequences
     macro["okay"] = FALSE       # Make sure Awk knows macro is an array
@@ -9349,7 +9428,7 @@ function dosubs(s,
             # Kluge for @srem ...@ to remove preceding whitespace
             if (macro["fn"] == "srem")
                 sub(/[ \t]+$/, "", L)
-            trace(TRACE_EXPANSION, macro["fn"], sprintf("@%s@ => '%s'",
+            trace(TRACE_EXPANSION, macro["fn"], sprintf("[Expand] @%s@ => '%s'",
                                                         macro["urtext"], macro["expansion"]))
             R = macro["expansion"] R
         } else {
@@ -9373,6 +9452,12 @@ function dosubs(s,
 # macro["fn"]        = function name, 1st param
 # macro["okay"]      = TRUE/FALSE
 # macro["urtext"]    = original M text
+#
+# macro_expand() does the real work of transforming specific macro-invoking
+# text from its original call to its expanded form.  It expects its argument
+# to be something it can work on.  In contrast, dosubs() is much more
+# laissez-faire -- it is given some text to scan, from somewhere, but if
+# the @ signs don't quite work out, no worries.
 function macro_setup(macro, urtext)
 {
     macro["okay"] = FALSE
@@ -9638,6 +9723,17 @@ function macro_expand(macro,
 
         macro_set_expansion(macro, idx__size(info__get(fninfo, "name"), level, info__get(fninfo, "code")))
     }
+}
+
+
+# Use this macro[] array to control macro expansion results due to the
+# need to track two return values: whether the expansion went "okay" and
+# what the "expansion" text actually is.
+function macro_setup(macro, urtext)
+{
+    macro["okay"] = FALSE
+    macro["urtext"] = urtext
+    macro["fn"] = macro["expansion"] = EMPTY
 }
 
 
@@ -10878,16 +10974,21 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     TRACE_SHOW_LINE_NUM         = "l" # show line number
     TRACE_COMMAND               = "m" # trace when a command is executed
     TRACE_PATH_SEARCH           = "p" # trace when search path search succeeds
+    TRACE_SYMBOL_READ_WRITE     = "s" # trace symbol low-level read & write
     TRACE_ALL                   = "t" # trace internal macros too
     TRACE_SET_ON                = "T" # Set __TRACE__ to true
    #TRACE_SHOW_CALL_ID          = "x" # show unique call id (may not be used)
     TRACE_WILDCARD_ALL_FLAGS    = "V" # shorthand for all of above options
     #
-    TRACE_DEFAULT_SET           = TRACE_ARGUMENTS      TRACE_EXPANSION
-    TRACE_ALL_SET               = TRACE_ARGUMENTS      TRACE_EXPANSION      \
-                                  TRACE_INPUT_FILE_CHG TRACE_SHOW_FILE_NAME \
-                                  TRACE_SHOW_LINE_NUM  TRACE_COMMAND        \
-                                  TRACE_PATH_SEARCH    TRACE_ALL
+    TRACE_DEFAULT_SET           = TRACE_ARGUMENTS       TRACE_EXPANSION
+    TRACE_VALID_EVENTS          = TRACE_COMMAND         TRACE_EXPANSION         \
+                                  TRACE_INPUT_FILE_CHG  TRACE_PATH_SEARCH       \
+                                  TRACE_SYMBOL_READ_WRITE
+    TRACE_ALL_SET               = TRACE_ARGUMENTS       TRACE_EXPANSION         \
+                                  TRACE_INPUT_FILE_CHG  TRACE_SHOW_FILE_NAME    \
+                                  TRACE_SHOW_LINE_NUM   TRACE_COMMAND           \
+                                  TRACE_PATH_SEARCH     TRACE_SYMBOL_READ_WRITE \
+                                  TRACE_SET_ON          TRACE_ALL
 
     # Execution control states for loops
     XEQ_NORMAL                  = 0
@@ -10978,8 +11079,8 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     sym_ll_fiat("__EXPR__",         "", PTYPE_READONLY_NUMERIC, 0.0)
     sym_ll_fiat("__FILE__",         "", PTYPE_READONLY_SYMBOL,  "")
     sym_ll_fiat("__FILE_UUID__",    "", PTYPE_READONLY_SYMBOL,  "")
-    sym_ll_fiat("__FMT__",        TRUE, "",                     "1")
-    sym_ll_fiat("__FMT__",       FALSE, "",                     "0")
+    sym_ll_fiat("__FMT__",         "1", "",                     "1") # True
+    sym_ll_fiat("__FMT__",         "0", "",                     "0") # False
     sym_ll_fiat("__FMT__",      "date", "",                     "%Y-%m-%d")
     sym_ll_fiat("__FMT__",     "epoch", "",                     "%s")
     sym_ll_fiat("__FMT__",    "number", "",                     CONVFMT)
@@ -11007,7 +11108,6 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     sym_ll_fiat("__STRICT__",   "name", "",                     TRUE)
     sym_ll_fiat("__SYNC__",         "", PTYPE_WRITABLE_INTEGER, SYNC_FILE)
     sym_ll_fiat("__SYSVAL__",       "", PTYPE_READONLY_INTEGER, 0)
-    sym_ll_fiat("__TRACE__",        "", PTYPE_WRITABLE_BOOLEAN, FALSE)
     sym_ll_fiat("__TRACEMODE__",    "", PTYPE_READONLY_SYMBOL,  TRACE_DEFAULT_SET)
 
     # IMMEDS

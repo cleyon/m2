@@ -1,0 +1,37 @@
+- env var SHELL
+
+- PROG["sh"] \\
+  If awk_stat determines that /bin/sh (or whatever the administrator
+  puts in the _progs[]) exists, this will be the ``safe'' shell that m2
+  uses for internal work.  The key to the PROG array is the basename of
+  the executable.  If the administrator chooses, she may remove sh from
+  the list; in this case PROG["sh"] will not exist as an element.
+
+- uuPROGuu["sh"] \\
+  This is an m2 Array which is a copy of the Awk PROG[] array.  Visible
+  to the user, but not modifiable.  Used by build_prog_cmdline().  "sh"
+  may or may not exist depending on PROG[].
+  
+
+EXISTING FUNCTIONS:
+- exec_prog_cmdline(ELEM, PATH) \\
+  Call build_prog_cmdline to construct a command line, then execute it
+  with Awk's system() function.  Stdout and stderr are always both
+  redirected to /dev/null when this function is used (MODE_IO_SILENT).
+
+- default_shell() \\
+  Return a path to "the shell".  (About to be split into two functions.)
+  1. Symbol "M2_SHELL", if defined
+  2. Env var "SHELL", if defined
+  3. PROG["sh"], if defined
+  4. Error!
+
+
+TK:
+safe_shell():
+        @esyscmd: Used to run command...
+            SAFE_SHELL -c 'CMDLINE' </dev/null  > @ESYSCMD_OUTPUT_TEXT
+
+user_shell():            # old default_shell()
+        @shell: Used as default "sendto" program when PROG not specified...
+            SENDTO < @SHELL_ARG_TEXT > @SHELL_OUTPUT_TEXT

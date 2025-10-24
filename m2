@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-10-24 12:21:35 cleyon>
+#  Time-stamp:  <2025-10-24 12:24:56 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -9458,6 +9458,10 @@ function dosubs(s,
 # to be something it can work on.  In contrast, dosubs() is much more
 # laissez-faire -- it is given some text to scan, from somewhere, but if
 # the @ signs don't quite work out, no worries.
+#
+# Use this macro[] array to control macro expansion results due to the
+# need to track two return values: whether the expansion went "okay" and
+# what the "expansion" text actually is.
 function macro_setup(macro, urtext)
 {
     macro["okay"] = FALSE
@@ -9723,17 +9727,6 @@ function macro_expand(macro,
 
         macro_set_expansion(macro, idx__size(info__get(fninfo, "name"), level, info__get(fninfo, "code")))
     }
-}
-
-
-# Use this macro[] array to control macro expansion results due to the
-# need to track two return values: whether the expansion went "okay" and
-# what the "expansion" text actually is.
-function macro_setup(macro, urtext)
-{
-    macro["okay"] = FALSE
-    macro["urtext"] = urtext
-    macro["fn"] = macro["expansion"] = EMPTY
 }
 
 

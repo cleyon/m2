@@ -1,0 +1,12 @@
+@define lastname DOE
+@define firstname JOHN
+@define month 08
+@define day 24
+@define year 81
+@define semester FALL
+@@
+@define ncourses 3
+@list courses
+@append courses BIO 255
+@append courses GEO 110
+@append courses PSY 201

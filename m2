@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-10-24 12:24:56 cleyon>
+#  Time-stamp:  <2025-10-24 21:53:11 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -925,7 +925,6 @@ function expand_braces(s,
         #                        ^---cb
         ltext = substr(s, 1,      atbr-1)
         mtext = substr(s, atbr+2, cb-atbr-2)
-                gsub(/\\}/, "}", mtext) # Fix quoted brace
         rtext = substr(s, cb+1)
         if (dbg__sys_level_p("braces", 7)) {
             print_debugfile("   expand_braces: ltext='" ltext "'")
@@ -933,15 +932,34 @@ function expand_braces(s,
             print_debugfile("   expand_braces: rtext='" rtext "'")
         }
 
-        while (length(mtext) >= 2 && first(mtext) == TOK_AT && last(mtext) == TOK_AT)
+        # Fix quoted right brace
+        gsub(/\\}/, TOK_RBRACE, mtext)
+
+        # If we're looking at "@something@", strip off the leading and
+        # trail @ and process just "something".  This happens if someone
+        # (mistakenly) writes
+        #       @{@symbol@}
+        # which has happened.  Be careful not to touch "@{something}".
+        while (length(mtext)       >= 2          &&
+               first(mtext)        == TOK_AT     &&
+               substr(mtext, 2, 1) != TOK_LBRACE &&
+               last(mtext)         == TOK_AT)
             mtext = substr(mtext, 2, length(mtext) - 2)
 
-        macro_setup(macro, mtext)
+        # Process any recursive @{...} expansions.  For example:
+        #       Item @i@ - @{title_text[@{i}]}
+        if (index(mtext, TOK_AT_BRACE) > 0)
+            mtext = expand_braces(mtext)
+
+        # No more fooling around, do the expansion already!
+        macro_reset(macro, mtext)
         if (!emptyp(mtext)) {
             macro_expand(macro)
             if (!macro["okay"] && strictp("def"))
                 error(sprintf("@%s@: Name '%s' not defined",
                               macro["urtext"], macro["fn"]))
+            if (dbg__sys_level_p("braces", 6))
+                print_debugfile("   expand_braces: expand='" macro["expansion"] "'")
         }
         s = ltext macro["expansion"] rtext
     }
@@ -1016,10 +1034,12 @@ function find_closing_brace(s, start, tok_opt,
             # without ending the expansion text parser.  Skip over }
             # and do not return yet.  "\}" is fixed in calling routine.
             offset++; nc = substr(s, start+offset+1, 1)
-        } else if (tok_opt == TOK_AT_BRACE && c == TOK_AT && nc == TOK_LBRACE) {
-            # If the start token was "@{", then @{ in expansion text
-            # will invoke a recursive scan.
-            cb = find_closing_brace(s, start+offset, TOK_AT_BRACE)
+        } else if (c == TOK_LBRACE) {
+            # In the general case, encountering an additional "{" means
+            # we have to recursively scan for *its* closing brace before
+            # we can resume searching for the *current* closing brace.
+            # Also, we take this branch when scanning @{...} expansions.
+            cb = find_closing_brace(s, start+offset, TOK_LBRACE)
             if (cb <= 0)
                 return cb       # propagate failure/error
 
@@ -1027,17 +1047,6 @@ function find_closing_brace(s, start, tok_opt,
             # in string s, update offset to be the value corresponding
             # to that location.  In fact, offset is exactly the distance
             # from that closing brace back to "start".
-            offset = cb - start
-            nc = substr(s, start+offset+1, 1)
-            dbg__print("braces", 5, ("   find_closing_brace: (recursive '@{') cb=" cb \
-                                     ".  Now, offset=" offset ", nc=" nc))
-        } else if (c == TOK_LBRACE) {
-            # In the general case, encountering an additional "{" means
-            # we have to scan for *its* closing brace before we can
-            # resume searching for the *current* closing brace.
-            cb = find_closing_brace(s, start+offset, TOK_LBRACE)
-            if (cb <= 0)
-                return cb       # propagate failure/error
             offset = cb - start
             nc = substr(s, start+offset+1, 1)
             dbg__print("braces", 5, ("   find_closing_brace: (recursive '{') cb=" cb \
@@ -9422,7 +9431,7 @@ function dosubs(s,
         # s == L  @  M  @  R
         #               ^---i
 
-        macro_setup(macro, M)
+        macro_reset(macro, M)
         macro_expand(macro)
         if (macro["okay"] == TRUE) {
             # Kluge for @srem ...@ to remove preceding whitespace
@@ -9462,7 +9471,7 @@ function dosubs(s,
 # Use this macro[] array to control macro expansion results due to the
 # need to track two return values: whether the expansion went "okay" and
 # what the "expansion" text actually is.
-function macro_setup(macro, urtext)
+function macro_reset(macro, urtext)
 {
     macro["okay"] = FALSE
     macro["urtext"] = urtext

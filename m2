@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-10-25 17:22:02 cleyon>
+#  Time-stamp:  <2025-10-25 19:51:07 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -43,7 +43,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "5.0.0"
+    M2_VERSION = "5.0.1"
 
     # Specify a shell for m2 to use for running utility programs.
     # It will be used in the safe_shell() function.  It is expected
@@ -9659,6 +9659,8 @@ function macro_expand(macro,
             macro_set_expansion(macro, xeq_fn__boolval(fn, M, nparam, param))
         else if (fn == "chr")
             macro_set_expansion(macro, xeq_fn__chr(fn, M, nparam, param))
+        else if (fn == "comma" || fn == "scomma")
+            macro_set_expansion(macro, xeq_fn__comma(fn, M, nparam, param))
         else if (fn == "date"     || fn == "epoch" ||
                  fn == "strftime" || fn == "time"  ||
                  fn == "tz"       || fn == "utc")
@@ -9951,6 +9953,55 @@ function xeq_fn__chr(fn, M, nparam, param,
         return sprintf("%c", p+0)
     else
         error("Bad parameters in '" M "':" $0)
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  C O M M A  @
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#       comma VAL: Print number with comma separated grouping
+#         @comma 87654321.1234@ => 87,654,321.1234
+#
+#*****************************************************************************
+# @{s,}comma VAL@
+function xeq_fn__comma(fn, M, nparam, param,
+                       p, silent, val)
+{
+    # S variant actually *removes* commas
+    silent = first(fn) == "s"
+    if (nparam != 1)
+        error("Bad parameters in '" M "':" $0)
+    p = param[1]
+
+    if (sym_valid_p(p)) {
+        assert_sym_defined(p, "@" M "@")
+        p = sym_fetch(p)
+    }
+    return silent ? rmcomma(p) : addcomma(p)
+}
+
+
+# from "The AWK Programming Language", 2nd ed, p. 54.
+function addcomma(x,   num)
+{
+    if (x < 0)
+        return "-" addcomma(-x)
+    while (x ~ /^[0-9][0-9][0-9][0-9]/)         # added ^
+        sub(/[0-9][0-9][0-9][,.]/, ",&", x)
+    return x
+}
+
+function rmcomma(x)
+{
+    gsub(/,/, EMPTY, x)
+    if (first(x) == "$")
+        x = rest(x)
+    return x
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -11201,10 +11252,10 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     # They are similar to symbols but with optional parameter handling
     # Also need to add handler in dosubs()  [search: SYMFUNC]
     # Functions cannot be used as symbol or sequence names.
-    split("basename boolval center chr date dirname divlines dow epoch" \
+    split("basename boolval center chr comma date dirname divlines dow epoch" \
           " executable expr format getenv gregdate ifdef ifelse ifndef" \
           " ifx index join lc left len ljust ltrim mid mjd ord rem right" \
-          " rjust rot13 rtrim scenter sexecutable sexpr sgetenv sjoin" \
+          " rjust rot13 rtrim scenter scomma sexecutable sexpr sgetenv sjoin" \
           " sljust space spaces srem srjust strftime substr tab tabs time" \
           " trim tz uc utc uuid xbasename xdirname",
           array, TOK_SPACE)

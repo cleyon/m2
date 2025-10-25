@@ -610,6 +610,15 @@ Variant
 does not truncate output.
 .It @chr SYM@
 Output character with ASCII code SYM.
+.It @comma SYM@
+Output the value of SYM, or a literal number, with comma-separated
+groupings of digits.
+Variant
+.Ql @scomma@
+.Em removes
+commas, and as an added bonus, any leading
+.Qq $
+as well.
 .It @date@
 Current date (format as __FMT__[date]).
 See section
@@ -1200,12 +1209,10 @@ True if SYMBOL is defined.
 True if variable VAR is defined in process environment.
 .It exists(FILE)
 True if FILE exists.
+.It ELEM in ARRAY
+True if ARRAY (or List) contains ELEM and False if not.
 .El
 .Pp
-Another syntax available in a boolean expression is
-.Dl elem IN Array | List
-which return True if array or list contains elem
-and False if not.
 Any other expression is evaluated as a mathematical expression and
 considered True if the result is non-zero.
 .Ss System Symbols

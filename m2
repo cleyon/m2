@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-10-25 12:11:38 cleyon>
+#  Time-stamp:  <2025-10-25 15:36:44 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -7011,9 +7011,11 @@ function execute__for(for_block,
                                  loopvar, start, end, incr))
 
     if (start > end && incr > 0)
-        error("(execute__for) Start cannot be greater than End")
+        # error("(execute__for) Start cannot be greater than End")
+        return
     if (start < end && incr < 0)
-        error("(execute__for) Start cannot be less than End")
+        # error("(execute__for) Start cannot be less than End")
+        return
 
     # Run the loop
     while (!done) {

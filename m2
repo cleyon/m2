@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-10-24 21:53:11 cleyon>
+#  Time-stamp:  <2025-10-25 01:35:46 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -91,11 +91,6 @@ BEGIN {
                          # At level 2, m2 does not know the current time
                          # or date, host or user name, etc.
     __secure_level   = SEC_STANDARD
-
-    # Largest legal diversion (stream) number.  Traditional m4 supports
-    # nine diversions, but GNU m4 greatly increases that limit.  Despite
-    # how bloated m2 may be, I don't have a need for more, but you might.
-    MAX_STREAM = 9
 }
 
 # DO NOT CHANGE anything below this line
@@ -2191,8 +2186,11 @@ function idx__size(arr, level, code,
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
 #*****************************************************************************
+
+# Return the newly allocated block number, strictly greater than zero.
+# Block 0 does not exist -- it is the terminal.
 function blk_new(block_type,
-                  new_blknum)
+                 new_blknum)
 {
     if (block_type == EMPTY)
         panic("(blk_new) Missing type")
@@ -4011,8 +4009,12 @@ function stk_pop(stack,
 #
 #       Send text to the destination stream __DIVNUM__
 #         < 0         Discard
-#         = 0         Standard output
+#         = 0         Standard output (TERMINAL)
 #         > 0         Stream # N
+#
+#       The strtab[] array maintains the mapping of stream number to
+#       block number.  Accessing a new stream allocates a new agg_block,
+#       which is how m2 provides an unlimited number of streams.
 #
 #       See @divert, @undivert
 #
@@ -4023,12 +4025,37 @@ function DIVNUM()
 }
 
 
+# Tell me if a stream block exists or not.
+function stream_block_exists_p(stream)
+{
+    if (! integerp(stream))
+        error("(stream_exists_p) Bad stream: " stream)
+    if (stream <= TERMINAL)
+        return FALSE
+    return (stream in strtab)
+}
+
+# Given a stream, return its associated block number (a BLK_AGG).
+# This always returns a block number.  BEWARE, this means it will
+# create a new block for an unrecognized stream number, so check
+# with the exists predicate if you're just looking.
+function stream_block(stream)
+{
+    if (!integerp(stream) || stream <= TERMINAL)
+        error("(stream_block) Bad stream: " stream)
+    if (! stream_block_exists_p(stream))
+        # Create/initialize empty agg block
+        strtab[stream] = blk_new(BLK_AGG)
+    return strtab[stream]
+}
+
+
 # Inject (i.e., ship out to current stream) the contents of a different
 # stream.  Negative streams and current diversion are silently ignored.
 # Buffer text is not re-scanned for macros, and buffer is cleared after
 # injection into target stream.
 function undivert(stream,
-                  count, i, dstblk)
+                  count, i, dstblk, divblk)
 {
     dstblk = curr_dstblk()
     dbg__print("divert", 2, sprintf("(undivert) START dstblk=%d, stream=%d",
@@ -4037,14 +4064,18 @@ function undivert(stream,
         dbg__print("divert", 3, "(undivert) END because dstblk <0")
         return
     }
-    if (stream <= 0 || stream == DIVNUM()) {
+    if (stream <= TERMINAL || stream == DIVNUM()) {
         dbg__print("divert", 3, "(undivert) END because stream <= 0 or == DIVNUM")
         return
     }
-    if (blk_type(stream) != BLK_AGG)
+    if (! stream_block_exists_p(stream))
+        return
+
+    divblk = stream_block(stream)
+    if (blk_type(divblk) != BLK_AGG)
         panic(sprintf("(undivert) Block %d has type %s, not AGG",
-                      stream, ppf__block_type(blk_type(stream))))
-    if ((count = blktab[stream, 0, "count"]) > 0) {
+                      divblk, ppf__block_type(blk_type(stream))))
+    if ((count = blktab[divblk, 0, "count"]) > 0) {
         # It is required to clear the stream immediately after undiverting.
         # This is to prevent
         #        @undivert N
@@ -4052,20 +4083,28 @@ function undivert(stream,
         # from producing double output.  Move each slot manually to the
         # target stream, then clear the original diversion.
         if (dstblk == TERMINAL)
-            execute__block(stream)
+            execute__block(divblk)
         else
             for (i = 1; i <= count; i++)
-                blk_append(dstblk, blk_ll_slot_type(stream, i), blk_ll_slot_value(stream, i))
+                blk_append(dstblk, blk_ll_slot_type(divblk, i), blk_ll_slot_value(divblk, i))
         cleardivert(stream)
     }
 }
 
 
-function undivert_all(    stream)
+# "Inject all diversions, in numerical order, into current stream."
+function undivert_all(    stream, keys, cnt, i)
 {
-    for (stream = 1; stream <= MAX_STREAM; stream++)
-        if (blktab[stream, 0, "count"] > 0)
+    cnt = 0
+    for (stream in strtab)
+        keys[++cnt] = stream
+    nqsort(keys, 1, cnt)
+
+    for (i = 1; i <= cnt; i++) {
+        stream = keys[i]
+        if (stream_block_exists_p(stream))
             undivert(stream)
+    }
 }
 
 
@@ -4075,14 +4114,17 @@ function undivert_all(    stream)
 # Buffer text is not re-scanned for macros, and buffer is cleared after
 # injection into target stream.
 function undivert_to_file(stream, file,
-                          count, i)
+                          count, i, divblk)
 {
     dbg__print("divert", 2, sprintf("(undivert_to_file) START; stream=%d, file='%s'", stream, file))
-    if (blk_type(stream) != BLK_AGG)
+    if (! stream_block_exists_p(stream))
+        return
+    divblk = stream_block(stream)
+    if (blk_type(divblk) != BLK_AGG)
         panic(sprintf("(undivert_to_file) Block %d has type %s, not AGG",
-                      stream, ppf__block_type(blk_type(stream))))
-    if ((count = blktab[stream, 0, "count"]) > 0) {
-        ship_out_to_file(stream, file)
+                      divblk, ppf__block_type(blk_type(divblk))))
+    if ((count = blktab[divblk, 0, "count"]) > 0) {
+        ship_out_to_file(divblk, file)
         cleardivert(stream)
     }
 }
@@ -4090,32 +4132,43 @@ function undivert_to_file(stream, file,
 
 # Remove all slots from an AGG block and return its count to zero.
 function cleardivert(stream,
-                     count, i)
+                     count, i, divblk)
 {
     dbg__print("divert", 2, sprintf("(cleardivert) START dstblk=%d, stream=%d",
-                                   curr_dstblk(), stream))
-    if (stream < 0) {
-        dbg__print("divert", 3, "(cleardivert) END because stream <0")
+                                    curr_dstblk(), stream, divblk))
+    if (stream <= TERMINAL) {
+        dbg__print("divert", 3, "(cleardivert) END because stream <=0")
         return
     }
-    if (blk_type(stream) != BLK_AGG)
+    if (! stream_block_exists_p(stream))
+        return
+
+    divblk = stream_block(stream)
+    if (blk_type(divblk) != BLK_AGG)
         panic(sprintf("(cleardivert) Block %d has type %s, not AGG",
-                      stream, ppf__block_type(blk_type(stream))))
-    if ((count = blktab[stream, 0, "count"]) > 0) {
+                      divblk, ppf__block_type(blk_type(divblk))))
+    if ((count = blktab[divblk, 0, "count"]) > 0) {
         for (i = 1; i <= count; i++) {
-            delete blktab[stream, i, "slot_type"]
-            delete blktab[stream, i, "slot_value"]
+            delete blktab[divblk, i, "slot_type"]
+            delete blktab[divblk, i, "slot_value"]
         }
-        blktab[stream, 0, "count"] = 0
+        blktab[divblk, 0, "count"] = 0
     }
 }
 
 
-function cleardivert_all(    stream)
+function cleardivert_all(    stream, keys, cnt, i)
 {
-    for (stream = 1; stream <= MAX_STREAM; stream++)
-        if (blktab[stream, 0, "count"] > 0)
+    cnt = 0
+    for (stream in strtab)
+        keys[++cnt] = stream
+    nqsort(keys, 1, cnt)
+
+    for (i = 1; i <= cnt; i++) {
+        stream = keys[i]
+        if (stream_block_exists_p(stream))
             cleardivert(stream)
+    }
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -5351,7 +5404,7 @@ function assert_sym_valid_name(sym, caller)
 #
 #*****************************************************************************
 function execute__text(text,
-                       stream)
+                       stream, divblk)
 {
     dbg__print("xeq", 1, sprintf("(execute__text) START; text='%s'", text))
     if (__xeq_ctl != XEQ_NORMAL) {
@@ -5374,8 +5427,10 @@ function execute__text(text,
     # call execute_text() directly.  In this case, we may want to do
     # this section first, *BEFORE* dosubs().
     if (stream > TERMINAL) {
-        dbg__print("ship_out", 1, sprintf("(execute__text) END Appending text to stream %d", stream))
-        blk_append(stream, OBJ_TEXT, text)
+        divblk = stream_block(stream)
+        dbg__print("ship_out", 1, sprintf("(execute__text) END Appending text to stream %d (block %d)",
+                                          stream, divblk))
+        blk_append(divblk, OBJ_TEXT, text)
         return
     }
 
@@ -5936,8 +5991,6 @@ function xeq_cmd__cleardivert(cmd, cmdline,
             stream = dosubs($i)
             if (!integerp(stream))
                 error(sprintf("%s: Value '%s' must be numeric", me, stream))
-            if (stream > MAX_STREAM)
-                error(sprintf("%s: Bad parameters: %s", me, $0))
             dbg__print("divert", 5, sprintf("(xeq_cmd__cleardivert) CALLING cleardivert(%d)", stream))
             cleardivert(stream)
         }
@@ -6143,8 +6196,6 @@ function xeq_cmd__divert(cmd, cmdline,
     new_stream = (NF == 0) ? "0" : dosubs($1)
     if (!integerp(new_stream))
         return
-    if (new_stream > MAX_STREAM)
-        error(me ": Bad parameters:" $0)
 
     sym_ll_write("__DIVNUM__", "", GLOBAL_NAMESPACE, int(new_stream))
     dbg__print("divert", 2, sprintf("(xeq_cmd__divert) END; __DIVNUM__ now %d", new_stream))
@@ -6296,6 +6347,21 @@ function _less_than(s1, s2,    fs1, fs2, d1, d2)
 
     else
         return s1 < s2
+}
+
+# Same thing, but no fancy sorting, just integers
+function nqsort(A, left, right,    i, lastpos)
+{
+    if (left >= right)          # Do nothing if array contains
+        return                  #   less than two elements
+    _swap(A, left, left + int((right-left+1)*rand()))
+    lastpos = left              # A[left] is now partition element
+    for (i = left+1; i <= right; i++)
+        if (A[i]+0 < A[left]+0)
+            _swap(A, ++lastpos, i)
+    _swap(A, left, lastpos)
+    nqsort(A, left,   lastpos-1)
+    nqsort(A, lastpos+1, right)
 }
 
 
@@ -8784,15 +8850,13 @@ function xeq_cmd__undivert(cmd, cmdline,
     }
 
     if (cmdline ~ "^[-0-9 \t]+$") {
-        # @undivert N1 N2... : process one or more streams
+        # @undivert N1 N2... : process one or more streams (in specified, not numerical, order)
         i = 0
         while (++i <= NF) {
             stream = dosubs($i)
             if (!integerp(stream) || stream <= 0)
                 # @undivert -1 or 0 => no effect
                 continue
-            if (stream > MAX_STREAM)
-                error("Bad parameters:" $0)
             dbg__print("divert", 5, sprintf("(xeq_cmd__undivert) CALLING undivert(%d)", stream))
             undivert(stream)
         }
@@ -8801,8 +8865,6 @@ function xeq_cmd__undivert(cmd, cmdline,
         if (secure_level() >= SEC_SECURE)
             security_violation("@undivert: Output file forbidden")
         stream = $1
-        if (stream > MAX_STREAM)
-            error("Bad parameters:" $0)
         sub(/^[^ \t]+[ \t]+/, "", cmdline) # a + this time because ARG is required
         dbg__print("divert", 5, sprintf("(xeq_cmd__undivert) CALLING undivert_to_file(%d,'%s')", stream, cmdline))
         undivert_to_file(stream, cmdline)
@@ -8986,13 +9048,11 @@ function ship_out(obj_type, obj,
         dbg__print("ship_out", 3, "(ship_out) END, because dstblk <0")
         return
     }
-    if (dstblk > MAX_STREAM) {
+    if (dstblk != TERMINAL) {
         dbg__print("ship_out", 5, sprintf("(ship_out) END Appending obj '%s' to block %d", obj, dstblk))
         blk_append(dstblk, obj_type, obj)
         return
     }
-    if (dstblk != TERMINAL)
-        panic(sprintf("(ship_out) dstblk is %d, not zero!", dstblk))
 
     # dstblk is zero, so obj must be executed (or text printed)
     if (obj_type == OBJ_BLKNUM) {
@@ -9977,10 +10037,9 @@ function xeq_fn__divlines(fn, M, nparam, param,
     stream = param[1]
     if (! integerp(stream))
         error("Parameter must be integer: '" M "':" $0)
-    if (stream <= TERMINAL) return 0
-    if (stream > MAX_STREAM)
-        error(sprintf("@%s@: Bad parameters", fn))
-    return blktab[stream, 0, "count"]
+    if (! stream_block_exists_p(stream))
+        return 0
+    return blktab[stream_block(stream), 0, "count"]
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -11101,7 +11160,6 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     sym_ll_fiat("__M2_VERSION__",   "", PTYPE_READONLY_SYMBOL,  M2_VERSION)
     sym_ll_fiat("__NFILE__",        "", PTYPE_READONLY_INTEGER, 0); __rnf = 0
     sym_ll_fiat("__NLINE__",        "", PTYPE_READONLY_INTEGER, 0)
-    sym_ll_fiat("__MAX_STREAM__",   "", PTYPE_READONLY_INTEGER, MAX_STREAM)
     sym_ll_fiat("__STRICT__",   "bool", "",                     TRUE)
     sym_ll_fiat("__STRICT__",    "def", "",                     TRUE)
     sym_ll_fiat("__STRICT__",    "env", "",                     TRUE)
@@ -11181,13 +11239,10 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     __flag_label[FLAG_TRACING]   = "Tracing"
     __flag_label[FLAG_WRITABLE]  = "Writable"
 
-    # Zero stream buffers
-    for (i = 1; i <= MAX_STREAM; i++)
-        blk_new(BLK_AGG)       # initialize to empty agg block
-
-    # Set up terminal to receive output
+    # Set up terminal to receive output as stream 0 (default)
     __terminal = blk_new(BLK_TERMINAL)
     stk_push(__parse_stack, __terminal)
+    strtab[0] = TERMINAL
 }
 
 

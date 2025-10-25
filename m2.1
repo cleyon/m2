@@ -1,4 +1,4 @@
-.\" Copyright (c) 2025 Christopher Leyon
+.\" Copyright (c) 2025 Christopher Leyon                   -*- mode: nroff -*-
 .\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
@@ -845,15 +845,14 @@ attempts to follow m4 in its use of
 .Ql @divert
 and
 .Ql @undivert .
-Each buffer stream has a number, from 1 to
-.Va __MAX_STREAM__ .
+Each stream has a number, an integer starting from 1.
+Unlike traditional m4 which limited you to nine streams,
+m2 streams can be any integer, providing a virtually
+unlimited number of diversions.
 Stream 0 is interpreted as resuming printing to standard output.
 Text diverted to a negative stream is discarded.
 The current stream number is available in the system symbol
 .Va __DIVNUM__ .
-In the descriptions below, stream number N is assumed to be in the range
-1 \*(Le N \*(Le
-.Va __MAX_STREAM__ .
 .Bl -inset
 .It Em Divert :
 No error message or action if argument is not an integer.
@@ -902,9 +901,10 @@ Hello,
 \ \ \ => world!
 .Ed
 .Pp
-The number of lines stored in a diversion is available with the function
+You can determine if a stream buffer contains text by using the function
 .Ql @divlines N@ ,
-which allows the user to alter processing depending on the availability
+which returns the number of lines stored in a diversion.
+This allows the user to alter processing depending on the availability
 of text in a stream.
 .It Em End-of-Data Processing :
 There is an implicit
@@ -1249,9 +1249,6 @@ Debugging enabled? (boolean, user modifiable, default FALSE).
 .It __DIVNUM__
 Current stream number.
 0, the default value, indicates output to the terminal (standard output).
-Integer values between 0 and
-.Va __MAX_STREAM__
-are valid.
 .It __DOW__
 Abbreviated weekday name (Sun, Mon, Tue, etc).
 See also
@@ -1316,12 +1313,6 @@ The data read by @input; user modifiable.
 .It __LINE__
 Current line number inside
 .Va __FILE__ .
-.It __MAX_STREAM__
-The largest valid stream number, used in
-.Ql @divert
-and
-.Ql @undivert .
-Default is 9.
 .It __M2_UUID__
 UUID unique to this m2 run.
 .It __M2_VERSION__

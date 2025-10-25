@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-10-25 15:36:44 cleyon>
+#  Time-stamp:  <2025-10-25 17:22:02 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -43,7 +43,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "5.0.0pre2"
+    M2_VERSION = "5.0.0"
 
     # Specify a shell for m2 to use for running utility programs.
     # It will be used in the safe_shell() function.  It is expected
@@ -4801,7 +4801,7 @@ function sym_ll_write(name, key, level, val)
     # Run triggers for various special symbols
     if (name == "__DEBUG__" &&
         sym_ll_read("__DEBUG__", "", GLOBAL_NAMESPACE) == FALSE &&
-        val != FALSE) {
+        val+0 > 1) {            # val != FALSE) {
         dbg__all_lev_standard()
     } else if (name == "__SECURE__") {
         val = max(secure_level(), val) # Don't allow __SECURE__ to decrease
@@ -7862,7 +7862,7 @@ function ppf__BLK_LONGDEF(longdef_block)
 #       @m2ctl dbg_max                  All 9s
 #       @m2ctl dbg_namespace            Debug namespaces
 #       @m2ctl dbg_params               Debug function parameters
-#       @m2ctl dbg_reset                Reset all dbg levels to standard
+#       @m2ctl dbg_standard             Reset all dbg levels to standard
 #       @m2ctl dbg_ship_out
 #       @m2ctl dbg_user                 Debug @newcmd, user_blocks
 #       @m2ctl dbg_zero                 Clear debugging
@@ -7926,9 +7926,6 @@ function xeq_cmd__m2ctl(cmd, cmdline,
         # dbg__set_level("nam",       3)
         dbg__set_level("sym",       5)
 
-    } else if ($1 == "dbg_reset") {
-        dbg__all_lev_standard()
-
     } else if ($1 == "dbg_ship_out") {
         enable_debugging()
         dbg__all_lev_zero()
@@ -7937,6 +7934,9 @@ function xeq_cmd__m2ctl(cmd, cmdline,
         dbg__set_level("io",   5)
         dbg__set_level("ship_out",   9)
         dbg__set_level("stk", 5)
+
+    } else if ($1 == "dbg_standard") {
+        dbg__all_lev_standard()
 
     } else if ($1 == "dbg_user") {
         enable_debugging()

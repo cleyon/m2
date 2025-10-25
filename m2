@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-10-25 01:35:46 cleyon>
+#  Time-stamp:  <2025-10-25 12:11:38 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -45,13 +45,15 @@
 BEGIN {
     M2_VERSION = "5.0.0pre2"
 
-    # Specify a shell for m2 to use for running utility program.  It
-    # will be used for the safe_shell() function.  Requirements:
+    # Specify a shell for m2 to use for running utility programs.
+    # It will be used in the safe_shell() function.  It is expected
+    # to be compatible with Bourne shell syntax.  Requirements:
+    #   - Honor the <, >, and 2> redirection operators
     #   - Accept a "-c" option to specify a command to execute
-    #   - Honor the "<" # and ">" redirection operators
     #   - Support "command -v" to check if program would execute
-    # Regardless of the program name (sh, bash, dash, ksh, etc), the
-    # PROG array key MUST be "sh".
+    #
+    # Regardless of the program executable name (sh, bash, dash, ksh, etc),
+    # the PROG array key MUST be "sh".
     _safe_shell = "/bin/sh"     # Customize me
     if (awk_stat(_safe_shell))
         PROG["sh"] = _safe_shell
@@ -2212,14 +2214,14 @@ function blk_new(block_type,
         blktab[new_blknum, 0, "terminator"] = ""
         blktab[new_blknum, 0, "oob_terminator"] = "EOS"
     } else if (block_type == BLK_FOR)
-        # [0, "array_type"]     each    TYPE_ARRAY or TYPE_LIST
+        # [0, "array_type"]     *       either @for or @foreach
         # [0, "body_block"]     *
         # [0, "dstblk"]         *
-        # [0, "level"]          each
-        # [0, "loop_array_name] each
-        # [0, "loop_end"]       iter
-        # [0, "loop_incr"]      iter
-        # [0, "loop_start"]     iter
+        # [0, "level"]          @foreach
+        # [0, "loop_array_name] @foreach
+        # [0, "loop_end"]       @for
+        # [0, "loop_incr"]      @for
+        # [0, "loop_start"]     @for
         # [0, "loop_type"]      *       @for, @foreach, @sforeach
         # [0, "loop_var"]       *
         blktab[new_blknum, 0, "terminator"] = "^@next"
@@ -6913,9 +6915,9 @@ function parse__for(                  for_block, body_block, pstat, incr, info, 
     if (cmd == "@for") {
         dbg__print("for", 9, "(parse__for) Found FOR: " $0)
         blktab[for_block, 0, "loop_type"] = cmd
-        blktab[for_block, 0, "loop_start"] = $3 + 0
-        blktab[for_block, 0, "loop_end"] = $4 + 0
-        blktab[for_block, 0, "loop_incr"] = incr = NF >= 5 ? ($5 + 0) : 1
+        blktab[for_block, 0, "loop_start"] = $3
+        blktab[for_block, 0, "loop_end"] = $4
+        blktab[for_block, 0, "loop_incr"] = incr = NF >= 5 ? $5 : 1
         if (incr == 0)
             error(cmd ": Increment value cannot be zero!")
 
@@ -6996,9 +6998,9 @@ function execute__for(for_block,
 {
     # Evaluate loop
     loopvar    = blktab[for_block, 0, "loop_var"]
-    start      = blktab[for_block, 0, "loop_start"] + 0
-    end        = blktab[for_block, 0, "loop_end"]   + 0
-    incr       = blktab[for_block, 0, "loop_incr"]  + 0
+    start      = dosubs(blktab[for_block, 0, "loop_start"]) + 0
+    end        = dosubs(blktab[for_block, 0, "loop_end"])   + 0
+    incr       = dosubs(blktab[for_block, 0, "loop_incr"])  + 0
     done       = FALSE
     counter    = start
     body_block = blktab[for_block, 0, "body_block"]
@@ -7162,9 +7164,9 @@ function ppf__BLK_FOR(blknum)
     return sprintf("  valid   : %s\n" \
                    "  type    : %s\n"       \
                    "  loopvar : %s\n"       \
-                   "  start   : %d\n"       \
-                   "  end     : %d\n"       \
-                   "  incr    : %d\n"       \
+                   "  start   : %s\n"       \
+                   "  end     : %s\n"       \
+                   "  incr    : %s\n"       \
                    "  body    : %d",
                    ppf__bool(blktab[blknum, 0, "valid"]),
                    blktab[blknum, 0, "loop_type"],

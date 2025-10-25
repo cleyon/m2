@@ -1,10 +1,13 @@
-@include unit4.include
 @define name @lastname@, @firstname@
 @define xdate @month@/@day@/@year@
 NAME:         @name@
 DATE:         @xdate@
 SEMESTER:     @semester@
 LIST OF COURSES:
-@for i 1 3
+@;
+@comment  The original next line referred to NCOURSES (which is set a priori
+@comment  to 3).  But we can do better, since @LIST@ returns the list size.
+@;
+@for i 1 @courses@
          @i@.   @{courses[@{i}]}
 @next i

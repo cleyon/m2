@@ -845,10 +845,9 @@ attempts to follow m4 in its use of
 .Ql @divert
 and
 .Ql @undivert .
-Each stream has a number, an integer starting from 1.
-Unlike traditional m4 which limited you to nine streams,
-m2 streams can be any integer, providing a virtually
-unlimited number of diversions.
+Each stream is identified by its number, a non-negative integer.
+Unlike traditional m4 which limits you to nine streams, m2 streams are
+created as needed without a pre-determined limit.\" beyond Awk's memory capacity, that is
 Stream 0 is interpreted as resuming printing to standard output.
 Text diverted to a negative stream is discarded.
 The current stream number is available in the system symbol

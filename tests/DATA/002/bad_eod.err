@@ -1,1 +1,1 @@
-m2:bad_eod.m2:3:[@eod] Parse error; Not in a @data block
+m2:bad_eod.m2:3:@eod: Parse error; Not in a @data block

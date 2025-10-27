@@ -82,7 +82,7 @@ does not scan
 or replace unadorned text: macro
 substitution must be explicitly requested by enclosing the macro
 name in
-.Qq @
+.Ql @
 characters.
 Thus, any occurrence of
 .Ql @name@
@@ -105,7 +105,7 @@ You are clearly @Condition@worked.
 .Ed
 .Pp
 No white space is allowed between
-.Qq @
+.Ql @
 and the name, so a lone at\&-sign does not trigger macro processing in any way.
 Thus, a line like
 .Dl 100 dollars @ 5% annual interest.
@@ -756,6 +756,22 @@ the number of days since midnight on November\ 17, 1858.
 Without parameters, the current date is used.
 See also
 .Va @gregdate@ .
+.It @mktemp [SYM | TEMPLATE]
+Output a unique file path which does not currently exist.
+TEMPLATE is expected to end with at least six
+.Ql X
+characters,
+which are replaced by random letters and digits.
+If the template does not contain a
+.Ql /
+character, a suitable temporary directory will be provided.
+Unlike standard
+.Xr mktemp 1 ,
+this function does
+.Em not
+actually create the file; it merely returns a likely path.
+It makes no guarantees that such a path can
+actually be created, so the caller must still take care.
 .It @ord SYM@
 Output ASCII code of first character in SYM.
 .It @rem COMMENT@
@@ -934,9 +950,7 @@ GNU m4 and
 implement a
 .Ql @cleardivert
 command which performs a similar operation.
-Like
-.Ql @undivert ,
-with no arguments, it clears all diverted streams.
+@cleardivert with no arguments clears all diverted streams.
 .Pp
 Diverted text will not be processed if m2 exits due to
 .Ql @error

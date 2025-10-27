@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-10-25 19:51:07 cleyon>
+#  Time-stamp:  <2025-10-27 02:41:18 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -43,11 +43,10 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "5.0.1"
+    M2_VERSION = "5.0.2"
 
     # Specify a shell for m2 to use for running utility programs.
-    # It will be used in the safe_shell() function.  It is expected
-    # to be compatible with Bourne shell syntax.  Requirements:
+    # It is expected to be compatible with Bourne shell syntax.
     #   - Honor the <, >, and 2> redirection operators
     #   - Accept a "-c" option to specify a command to execute
     #   - Support "command -v" to check if program would execute
@@ -499,7 +498,7 @@ function floatp(pat)
 
 function with_trailing_slash(s)
 {
-    return s ((last(s) != "/") ? "/" : EMPTY)
+    return s ((last(s) != TOK_SLASH) ? TOK_SLASH : EMPTY)
 }
 
 
@@ -609,23 +608,19 @@ function path_exists_p(path)
 }
 
 
-# Construct a unique file path which does not currently exist.
-# The path_template is expected to end in one or more "X" characters,
-# which are replaced by random (hex) characters.  Unlike standard
-# mktemp(1), this function does not actually create the file; it merely
-# returns its path.  It makes no guarantees that such a file path can
-# actually be created or used, so the caller must still take care.  This
-# is less robust than the system version but hopefully still good enough.
 function mktemp(path_template,
-                leading_elements, file_path, tries)
+                leading_elements, file_path, tries, rp, i)
 {
     if (match(path_template, "X+$") == NOT_FOUND)
-        error("(mktemp) Invalid template '" path_template "': missing X")
+        error("(mktemp) Invalid template '" path_template "': missing 1 or more Xs")
     # Leading elements are everything up to but not including trailing "X"s
     leading_elements = substr(path_template, 1, RSTART - 1)
     tries = 10
     while (tries-- > 0) {
-        file_path = leading_elements  hex_digits(RLENGTH)
+        #file_path = leading_elements  hex_digits(RLENGTH)
+        for (i = 1; i <= RLENGTH; i++)
+            rp = rp substr(LOTS_O_LETTERS, randint2(1, 62), 1)
+        file_path = leading_elements  rp
         if (path_exists_p(file_path))
             continue
         return file_path
@@ -802,7 +797,7 @@ function safe_shell()
 
 
 # ATMODE is a property of the source.  If there is no source, we're probably
-# in the process of undiverting some streams after the program ends.  Streams
+# in the process of undiverting a stream after the program ends.  Streams
 # are not processed for macros, so the default mode in this case is literal.
 function curr_atmode(    src_block)
 {
@@ -2659,7 +2654,7 @@ function execute__command(name, cmdline,
     else if (name ==  "dumpdef")        xeq_cmd__dumpdef(name, cmdline)
     else if (name ~   /dump(all)?/)     xeq_cmd__dump(name, cmdline)
     else if (name ~ /s?echo/)           xeq_cmd__error(name, cmdline)
-    else if (name ~   /enddata|eod/)    error(sprintf("[@%s] Parse error; Not in a @data block", name))
+    else if (name ~   /enddata|eod/)    error(sprintf("@%s: Parse error; Not in a @data block", name))
     else if (name ~ /s?error/)          xeq_cmd__error(name, cmdline)
     else if (name ==  "errprint")       xeq_cmd__error(name, cmdline)
     else if (name ==  "esyscmd")        xeq_cmd__esyscmd(name, cmdline)
@@ -5675,9 +5670,7 @@ function bool__scan_factor(    e, r,         # ! factor | variable | ( expressio
         if (secure_level() >= SEC_PARANOID)
             security_violation("canrun(): Forbidden")
         # Check via "sh -c 'command -v ARG'"
-        rc = system(sprintf("%s -c 'command -v %s' >%s 2>%s",
-                            safe_shell(), name, NULL, NULL))
-        r = (rc == 0)
+        r = exec_prog_cmdline("sh", sprintf("-c 'command -v %s'", name)) == EX_OK
         dbg__print("bool", 5, "(bool__scan_factor) CANRUN; name='" name "', RETURNING " ppf__bool(r))
         __bf++
         return r
@@ -6613,10 +6606,10 @@ function xeq_cmd__esyscmd(cmd, cmdline,
     dbg__print("cmd", 3, sprintf("(xeq_cmd__esyscmd) START; cmdline='%s'", cmdline))
     if (secure_level() >= SEC_SECURE)
         security_violation(me ": Forbidden")
-
-    output_file = mktemp(tmpdir() "m2-esyscmd.out.XXXXXX")
-    shell_cmdline = sprintf("%s -c '%s' <%s >%s",
-                            safe_shell(), cmdline, NULL, output_file)
+    output_file = mktemp(tmpdir() "m2EsysO.XXXXXX")
+    shell_cmdline = build_prog_cmdline("sh",
+                       sprintf("-c '%s' <%s >%s", cmdline, NULL, output_file),
+                       MODE_IO_CAPTURE)
     flush_stdout(SYNC_FORCE)
     rc = system(shell_cmdline)
     sym_ll_write("__SYSVAL__", "", GLOBAL_NAMESPACE, rc)
@@ -6933,7 +6926,7 @@ function parse__for(                  for_block, body_block, pstat, incr, info, 
                           cmd, info__get(info, "type"), info__get(info, "name")))
         blktab[for_block, 0, "loop_type"] = cmd
         blktab[for_block, 0, "loop_array_name"] = $3
-        blktab[for_block, 0, "array_type"] = info__get(info, "type") # (flag_1true_p(info["code"], FLAG_BLKARRAY)) ? "block" : "normal"
+        blktab[for_block, 0, "array_type"] = info__get(info, "type")
         blktab[for_block, 0, "level"] = level
 
     } else
@@ -7547,7 +7540,7 @@ function search_file(f,
         f = "/dev/stdin"
     if ((pe = path_exists_p(f)) == TRUE)
         return f
-    if (first(f) == "/")
+    if (first(f) == TOK_SLASH)
         # If path is absolute, do not invoke path search mechanism
         return pe ? f : EMPTY
     icount = split(__inc_path, paths, TOK_COLON)
@@ -8472,8 +8465,8 @@ function xeq_cmd__shell(cmd, cmdline,
     shell_text_in = blk_to_string(shell_data_blk)
     dbg__print("parse", 5, sprintf("(xeq_cmd__shell) shell_text_in='%s'", shell_text_in))
 
-    input_file  = mktemp(tmpdir() "m2-shell.in.XXXXXX")
-    output_file = mktemp(tmpdir() "m2-shell.out.XXXXXX")
+    input_file  = mktemp(tmpdir() "m2ShelI.XXXXXX")
+    output_file = mktemp(tmpdir() "m2ShelO.XXXXXX")
     print dosubs(shell_text_in) > input_file
     close(input_file)
 
@@ -9700,6 +9693,8 @@ function macro_expand(macro,
             macro_set_expansion(macro, xeq_fn__mid(fn, M, nparam, param))
         else if (fn == "mjd")
             macro_set_expansion(macro, xeq_fn__mjd(fn, M, nparam, param))
+        else if (fn == "mktemp")
+            macro_set_expansion(macro, xeq_fn__mktemp(fn, M, nparam, param))
         else if (fn == "ord")
             macro_set_expansion(macro, xeq_fn__ord(fn, M, nparam, param))
         else if (fn == "rem" || fn == "srem")
@@ -10766,6 +10761,37 @@ function xeq_fn__mjd(fn, M, nparam, param,
 
 #*****************************************************************************
 #
+#       @  M K T E M P  @
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#       Return a temporary path based on a template.
+#       NOTE:  Does not actually create the file!
+#       Template must end in at least six X characters.
+#
+#*****************************************************************************
+# @mktemp SYM | templateXXXXXX
+function xeq_fn__mktemp(fn, M, nparam, param,
+                        p, template)
+{
+    if (nparam == 0)
+        # Skip the rigamarole and give me a random file name
+        return mktemp(tmpdir() "m2Tmp.XXXXXXXX")
+    p = param[1]
+    template = (sym_valid_p(p) && sym_defined_p(p)) \
+             ? sym_fetch(p) : substr(M, length(fn)+2)
+    if (match(template, "XXXXXX+$") == NOT_FOUND)
+        error("@mktemp@: Invalid template '" template "': missing 6 or more X")
+    if (index(template, TOK_SLASH) == NOT_FOUND)
+        template = tmpdir() template
+    return mktemp(template)
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
 #       @  O R D  @
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -10836,7 +10862,7 @@ function xeq_fn__right(fn, M, nparam, param,
 #         @rot13 NotaRealSymbol@ => AbgnErnyFlzoby
 #
 #*****************************************************************************
-# @rot13 SYM@
+# @rot13 SYM | Text@
 function xeq_fn__rot13(fn, M, nparam, param,
                        p, i, c, result)
 {
@@ -11009,6 +11035,9 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     JD_MJD_DIFF                 = 2400000.5
     LOG2                        = log(2)
     LOG10                       = log(10)
+    LOTS_O_LETTERS              = "ABCDEFGHIJKLMNOPQRSTUVWXYZ" \
+                                  "abcdefghijklmnopqrstuvwxyz" \
+                                  "0123456789"
     MAX_DBG_LEVEL               = 10
     MAX_PARAM                   = 20
     NOT_FOUND                   = 0     # index() when search fails
@@ -11079,6 +11108,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     TOK_OR                      = "||"
     TOK_RBRACE                  = "}"
     TOK_RPAREN                  = ")"
+    TOK_SLASH                   = "/"
     TOK_TAB                     = "\t"
 
     # For __TRACEMODE__
@@ -11254,7 +11284,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     # Functions cannot be used as symbol or sequence names.
     split("basename boolval center chr comma date dirname divlines dow epoch" \
           " executable expr format getenv gregdate ifdef ifelse ifndef" \
-          " ifx index join lc left len ljust ltrim mid mjd ord rem right" \
+          " ifx index join lc left len ljust ltrim mid mjd mktemp ord rem right" \
           " rjust rot13 rtrim scenter scomma sexecutable sexpr sgetenv sjoin" \
           " sljust space spaces srem srjust strftime substr tab tabs time" \
           " trim tz uc utc uuid xbasename xdirname",

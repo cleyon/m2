@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-10-27 02:41:18 cleyon>
+#  Time-stamp:  <2025-10-29 14:58:01 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -43,7 +43,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "5.0.2"
+    M2_VERSION = "5.0.3"
 
     # Specify a shell for m2 to use for running utility programs.
     # It is expected to be compatible with Bourne shell syntax.
@@ -7364,7 +7364,7 @@ function evaluate_condition(cond, negate,
         if (info["idxable"] == FALSE)
             error(sprintf("IN: Name '%s' has type %s, not Array or List", arr, info__get(info, "type")))
 
-        retval = sym_ll_in(arr, key, info["level"])
+        retval = idx__key_exists_p(info, key)
 
     } else if (match(cond, "[^ ]+ *(<|<=|=|==|!=|>=|>) *[^ ]+")) { # poor regexp, fragile
         # This whole section is pretty easy to confound....

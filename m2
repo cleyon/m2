@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-11-04 03:06:06 cleyon>
+#  Time-stamp:  <2025-11-04 11:35:12 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -1905,25 +1905,6 @@ function arrayp(arr,
 }
 
 
-# function array_defined_p(arr)
-# {
-#     if (! arrayp(arr))
-#         return FALSE
-#     return TRUE
-# }
-
-
-# function assert_array_defined(arr, caller,
-#                               level, info)
-# {
-#     if (caller == EMPTY)
-#         panic("(assert_array_defined) Empty caller!")
-#     if (! array_defined_p(arr))
-#         error(sprintf("%s: Array '%s' not defined",
-#                       caller, arr))
-# }
-
-
 # Check that arr is really an ARRAY and that it's writable
 # function assert_array_okay_to_define(arr, caller,
 #                                      nparts, level, info, code)
@@ -3440,7 +3421,8 @@ function flag_set_clear(code, set_fs, clear_fs,
     }
     # First, clear flags listed in clear_fs
     for (x = 1; x <= length(clear_fs); x++) {
-        flag = substr(clear_fs, x, 1)
+        if ((flag = substr(clear_fs, x, 1)) == FLAG_READONLY)
+            continue            # can't clear read-only  :-(
         if (flag_1true_p(code, flag)) {
             idx = index(code, flag)
             code = substr(code, 1, idx-1) \
@@ -5130,7 +5112,7 @@ function sym_value_or_literal(s)
 
 # XXX Bare bones, no checking yet
 function syminfo_increment(info, incr,
-                           iname, ilevel, itype)
+                           iname, ikey, ilevel, itype)
 {
     # if (incr == EMPTY)
     #     incr = 1
@@ -5149,14 +5131,15 @@ function syminfo_increment(info, incr,
 
     # Add entry:        symtab[name, key, level, "symval"] += incr
     #symtab[sym, "", GLOBAL_NAMESPACE, "symval"] += incr
-    iname = info__get(info, "name")
+    iname  = info__get(info, "name")
+    ikey   = info__get(info, "key")
     ilevel = info__get(info, "level")
-    itype = info__get(info, "type")
+    itype  = info__get(info, "type")
 
     if (itype == TYPE_LIST)
         lis__ll_incr(iname, info__get(info, "key"), ilevel, incr)
     else if (itype == TYPE_ARRAY || itype == TYPE_SYMBOL)
-        sym_ll_incr(iname, "", ilevel, incr)
+        sym_ll_incr(iname, ikey, ilevel, incr)
     else if (itype == TYPE_SEQUENCE)
         seq_ll_incr(iname, incr)
     else
@@ -6069,7 +6052,7 @@ function xeq_cmd__data(cmd, cmdline,
     save_line = $0
     save_lineno = LINE()
 
-    # # Check ARR.  assert_array_okay_to_define() passed, so this won't fail
+    # # Check ARR.  assert_list_okay_to_define() passed, so this won't fail
     # nam__scan(lis, info)
     # level = nam__lookup(info)
     level = info__create_from_text(lis, info)
@@ -8562,10 +8545,9 @@ function xeq_cmd__split(cmd, cmdline,
         wantfs = FALSE
 
     # Check array LIS.
-#    print_stderr("ABOUT TO ASSERT")
     # assert_list_okay_to_define(lis, me)
-    # Since assert_array_okay_to_define() passed,
-    # these calls won't fail either...
+    # # Since assert_list_okay_to_define() passed,
+    # # these calls won't fail either...
     # nam__scan(lis, info)
     # level = nam__lookup(info)
     level = info__create_from_text(lis, info)

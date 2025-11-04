@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-11-04 01:17:23 cleyon>
+#  Time-stamp:  <2025-11-04 03:06:06 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -43,7 +43,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "5.1.0"
+    M2_VERSION = "5.1.1"
 
     # Specify a shell for m2 to use for running utility programs.
     # It is expected to be compatible with Bourne shell syntax.
@@ -63,7 +63,8 @@ BEGIN {
     # system.  They are assumed to be safe to run even at secure level
     # SECURE (but not PARANOID).  If a program is not available, simply
     # remove the entry entirely.
-    split("/usr/bin/basename" \
+    split(                    \
+          "/usr/bin/basename" \
              " /bin/date"     \
          " /usr/bin/dirname"  \
              " /bin/hostname" \
@@ -242,7 +243,7 @@ function spaces(n,    c,
 # If s is surrounded by quotes, remove them.
 function rm_quotes(s)
 {
-    if (length(s) >= 2 && first(s) == "\"" && last(s) == "\"")
+    if (length(s) >= 2 && first(s) == TOK_QUOTE && last(s) == TOK_QUOTE)
         s = substr(s, 2, length(s) - 2)
     return s
 }
@@ -919,9 +920,9 @@ function expand_braces(s,
         mtext = substr(s, atbr+2, cb-atbr-2)
         rtext = substr(s, cb+1)
         if (dbg__sys_level_p("braces", 7)) {
-            print_debugfile("   expand_braces: ltext='" ltext "'")
-            print_debugfile("   expand_braces: mtext='" mtext "'")
-            print_debugfile("   expand_braces: rtext='" rtext "'")
+            print_debugfile("m2debug:   expand_braces: ltext='" ltext "'")
+            print_debugfile("m2debug:   expand_braces: mtext='" mtext "'")
+            print_debugfile("m2debug:   expand_braces: rtext='" rtext "'")
         }
 
         # Fix quoted right brace
@@ -951,7 +952,7 @@ function expand_braces(s,
                 error(sprintf("@%s@: Name '%s' not defined",
                               macro["urtext"], macro["fn"]))
             if (dbg__sys_level_p("braces", 6))
-                print_debugfile("   expand_braces: expand='" macro["expansion"] "'")
+                print_debugfile("m2debug:   expand_braces: expand='" macro["expansion"] "'")
         }
         s = ltext macro["expansion"] rtext
     }
@@ -1432,7 +1433,7 @@ function dbg__print(dsys, lev, text,
                    retval)
 {
     if (dbg__sys_level_p(dsys, lev))
-        print_debugfile(text)
+        print_debugfile("m2debug:" text)
 }
 
 
@@ -1442,18 +1443,18 @@ function dbg__print_block(dsys, lev, blknum, description,
     if (! dbg__sys_level_p(dsys, lev))
         return
 ##    blknum = blknum+0
-    # print_debugfile("(dbg__print_block) blknum = " blknum)
+    # print_debugfile("m2debug:(dbg__print_block) blknum = " blknum)
     if (! ((blknum, 0, "type") in blktab))
         panic("(dbg__print_block) No 'type' field for block " blknum)
     block_type = blk_type(blknum)
-    # print_debugfile("(dbg__print_block) block_type = " block_type)
+    # print_debugfile("m2debug:(dbg__print_block) block_type = " block_type)
     blk_label = ppf__block_type(block_type)
 
-    print_debugfile(sprintf("Block # %d, Type=%s: %s", blknum, blk_label, description))
+    print_debugfile(sprintf("m2debug:Block # %d, Type=%s: %s", blknum, blk_label, description))
     print_debugfile(ppf__BLK(blknum))
     if (((blknum, 0, "body_block") in blktab)) {
         body_block = blktab[blknum, 0, "body_block"]
-        print_debugfile(sprintf("Block # %d, %s", body_block, blk_label, "body_ block from above"))
+        print_debugfile(sprintf("m2debug:Block # %d, %s", body_block, blk_label, "body_ block from above"))
         print_debugfile(ppf__BLK(body_block))
     }
 }
@@ -2361,7 +2362,7 @@ function blk_dump_block_raw(blknum,
             slot_type_str = ""
             if (x[3] == "slot_type")
                 slot_type_str = " (" ppf__block_type(blktab[x[1], x[2], x[3]]) ")"
-            print_debugfile("blknum=" x[1] ", slot=" x[2] ", tag=" x[3] \
+            print_debugfile("m2debug:blknum=" x[1] ", slot=" x[2] ", tag=" x[3] \
                             " => '" blktab[x[1], x[2], x[3]] "'" slot_type_str)
         }
     }
@@ -2752,17 +2753,17 @@ function execute__command(name, cmdline,
 #*****************************************************************************
 function dump_parse_stack(    level, block, block_type)
 {
-    print_debugfile("(dump_parse_stack) BEGIN")
+    print_debugfile("m2debug:(dump_parse_stack) BEGIN")
     if (stk_depth(__parse_stack) == 0)
-        print_debugfile("(dump_parse_stack) Parse stack is empty")
+        print_debugfile("m2debug:(dump_parse_stack) Parse stack is empty")
     else
         for (level = stk_depth(__parse_stack); level > 0; level--) {
             block = __parse_stack[level]
             block_type = blk_type(block)
-            print_debugfile("(dump_pars_stack) Level " level ", block # " block ", type=" block_type )
+            print_debugfile("m2debug:(dump_pars_stack) Level " level ", block # " block ", type=" block_type )
             dbg__print_block("xeq", -1, block)
         }
-    print_debugfile("(dump_parse_stack) END")
+    print_debugfile("m2debug:(dump_parse_stack) END")
 }
 
 
@@ -3039,7 +3040,7 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
                         if (match($1, terminator)) {
                             dbg__print("parse", 5, "(parse) [" parser_label "] END; @endcmd matched terminator => TRUE")
                             if (dbg__sys_level_p("parse", 7)) {
-                                print_debugfile("(parse) [" parser_label "] new_block=" new_block)
+                                print_debugfile("m2debug:(parse) [" parser_label "] new_block=" new_block)
                                 ppf__block(new_block)
                             }
 
@@ -3565,9 +3566,9 @@ function nam__scan(text, info,
 
     count = split(text, part, "(\\[|\\])")
     if (dbg__sys_level_p("nam", 7)) {
-        print_debugfile("'split(" text ")' ==> " count " fields:")
+        print_debugfile("m2debug:split(" text ") ==> " count " fields:")
         for (i = 1; i <= count; i++)
-            print_debugfile(i " = '" part[i] "'")
+            print_debugfile("m2debug:" i " = '" part[i] "'")
     }
     if (count < 1 || count > 3) # assert count in [1,2,3]
         panic("(nam__scan) split() returned strange value: " count)
@@ -3712,16 +3713,16 @@ function nam_dump_namtab(filter_fs, include_sys,
         code = nam_ll_read(name, level)
 
         if (! flag_alltrue_p(code, filter_fs)) {
-            #print_debugfile(sprintf("code=%s, filter=%s, flag filter failed", code, filter_fs))
+            #print_debugfile(sprintf("m2debug:code=%s, filter=%s, flag filter failed", code, filter_fs))
             continue
         }
         if (flag_1true_p(code, FLAG_SYSTEM) && !include_system) {
-            #print_debugfile("system filter failed")
+            #print_debugfile("m2debug:system filter failed")
             continue
         }
-        print_debugfile("(nam_dump_namtab) " nam_ppf_name_level(name, level))
+        print_debugfile("m2debug:(nam_dump_namtab) " nam_ppf_name_level(name, level))
     }
-    print_debugfile("(nam_dump_namtab) End namtab")
+    print_debugfile("m2debug:(nam_dump_namtab) End namtab")
 }
 
 
@@ -3756,7 +3757,7 @@ function nam_ll_in(name, level)
     if (level == EMPTY)
         panic("(nam_ll_in) LEVEL missing")
     if (name != "__LINE__" && name != "__NLINE__" && name != "__DBG__")
-        dbg__print("sym", 5, sprintf("(nam_ll_in) Looking for '%s' at level %d", name, level))
+        dbg__print("sym", 5, sprintf("(nam_ll_in) Looking for '%s' at level %s", name, level))
     return (name, level) in namtab
 }
 
@@ -3770,7 +3771,7 @@ function nam_ll_write(name, level, code,
     # dbg__* functions in this procedure, otherwise nasty loops ensue.
     if (sym_ll_in("__DBG__", "nam", GLOBAL_NAMESPACE) &&
         sym_ll_read("__DBG__", "nam", GLOBAL_NAMESPACE) >= 5)
-        print_debugfile(sprintf("(nam_ll_write) namtab[\"%s\", %d] = %s", name, level, code))
+        print_debugfile(sprintf("m2debug:(nam_ll_write) namtab[\"%s\", %d] = %s", name, level, code))
 
     trace(TRACE_SYMBOL_READ_WRITE, name,
           sprintf("[Name Write] \"%s\" (lev:%d) := Code '%s'",
@@ -3983,7 +3984,7 @@ function stk_push(stack, new_elem,
               sprintf("[File] Input file now '%s'", blktab[new_elem, 0, "filename"]))
     if (dbg__sys_level_p("stk", 5)) {
         siz = stack[0]
-        print_debugfile(sprintf("(stk_push) %s[%d] := %s",
+        print_debugfile(sprintf("m2debug:(stk_push) %s[%d] := %s",
                                 stack["name"], siz+1, new_elem))
     }
     return stack[++stack[0]] = new_elem
@@ -4017,7 +4018,7 @@ function stk_pop(stack,
               sprintf("[File] Input file now '%s'", blktab[new_top, 0, "filename"]))
     }
     if (dbg__sys_level_p("stk", 5)) {
-        print_debugfile(sprintf("(stk_pop) %s[%d] -> %s",
+        print_debugfile(sprintf("m2debug:(stk_pop) %s[%d] -> %s",
                                 stack["name"], siz, old_top))
     }
     return old_top
@@ -4282,7 +4283,7 @@ function syminfo_valid_p(syminfo,
 #     # Add entry:        namtab[name,level] = code
 #     # Create an entry in the name table
 #     #dbg__print("sym", 2, sprintf("...
-#     # print_debugfile(sprintf("sym_create: namtab += [\"%s\",%d]=%s", name, level, code))
+#     # print_debugfile(sprintf("m2debug:sym_create: namtab += [\"%s\",%d]=%s", name, level, code))
 #     if (! nam_ll_in(name, level)) {
 #         nam_ll_write(name, level, code)
 #     }
@@ -4586,7 +4587,7 @@ function sym_store(sym, new_val,
     # Fetch debug level first before it might possibly change
     dbg5 = dbg__sys_level_p("sym", 5)
     if (dbg5)
-        print_debugfile(sprintf("(sym_store) START sym='%s'", sym))
+        print_debugfile(sprintf("m2debug:(sym_store) START sym='%s'", sym))
 
     # Scan sym => name, key
     if ((nparts = nam__scan(sym, info)) == ERROR)
@@ -4651,7 +4652,7 @@ function sym_store(sym, new_val,
         }
 
         if (dbg5) {
-            print_debugfile(sprintf("(sym_store) LOOP BOTTOM: name='%s', key='%s', level=%d, code='%s', good=%s",
+            print_debugfile(sprintf("m2debug:(sym_store) LOOP BOTTOM: name='%s', key='%s', level=%d, code='%s', good=%s",
                                  name, key, level, code, ppf__bool(good)))
             nam_dump_namtab(TYPE_SYMBOL, FALSE)
             print_debugfile(dump__symtab(TYPE_SYMBOL, FALSE)) # print_debugfile() adds newline.  FALSE means omit system symbols
@@ -4677,7 +4678,7 @@ function sym_store(sym, new_val,
         warn(sprintf("(sym_store) !good sym='%s'", sym))
     }
     if (dbg5)
-        print_debugfile(sprintf("(sym_store) END;"))
+        print_debugfile(sprintf("m2debug:(sym_store) END;"))
 }
 function syminfo_store(info, new_val,
                        iname, ikey, ilevel, good, ihasbracket, itype, icode, dbg5,
@@ -4685,7 +4686,7 @@ function syminfo_store(info, new_val,
 {
     dbg5 = dbg__sys_level_p("sym", 5)
     if (dbg5)
-        print_debugfile(sprintf("(syminfo_store) START sym='%s'", iname))
+        print_debugfile(sprintf("m2debug:(syminfo_store) START sym='%s'", iname))
 
     # This needs to be much more robust, like sym_store() above
     iname = info__get(info, "name")
@@ -4738,7 +4739,7 @@ function syminfo_store(info, new_val,
         }
 
         if (dbg5) {
-            print_debugfile(sprintf("(syminfo_store) LOOP BOTTOM: name='%s', key='%s', level=%d, code='%s', good=%s",
+            print_debugfile(sprintf("m2debug:(syminfo_store) LOOP BOTTOM: name='%s', key='%s', level=%d, code='%s', good=%s",
                                  iname, ikey, ilevel, icode, ppf__bool(good)))
             nam_dump_namtab(TYPE_SYMBOL, FALSE)
             print_debugfile(dump__symtab(TYPE_SYMBOL, FALSE)) # print_debugfile() adds newline.  FALSE means omit system symbols
@@ -4773,7 +4774,7 @@ function syminfo_store(info, new_val,
         warn(sprintf("(syminfo_store) !good sym='%s'", iname))
     }
     if (dbg5)
-        print_debugfile(sprintf("(syminfo_store) END;"))
+        print_debugfile(sprintf("m2debug:(syminfo_store) END;"))
 }
 
 
@@ -4819,7 +4820,7 @@ function sym_ll_write(name, key, level, val)
     if (sym_ll_in("__DBG__", "sym", GLOBAL_NAMESPACE) &&
         sym_ll_read("__DBG__", "sym", GLOBAL_NAMESPACE) >= 5 &&
         !nam_system_p(name))
-        print_debugfile(sprintf("(sym_ll_write) symtab[\"%s\", \"%s\", %d, \"symval\"] = %s", name, key, level, val))
+        print_debugfile(sprintf("m2debug:(sym_ll_write) symtab[\"%s\", \"%s\", %d, \"symval\"] = %s", name, key, level, val))
 
     # Run triggers for various special symbols
     if (name == "__DEBUG__" &&
@@ -4836,7 +4837,7 @@ function sym_ll_write(name, key, level, val)
         # Maintain equivalence:  __FMT__[number] === CONVFMT
         if (sym_ll_in("__DBG__", "sym", GLOBAL_NAMESPACE) &&
             sym_ll_read("__DBG__", "sym", GLOBAL_NAMESPACE) >= 7)
-            print_debugfile(sprintf("(sym_ll_write) Setting CONVFMT to %s", val))
+            print_debugfile(sprintf("m2debug:(sym_ll_write) Setting CONVFMT to %s", val))
         CONVFMT = val
     }
 
@@ -4856,7 +4857,7 @@ function sym_ll_incr(name, key, level, incr)
     if (sym_ll_in("__DBG__", "sym", GLOBAL_NAMESPACE) &&
         sym_ll_read("__DBG__", "sym", GLOBAL_NAMESPACE) >= 5 &&
         !nam_system_p(name))
-        print_debugfile(sprintf("(sym_ll_incr) symtab[\"%s\", \"%s\", %d, \"symval\"] += %d",
+        print_debugfile(sprintf("m2debug:(sym_ll_incr) symtab[\"%s\", \"%s\", %d, \"symval\"] += %d",
                              name, key, level, incr))
     return symtab[name, key, level, "symval"] += incr
 }
@@ -4873,7 +4874,7 @@ function lis__ll_incr(lis, idx, level, incr,
     if (sym_ll_in("__DBG__", "sym", GLOBAL_NAMESPACE) &&
         sym_ll_read("__DBG__", "sym", GLOBAL_NAMESPACE) >= 5 &&
         !nam_system_p(lis))
-        print_debugfile(sprintf("(lis__ll_incr) List %s[%s] (level %d) += %d",
+        print_debugfile(sprintf("m2debug:(lis__ll_incr) List %s[%s] (level %d) += %d",
                                 lis, idx, level, incr))
     if (! ((lis, "", level, "agg_block") in symtab))
         panic(sprintf("(lis__ll_incr) Could not find ['%s','%s',%d,'agg_block'] in symtab",
@@ -4968,7 +4969,7 @@ function sym_fetch(sym,
 
         panic(sprintf("(sym_fetch) LOOP BOTTOM: sym='%s', name='%s', key='%s', level=%d, code='%s'",
                       sym, name, key, level, icode))
-        # print_debugfile(sprintf("(sym_fetch) LOOP BOTTOM: sym='%s', name='%s', key='%s', level=%d, code='%s'",
+        # print_debugfile(sprintf("m2debug:(sym_fetch) LOOP BOTTOM: sym='%s', name='%s', key='%s', level=%d, code='%s'",
         #                      sym, name, key, level, icode))
     } while (FALSE)
 
@@ -5075,7 +5076,7 @@ function syminfo_fetch(syminfo,
 
         panic(sprintf("(syminfo_fetch) LOOP BOTTOM: sym='%s', name='%s', key='%s', level=%d, code='%s'",
                       sym, name, key, level, icode))
-        # print_debugfile(sprintf("(syminfo_fetch) LOOP BOTTOM: sym='%s', name='%s', key='%s', level=%d, code='%s'",
+        # print_debugfile(sprintf("m2debug:(syminfo_fetch) LOOP BOTTOM: sym='%s', name='%s', key='%s', level=%d, code='%s'",
         #                      sym, name, key, level, icode))
     } while (FALSE)
 
@@ -5608,7 +5609,7 @@ function bool__tokenize_string(s,
     dbg__print("bool", 7, "(bool__tokenize_string) DONE; __bnf=" __bnf)
     if (dbg__sys_level_p("bool", 3))
         for (i = 1; i <= __bnf; i++)
-            print_debugfile(sprintf("(bool__tokenize_string) __btoken[%d]='%s'", i, __btoken[i]))
+            print_debugfile(sprintf("m2debug:(bool__tokenize_string) __btoken[%d]='%s'", i, __btoken[i]))
 }
 
 
@@ -6503,10 +6504,10 @@ function dump__cmdtab(type, include_sys,
     cnt = 0
     for (k in cmdtab) {
         split(k, x, SUBSEP)
-        # print_debugfile("x[1]=" x[1])
-        # print_debugfile("x[2]=" x[2])
-        # print_debugfile("x[3]=" x[3])
-        # print_debugfile("value => " cmdtab[x[1], x[2], x[3]])
+        # print_debugfile("m2debug:x[1]=" x[1])
+        # print_debugfile("m2debug:x[2]=" x[2])
+        # print_debugfile("m2debug:x[3]=" x[3])
+        # print_debugfile("m2debug:value => " cmdtab[x[1], x[2], x[3]])
 
         if (x[3] != "user_block") continue
         code = nam_ll_read(x[1], x[2]) # name, level
@@ -9634,10 +9635,10 @@ function macro_expand(macro,
         if (!emptyp(wrkM))
             error("(macro_expand) Text remains after scanning params")
         if (dbg__sys_level_p("dosubs", 7)) {
-            print_debugfile("(macro_expand) nparam=" nparam)
+            print_debugfile("m2debug:(macro_expand) nparam=" nparam)
             for (x in param)
-                print_debugfile(sprintf("(macro_expand) param[%d] = '%s'", x, param[x]))
-            print_debugfile("(macro_expand) End param[]")
+                print_debugfile(sprintf("m2debug:(macro_expand) param[%d] = '%s'", x, param[x]))
+            print_debugfile("m2debug:(macro_expand) End param[]")
         }
     } else {
         dbg__print("dosubs", 5, "(macro_expand) No brace; fn='" fn "'")
@@ -9649,8 +9650,8 @@ function macro_expand(macro,
         param[0] = fn
         if (dbg__sys_level_p("dosubs", 7)) {
             for (x in param)
-                print_debugfile(sprintf("(macro_expand) param[%d] = '%s'", x, param[x]))
-            print_debugfile("(macro_expand) End param[]")
+                print_debugfile(sprintf("m2debug:(macro_expand) param[%d] = '%s'", x, param[x]))
+            print_debugfile("m2debug:(macro_expand) End param[]")
         }
     }
     lfn = length(fn)
@@ -10061,7 +10062,7 @@ function xeq_fn__date(fn, M, nparam, param,
     y = fn == "strftime" ? substr(M, length(fn)+2) \
         : sym_ll_read("__FMT__", fn)
     gsub(/"/, "\\\"", y)
-    cmdline = build_prog_cmdline("date", "+\"" y "\"", MODE_IO_CAPTURE)
+    cmdline = build_prog_cmdline("date", "+" TOK_QUOTE y TOK_QUOTE, MODE_IO_CAPTURE)
     if (fn == "utc")
         cmdline = "TZ=UTC " cmdline
     cmdline | getline result
@@ -11139,6 +11140,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     TOK_NEWLINE                 = "\n"
     TOK_NOT                     = "!"
     TOK_OR                      = "||"
+    TOK_QUOTE                   = "\""
     TOK_RBRACE                  = "}"
     TOK_RPAREN                  = ")"
     TOK_SLASH                   = "/"

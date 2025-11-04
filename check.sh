@@ -4,15 +4,15 @@
 #
 # DESCRIPTION
 # ===========
-# Run the *.m2 "scripts" in the "tests" subdirectory.  For each run,
-# compare current m2 output against the contents of TESTNAME.out, which
-# contains the expected/correct output.
+# Run the *.m2 scripts in the "tests" subdirectory.  For each test,
+# compare m2 output against the contents of TESTNAME.out, which contains
+# the expected output.  Error messages and exit codes are also checked.
 #
 # USAGE
 # =====
-#       $ check.sh                              # Run all tests! - in "tests" subdir
+#       $ check.sh                              # Run all tests in "tests" subdirectory
 #       $ check.sh CATEGORY                     # Run all tests in all series in CATEGORY
-#       $ check.sh CATEGORY/SERIES              # Run all tests in CATEGORY/SERIES
+#       $ check.sh CATEGORY/SERIES              # Run all tests in SERIES
 #       $ check.sh CATEGORY/SERIES/TESTNAME     # Run one specific test, file TESTNAME.m2
 #
 # CATEGORY/SERIES/TESTNAME
@@ -22,18 +22,15 @@
 # diversions, subshell handling, defining new new commands, etc.
 # Categories are short names in all caps.
 #
-# Each category is divided into a SERIES of tests, each of which
-# exercise one specific functional component.  For example, one series
-# might include a few checks for when a command when supplied with too
-# few, correct number, or too many arguments.  Another series might test
-# undefined or anomalous behavior.  Perhaps the author was up late and
-# though of a few new interesting things to test.  The tests in a series
-# should relate to a similar theme.  Each series is a three-digit number,
-# starting at either 000 or 001 depending on the test writer's temperament.
+# Each category is divided into a SERIES of tests, identified by a
+# three-digit number, starting at either 000 or 001 depending on the
+# test writer's temperament and/or phase of moon.  The tests in a series
+# should relate to a similar theme exercise one specific functional
+# component.  For example, one series might include a few checks for
+# when a command when supplied with too few, correct number, or too many
+# arguments.  Another series might test undefined or anomalous behavior.
 #
 # TESTNAME is the base file name for the test, which has an .m2 extension.
-#       TESTNAME.m2         Input stream to evaluate
-#       TESTNAME.out        Expected output
 #
 # EXIT CODE
 # =========
@@ -51,7 +48,7 @@
 # TESTNAME.disabled         If present, TESTNAME is not executed for testing.
 # TESTNAME.err              If present, expected m2 error text.  Default "".
 # TESTNAME.exit             If present, expected m2 exit code.  Default 0.
-# TESTNAME.m2               m2 input file, obviously required.
+# TESTNAME.m2               m2 input file
 # TESTNAME.out              Expected m2 standard output.  Required to exist even if empty.
 #                           This catches random .m2 files being interpreted as tests, and
 #                           also requires a test to positively specify "no output expected".
@@ -71,11 +68,8 @@
 #
 # TEST OUTPUT
 # ===========
-# Framework control messages begin with "!!!" and a keyword describing the message.
-#       !!! BEGIN - Starting test runs
-#       !!! SUMMARY - 6 tests:
-#       !!!       5 passed (83.3%)
-#       !!!       1 failed (16.7%)
+# Framework control messages begin with "!!!", followed by a KEYWORD and info:
+#       !!! START - Starting test runs
 # Test ids and results are shown on lines beginning and ending with "***":
 #       *** NEWCMD/004/simple ... PASS ***
 # Exit status codes and data streams are shown in sections whose titles appear
@@ -84,6 +78,7 @@
 # EXIT STATUS
 # ===========
 # 0     all tests passed
+# 1     interrupted by signal
 # 127   at least one test failed
 #
 # ORIGINAL CODE & AUTHOR
@@ -141,6 +136,7 @@ summarize_tests()
     local intr_pct
     local intr
     local chk
+    local plural
     pass_pct=0.0
     skip_pct=0.0
     fail_pct=0.0
@@ -161,9 +157,9 @@ summarize_tests()
             intr_pct=`echo "scale=3; 1*100/$ntest" | bc`
         fi
     fi
-    echo   "!!! END - Stopping test runs"
 
-    printf "!!! SUMMARY - %d tests:\n" $ntest
+    [ $ntest -ne 1 ] && plural="s" || plural=""
+    printf "!!! SUMMARY - %d test%s:\n" $ntest $plural
     [ $npass -gt 0 ]   && printf "!!!     %3d passed (%.1f%%)\n"  $npass $pass_pct
     [ $nfail -gt 0 ]   && printf "!!!     %3d failed (%.1f%%)\n"  $nfail $fail_pct
     [ $nskip -gt 0 ]   && printf "!!!     %3d skipped (%.1f%%)\n" $nskip $skip_pct
@@ -281,9 +277,8 @@ run_test()
         return
     fi
 
-    rm -f ${TESTNAME}.expected_out ${TESTNAME}.expected_err ${TESTNAME}.expected_exit
-    rm -f ${TESTNAME}.run_out      ${TESTNAME}.run_err      ${TESTNAME}.run_exit        ${TESTNAME}.run_diff
-    trap 'rm -f ${TESTNAME}.expected_* ${TESTNAME}.run_*; summarize_tests; exit' 1 2 3 15
+    rm -f ${TESTNAME}.expected_* ${TESTNAME}.run_*
+    trap 'echo; echo "!!! INTERRUPT - Aborting"; rm -f ${TESTNAME}.expected_* ${TESTNAME}.run_*; summarize_tests; echo "!!! END - `date`"; exit 1' 1 2 3 15
 
     if [ ! -r "$M2_FILE" ]; then
         echo "FAIL - Unreadable test file ***"
@@ -387,14 +382,12 @@ run_test()
     if [ $fail -eq 0 ]; then
         echo "PASS ***"
         npass=$(expr $npass + 1)
-       #rm -f ${TESTNAME}.run_out ${TESTNAME}.run_err
         rm -f ${TESTNAME}.run_*
     else
         nfail=$(expr $nfail + 1)
+        # Retain ${TESTNAME}.run_* for further investigation
     fi
-
-    # Retain ${TESTNAME}.run_* for further investigation
-    rm -f ${TESTNAME}.expected_out ${TESTNAME}.expected_err ${TESTNAME}.expected_exit
+    rm -f ${TESTNAME}.expected_*
 }
 
 
@@ -440,13 +433,15 @@ if [ $debug = "true" ]; then
     echo "cwd     is `pwd`"
     echo "I see $# arguments"
 fi
+echo "!!! BEGIN - `date`"
 case $# in
-    0) echo "!!! BEGIN - Starting test runs"
+    0) echo "!!! START - Starting test runs"
        test_all_categories ;;
-    1) echo "!!! BEGIN - Starting test runs"
+    1) echo "!!! START - Starting test runs"
        test_something $1 ;;
     *) framework_error "Invocation error: Bad # parameters" ;;
 esac
+echo   "!!! STOP - Stopping test runs"
 
 if [ ${rc} -eq 0 ] ; then
     echo "!!! SUCCESS - All tests completed successfully"
@@ -457,4 +452,5 @@ else
 fi
 
 summarize_tests
+echo "!!! END - `date`"
 exit ${rc}

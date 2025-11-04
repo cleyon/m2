@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-10-29 14:58:01 cleyon>
+#  Time-stamp:  <2025-11-04 01:17:23 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -43,7 +43,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "5.0.3"
+    M2_VERSION = "5.1.0"
 
     # Specify a shell for m2 to use for running utility programs.
     # It is expected to be compatible with Bourne shell syntax.
@@ -944,7 +944,7 @@ function expand_braces(s,
             mtext = expand_braces(mtext)
 
         # No more fooling around, do the expansion already!
-        macro_reset(macro, mtext)
+        macro_initialize(macro, mtext)
         if (!emptyp(mtext)) {
             macro_expand(macro)
             if (!macro["okay"] && strictp("def"))
@@ -1180,43 +1180,69 @@ function security_violation(text, file, line)
 # Return OKAY, ERROR, or EOF.  parse() is the only caller of readline.
 # That used to be true, but read_lines_until() now also calls readline.
 # (later) scan__usercmd_call() can also call readline, chasing closing `}'.
-function readline(    getstat, i)
+function readline(    retval, i, s, done, topsrc)
 {
     dbg__print("io", 6, "(readline) START")
-    getstat = OKAY
-    if (!emptyp(__buffer)) {
-        dbg__print("io", 6, "(readline) __buffer not empty so using its contents")
-        # Return the buffer even if somehow it doesn't end with a newline
-        if ((i = index(__buffer, TOK_NEWLINE)) == NOT_FOUND) {
-            $0 = __buffer
-            __buffer = EMPTY
-        } else {
-            $0 = substr(__buffer, 1, i-1)
-            __buffer = substr(__buffer, i+1)
-        }
-
-    } else if (stk_empty_p(__source_stack)) {
+    retval = OKAY               # uncharacteristically optimistic
+    s = ""
+    done = FALSE
+    if (stk_empty_p(__source_stack))
         panic("(readline) Source stack empty")
+    topsrc = stk_top(__source_stack)
 
-    } else if (blk_type(stk_top(__source_stack)) == SRC_STRING) {
-        dbg__print("io", 6, "(readline) [STRING] RETURNING EOF")
-        return EOF
-
-    } else {
-        dbg__print("io", 8, "(readline) source_stack count = " stk_depth(__source_stack))
-        dbg__print_block("io", 7, stk_top(__source_stack), "(readline) About to call getline < FILE()...")
-        getstat = getline < FILE()
-        dbg__print("io", 7, "(readline) getstat=" getstat)
-        if (getstat == OKAY) {
-            sym_ll_incr("__LINE__", "", GLOBAL_NAMESPACE, 1)
-            sym_ll_incr("__NLINE__", "", GLOBAL_NAMESPACE, 1)
-        } else if (getstat == ERROR) {
-            warn("(readline) getline=>Error reading file '" FILE() "'")
-        } else if (getstat != EOF)
-            panic("(readline) getline returned strange value: " getstat)
+    if (blk_type(topsrc) == SRC_STRING) {
+        dbg__print_block("io", 7, topsrc)
+        s = blktab[topsrc, 0, "str"]
+        if (!emptyp(s)) {
+            dbg__print("io", 3, sprintf("(readline) [STRING] RETURNING %d, '%s'", retval, s))
+            $0 = s
+            blktab[topsrc, 0, "str"] = EMPTY    # "USED UP"
+            return retval
+        } else {
+            dbg__print("io", 6, "(readline) [STRING] RETURNING EOF")
+            return EOF
+        }
     }
-    dbg__print("io", 3, sprintf("(readline) RETURNING %d, $0='%s'", getstat, $0))
-    return getstat
+
+    do {
+        if (!emptyp(__buffer)) {
+            dbg__print("io", 6, "(readline) __buffer not empty so using its contents")
+            # Return the buffer even if somehow it doesn't end with a newline
+            if ((i = index(__buffer, TOK_NEWLINE)) == NOT_FOUND) {
+                s = s __buffer
+                __buffer = EMPTY
+            } else {
+                s = s substr(__buffer, 1, i-1)
+                __buffer = substr(__buffer, i+1)
+            }
+
+        } else {
+            dbg__print("io", 8, "(readline) source_stack count = " stk_depth(__source_stack))
+            dbg__print_block("io", 7, topsrc, "(readline) About to call getline < FILE()...")
+            retval = getline < FILE()
+            dbg__print("io", 7, "(readline) retval=" retval)
+            if (retval == OKAY) {
+                s = s $0
+                sym_ll_incr("__LINE__", "", GLOBAL_NAMESPACE, 1)
+                sym_ll_incr("__NLINE__", "", GLOBAL_NAMESPACE, 1)
+            } else {
+                done = TRUE
+                if (retval == ERROR)
+                    warn("(readline) getline=>Error reading file '" FILE() "'")
+                else if (retval != EOF)
+                    panic("(readline) getline returned strange value: " retval)
+            }
+        }
+        if (retval == OKAY && substr(s, length(s) - 1, 2) == "@\\") {
+            s = chop(chop(s))   # Remove "@\"
+            continue
+        }
+        done = TRUE
+    } while (!done)
+
+    dbg__print("io", 3, sprintf("(readline) RETURNING %d, '%s'", retval, s))
+    $0 = s
+    return retval
 }
 
 
@@ -2391,6 +2417,7 @@ function ppf__block(blknum,
     else if (block_type == BLK_USER)      buf = ppf__user(blknum)
     else if (block_type == BLK_WHILE)     buf = ppf__while(blknum)
     else if (block_type == SRC_FILE)      buf = EMPTY
+    else if (block_type == SRC_STRING)    buf = blktab[blknum, 0, "str"]
     else
         panic(sprintf("(ppf__block) Block # %d: type %s (%s) not handled",
                       blknum, block_type, ppf__block_type(block_type)))
@@ -3258,7 +3285,7 @@ function scan__usercmd_call(    s, name, obj, i, oldi, c, nc, narg, nlbr,
             # Found a }
             dbg__print("parse", 5, ("   (scan__usercmd_call) in loop, cb=" cb))
             inarg = substr(s, 2, cb - 2)
-            gsub(/\\}/, "}", inarg) # Fix quoted brace
+            gsub(/\\}/, TOK_RBRACE, inarg) # Fix quoted brace
             arg[++narg] = inarg
             s = substr(s, cb + 1)
         }
@@ -3530,6 +3557,7 @@ function nam__scan(text, info,
         #warn("(nam__scan) Name '" text "' not valid")
         dbg__print("nam", 2, sprintf("(nam__scan) '%s' => %d", text, ERROR))
         #__m2_msg = "Invalid name: '" text "'"
+        info["valid"] = FALSE
         info["error"] = TRUE
         info["errtext"] = "Error scanning '" text "'"
         return ERROR            # interpret as ERR_SCAN_INVALID_NAME
@@ -6714,7 +6742,7 @@ function parse__string(    str, string_block1, string_block2, pstat, d)
 
 function ppf__SRC_STRING(blknum)
 {
-    return sprintf("  str     : %s\n"             \
+    return sprintf("  str     : '%s'\n"         \
                    "  atmode  : %s",
                    blktab[blknum, 0, "str"],
                    ppf__mode(blktab[blknum, 0, "atmode"]))
@@ -9426,17 +9454,17 @@ function _c3_advance(    tmp)
 #
 #               L = Empty
 #               R = Input String
-#               while R contains an "@" sign do
+#               while R contains an "@" sign do:
 #                   let R = A @ B; set L = L A and R = B
-#                   if R contains no "@" then
+#                   if R contains no "@" then:
 #                       L = L "@"
-#                       break
+#                       break ;
 #                   let R = A @ B; set M = A and R = B
-#                   if M is in SymTab then
-#                       R = SymTab[M] R
-#                   else
+#                   if M is in SymTab then:
+#                       R = SymTab[M] R ;
+#                   else:
 #                       L = L "@" M
-#                       R = "@" R
+#                       R = "@" R ;;
 #               return L R
 #
 #       Note use of macro_*() functions, described below.
@@ -9444,7 +9472,7 @@ function _c3_advance(    tmp)
 #*****************************************************************************
 function dosubs(s,
                 expand, i, j, L, M, nparam, p, pval, param, R, fn,
-                x, inc_dec, pre_post, subcmd, br, lfn, incr, wrkm,
+                x, inc_dec, pre_post, subcmd, lfn, incr, wrkm,
                 fninfo, level, macro)
 {
     trace(TRACE_COMMAND, "dosubs", sprintf("[Execute] dosubs('%s')", s))
@@ -9463,7 +9491,7 @@ function dosubs(s,
             break
 
         # While R contains an "@" sign
-        dbg__print("dosubs", 7, (sprintf("(dosubs) Top of loop: L='%s', R='%s'", L, R)))
+        dbg__print("dosubs", 7, sprintf("(dosubs) Top of loop: L='%s', R='%s'", L, R))
         L = L substr(R, 1, i-1)
         R = substr(R, i+1)      # Currently scanning @
 
@@ -9488,7 +9516,7 @@ function dosubs(s,
         # s == L  @  M  @  R
         #               ^---i
 
-        macro_reset(macro, M)
+        macro_initialize(macro, M)
         macro_expand(macro)
         if (macro["okay"] == TRUE) {
             # Kluge for @srem ...@ to remove preceding whitespace
@@ -9528,11 +9556,28 @@ function dosubs(s,
 # Use this macro[] array to control macro expansion results due to the
 # need to track two return values: whether the expansion went "okay" and
 # what the "expansion" text actually is.
-function macro_reset(macro, urtext)
+function macro_initialize(macro, urtext,
+                          fn, param, br)
 {
-    macro["okay"] = FALSE
-    macro["urtext"] = urtext
-    macro["fn"] = macro["expansion"] = EMPTY
+    macro["urtext"]    = urtext
+    macro["okay"]      = FALSE
+    macro["brace"]     = (br = index(urtext, TOK_LBRACE)) > 0
+    macro["expansion"] = EMPTY
+
+    split(urtext, param)
+    fn = param[1]
+    # Check for @foo{...} -- isolate fn to scan @foo{a}{b}{c}...@ better
+    if (macro["brace"])
+        fn = substr(fn, 1, br - 1)
+    dbg__print("dosubs", 4, sprintf("(macro_initialize) fn='%s'", fn))
+    macro["fn"] = fn
+}
+
+
+function macro_set_expansion(macro, expanded_text)
+{
+    macro["okay"] = TRUE
+    macro["expansion"] = expanded_text
 }
 
 
@@ -9564,21 +9609,16 @@ function macro_reset(macro, urtext)
 # Eventually the big while loop exits and dosubs() returns "L R".
 function macro_expand(macro,
                       i, j, l, M, nparam, p, pval, param, r, fn,
-                      x, inc_dec, pre_post, subcmd, br, lfn, incr, wrkm,
+                      x, inc_dec, pre_post, subcmd, lfn, incr, wrkm,
                       fninfo, level)
 {
     M = macro["urtext"]
     nparam = split(M, param)
-    fn = param[1]
-    macro["fn"] = fn
+    fn = macro["fn"]
 
-    # Check for @foo{...} -- isolate fn to scan @foo{a}{b}{c}...@ better
-    if ((br = index(fn, TOK_LBRACE)) > 0) {
-        fn = substr(fn, 1, br-1)
-        dbg__print("dosubs", 6, sprintf("(macro_expand) fn='%s'", fn))
-
-        # Re-create nparam and param[] according to braces,
-        # not split() on whitespace
+    # Re-create nparam and param[] according to braces,
+    # not split() on whitespace
+    if (macro["brace"]) {
         split("", param)       # Start by deleting all entries
         param[nparam = 0] = fn # 1st element is function name
         wrkM = substr(M, length(fn) + 1)
@@ -9615,7 +9655,7 @@ function macro_expand(macro,
     }
     lfn = length(fn)
 
-    dbg__print("dosubs", 6, sprintf("(macro_expand) fn=%s, nparam=%d; M='%s", fn, nparam, M))
+    dbg__print("dosubs", 6, sprintf("(macro_expand) fn=%s, nparam=%d; M='%s'", fn, nparam, M))
 
     # Check for sequence modifiers.  First one wins, and
     # invalid syntax is silently ignored.
@@ -9797,13 +9837,6 @@ function macro_expand(macro,
 
         macro_set_expansion(macro, idx__size(info__get(fninfo, "name"), level, info__get(fninfo, "code")))
     }
-}
-
-
-function macro_set_expansion(macro, expanded_text)
-{
-    macro["okay"] = TRUE
-    macro["expansion"] = expanded_text
 }
 
 

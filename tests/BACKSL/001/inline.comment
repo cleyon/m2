@@ -1,0 +1,8 @@
+At first glance, this test looks confusing but I think it is operating
+as expected.  Lines 2 and 3 are concatenated into one logical line
+by readline() itself, resulting in
+Here is another @\, and then yet another ... @\.
+
+m2 tries to parse everything between the @ signs as a function,
+and dutifully reports (errors) that "\," (i.e., param[0] == "\,")
+is not a defined function name.

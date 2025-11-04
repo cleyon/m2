@@ -142,6 +142,23 @@ The
 .Qq @{...}
 is required whenever you invoke macros inside other macros, and failure
 to do so will result in obscure and hard\&-to-debug errors.
+.Pp
+There may be occasions when you wish to continue a logical line
+onto the next physical line.
+It is common in many Unix programs for a
+.Ql \e
+character at end of line to do this.
+However,
+.Nm
+is not in the business of altering, without being requested, text which
+may be sent to other programs.
+In order to continue lines, the characters
+.Qq @\e
+must be used to terminate the line, indicating that the next line shall
+be joined to the first line.
+This allows m2 to work on files with backslashes without disturbing
+them, while still providing a mechanism for line continuation that will
+not be triggered spuriously.
 .Ss Commands
 Control commands
 .Po

@@ -75,7 +75,7 @@ for a multi-line comment.
 Manage multiple output data streams with diversions.
 Different streams may be saved to different files.
 .El
-.Pp
+.Ss Syntax
 .Nm
 does not scan
 .Qq tokens
@@ -116,28 +116,34 @@ invocations was a conscious design decision by m1's author, but it
 presents challenges when attempting to parse more advanced syntax, such
 as invoking macros in a nested fashion.
 It is difficult to distinguish, purely lexically:
-.Bd -literal -offset indent -compact
-This is @one and 2@ AND ALSO @three and 4@.
-This is @mid mySym @myBegPos1 Field1@ myLen@.
-.Ed
+.Dl This is @one and 2@ AND ALSO @three and 4@.
+from
+.Dl This is @mid mySym @myBegPos1 Field1@ myLen@.
+.Pp
 To alleviate scanning ambiguities, any characters enclosed in
 at\&-sign braces
 .Qq @{...}
 will be recursively scanned and expanded.
-Thus
-.Dl @data_list[@{my_key}]@
-uses the value in
-.Va my_key
-to look up data from the array
-.Va data_list .
 The text between the braces is implicitly interpreted as if it
 were surrounded by
 .Qq @
 characters, so
 .Ql @{SYMBOL}
 is correct.
-The example shows the syntax when accessing an array element, but the
-syntax is applicable generally.
+Thus, the example above is correctly written:
+.\"  See file tests/SUBSTR/002/examp.m2
+.Dl This is @mid mySym @{myBegPos1 Field1} @{myLen}@.
+.\"  This syntax is admittedly klunky, but with repeated exposure,
+.\"  it soon becomes almost numbingly bearable.
+.Pp
+.Em Example :
+.Bd -literal -offset indent -compact
+@data_list[@{my_key}]@
+.Ed
+uses the value in
+.Va my_key
+to look up data from the List
+.Va data_list .
 The
 .Qq @{...}
 is required whenever you invoke macros inside other macros, and failure
@@ -1454,6 +1460,8 @@ A.\ @define (and @longdef) create a
 whose value can be expanded by surrounding it with "@" characters, as in:
 .br
 .Bd -literal -offset indent -compact
+@define name John Doe
+@define item air fryer
 Hello @name@, I just got a great deal on this new @item@ !!!
 .Ed
 You can also define and invoke
@@ -1474,35 +1482,41 @@ which is recognized and executed like other built-in commands (such as
 etc).
 Commands can only appear on a line of their own
 and may or may not produce output.
-Their definitions may include complex logic.
+Their definitions may include named parameters and complex logic.
 .Pp
 .Em Example :
+.\"  See tests/FOR/007/table.m2
 .Bd -literal -offset indent -compact
-@#              @line{n} produces one data line of the table
+@comment        @line{n} produces one data line of the table
 @newcmd line{n}
-| @format %2d @{n}@ | @format %7.4f @{expr sqrt(n)}@ |
+| @format %2d @{n}@ @\e
+| @format %3d @{expr n^2}@ @\e
+| @format %7.4f @{expr sqrt(n)}@ |
 @endcmd
-@#              @table prints the entire table
-@newcmd table
-|  N | sqrt(N) |
-|----|---------|
-@for N 1 9
-@line{@{N}}
-@next N
+@;
+@comment        @table{n} prints a table with a number of rows
+@newcmd table{n}
+This table will have @n@ lines:
+|  N | N^2 | sqrt(N) |
+|----|-----|---------|
+@for i 1 @n@
+@line{@{i}}
+@next i
 @endcmd
-@@
-@table
-\ \ \ => |  N | sqrt(N) |
-\ \ \ => |----|---------|
-\ \ \ => |  1 |  1.0000 |
-\ \ \ => |  2 |  1.4142 |
-\ \ \ => |  3 |  1.7321 |
-\ \ \ => |  4 |  2.0000 |
-\ \ \ => |  5 |  2.2361 |
-\ \ \ => |  6 |  2.4495 |
-\ \ \ => |  7 |  2.6458 |
-\ \ \ => |  8 |  2.8284 |
-\ \ \ => |  9 |  3.0000 |
+@;
+@table{9}
+\ \ \ => This table will have 9 lines:
+\ \ \ => |  N | N^2 | sqrt(N) |
+\ \ \ => |----|-----|---------|
+\ \ \ => |  1 |   1 |  1.0000 |
+\ \ \ => |  2 |   4 |  1.4142 |
+\ \ \ => |  3 |   9 |  1.7321 |
+\ \ \ => |  4 |  16 |  2.0000 |
+\ \ \ => |  5 |  25 |  2.2361 |
+\ \ \ => |  6 |  36 |  2.4495 |
+\ \ \ => |  7 |  49 |  2.6458 |
+\ \ \ => |  8 |  64 |  2.8284 |
+\ \ \ => |  9 |  81 |  3.0000 |
 .Ed
 .Ss Debugging
 Symbol

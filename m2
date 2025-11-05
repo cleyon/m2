@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-11-04 11:35:12 cleyon>
+#  Time-stamp:  <2025-11-04 12:58:46 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -3860,17 +3860,19 @@ function seqinfo_defined_p(seqinfo,
 }
 
 
-function seq_definition_ppf(name,    buf, TAB)
+function seq_definition_ppf(name,
+                            buf, AT_SEQUENCE)
 {
-    buf =         "@sequence " name TOK_TAB "create\n"
+    AT_SEQUENCE = "@sequence "
+    buf =         AT_SEQUENCE name TOK_TAB "create" TOK_NEWLINE
     if (seq_ll_read(name) != SEQ_DEFAULT_INIT)
-        buf = buf "@sequence " name TOK_TAB "setval " seq_ll_read(name) TOK_NEWLINE
+        buf = buf AT_SEQUENCE name TOK_TAB "setval " seq_ll_read(name) TOK_NEWLINE
     if (seqtab[name, "init"] != SEQ_DEFAULT_INIT)
-        buf = buf "@sequence " name TOK_TAB "setinit " seqtab[name, "init"] TOK_NEWLINE
+        buf = buf AT_SEQUENCE name TOK_TAB "setinit " seqtab[name, "init"] TOK_NEWLINE
     if (seqtab[name, "incr"] != SEQ_DEFAULT_INCR)
-        buf = buf "@sequence " name TOK_TAB "setincr " seqtab[name, "incr"] TOK_NEWLINE
+        buf = buf AT_SEQUENCE name TOK_TAB "setincr " seqtab[name, "incr"] TOK_NEWLINE
     if (seqtab[name, "fmt"] != sym_ll_read("__FMT__", "seq"))
-        buf = buf "@sequence " name TOK_TAB "format " seqtab[name, "fmt"] TOK_NEWLINE
+        buf = buf AT_SEQUENCE name TOK_TAB "format " seqtab[name, "fmt"] TOK_NEWLINE
     return chop(buf)
 }
 

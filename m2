@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-11-04 20:43:10 cleyon>
+#  Time-stamp:  <2025-11-05 13:42:39 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -1134,7 +1134,8 @@ function error(text, file, line)
 {
     warn(text, file, line)
     __exit_code = EX_M2_ERROR
-    end_program(MODE_STREAMS_DISCARD)
+    if (! sym_ll_read("__LENIENT__", "", GLOBAL_NAMESPACE))
+        end_program(MODE_STREAMS_DISCARD)
 }
 
 
@@ -11259,6 +11260,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     else if ("LOGDIR" in ENVIRON)
       sym_ll_fiat("__HOME__",       "", PTYPE_READONLY_SYMBOL,  with_trailing_slash(ENVIRON["LOGDIR"]))
     sym_ll_fiat("__INPUT__",        "", PTYPE_WRITABLE_SYMBOL,  EMPTY)
+    sym_ll_fiat("__LENIENT__",      "", PTYPE_WRITABLE_BOOLEAN, FALSE) # Undocumented
     sym_ll_fiat("__LINE__",         "", PTYPE_READONLY_INTEGER, 0)
     sym_ll_fiat("__M2_UUID__",      "", PTYPE_READONLY_SYMBOL,  uuid())
     sym_ll_fiat("__M2_VERSION__",   "", PTYPE_READONLY_SYMBOL,  M2_VERSION)

@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-11-04 12:58:46 cleyon>
+#  Time-stamp:  <2025-11-04 20:43:10 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -43,7 +43,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "5.1.1"
+    M2_VERSION = "5.1.2"
 
     # Specify a shell for m2 to use for running utility programs.
     # It is expected to be compatible with Bourne shell syntax.
@@ -9685,8 +9685,8 @@ function macro_expand(macro,
             macro_set_expansion(macro, xeq_fn__date(fn, M, nparam, param))
         else if (fn == "dirname")
             macro_set_expansion(macro, xeq_fn__dirname(fn, M, nparam, param))
-        else if (fn == "divlines")
-            macro_set_expansion(macro, xeq_fn__divlines(fn, M, nparam, param))
+        else if (fn == "divnl")
+            macro_set_expansion(macro, xeq_fn__divnl(fn, M, nparam, param))
         else if (fn == "dow")
             macro_set_expansion(macro, xeq_fn__dow(fn, M, nparam, param))
         else if (fn == "executable" || fn == "sexecutable")
@@ -10093,11 +10093,11 @@ function xeq_fn__dirname(fn, M, nparam, param,
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
-#       divlines : Number of lines in a stream, or zero if empty
+#       divnl : Number of lines in a stream, or zero if empty
 #
 #*****************************************************************************
-# @divlines STREAM@
-function xeq_fn__divlines(fn, M, nparam, param,
+# @divnl STREAM@
+function xeq_fn__divnl(fn, M, nparam, param,
                           stream)
 {
     if (nparam != 1)
@@ -11301,7 +11301,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     # They are similar to symbols but with optional parameter handling
     # Also need to add handler in dosubs()  [search: SYMFUNC]
     # Functions cannot be used as symbol or sequence names.
-    split("basename boolval center chr comma date dirname divlines dow epoch" \
+    split("basename boolval center chr comma date dirname divnl dow epoch" \
           " executable expr format getenv gregdate ifdef ifelse ifndef" \
           " ifx index join lc left len ljust ltrim mid mjd mktemp ord rem right" \
           " rjust rot13 rtrim scenter scomma sexecutable sexpr sgetenv sjoin" \

@@ -9,9 +9,9 @@ Two
 One
 @divert
 Here we go!
-@divlines 0@
-@divlines 1@
-@divlines 2@
-@divlines 3@
-@divlines 4@
+@divnl 0@
+@divnl 1@
+@divnl 2@
+@divnl 3@
+@divnl 4@
 @cleardivert

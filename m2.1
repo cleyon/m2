@@ -651,8 +651,8 @@ Directory name of SYM implemented in Awk, assuming Unix style path
 separators.
 See also
 .Va @xdirname .
-.It @divlines STREAM@
-Return the number of lines in STREAM, or zero if empty.
+.It @divnl STREAM@
+Return the number of lines in STREAM, or 0 if empty.
 .It @dow [MJD | YYYY MM DD]@
 Return the ISO day number corresponding to the date specified,
 where 1=Monday, 2=Tuesday, ..., 7=Sunday.
@@ -949,7 +949,7 @@ Hello,
 .Ed
 .Pp
 You can determine if a stream buffer contains text by using the function
-.Ql @divlines N@ ,
+.Ql @divnl N@ ,
 which returns the number of lines stored in a diversion.
 This allows the user to alter processing depending on the availability
 of text in a stream.

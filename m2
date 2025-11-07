@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-11-17 01:45:28 cleyon>
+#  Time-stamp:  <2025-11-17 17:39:24 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -75,11 +75,11 @@ BEGIN {
          " /usr/bin/tput"     \
          " /usr/bin/uname"    \
          , _progs, " ")
-    for (_prog in _progs)
-        if (awk_stat(_progs[_prog]))
-            PROG[awk_basename(_progs[_prog])] = _progs[_prog]
+    for (_p in _progs)
+        if (awk_stat(_progs[_p]))
+            PROG[awk_basename(_progs[_p])] = _progs[_p]
         else
-            print_stderr("m2:External program '" _progs[_prog] "' not found")
+            print_stderr("m2:External program '" _progs[_p] "' not found")
 
     # See the "SECURITY CONSIDERATIONS" section of the manual for more info:
     SEC_STANDARD     = 0 # Default secure level allows m2 to run normal
@@ -151,14 +151,44 @@ BEGIN {
     PTYPE_WRITABLE_INTEGER = TYPE_SYMBOL FLAG_SYSTEM FLAG_WRITABLE FLAG_INTEGER
     PTYPE_WRITABLE_BOOLEAN = TYPE_SYMBOL FLAG_SYSTEM FLAG_WRITABLE FLAG_BOOLEAN
 
-    # Set up critical symbols early
-    namtab["__DEBUG__",      GLOBAL_NAMESPACE] = PTYPE_WRITABLE_BOOLEAN
-    namtab["__SECURE__",     GLOBAL_NAMESPACE] = PTYPE_WRITABLE_INTEGER
-    namtab["__TRACE__",      GLOBAL_NAMESPACE] = PTYPE_WRITABLE_BOOLEAN
+    # For __TRACEMODE__  [search: MATCHFLAGS]
+    TRACE_ARGUMENTS             = "a" # show actual arguments in each call
+    TRACE_BLOCKS                = "b" # show block create/destroy
+   #TRACE_MULTI_LINE            = "c" # show multiple trace lines for each call
+    TRACE_EXPANSION             = "e" # show macro expansion
+    TRACE_INPUT_FILE_CHG        = "i" # trace when input file changes
+    TRACE_SHOW_FILE_NAME        = "f" # show file name
+    TRACE_SHOW_LINE_NUM         = "l" # show line number
+    TRACE_COMMAND               = "m" # trace when a command is executed
+    TRACE_PATH_SEARCH           = "p" # trace when search path search succeeds
+    TRACE_SYMBOL_READ_WRITE     = "s" # trace symbol low-level read & write
+    TRACE_ALL                   = "t" # trace internal macros too
+    TRACE_SET_ON                = "T" # Set __TRACE__ to true
+   #TRACE_SHOW_CALL_ID          = "x" # show unique call id (may not be used)
+    TRACE_WILDCARD_ALL_FLAGS    = "V" # shorthand for all of above options
     #
-    symtab["__DEBUG__",  "", GLOBAL_NAMESPACE, "symval"] = FALSE
-    symtab["__SECURE__", "", GLOBAL_NAMESPACE, "symval"] = __secure_level
-    symtab["__TRACE__",  "", GLOBAL_NAMESPACE, "symval"] = FALSE
+    TRACE_DEFAULT_SET           = TRACE_ARGUMENTS       TRACE_EXPANSION         \
+                                  TRACE_SHOW_FILE_NAME  TRACE_SHOW_LINE_NUM
+    TRACE_VALID_EVENTS          = TRACE_COMMAND         TRACE_EXPANSION         \
+                                  TRACE_INPUT_FILE_CHG  TRACE_PATH_SEARCH       \
+                                  TRACE_BLOCKS          TRACE_SYMBOL_READ_WRITE
+    TRACE_ALL_SET               = TRACE_ARGUMENTS       TRACE_EXPANSION         \
+                                  TRACE_INPUT_FILE_CHG  TRACE_SHOW_FILE_NAME    \
+                                  TRACE_SHOW_LINE_NUM   TRACE_COMMAND           \
+                                  TRACE_PATH_SEARCH     TRACE_SYMBOL_READ_WRITE \
+                                  TRACE_SET_ON          TRACE_ALL               \
+                                  TRACE_BLOCKS
+
+    # Set up critical symbols early
+    namtab["__DEBUG__",     GLOBAL_NAMESPACE] = PTYPE_WRITABLE_BOOLEAN
+    namtab["__SECURE__",    GLOBAL_NAMESPACE] = PTYPE_WRITABLE_INTEGER
+    namtab["__TRACE__",     GLOBAL_NAMESPACE] = PTYPE_WRITABLE_BOOLEAN
+    namtab["__TRACEMODE__", GLOBAL_NAMESPACE] = PTYPE_READONLY_SYMBOL
+    #
+    symtab["__DEBUG__",     "", GLOBAL_NAMESPACE, "symval"] = FALSE
+    symtab["__SECURE__",    "", GLOBAL_NAMESPACE, "symval"] = __secure_level
+    symtab["__TRACE__",     "", GLOBAL_NAMESPACE, "symval"] = FALSE
+    symtab["__TRACEMODE__", "", GLOBAL_NAMESPACE, "symval"] = TRACE_DEFAULT_SET
 }
 
 
@@ -228,14 +258,27 @@ function rtrim(s)
 }
 
 
-# Return N spaces (or other character)
-function spaces(n,    c,
-                s)
+# Return N character
+function repeated(n, c,
+                  s)
 {
-    if (c == EMPTY)
+    if (c == EMPTY) {
+        warn("(repeated) Empty c")
         c = TOK_SPACE
+    }
+    s = ""
     while (n-- > 0)
         s = s c
+    return s
+}
+
+# Return N spaces
+function spaces(n,
+                s)
+{
+    s = ""
+    while (n-- > 0)
+        s = s TOK_SPACE
     return s
 }
 
@@ -1070,7 +1113,7 @@ function format_message(text, file, line,    s)
 {
     file = file ""
     if (file == EMPTY)
-        file = FILE()
+        file = FILE() ? FILE() : __dofile_name
     if (file == STDIN || file == "-")
         file = "<STDIN>"
     line = line ""
@@ -1150,7 +1193,7 @@ function abend(tag, code)
     if (tag == EMPTY)
         tag = "ABEND"
 
-    print_stderr(sprintf("m2:%s", tag))
+    print_stderr(sprintf("m2:%s %d", tag, code))
     flush_stdout(SYNC_FORCE)
     exit code
 }
@@ -1192,7 +1235,7 @@ function readline(    retval, i, s, done, topsrc)
         panic("(readline) Source stack empty")
     topsrc = stk_top(__source_stack)
 
-    if (blk_type(topsrc) == SRC_STRING) {
+    if (blk_type(topsrc) == BLK_STRING) {
         dbg__print_block("io", 7, topsrc)
         s = blktab[topsrc, 0, "str"]
         if (!emptyp(s)) {
@@ -1470,31 +1513,43 @@ function dbg__print_block(dsys, lev, blknum, description,
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
 #*****************************************************************************
-function tracingp(sym,
-                  info)
-{
-    dbg__print("trace", 5, sprintf("(tracingp) START; sym='%s'", sym))
-
-    if (nam__scan(sym, info) == ERROR)
-        error("(tracingp) Scan error, '" sym "'")
-    if (nam__lookup(info) == NAME_NOT_FOUND) {
-        dbg__print("trace", 7, sprintf("(tracingp) nam__lookup() failed: " sym))
-        return FALSE
-    }
-    return info__get(info, "tracing")
-}
-
-
 function trace_prefix(    prefix,
                           trace_mode)
 {
     prefix = "m2trace:"
     trace_mode = sym_ll_read("__TRACEMODE__", "", GLOBAL_NAMESPACE)
     if (flag_1true_p(trace_mode, TRACE_SHOW_FILE_NAME))
-        prefix = prefix FILE() ":"
+        prefix = prefix (FILE() ? FILE() : __dofile_name) ":"
     if (flag_1true_p(trace_mode, TRACE_SHOW_LINE_NUM))
         prefix = prefix LINE() ":"
     return prefix
+}
+
+
+function tracing_symbol_p(sym,
+                          info)
+{
+    dbg__print("trace", 5, sprintf("(tracing_symbol_p) START; sym='%s'", sym))
+
+    if (nam__scan(sym, info) == ERROR)
+        error("(tracing_symbol_p) Scan error, '" sym "'")
+    if (nam__lookup(info) == NAME_NOT_FOUND) {
+        dbg__print("trace", 7, sprintf("(tracing_symbol_p) nam__lookup() failed: " sym))
+        return FALSE
+    }
+    return info__get(info, "tracing")
+}
+
+
+function tracing_event_p(event,
+                         trace_mode)
+{
+    if (index(TRACE_VALID_EVENTS, event) == NOT_FOUND)
+        panic("(tracing_event_p) Unrecognized trace event '" event "'")
+    trace_mode = sym_ll_read("__TRACEMODE__", "", GLOBAL_NAMESPACE)
+    if (flag_1true_p(trace_mode, TRACE_ALL))
+        return TRUE
+    return flag_1true_p(trace_mode, event)
 }
 
 
@@ -1508,12 +1563,14 @@ function trace(event, sym, message,
         return
 
     trace_mode = sym_ll_read("__TRACEMODE__", "", GLOBAL_NAMESPACE)
-    if (((event == TRACE_COMMAND) &&
-         (flag_1true_p(trace_mode, TRACE_ALL) || (flag_1true_p(trace_mode, TRACE_COMMAND) && tracingp(sym)))) ||
+    if (((event == TRACE_BLOCKS) &&
+         (flag_1true_p(trace_mode, TRACE_ALL) || (flag_1true_p(trace_mode, TRACE_BLOCKS)))) ||
+        ((event == TRACE_COMMAND) &&
+         (flag_1true_p(trace_mode, TRACE_ALL) || (flag_1true_p(trace_mode, TRACE_COMMAND) && tracing_symbol_p(sym)))) ||
         ((event == TRACE_EXPANSION) &&
-         (flag_1true_p(trace_mode, TRACE_ALL) || (flag_1true_p(trace_mode, TRACE_EXPANSION) && tracingp(sym)))) ||
+         (flag_1true_p(trace_mode, TRACE_ALL) || (flag_1true_p(trace_mode, TRACE_EXPANSION) && tracing_symbol_p(sym)))) ||
         ((event == TRACE_SYMBOL_READ_WRITE) &&
-         (flag_1true_p(trace_mode, TRACE_ALL) || (flag_1true_p(trace_mode, TRACE_SYMBOL_READ_WRITE) && tracingp(sym)))) ||
+         (flag_1true_p(trace_mode, TRACE_ALL) || (flag_1true_p(trace_mode, TRACE_SYMBOL_READ_WRITE) && tracing_symbol_p(sym)))) ||
         ((event == TRACE_INPUT_FILE_CHG || event == TRACE_PATH_SEARCH) &&
          (flag_1true_p(trace_mode, event))))
 
@@ -2196,28 +2253,26 @@ function idx__size(arr, level, code,
 # Return the newly allocated block number, strictly greater than zero.
 # Block 0 does not exist -- it is the terminal.
 function blk_new(block_type,
-                 new_blknum)
+                 new_blknum, msg)
 {
     if (block_type == EMPTY)
         panic("(blk_new) Missing type")
     new_blknum = ++__block_cnt
+
     blktab[new_blknum, 0, "depth"] = stk_depth(__parse_stack)
     blktab[new_blknum, 0, "type"] = block_type
+    blktab[new_blknum, 0, "refcnt"] = 1
 
-    if (block_type == BLK_AGG)
+    if (block_type == BLK_AGG) {
         blktab[new_blknum, 0, "count"] = 0
-    else if (block_type == BLK_CASE)
+    } else if (block_type == BLK_CASE) {
         blktab[new_blknum, 0, "terminator"] = "^@(endcase|esac)"
-    else if (block_type == BLK_IF)
-        blktab[new_blknum, 0, "terminator"] = "^@(endif|fi)"
-    else if (block_type == SRC_FILE) {
+    } else if (block_type == BLK_FILE) {
         blktab[new_blknum, 0, "open"] = FALSE
+        blktab[new_blknum, 0, "ever_opened"] = FALSE
         blktab[new_blknum, 0, "terminator"] = ""
         blktab[new_blknum, 0, "oob_terminator"] = "EOF"
-    } else if (block_type == SRC_STRING) {
-        blktab[new_blknum, 0, "terminator"] = ""
-        blktab[new_blknum, 0, "oob_terminator"] = "EOS"
-    } else if (block_type == BLK_FOR)
+    } else if (block_type == BLK_FOR) {
         # [0, "array_type"]     *       either @for or @foreach
         # [0, "body_block"]     *
         # [0, "dstblk"]         *
@@ -2230,9 +2285,14 @@ function blk_new(block_type,
         # [0, "loop_var"]       *
         blktab[new_blknum, 0, "terminator"] = "^@next"
         # [0, "valid"]          *
-    else if (block_type == BLK_LONGDEF)
+    } else if (block_type == BLK_IF) {
+        blktab[new_blknum, 0, "terminator"] = "^@(endif|fi)"
+    } else if (block_type == BLK_LONGDEF) {
         blktab[new_blknum, 0, "terminator"] = "^@endlong(def)?"
-    else if (block_type == BLK_TERMINAL) {
+    } else if (block_type == BLK_STRING) {
+        blktab[new_blknum, 0, "terminator"] = ""
+        blktab[new_blknum, 0, "oob_terminator"] = "EOS"
+    } else if (block_type == BLK_TERMINAL) {
         blktab[new_blknum, 0, "dstblk"] = TERMINAL
         blktab[new_blknum, 0, "terminator"] = ""
     } else if (block_type == BLK_USER) {
@@ -2243,22 +2303,88 @@ function blk_new(block_type,
         # [N, "param_name"]
         blktab[new_blknum, 0, "terminator"] = "^@endcmd"
         # [0, "valid"]
-    } else if (block_type == BLK_WHILE)
+    } else if (block_type == BLK_WHILE) {
         blktab[new_blknum, 0, "terminator"] = "^@(endwhile|wend)"
-    else
+    } else
         panic("(blk_new) Uncaught block_type '" block_type "'")
 
-    dbg__print("ship_out", 2, sprintf("(blk_new) Block # %d; type=%s",
-                                      new_blknum, ppf__block_type(block_type)))
+   
+    msg = sprintf("[Block Create] %s => %d",
+                  ppf__block_type(block_type), new_blknum)
+    #print_stderr(msg)
+    trace(TRACE_BLOCKS, EMPTY, msg)
+    dbg__print("ship_out", 2, "(block_new) " msg)
     return new_blknum
+}
+
+
+function blk_delete(blknum,
+                    block_type, seen, msg)
+{
+    block_type = blk_type(blknum)    
+
+    if (block_type == BLK_FILE &&
+        blktab[blknum, 0, "open"] == TRUE) {
+        warn("(blk_delete) Refusing to delete open BLK_FILE " blknum)
+        return
+    }
+    if (--blktab[blknum, 0, "refcnt"] > 0) {
+        # Don't touch if someone else is still holding ref
+        warn("(blk_delete) Refusing to delete blk " blknum " refcnt > 0")
+        return
+    }
+    seen[VOID] = TRUE
+    if      (block_type == BLK_AGG)      blk_walk_AGG(OP_DELETE, blknum, seen, 0)
+    else if (block_type == BLK_CASE)     blk_walk_CASE(OP_DELETE, blknum, seen, 0)
+    else if (block_type == BLK_FILE)     blk_walk_FILE(OP_DELETE, blknum, seen, 0)
+    else if (block_type == BLK_FOR)      blk_walk_FOR(OP_DELETE, blknum, seen, 0)
+    else if (block_type == BLK_IF)       blk_walk_IF(OP_DELETE, blknum, seen, 0)
+    else if (block_type == BLK_LONGDEF)  blk_walk_LONGDEF(OP_DELETE, blknum, seen, 0)
+    else if (block_type == BLK_STRING)   blk_walk_STRING(OP_DELETE, blknum, seen, 0)
+    else if (block_type == BLK_TERMINAL) blk_walk_TERMINAL(OP_DELETE, blknum, seen, 0)
+    else if (block_type == BLK_USER)     blk_walk_USER(OP_DELETE, blknum, seen, 0)
+    else if (block_type == BLK_WHILE)    blk_walk_WHILE(OP_DELETE, blknum, seen, 0)
+    else
+        panic(sprintf("(blk_delete) Can't handle type '%s' for block %d",
+                      block_type, blknum))
+
+    msg = sprintf("[Block Delete] %d %s",
+                  blknum, ppf__block_type(block_type))
+    trace(TRACE_BLOCKS, EMPTY, msg)
+    dbg__print("ship_out", 2, "(blk_delete) " msg)
+
+    delete blktab[blknum, 0, "depth"]
+    delete blktab[blknum, 0, "refcnt"]
+    delete blktab[blknum, 0, "terminator"]
+    delete blktab[blknum, 0, "type"]
+
+    blk_lint(blknum)
+}
+function blk_lint(blknum,
+                   k, x, blk)
+{
+    #print_stderr(">>> BEGIN LINT blknum=" blknum)
+    for (k in blktab) {
+        split(k, x, SUBSEP)
+        blk = x[1] + 0
+        if (blk == blknum)
+            warn(sprintf("(blk_lint) Found blktab[%d, %d, '%s'] with Val '%s'",
+                                blknum, x[2]+0, x[3],
+                         blktab[blknum, x[2]+0, x[3]]))
+    }
+    #print_stderr("<<< END LINT")
 }
 
 
 function blk_type(blknum,
                   bt)
 {
-    if (! ((blknum, 0, "type") in blktab))
-        panic("(blk_type) Block # " blknum " has no type!")
+    if (! ((blknum, 0, "type") in blktab)) {
+        if (! sym_ll_read("__LENIENT__", "", GLOBAL_NAMESPACE))
+            panic("(blk_type) Block # " blknum " has no type!")
+        warn("(blk_type) Block # " blknum " has no type -> UNDEF")
+        return PTYPE_UNDEF
+    }
     bt = blktab[blknum, 0, "type"]
     if (! (bt in __blk_label))
         panic("(blk_type) Block # " blknum " has invalid block type '" bt "'")
@@ -2329,6 +2455,210 @@ function blk_dump_blktab(    x, k, blknum, seen, type)
 }
 
 
+function blk_nicer_dump_blktab( \
+                               x, k, blknum, seen, type,
+                               cnt, blks, i)
+{
+    cnt = 0
+    for (k in blktab) {
+        split(k, x, SUBSEP)
+        blks[++cnt] = 0 + x[1]  # block #
+    }
+    nqsort(blks, 1, cnt)
+
+    # "Touching the Void" (2003 movie)  True story of mountaineers on the
+    # west face of Siula Grande.  https://www.imdb.com/title/tt0379557/
+    seen[VOID] = TRUE
+    seen[TERMINAL] = TRUE
+    for (i = 1; i <= cnt; i++) {
+        blknum = blks[i]
+        #print blknum
+        #print TERMINAL
+        #if (blknum < TERMINAL) print_stderr("TERM LESS"); else if (blknum == TERMINAL) print_stderr("TERM EQUAL"); else if (blknum > TERMINAL) print_stderr("TERM GREATER"); else print_stderr("TERM UNKNOWN")
+        #if (blknum > TERMINAL && (! (blknum in seen))) {
+        if ((! (blknum in seen))) {
+            print_stderr("================================")
+            blk_nicer_print_block(blknum, seen, 0) # 0 <-- indent level
+            print_stderr("Lint:")
+            blk_lint(blknum)
+        }
+    }        
+}
+function blk_nicer_print_block(blknum, seen, indent,
+                               block_type)
+{
+    block_type = blk_type(blknum)
+    if      (block_type == BLK_AGG)      blk_walk_AGG(OP_PRINT, blknum, seen, indent)
+    else if (block_type == BLK_CASE)     blk_walk_CASE(OP_PRINT, blknum, seen, indent)
+    else if (block_type == BLK_FILE)     blk_walk_FILE(OP_PRINT, blknum, seen, indent)
+    else if (block_type == BLK_FOR)      blk_walk_FOR(OP_PRINT, blknum, seen, indent)
+    else if (block_type == BLK_IF)       blk_walk_IF(OP_PRINT, blknum, seen, indent)
+    else if (block_type == BLK_LONGDEF)  blk_walk_LONGDEF(OP_PRINT, blknum, seen, indent)
+    else if (block_type == BLK_STRING)   blk_walk_STRING(OP_PRINT, blknum, seen, indent)
+    else if (block_type == BLK_TERMINAL) blk_walk_TERMINAL(OP_PRINT, blknum, seen, ident)
+    else if (block_type == BLK_USER)     blk_walk_USER(OP_PRINT, blknum, seen, indent)
+    else if (block_type == BLK_WHILE)    blk_walk_WHILE(OP_PRINT, blknum, seen, indent)
+    else
+        panic(sprintf("(blk_nicer_print_block) Can't handle type '%s' for block %d",
+                      block_type, blknum))
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+function blk_walk_AGG(opcode, blknum, seen, indent,
+                      i, count)
+{
+    count = blktab[blknum, 0, "count"] + 0
+    if (opcode == OP_PRINT)
+        print_debugfile(sprintf("%s%2d %s[%d]:",
+                                spaces(3*indent), blknum,                      
+                                "AGG", count))
+    for (i = 1; i <= count; i++)
+        if (opcode == OP_PRINT)
+            blk_nicer_print__obj(blknum, i, indent)
+        else if (opcode == OP_DELETE) {
+            delete blktab[blknum, i, "slot_type"]
+            delete blktab[blknum, i, "slot_value"]
+        }
+    if (opcode == OP_DELETE)
+        delete blktab[blknum, 0, "count"]
+
+    seen[blknum] = TRUE
+}
+function blk_walk_CASE(opcode, blknum, seen, indent)
+{
+    print_debugfile("BLK_CASE"); seen[0 + blknum] = 1
+}
+function blk_walk_FILE(opcode, blknum, seen, indent)
+{
+    if (opcode == OP_PRINT)
+        print_debugfile(sprintf("%2d (%1d ref) %s%s %s",
+                                blknum, blktab[blknum, 0, "refcnt"],
+                                spaces(3*indent),
+                                "FILE", blktab[blknum, 0, "filename"]))
+    if (opcode == OP_DELETE) {
+        if (blktab[blknum, 0, "ever_opened"]) {
+            delete blktab[blknum, 0, "old.buffer"]
+            delete blktab[blknum, 0, "old.file"]
+            delete blktab[blknum, 0, "old.file_uuid"]
+            delete blktab[blknum, 0, "old.line"]
+        }
+        delete blktab[blknum, 0, "atmode"]
+        delete blktab[blknum, 0, "ever_opened"]
+        delete blktab[blknum, 0, "filename"]
+        delete blktab[blknum, 0, "oob_terminator"]
+        delete blktab[blknum, 0, "open"]
+    }
+    seen[blknum] = TRUE
+}
+
+function blk_walk_FOR(opcode, blknum, seen, indent)
+{
+    print_debugfile("BLK_FOR")
+    if (opcode == OP_DELETE) {
+        # [0, "array_type"]     *       either @for or @foreach
+        # [0, "body_block"]     *
+        # [0, "dstblk"]         *
+        # [0, "level"]          @foreach
+        # [0, "loop_array_name] @foreach
+        # [0, "loop_end"]       @for
+        # [0, "loop_incr"]      @for
+        # [0, "loop_start"]     @for
+        # [0, "loop_type"]      *       @for, @foreach, @sforeach
+        # [0, "loop_var"]       *
+        # [0, "valid"]          *
+    }
+    seen[0 + blknum] = 1
+}
+
+function blk_walk_IF(opcode, blknum, seen, indent)
+{
+    if (opcode == OP_PRINT) {
+        print_debugfile(sprintf("%s%2d %s %s%s",
+                                spaces(3*indent), blknum,
+                                "IF" , (blktab[blknum, 0, "init_negate"] ? "! " : ""),
+                                blktab[blknum, 0, "condition"]))
+        blk_nicer_print_block(blktab[blknum, 0, "true_block"], seen, indent+1)
+    } else if (opcode == OP_DELETE)
+        blk_delete(blktab[blknum, 0, "true_block"])
+    if (blktab[blknum, 0, "seen_else"]) {
+        if (opcode == OP_PRINT) {
+            print_debugfile(sprintf("%s%2d %s",
+                                    spaces(3*indent), blknum,
+                                    "ELSE"))
+            blk_nicer_print_block(blktab[blknum, 0, "false_block"], seen, indent+1)
+        } else if (opcode == OP_DELETE)
+            blk_delete(blktab[blknum, 0, "false_block"])
+    }
+    if (opcode == OP_PRINT) {
+        print_debugfile(sprintf("%s%2d %s",
+                                spaces(3*indent), blknum,
+                                "ENDIF"))
+    } else if (opcode == OP_DELETE) {
+        delete blktab[blknum, 0, "condition"]
+        delete blktab[blknum, 0, "dstblk"]
+        delete blktab[blknum, 0, "false_block"]
+        delete blktab[blknum, 0, "init_negate"]
+        delete blktab[blknum, 0, "seen_else"]
+        delete blktab[blknum, 0, "true_block"]
+        delete blktab[blknum, 0, "valid"]
+    }
+    seen[0 + blknum] = 1
+}
+function blk_walk_LONGDEF(opcode, blknum, seen, indent)
+{
+    print "BLK_LONGDEF"; seen[0 + blknum] = 1
+}
+function blk_walk_STRING(opcode, blknum, seen, indent)
+{
+    if (opcode == OP_DELETE) {
+        delete blktab[blknum, 0, "oob_terminator"]
+    }
+    seen[0 + blknum] = 1
+}
+function blk_walk_TERMINAL(opcode, blknum, seen, indent)
+{
+    if (opcode == OP_PRINT) {
+        print_debugfile(sprintf("%s%2d %s",
+                                spaces(3*indent), blknum,
+                                "TERMINAL"))
+    } else if (opcode == OP_DELETE) {
+        delete blktab[blknum, 0, "dstblk"]
+    }
+    seen[0 + blknum] = 1
+}
+function blk_walk_USER(opcode, blknum, seen, indent,
+                       i)
+{
+    if (opcode == OP_DELETE) {
+        for (i = 1; i <= blktab[blknum, 0, "nparam"]; i++)
+            delete blktab[blknum, i, "param_name"]
+        delete blktab[blknum, 0, "body_block"]
+        delete blktab[blknum, 0, "dstblk"]
+        delete blktab[blknum, 0, "name"]
+        delete blktab[blknum, 0, "nparam"]
+        delete blktab[blknum, 0, "valid"]
+    }
+    seen[0 + blknum] = 1
+}
+function blk_walk_WHILE(opcode, blknum, seen, indent)
+{
+    print "BLK_WHILE"; seen[0 + blknum] = 1
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+function blk_nicer_print__obj(blknum, slot, indent,
+                              value)
+{
+    if (blk_type(blknum) != BLK_AGG)
+        panic(sprintf("(blk_nicer_print__obj) Block %d has type %s, not AGG",
+                      blknum, ppf__block_type(blk_type(blknum))))
+    if (blk_ll_slot_type(blknum, slot) != OBJ_TEXT)
+        panic(sprintf("(blk_nicer_print__obj) Block # %d slot %d is not OBJ_TEXT",
+                      blknum, slot))
+    value = blk_ll_slot_value(blknum, slot)
+    print sprintf("%s%2d %s",
+                  spaces(3*indent), blknum, value)
+}
+
+
 function blk_dump_block_raw(blknum,
                             x, k, blk, type, slot_type_str)
 {
@@ -2393,14 +2723,14 @@ function ppf__block(blknum,
 
     if      (block_type == BLK_AGG)       buf = ppf__agg(blknum)
     else if (block_type == BLK_CASE)      buf = ppf__case(blknum)
+    else if (block_type == BLK_FILE)      buf = EMPTY
     else if (block_type == BLK_FOR)       buf = ppf__for(blknum)
     else if (block_type == BLK_IF)        buf = ppf__if(blknum)
     else if (block_type == BLK_LONGDEF)   buf = ppf__longdef(blknum)
+    else if (block_type == BLK_STRING)    buf = blktab[blknum, 0, "str"]
     else if (block_type == BLK_TERMINAL)  buf = EMPTY
     else if (block_type == BLK_USER)      buf = ppf__user(blknum)
     else if (block_type == BLK_WHILE)     buf = ppf__while(blknum)
-    else if (block_type == SRC_FILE)      buf = EMPTY
-    else if (block_type == SRC_STRING)    buf = blktab[blknum, 0, "str"]
     else
         panic(sprintf("(ppf__block) Block # %d: type %s (%s) not handled",
                       blknum, block_type, ppf__block_type(block_type)))
@@ -2417,13 +2747,13 @@ function ppf__BLK(blknum,
 
     if      (block_type == BLK_AGG)      text = ppf__BLK_AGG(blknum)
     else if (block_type == BLK_CASE)     text = ppf__BLK_CASE(blknum)
-    else if (block_type == SRC_FILE)     text = ppf__SRC_FILE(blknum)
-    else if (block_type == SRC_STRING)   text = ppf__SRC_STRING(blknum)
+    else if (block_type == BLK_FILE)     text = ppf__BLK_FILE(blknum)
     else if (block_type == BLK_FOR)      text = ppf__BLK_FOR(blknum)
     else if (block_type == BLK_IF)       text = ppf__BLK_IF(blknum)
     else if (block_type == BLK_LONGDEF)  text = ppf__BLK_LONGDEF(blknum)
-    else if (block_type == BLK_USER)     text = ppf__BLK_USER(blknum)
+    else if (block_type == BLK_STRING)   text = ppf__BLK_STRING(blknum)
     else if (block_type == BLK_TERMINAL) text = EMPTY
+    else if (block_type == BLK_USER)     text = ppf__BLK_USER(blknum)
     else if (block_type == BLK_WHILE)    text = ppf__BLK_WHILE(blknum)
     else
         panic(sprintf("(ppf__BLK) Can't handle type '%s' for block %d",
@@ -2447,9 +2777,12 @@ function execute__block(blknum,
     old_level = __namespace
     if      (block_type == BLK_AGG)       xeq__BLK_AGG(blknum)
     else if (block_type == BLK_CASE)      xeq__BLK_CASE(blknum)
+    # BLK_FILE
     else if (block_type == BLK_FOR)       xeq__BLK_FOR(blknum)
     else if (block_type == BLK_IF)        xeq__BLK_IF(blknum)
     else if (block_type == BLK_LONGDEF)   xeq__BLK_LONGDEF(blknum)
+    # BLK_STRING
+    # BLK_TERMINAL
     else if (block_type == BLK_USER)      xeq__BLK_USER(blknum)
     else if (block_type == BLK_WHILE)     xeq__BLK_WHILE(blknum)
     else
@@ -2753,8 +3086,8 @@ function prep_file(filename,
                    file_block, retval)
 {
     dbg__print("parse", 7, "(prep_file) START filename='" filename "'")
-    # create and return a SRC_FILE set up for the terminal
-    file_block = blk_new(SRC_FILE)
+    # create and return a BLK_FILE set up for the terminal
+    file_block = blk_new(BLK_FILE)
     if (filename == "-")
         filename = STDIN
     blktab[file_block, 0, "filename"] = filename
@@ -2768,21 +3101,25 @@ function prep_file(filename,
 function dofile(filename,
                 file_block, retval, p)
 {
+    __dofile_name = filename
     dbg__print("parse", 5, "(dofile) START filename='" filename "'")
 
-    # Prepare to read filename; set up a SRC_FILE block to manage input
+    # Prepare to read filename; set up a BLK_FILE block to manage input
     # and a BLK_TERMINAL to receive output
     file_block = prep_file(filename)
+    trace(TRACE_BLOCKS, EMPTY, sprintf("[Block Update] %d FILE, filename='%s'",
+                                       file_block, filename))
+
     dbg__print("parse", 7, sprintf("(dofile) Pushing file block %d (%s) onto source_stack", file_block, filename))
     stk_push(__source_stack, file_block)
     stk_push(__parse_stack, __terminal)
 
     dbg__print("parse", 5, "(dofile) CALLING parse__file()")
     retval = parse__file()
+    # parse_file() pops the source stack and deletes the BLK_FILE block
     dbg__print("parse", 5, "(dofile) RETURNED FROM parse__file()")
 
     # Clean up
-    # (parse_file() pops the source stack)
     p = stk_pop(__parse_stack)
     dbg__print("parse", 7, "(dofile) popped parse_stack => " p)
     dbg__print("parse", 5, "(dofile) END => " ppf__bool(retval))
@@ -2815,7 +3152,8 @@ function parse__file(    filename, file_block1, file_block2, pstat, d)
     if (!path_exists_p(filename)) {
         dbg__print("parse", 2, sprintf("(parse__file) END File '%s' does not exist => %s",
                                      filename, ppf__bool(FALSE)))
-        stk_pop(__source_stack) # Remove SRC_FILE for non-existent file
+        stk_pop(__source_stack) # Remove BLK_FILE for non-existent file
+        blk_delete(file_block1)
         return FALSE
     }
     if (filename in __active_files)
@@ -2823,10 +3161,11 @@ function parse__file(    filename, file_block1, file_block2, pstat, d)
     __active_files[filename] = TRUE
     sym_ll_incr("__NFILE__", "", GLOBAL_NAMESPACE, 1); __rnf++
     blktab[file_block1, 0, "open"]          = TRUE
+    blktab[file_block1, 0, "ever_opened"]   = TRUE
     blktab[file_block1, 0, "old.buffer"]    = __buffer
     blktab[file_block1, 0, "old.file"]      = FILE()
-    blktab[file_block1, 0, "old.line"]      = LINE()
     blktab[file_block1, 0, "old.file_uuid"] = sym_ll_read("__FILE_UUID__", "", GLOBAL_NAMESPACE)
+    blktab[file_block1, 0, "old.line"]      = LINE()
     dbg__print_block("ship_out", 7, file_block1, "(parse__file) file_block1")
 
     # # Set up new file context
@@ -2857,6 +3196,7 @@ function parse__file(    filename, file_block1, file_block2, pstat, d)
     sym_ll_write("__LINE__",      "", GLOBAL_NAMESPACE, blktab[file_block2, 0, "old.line"])
     sym_ll_write("__FILE_UUID__", "", GLOBAL_NAMESPACE, blktab[file_block2, 0, "old.file_uuid"])
 
+    blk_delete(file_block2)
     dbg__print("parse", 2, sprintf("(parse__file) END '%s' => %s",
                                  filename, ppf__bool(pstat)))
     return pstat
@@ -2899,7 +3239,7 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
             break          # out of entire parsing loop, to then return
         }
         if (rstat == EOF) {
-            # End of file SRC_FILE is fine, just return a TRUE to say so.
+            # End of file BLK_FILE is fine, just return a TRUE to say so.
             # EOF on any other block type means the parse didn't find
             # a terminator, so return FALSE.
             dbg__print("parse", 5, sprintf("(parse) [%s] readline() detected EOF on '%s'",
@@ -3282,7 +3622,7 @@ function scan__usercmd_call(    s, name, obj, i, oldi, c, nc, narg, nlbr,
 }
 
 
-function ppf__SRC_FILE(blknum)
+function ppf__BLK_FILE(blknum)
 {
     return sprintf("  filename: %s (%s)\n" \
                    "  atmode  : %s",
@@ -3757,7 +4097,7 @@ function nam_ll_write(name, level, code,
         print_debugfile(sprintf("m2debug:(nam_ll_write) namtab[\"%s\", %d] = %s", name, level, code))
 
     trace(TRACE_SYMBOL_READ_WRITE, name,
-          sprintf("[Name Write] \"%s\" (lev:%d) := Code '%s'",
+          sprintf("[Name Update] \"%s\" (lev:%d) := Code '%s'",
                   name, level, code))
     return namtab[name, level] = code
 }
@@ -3966,7 +4306,7 @@ function stk_push(stack, new_elem,
 {
     if (stack["name"] == "source_stack")
         trace(TRACE_INPUT_FILE_CHG, EMPTY,
-              sprintf("[File] Input file now '%s'", blktab[new_elem, 0, "filename"]))
+              sprintf("[File Update] Input file now '%s'", blktab[new_elem, 0, "filename"]))
     if (dbg__sys_level_p("stk", 5)) {
         siz = stack[0]
         print_debugfile(sprintf("m2debug:(stk_push) %s[%d] := %s",
@@ -4000,7 +4340,7 @@ function stk_pop(stack,
     if (!stk_empty_p(stack) && stack["name"] == "source_stack") {
         new_top = stack[stack[0]]
         trace(TRACE_INPUT_FILE_CHG, EMPTY,
-              sprintf("[File] Input file now '%s'", blktab[new_top, 0, "filename"]))
+              sprintf("[File Update] Input file now '%s'", blktab[new_top, 0, "filename"]))
     }
     if (dbg__sys_level_p("stk", 5)) {
         print_debugfile(sprintf("m2debug:(stk_pop) %s[%d] -> %s",
@@ -4331,7 +4671,7 @@ function sym_destroy(name, key, level)
     #                                   delete namtab[name]
     delete namtab[name, level]
     trace(TRACE_SYMBOL_READ_WRITE, name,
-          sprintf("[Name Delete] \"%s\" (lev:%d)", name, level))
+          sprintf("[Symbol Delete] \"%s\" (lev:%d)", name, level))
     delete symtab[name, key, level, "agg_block"]
     delete symtab[name, key, level, "deferred_arg"]
     delete symtab[name, key, level, "deferred_prog"]
@@ -4782,7 +5122,7 @@ function sym_ll_read(name, key, level,
     #print_stderr("ll_read: name='" name "'")
     if (! double_underscores_p(name))
         trace(TRACE_SYMBOL_READ_WRITE, name,
-              sprintf("[Symbol Read] %s (lev:%d) == '%s'",
+              sprintf("[Symbol Read] %s (lev:%d) => '%s'",
                       sprintf("\"%s%s\"", name, (key ? "[" key "]" : "")),
                       level, retval))
     return retval
@@ -4827,7 +5167,7 @@ function sym_ll_write(name, key, level, val)
     }
 
     trace(TRACE_SYMBOL_READ_WRITE, name,
-          sprintf("[Symbol Write] %s (lev:%d) := Val '%s'",
+          sprintf("[Symbol Update] %s (lev:%d) := Val '%s'",
                   sprintf("\"%s%s\"", name, !emptyp(key) ? "[" key "]" : ""),
                   level, val))
     return symtab[name, key, level, "symval"] = val
@@ -5404,6 +5744,25 @@ function assert_sym_valid_name(sym, caller)
 #         error(sprintf("%s: Name '%s' not valid",
 #                       caller, info__get(syminfo, "name")))
 # }
+
+
+function symtab_whats_left(x, k)
+{
+        for (k in symtab) {
+            split(k, x, SUBSEP)
+            if (double_underscores_p(x[1]))
+                continue
+            print sprintf("symtab['%s', '%s', %d, %s]=%s",
+                          x[1], x[2], x[3], x[4],
+                          symtab[x[1], x[2], x[3], x[4]])
+        }
+#         for (k in del_list) {
+#             split(k, x, SUBSEP)
+#             dbg__print("sym", 3, sprintf("(arr_clear) Delete symtab['%s', '%s', %d, %s]",
+#                                         x[1], x[2], x[3], x[4]))
+#             delete symtab[x[1], x[2], x[3], x[4]]
+#         }
+}
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
 
@@ -6675,8 +7034,8 @@ function dostring(str,
 {
     dbg__print("parse", 5, "(dostring) START str='" str "'")
 
-    # Set up a SRC_STRING parser for str, and the __terminal
-    string_block = blk_new(SRC_STRING)
+    # Set up a BLK_STRING parser for str, and the __terminal
+    string_block = blk_new(BLK_STRING)
     blktab[string_block, 0, "str"]    = str # was dosubs(str), but that loses if you say:
                                             #   @wrap @syscmd rm @TEMPFILES@
     blktab[string_block, 0, "atmode"] = MODE_AT_PROCESS
@@ -6727,7 +7086,7 @@ function parse__string(    str, string_block1, string_block2, pstat, d)
 }
 
 
-function ppf__SRC_STRING(blknum)
+function ppf__BLK_STRING(blknum)
 {
     return sprintf("  str     : '%s'\n"         \
                    "  atmode  : %s",
@@ -6816,6 +7175,8 @@ function xeq_cmd__filedata(cmd, cmdline,
     # create a new literal file parser
     stk_push(__parse_stack, agg_block)
     file_block = prep_file(filename)
+    trace(TRACE_BLOCKS, EMPTY, sprintf("[Block Update] %d %s, filename='%s'",
+                                       file_block, "FILE", filename))
     blktab[file_block, 0, "atmode"] = MODE_AT_LITERAL
     # Push file block manually because prep_file doesn't do that
     dbg__print("parse", 7, sprintf("(xeq_cmd__filedata) Pushing file block %d (%s) onto source_stack", file_block, filename))
@@ -7525,9 +7886,11 @@ function xeq_cmd__include(cmd, cmdline,
         if (emptyp(filename))
             break
         file_block = prep_file(filename)
+        trace(TRACE_BLOCKS, EMPTY, sprintf("[Block Update] %d %s, filename='%s'",
+                                           file_block, "FILE", filename))
         blktab[file_block, 0, "atmode"] = substr(cmd, length(cmd)-4) == "paste" \
                                           ? MODE_AT_LITERAL : MODE_AT_PROCESS
-        # prep_file doesn't push the SRC_FILE onto the __source_stack,
+        # prep_file doesn't push the BLK_FILE onto the __source_stack,
         # so we have to do that ourselves due to customization
         dbg__print("parse", 7, sprintf("(xeq_cmd__include) Pushing file block %d (%s) onto source_stack", file_block, filename))
         stk_push(__source_stack, file_block)
@@ -8629,7 +8992,8 @@ function xeq_cmd__tracemode(cmd, cmdline,
     }
 
     letters = $1
-    if (letters !~ /^[-+aeiflmpstTV][-+aeiflmpstTV]*$/)
+    # MATCHFLAGS
+    if (letters !~ /^[-+abeiflmpstTV][-+abeiflmpstTV]*$/)
         error("@tracemode: Bad parameters")
 
     add_rem = TRUE              # add_rem == TRUE  -> Adding flags
@@ -10927,13 +11291,12 @@ function xeq_fn__spaces(fn, M, nparam, param,
             error("Value '" n "' must be numeric:" $0)
     } else
         n = 1
+    if (substr(fn, 1, 5) == "space")
+        return spaces(n)
     if (substr(fn, 1, 3) == "tab")
-        c = TOK_TAB
-    else if (substr(fn, 1, 5) == "space")
-        c = TOK_SPACE
-    else
-        c = "?"
-    return spaces(n, c)
+        return repeated(n, TOK_TAB)
+    # Alternate reality
+    return repeated(n, "?")
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -11073,20 +11436,21 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
       OBJ_TEXT                  = "t"; __blk_label[OBJ_TEXT]     = "TEXT"
       OBJ_USER                  = "u"; __blk_label[OBJ_USER]     = "USER"
     BLK_CASE                    = "C"; __blk_label[BLK_CASE]     = "CASE"
-    BLK_IF                      = "I"; __blk_label[BLK_IF]       = "IF"
+    BLK_FILE                    = "F"; __blk_label[BLK_FILE]     = "FILE"
     BLK_FOR                     = "R"; __blk_label[BLK_FOR ]     = "FOR"
+    BLK_IF                      = "I"; __blk_label[BLK_IF]       = "IF"
     BLK_LONGDEF                 = "L"; __blk_label[BLK_LONGDEF]  = "LONGDEF"
+    BLK_STRING                  = "S"; __blk_label[BLK_STRING]   = "STRING"
     BLK_TERMINAL                = "T"; __blk_label[BLK_TERMINAL] = "TERMINAL"
     BLK_USER                    = "U"; __blk_label[BLK_USER]     = "USER"
     BLK_WHILE                   = "W"; __blk_label[BLK_WHILE]    = "WHILE"
-    SRC_FILE                    = "F"; __blk_label[SRC_FILE]     = "FILE"
-    SRC_STRING                  = "S"; __blk_label[SRC_STRING]   = "STRING"
 
-    # CRUD
+    # CRUDP
     OP_CREATE                   =    1; __op_label[OP_CREATE]    = "CREATE"
     OP_READ                     =    2; __op_label[OP_READ]      = "READ"
     OP_UPDATE                   =    3; __op_label[OP_UPDATE]    = "UPDATE"
     OP_DELETE                   =    4; __op_label[OP_DELETE]    = "DELETE"
+    OP_PRINT                    =    5; __op_label[OP_PRINT]     = "PRINT"
 
     # Errors
     ERR_OKAY                    =    0
@@ -11131,31 +11495,6 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     TOK_SLASH                   = "/"
     TOK_TAB                     = "\t"
 
-    # For __TRACEMODE__
-    TRACE_ARGUMENTS             = "a" # show actual arguments in each call
-   #TRACE_MULTI_LINE            = "c" # show multiple trace lines for each call
-    TRACE_EXPANSION             = "e" # show macro expansion
-    TRACE_INPUT_FILE_CHG        = "i" # trace when input file changes
-    TRACE_SHOW_FILE_NAME        = "f" # show file name
-    TRACE_SHOW_LINE_NUM         = "l" # show line number
-    TRACE_COMMAND               = "m" # trace when a command is executed
-    TRACE_PATH_SEARCH           = "p" # trace when search path search succeeds
-    TRACE_SYMBOL_READ_WRITE     = "s" # trace symbol low-level read & write
-    TRACE_ALL                   = "t" # trace internal macros too
-    TRACE_SET_ON                = "T" # Set __TRACE__ to true
-   #TRACE_SHOW_CALL_ID          = "x" # show unique call id (may not be used)
-    TRACE_WILDCARD_ALL_FLAGS    = "V" # shorthand for all of above options
-    #
-    TRACE_DEFAULT_SET           = TRACE_ARGUMENTS       TRACE_EXPANSION
-    TRACE_VALID_EVENTS          = TRACE_COMMAND         TRACE_EXPANSION         \
-                                  TRACE_INPUT_FILE_CHG  TRACE_PATH_SEARCH       \
-                                  TRACE_SYMBOL_READ_WRITE
-    TRACE_ALL_SET               = TRACE_ARGUMENTS       TRACE_EXPANSION         \
-                                  TRACE_INPUT_FILE_CHG  TRACE_SHOW_FILE_NAME    \
-                                  TRACE_SHOW_LINE_NUM   TRACE_COMMAND           \
-                                  TRACE_PATH_SEARCH     TRACE_SYMBOL_READ_WRITE \
-                                  TRACE_SET_ON          TRACE_ALL
-
     # Execution control states for loops
     XEQ_NORMAL                  = 0
     XEQ_BREAK                   = 1
@@ -11163,7 +11502,6 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     XEQ_RETURN                  = 3
 
     # Global variables
-    __block_cnt                 = 0
     __buffer                    = EMPTY
     __init_files_loaded         = FALSE # becomes True in load_init_files()
     __namespace                 = GLOBAL_NAMESPACE
@@ -11274,7 +11612,6 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     sym_ll_fiat("__STRICT__",   "name", "",                     TRUE)
     sym_ll_fiat("__SYNC__",         "", PTYPE_WRITABLE_INTEGER, SYNC_FILE)
     sym_ll_fiat("__SYSVAL__",       "", PTYPE_READONLY_INTEGER, 0)
-    sym_ll_fiat("__TRACEMODE__",    "", PTYPE_READONLY_SYMBOL,  TRACE_DEFAULT_SET)
 
     # IMMEDS
     # These commands are Immediate
@@ -11346,7 +11683,8 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     __flag_label[FLAG_WRITABLE]  = "Writable"
 
     # Set up terminal to receive output as stream 0 (default)
-    __terminal = blk_new(BLK_TERMINAL)
+    __block_cnt = -1            # blk_new() increments first, so
+    __terminal = blk_new(BLK_TERMINAL) # __terminal == block 0
     stk_push(__parse_stack, __terminal)
     strtab[0] = TERMINAL
 }
@@ -11536,7 +11874,16 @@ function process_command_line_arguments(    nfile, arg, i, eq, name, val, file)
                 sym_ll_write("__STRICT__", "name", GLOBAL_NAMESPACE, val)
                 continue
             } else if (name == "trace") {
-                name = "__TRACE__"
+                if (emptyp(val))
+                    # trace= sets __TRACE__ to False
+                    sym_ll_write("__TRACE__", "", GLOBAL_NAMESPACE, FALSE)
+                else {
+                    # trace=abcd sets __TRACE__ to True and _val is
+                    # passed to @tracemode.  Don't forget "+" FLAGS
+                    sym_ll_write("__TRACE__", "", GLOBAL_NAMESPACE, TRUE)
+                    xeq_cmd__tracemode("tracemode", val)
+                }
+                continue
             } else if (name == "U") {      # U=<name>
                 # Undefine name, like @undef
                 xeq_cmd__undefine("undefine", val)
@@ -11661,9 +12008,16 @@ function end_program(diverted_streams_final_disposition,
         for (i = 1; i <= __wrap_cnt; i++)
             dostring(__wrap_text[i])
 
+    # XXX - dev stuff here
+    if (tracing_event_p(TRACE_SYMBOL_READ_WRITE))
+        symtab_whats_left()
+    if (tracing_event_p(TRACE_BLOCKS))
+        blk_nicer_dump_blktab()
+
     if (debugging_enabled_p())
-        print_debugfile(sprintf("m2:%s",
-                                __exit_code == EX_NOINPUT ? "NOFILE" : __exit_code == EX_OK ? "END" : "ERROR"))
+        print_debugfile(sprintf("m2:%s %d",
+                                __exit_code == EX_NOINPUT ? "NOFILE" : __exit_code == EX_OK ? "END" : "ERROR",
+                                __exit_code))
     flush_stdout(SYNC_FORCE)
     exit __exit_code
 }

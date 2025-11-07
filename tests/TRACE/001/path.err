@@ -1,1 +1,1 @@
-m2trace: [Path Search] 'incl2' found 'path_search/incl2'
+m2trace:path.m2:3: [Path Search] 'incl2' found 'path_search/incl2'

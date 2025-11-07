@@ -1,1 +1,1 @@
-m2trace: [Expand] @foo@ => 'bar'
+m2trace:tr.m2:5: [Expand] @foo@ => 'bar'

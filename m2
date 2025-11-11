@@ -3027,7 +3027,7 @@ function execute__command(name, cmdline,
     else if (name ==  "traceoff")       xeq_cmd__traceoff(name, cmdline)
     else if (name ==  "traceon")        xeq_cmd__traceon(name, cmdline)
     else if (name ==  "typeout")        xeq_cmd__typeout(name, cmdline)
-    else if (name ~   "undef(ine)?")    xeq_cmd__undefine(name, cmdline)
+    else if (name ~   /undef(ine)?/)    xeq_cmd__undefine(name, cmdline)
     else if (name ==  "undivert")       xeq_cmd__undivert(name, cmdline)
     else if (name ==  "warn")           xeq_cmd__error(name, cmdline)
     else if (name ==  "wrap")           xeq_cmd__wrap(name, cmdline)
@@ -3838,6 +3838,7 @@ function ppf__flags(code,
 #             valid       : TRUE if both name_valid && key_valid are TRUE
 #
 #       After a successful nam__lookup(), the following entries are added:
+#       (assuming TYPE_SYMBOL).
 #             code        : String holding the type and any flags (from namtab)
 #             idxable     : TRUE if type == TYPE_ARRAY or TYPE_LIST.
 #                           Means this incantation can support NAME[KEY].
@@ -8150,7 +8151,7 @@ function parse__longdef(    name, sym_block, body_block, pstat,
     stk_push(__parse_stack, sym_block) # Push it on to the parse_stack
 
     dbg__print("sym", 5, "(parse__longdef) CALLING parse()")
-    pstat = parse() # parse() should return after it encounters @endcmd
+    pstat = parse() # parse() should return after it encounters @endlongdef
     dbg__print("sym", 5, "(parse__longdef) RETURNED FROM parse() => " ppf__bool(pstat))
     if (!pstat)
         error("[@longdef] Parse error")
@@ -9655,7 +9656,7 @@ function _c3_factor3(    e, fun, e2,
             dbg__print("expr", 7, sprintf("defined(): e2='%s'", e2))
             _c3__f += length(e2)
             e = sym_defined_p(e2) ? TRUE : FALSE
-        } else if (fun ~ /^(atan2|hypot|max|min|pow)\(/) {
+        } else if (fun ~ /^(atan2|gcd|hypot|lcm|max|min|pow)\(/) {
             e = _c3_expr()
             if (substr(_c3__Sexpr, _c3__f, 1) != ",")
                 error(sprintf("Missing ',' at '%s'", substr(_c3__Sexpr, _c3__f)))
@@ -9752,6 +9753,7 @@ function _c3_calculate_function2(fun, e, e2,
                                  hmax, hmin, hr)
 {
     if (fun == "atan2(")   return atan2(e, e2)
+    if (fun == "gcd(")     return _c3_gcd(e, e2)
     if (fun == "hypot(")   { # Dangerous due to potentional overflow:
                              #    return sqrt(e^2 + e2^2)
                              # Better: the following algorithm computes
@@ -9762,6 +9764,7 @@ function _c3_calculate_function2(fun, e, e2,
                              hr = hmin / hmax
                              return hmax * sqrt(1 + hr^2)
                            }
+    if (fun == "lcm(")     return _c3_lcm(e, e2)
     if (fun == "max(")     return e > e2 ? e : e2
     if (fun == "min(")     return e < e2 ? e : e2
     if (fun == "pow(")     return e ^ e2
@@ -9775,6 +9778,20 @@ function _c3_advance(    tmp)
     tmp = substr(_c3__Sexpr, _c3__f, RLENGTH)
     _c3__f += RLENGTH
     return tmp
+}
+
+# greatest common divisor
+function _c3_gcd(e, e2)
+{
+    return e2 ? _c3_gcd(e2, e % e2) \
+              : e
+}
+
+# least common multiple
+function _c3_lcm(e, e2)
+{
+    return (e == 0 || e2 == 0) ? 0 \
+        : abs(e * e2 / _c3_gcd(e, e2))
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 

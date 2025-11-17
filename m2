@@ -9647,8 +9647,8 @@ function _c3_factor3(    e, fun, e2,
     # (expr) | function(expr) | function(expr,expr)
     if (match(e, /^([A-Za-z#_][A-Za-z#_0-9]+)?\(/)) {
         fun = _c3_advance()
-        # These are for numeric functions only, not strings/symbols
-        if (fun ~ /^(abs|acos|asin|ceil|cos|deg|exp|floor|int|lg|ln|log(10)?|rad|randint|round|sign|sin|sqrt|srand|tan)?\(/) {
+        # These are for *1 argument* numeric functions only, not strings/symbols
+        if (fun ~ /^(abs|acos|asin|ceil|cos|deg|exp|floor|int|lg|ln|log(10)?|odd|rad|randint|round|sign|sin|sqrt|srand|tan)?\(/) {
             e = _c3_expr()
             e = _c3_calculate_function(fun, e)
         } else if (fun ~ /^defined\(/) {
@@ -9656,6 +9656,7 @@ function _c3_factor3(    e, fun, e2,
             dbg__print("expr", 7, sprintf("defined(): e2='%s'", e2))
             _c3__f += length(e2)
             e = sym_defined_p(e2) ? TRUE : FALSE
+        # These are two arg numeric functions
         } else if (fun ~ /^(atan2|gcd|hypot|lcm|max|min|pow)\(/) {
             e = _c3_expr()
             if (substr(_c3__Sexpr, _c3__f, 1) != ",")
@@ -9705,10 +9706,10 @@ function _c3_calculate_function(fun, e,
     if (fun == "(")        { return e }
     if (fun == "abs(")     { return abs(e) }    # e < 0 ? -e : e
     if (fun == "acos(")    { if (e < -1 || e > 1)
-                                 error(sprintf("%s%d): Math expression error", fun, e))
+                                 error(sprintf("%s%g): Math expression error", fun, e))
                              return atan2(sqrt(1 - e^2), e) }
     if (fun == "asin(")    { if (e < -1 || e > 1)
-                                 error(sprintf("%s%d): Math expression error", fun, e))
+                                 error(sprintf("%s%g): Math expression error", fun, e))
                              return atan2(e, sqrt(1 - e^2)) }
     if (fun == "ceil(")    { c = int(e)
                              return e > c ? c+1 : c }
@@ -9719,30 +9720,28 @@ function _c3_calculate_function(fun, e,
                              return e < c ? c-1 : c }
     if (fun == "int(")     { return int(e) }
     if (fun == "lg(")      { if (e <= 0)
-                                 error(sprintf("%s%d): Math expression error", fun, e))
+                                 error(sprintf("%s%g): Math expression error", fun, e))
                              return log(e) / LOG2 }
     if (fun == "log(" || fun == "ln(")
                            { if (e <= 0)
-                                 error(sprintf("%s%d): Math expression error", fun, e))
+                                 error(sprintf("%s%g): Math expression error", fun, e))
                              return log(e) }
     if (fun == "log10(")   { if (e <= 0)
-                                 error(sprintf("%s%d): Math expression error", fun, e))
+                                 error(sprintf("%s%g): Math expression error", fun, e))
                              return log(e) / LOG10 }
-    if (fun == "rad(")     { return e * (TAU / 360) }
+    if (fun == "odd(")     { return e % 2 }
+    if (fun == "rad(")     { return _c3_to_rad(e) }  # e * (TAU / 360) }
     if (fun == "randint(") { if (e < 1)
-                                 error(sprintf("%s%d): Math expression error", fun, e))
+                                 error(sprintf("%s%g): Math expression error", fun, e))
                              return randint2(1,int(e)) }
     if (fun == "round(")   { return round(e) }
     if (fun == "sign(")    { return (e > 0) - (e < 0) } # cf _The Elements of Programming Style, 2ed_, Kernighan & Plauger, 1974, pp. 1-2
     if (fun == "sin(")     { return sin(e) }
     if (fun == "sqrt(")    { if (e < 0)
-                                 error(sprintf("%s%d): Math expression error", fun, e))
+                                 error(sprintf("%s%g): Math expression error", fun, e))
                              return sqrt(e) }
     if (fun == "srand(")   { return srand(e) }
-    if (fun == "tan(")     { c = cos(e)
-                             if (c == 0)
-                                 error(sprintf("%s%d): Math expression error", fun, e))
-                             return sin(e) / c }
+    if (fun == "tan(")     { return _c3_tan(e) }
     error(sprintf("@expr: Unknown function '%s'",
                   (last(fun) == "(") ? chop(fun) : fun))
 }
@@ -9778,6 +9777,21 @@ function _c3_advance(    tmp)
     tmp = substr(_c3__Sexpr, _c3__f, RLENGTH)
     _c3__f += RLENGTH
     return tmp
+}
+
+# convert degrees to radians
+function _c3_to_rad(e)
+{
+    return e * DEG_RADIANS
+}
+
+# tangent
+function _c3_tan(e,    c)
+{
+    c = cos(e)
+    if (c == 0)
+        error(sprintf("tan(%g): Math expression error", e))
+    return sin(e) / c
 }
 
 # greatest common divisor
@@ -11444,6 +11458,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     SEQ_DEFAULT_INCR            = 1
     SEQ_DEFAULT_INIT            = 0
     TAU                         = 8 * atan2(1, 1) # 2 * PI
+      DEG_RADIANS               = TAU / 360
     TERMINAL                    = 0     # Block zero means standard output
 
     # Block types and labels

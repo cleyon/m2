@@ -4,12 +4,12 @@ Begin
 @case FOO
 Preamble
 Of clauses may print in different order - that's okay
-@of 3
-Three
 @of 2
 Two
 @of 1
 One
+@of 3
+Three
 @otherwise
 Not matched
 @endcase

@@ -1,11 +1,11 @@
+#!/usr/local/bin/gawk -f
 #!/usr/bin/awk -f
 #!/usr/local/bin/mawk -f
-#!/usr/local/bin/gawk -f
 #
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-11-17 17:39:24 cleyon>
+#  Time-stamp:  <2025-11-17 17:40:57 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -756,6 +756,89 @@ function uuid()
 }
 
 
+# Vincenty's inverse formula (ellipsoidal model, WGS84)
+# Return value: Distance *IN METERS*
+#               or -1 if algorithm fails to converge.
+#
+# Thaddeus Vincenty, "Direct and Inverse Solutions of Geodesics on the Ellipsoid
+# with application of nested equations", Survey Review, vol XXIII no 176, 1975
+# http://www.ngs.noaa.gov/PUBS_LIB/inverse.pdf.
+#
+# Original Javascript code © 2002-2022 Chris Veness, MIT licensed
+# http://www.movable-type.co.uk/scripts/latlong-vincenty.html
+function vincenty_distance(lat1, lon1, lat2, lon2,
+                           \
+                           phi1, lambda1, phi2, lambda2,
+                           a, f, L, U1, U2, sinU1, sinU2,
+                           lambda, lambdaP, iterLimit,
+                           sinLambda, sinSqSigma, sinSigma, cosSigma,
+                           sigma, sinAlpha, cosSqAlpha,
+                           cos2SignaM, C, b, uSq, A, B, deltaSigma,
+                           distance, alpha1, alpha2)
+{
+    phi1 = lat1; lambda1 = lon1
+    phi2 = lat2; lambda2 = lon2
+    a = 6378137.0               # WGS84 equatorial radius in meters
+    f = 1 / 298.257223563       # WGS84 flattening
+    b = a * (1 - f)             # Polar radius
+    L = _c3_to_rad(lon2 - lon1) # Longitude difference in radians
+    # U = Reduced latitude : tan(U) = (1-f) * tan(phi)
+    U1 = atan2((1 - f) * _c3_tan(_c3_to_rad(phi1)), 1) # Reduced latitude
+    U2 = atan2((1 - f) * _c3_tan(_c3_to_rad(phi2)), 1) # Reduced latitude
+    sinU1 = sin(U1); cosU1 = cos(U1)
+    sinU2 = sin(U2); cosU2 = cos(U2)
+
+    lambda = L; lambdaP = iterLimit = 100
+    do {
+        sinLambda = sin(lambda); cosLambda = cos(lambda)
+        sinSqSigma = (cosU2 * sinLambda)^2 + \
+                     (cosU1 * sinU2 - sinU1 * cosU2 * cosLambda)^2
+        sinSigma = sqrt(sinSqSigma)
+        if (sinSigma == 0)      # Coordinates are the same
+            return 0
+        cosSigma = sinU1 * sinU2 + cosU1 * cosU2 * cosLambda
+        sigma = atan2(sinSigma, cosSigma)
+        sinAlpha = cosU1 * cosU2 * sinLambda / sinSigma
+        cosSqAlpha = 1 - sinAlpha^2
+        cos2SigmaM = cosSigma - 2 * sinU1 * sinU2 / cosSqAlpha
+        C = f / 16 * cosSqAlpha * (4 + f * (4 - 3 * cosSqAlpha))
+        lambdaP = lambda
+        lambda = L + (1 - C) * f * sinAlpha *                           \
+            (sigma + C * sinSigma * (cos2SigmaM + C * cosSigma * (-1 + 2 * cos2SigmaM^2)))
+    } while (abs(lambda - lambdaP) > 1e-12 && --iterLimit > 0)
+
+    if (iterLimit == 0) {
+        warn("(vincenty_distance) Failed to converge on solution")
+        return -1
+    }
+
+    uSq = cosSqAlpha * (a^2 - b^2) / (b^2)
+    A = 1 + uSq / 16384 * (4096 + uSq * (-768 + uSq * (320 - 175 * uSq)))
+    B = uSq / 1024 * (256 + uSq * (-128 + uSq * (74 - 47 * uSq)))
+    deltaSigma = B * sinSigma * (cos2SigmaM + B / 4 * (cosSigma * (-1 + 2 * cos2SigmaM^2) - \
+                                                       B / 6 * cos2SigmaM * (-3 + 4 * sinSigma ^2) * (-3 + 4 * cos2SigmaM^2)))
+    distance = b * A * (sigma - deltaSigma) # Distance in meters
+
+    # note special handling of exactly antipodal points where sin^2 alpha = 0 (due to discontinuity
+    # atan2(0, 0) = 0 but atan2(eps, 0) = PI/2 [90 deg]) - in which case bearing is always meridional,
+    # due north (or due south!)
+    # alpha1 = azimuths of the geodesic; alpha2 the direction P1 P2 produced    
+
+    alpha1 = atan2(cosU2 * sinLambda, cosU1 * sinU2 - sinU1 * cosU2 * cosLambda)
+    alpha2 = atan2(cosU1 * sinLambda, -sinU1 * cosU2 + cosU1 * sinU2 * cosLambda)
+
+    # alpha1 = Math.abs(sinSqσ) < ε ? 0 : Math.atan2(cosU2*sinλ,  cosU1*sinU2-sinU1*cosU2*cosλ);
+    # alpha2 = Math.abs(sinSqσ) < ε ? π : Math.atan2(cosU1*sinλ, -sinU1*cosU2+cosU1*sinU2*cosλ);
+    print("alpha1=" alpha1 ", alpha2=" alpha2)
+
+    print("alpha1=" alpha1 ", alpha2=" alpha2)
+    return distance
+
+    # NOTREACHED
+    # if you prefer km, return distance / 1000
+}
+
+
 function secure_level()
 {
     return sym_ll_read("__SECURE__", "", GLOBAL_NAMESPACE)
@@ -866,7 +949,8 @@ function curr_dstblk(    top_block)
     top_block = stk_top(__parse_stack)
     dbg__print_block("ship_out", 7, top_block, "(curr_dstblk) top_block [top of __parse_stack]")
     if (! ((top_block, 0, "dstblk") in blktab)) {
-        panic("(curr_dstblk) Top block " top_block " does not have 'dstblk'")
+        #panic("(curr_dstblk) Top block " top_block " does not have 'dstblk'")
+        return TERMINAL
     }
     return blktab[top_block, 0, "dstblk"] + 0
 }
@@ -900,6 +984,7 @@ function lower_namespace()
     if (__namespace == GLOBAL_NAMESPACE)
         panic("(lower_namespace) Cannot be called from global namespace")
     sym_purge(__namespace)
+    print_stderr("NAM_PURGE " __namespace)
     nam_purge(__namespace)
     __namespace--
     dbg__print("namespace", 4, "(lower_namespace) namespace now " __namespace)
@@ -1186,14 +1271,17 @@ function error(text, file, line)
 # induce a panic merely by executing user code.  It is used when there
 # is an internal error, a logical inconsistency, or a "can't happen"
 # situation.  It prints its message and exits immediately with code 70.
-function abend(tag, code)
+function abend(tag, code,
+               filename, file_block)
 {
     if (code == EMPTY)
         code = EX_SOFTWARE
     if (tag == EMPTY)
         tag = "ABEND"
-
     print_stderr(sprintf("m2:%s %d", tag, code))
+
+    # Try to close any open files, but don't delete any blocks
+    close_open_files(FALSE)
     flush_stdout(SYNC_FORCE)
     exit code
 }
@@ -1368,14 +1456,14 @@ function dbg__all_lev_standard()
     dbg__set_level("gate",       7)
     dbg__set_level("if",         5)
     dbg__set_level("io",         3)
-    dbg__set_level("nam",        3)
+    dbg__set_level("nam",        7) # 3
     dbg__set_level("namespace",  5)
     dbg__set_level("parse",      7)
     dbg__set_level("read",       0)
     dbg__set_level("seq",        3)
     dbg__set_level("ship_out",   5)
     dbg__set_level("stk",        5)
-    dbg__set_level("sym",        5)
+    dbg__set_level("sym",        7) # 5
     dbg__set_level("trace",      5)
     dbg__set_level("while",      5)
     dbg__set_level("xeq",        5)
@@ -1733,6 +1821,18 @@ function info__gate_1part(opcode, optype, info, oplevel, caller, assert_true_or_
                 #print_stderr("should be true")
                 retval = TRUE; break
             }
+        } else if (opcode == OP_DELETE) {
+            #print_stderr("OP_DELETE, optype=" optype)
+            if (ilevel == NAME_NOT_FOUND)
+                return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
+                                          sprintf("Name '%s' not defined", iname))
+
+            if (optype == TYPE_USER) {
+                if (info__get(info, "protected"))
+                    return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
+                                              sprintf("Name '%s' is protected", iname))
+                retval = TRUE; break
+            }
         }
         panic(sprintf("(info__gate_1part) UNHANDLED (opcode=%s, optype=%s, name='%s', oplevel=%d, caller='%s' assert=%s) => %s",
                       __op_label[opcode], ppf__flag_type(optype), iname,
@@ -2086,12 +2186,9 @@ function lis_fetch_info(info, caller,
 }
 
 
-function lis_clear(lis, level, code,
+function lis_clear(lis, level,
                    agg_block, count, i)
 {
-    if (code == EMPTY)
-        panic("(lis_clear) Missing code!")
-
     # Clear List
     if (! ((lis, "", level, "agg_block") in symtab))
         panic(sprintf("(lis_clear) Could not find ['%s','%s',%d,'agg_block'] in symtab",
@@ -2318,22 +2415,13 @@ function blk_new(block_type,
 }
 
 
-function blk_delete(blknum,
-                    block_type, seen, msg)
+function blk_walk_delete(blknum, seen,
+                         block_type, msg)
 {
-    block_type = blk_type(blknum)    
+    if (--blktab[blknum, 0, "refcnt"] > 0)
+        warn("(blk_walk_delete) Block " blknum " has refcnt " blktab[blknum, 0, "refcnt"] ", continuing...")
 
-    if (block_type == BLK_FILE &&
-        blktab[blknum, 0, "open"] == TRUE) {
-        warn("(blk_delete) Refusing to delete open BLK_FILE " blknum)
-        return
-    }
-    if (--blktab[blknum, 0, "refcnt"] > 0) {
-        # Don't touch if someone else is still holding ref
-        warn("(blk_delete) Refusing to delete blk " blknum " refcnt > 0")
-        return
-    }
-    seen[VOID] = TRUE
+    block_type = blk_type(blknum)    
     if      (block_type == BLK_AGG)      blk_walk_AGG(OP_DELETE, blknum, seen, 0)
     else if (block_type == BLK_CASE)     blk_walk_CASE(OP_DELETE, blknum, seen, 0)
     else if (block_type == BLK_FILE)     blk_walk_FILE(OP_DELETE, blknum, seen, 0)
@@ -2345,34 +2433,60 @@ function blk_delete(blknum,
     else if (block_type == BLK_USER)     blk_walk_USER(OP_DELETE, blknum, seen, 0)
     else if (block_type == BLK_WHILE)    blk_walk_WHILE(OP_DELETE, blknum, seen, 0)
     else
-        panic(sprintf("(blk_delete) Can't handle type '%s' for block %d",
+        panic(sprintf("(blk_walk_delete) Can't handle type '%s' for block %d",
                       block_type, blknum))
 
     msg = sprintf("[Block Delete] %d %s",
                   blknum, ppf__block_type(block_type))
     trace(TRACE_BLOCKS, EMPTY, msg)
-    dbg__print("ship_out", 2, "(blk_delete) " msg)
+    dbg__print("ship_out", 2, "(blk_walk_delete) " msg)
 
     delete blktab[blknum, 0, "depth"]
     delete blktab[blknum, 0, "refcnt"]
     delete blktab[blknum, 0, "terminator"]
     delete blktab[blknum, 0, "type"]
 
+    seen[blknum] = TRUE
     blk_lint(blknum)
 }
-function blk_lint(blknum,
-                   k, x, blk)
+function blk_master_delete(blknum,
+                           block_type, seen)
 {
-    #print_stderr(">>> BEGIN LINT blknum=" blknum)
+    block_type = blk_type(blknum)    
+
+    if (block_type == BLK_FILE &&
+        blktab[blknum, 0, "open"] == TRUE) {
+        warn("(blk_master_delete) Refusing to delete open BLK_FILE " blknum)
+        return
+    }
+    if (--blktab[blknum, 0, "refcnt"] > 0) {
+        # Don't touch if someone else is still holding ref
+        warn("(blk_master_delete) Refusing to delete blk " blknum " refcnt > 0")
+        return
+    }
+    seen[VOID] = TRUE
+    blk_walk_delete(blknum, seen)
+}
+function blk_lint(blknum,
+                  k, x, blk, val, foundp)
+{
+    foundp = FALSE
     for (k in blktab) {
         split(k, x, SUBSEP)
         blk = x[1] + 0
-        if (blk == blknum)
-            warn(sprintf("(blk_lint) Found blktab[%d, %d, '%s'] with Val '%s'",
-                                blknum, x[2]+0, x[3],
-                         blktab[blknum, x[2]+0, x[3]]))
+        if (blk == blknum) {
+            if (!foundp)        # first hit?
+                # This is clumsy because I don't want to print a message
+                # in the (hopefully) normal case of no hits.
+                print_stderr(">>> BEGIN LINT blknum=" blknum)
+            foundp = TRUE
+            val = blktab[blk, x[2], x[3]]
+            warn(sprintf("(blk_lint) Found blktab[%d, %s, '%s'] with Val '%s'",
+                         blk, x[2], x[3], val))
+        }
     }
-    #print_stderr("<<< END LINT")
+    if (foundp)
+        print_stderr("<<< END LINT")
 }
 
 
@@ -2462,14 +2576,15 @@ function blk_nicer_dump_blktab( \
     cnt = 0
     for (k in blktab) {
         split(k, x, SUBSEP)
-        blks[++cnt] = 0 + x[1]  # block #
+        blks[++cnt] = x[1]+0  # block #
+        print("building blks for dump, found " x[1], x[2], x[3])
     }
     nqsort(blks, 1, cnt)
 
-    # "Touching the Void" (2003 movie)  True story of mountaineers on the
-    # west face of Siula Grande.  https://www.imdb.com/title/tt0379557/
-    seen[VOID] = TRUE
-    seen[TERMINAL] = TRUE
+    # # "Touching the Void" (2003 movie)  True story of mountaineers on the
+    # # west face of Siula Grande.  https://www.imdb.com/title/tt0379557/
+    # seen[VOID] = TRUE
+    # seen[TERMINAL] = TRUE
     for (i = 1; i <= cnt; i++) {
         blknum = blks[i]
         #print blknum
@@ -2479,8 +2594,8 @@ function blk_nicer_dump_blktab( \
         if ((! (blknum in seen))) {
             print_stderr("================================")
             blk_nicer_print_block(blknum, seen, 0) # 0 <-- indent level
-            print_stderr("Lint:")
-            blk_lint(blknum)
+            # print_stderr("Lint(" blknum "):")
+            # blk_lint(blknum)
         }
     }        
 }
@@ -2504,7 +2619,7 @@ function blk_nicer_print_block(blknum, seen, indent,
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 function blk_walk_AGG(opcode, blknum, seen, indent,
-                      i, count)
+                      i, count, slot_type, slot_value)
 {
     count = blktab[blknum, 0, "count"] + 0
     if (opcode == OP_PRINT)
@@ -2513,19 +2628,86 @@ function blk_walk_AGG(opcode, blknum, seen, indent,
                                 "AGG", count))
     for (i = 1; i <= count; i++)
         if (opcode == OP_PRINT)
-            blk_nicer_print__obj(blknum, i, indent)
+            blk_nicer_print__obj(blknum, i, seen, indent)
         else if (opcode == OP_DELETE) {
+            slot_type   = blktab[blknum, i, "slot_type"]
+            slot_value = blktab[blknum, i, "slot_value"]
+            if (slot_type == OBJ_BLKNUM) {
+                #print_stderr("(blk_walk_AGG) Slot " i " is type AGG, recursively deleting block " slot_value)
+                blk_walk_delete(slot_value, seen)
+            }
             delete blktab[blknum, i, "slot_type"]
             delete blktab[blknum, i, "slot_value"]
         }
-    if (opcode == OP_DELETE)
+    if (opcode == OP_DELETE) {
         delete blktab[blknum, 0, "count"]
-
+        if ((blknum, 0, "dstblk") in blktab)
+            delete blktab[blknum, 0, "dstblk"]
+    }
     seen[blknum] = TRUE
 }
-function blk_walk_CASE(opcode, blknum, seen, indent)
+function blk_nicer_print__obj(blknum, slot, seen, indent,
+                              slot_type, value)
 {
-    print_debugfile("BLK_CASE"); seen[0 + blknum] = 1
+    if (blk_type(blknum) != BLK_AGG)
+        panic(sprintf("(blk_nicer_print__obj) Block %d has type %s, not AGG",
+                      blknum, ppf__block_type(blk_type(blknum))))
+    slot_type = blk_ll_slot_type(blknum, slot)
+    value = blk_ll_slot_value(blknum, slot)
+    print_stderr(sprintf("(blk_nicer_print__obj) block %d slot %d type %s => %s",
+                         blknum, slot, slot_type, value))
+
+    if (slot_type == OBJ_BLKNUM)
+        blk_nicer_print_block(value, seen, indent)
+    else if (slot_type == OBJ_TEXT)
+        print_debugfile(sprintf("%s%2d [TEXT] %s",
+                                spaces(3*indent), blknum, value))
+    else if (slot_type == OBJ_CMD)
+        print_debugfile(sprintf("%s%2d [CMD] %s",
+                                spaces(3*indent), blknum, value))
+    else if (slot_type == OBJ_USER)
+        print_debugfile(sprintf("%s%2d [USER] %s",
+                                spaces(3*indent), blknum, value))
+    else
+        # ? no other types?
+        panic(sprintf("(blk_nicer_print__obj) Block # %d slot %d type %s not handled",
+                      blknum, slot, slot_type))
+}
+function blk_walk_CASE(opcode, blknum, seen, indent,
+                       k, x, del_list)
+{
+    if (opcode == OP_DELETE) {
+        #print_stderr("OP_DELETE CASE begin:")
+        #print_stderr("Deleting PREAMBLE block " blktab[blknum, 0, "preamble_block"])
+        blk_walk_delete(blktab[blknum, 0, "preamble_block"], seen)
+
+        # Delete the OF cases
+        for (k in blktab) {
+            split(k, x, SUBSEP)
+            if (x[1] == blknum && x[3] == "of_block") {
+                del_list[x[1], x[2]] = TRUE
+            }
+        }
+        for (k in del_list) {
+            split(k, x, SUBSEP)
+            #print_stderr("Deleting OF '" x[2] "' block " blktab[x[1], x[2], "of_block"])
+            blk_walk_delete(blktab[x[1], x[2], "of_block"], seen)
+            delete blktab[x[1], x[2], "of_block"]
+        }
+        if (blktab[blknum, 0, "seen_otherwise"]) {
+            #print_stderr("Deleting OTHERWISE block " blktab[blknum, 0, "otherwise_block"])
+            blk_walk_delete(blktab[blknum, 0, "otherwise_block"], seen)
+        }
+
+        delete blktab[blknum, 0, "casevar"]
+        delete blktab[blknum, 0, "dstblk"]
+        delete blktab[blknum, 0, "otherwise_block"]
+        delete blktab[blknum, 0, "preamble_block"]
+        delete blktab[blknum, 0, "seen_otherwise"]
+        delete blktab[blknum, 0, "valid"] 
+        #print_stderr("OP_DELETE CASE end : Deleted CASE block " blknum)
+    }
+    seen[0 + blknum] = 1
 }
 function blk_walk_FILE(opcode, blknum, seen, indent)
 {
@@ -2552,19 +2734,27 @@ function blk_walk_FILE(opcode, blknum, seen, indent)
 
 function blk_walk_FOR(opcode, blknum, seen, indent)
 {
-    print_debugfile("BLK_FOR")
+    #print_debugfile("BLK_FOR")
     if (opcode == OP_DELETE) {
-        # [0, "array_type"]     *       either @for or @foreach
-        # [0, "body_block"]     *
-        # [0, "dstblk"]         *
-        # [0, "level"]          @foreach
-        # [0, "loop_array_name] @foreach
-        # [0, "loop_end"]       @for
-        # [0, "loop_incr"]      @for
-        # [0, "loop_start"]     @for
-        # [0, "loop_type"]      *       @for, @foreach, @sforeach
-        # [0, "loop_var"]       *
-        # [0, "valid"]          *
+        #print_stderr("walk_FOR: type=" blktab[blknum, 0, "loop_type"])
+        blk_walk_delete(blktab[blknum, 0, "body_block"], seen)
+
+        if (blktab[blknum, 0, "loop_type"] == "@for") {
+            delete blktab[blknum, 0, "loop_end"]
+            delete blktab[blknum, 0, "loop_incr"]
+            delete blktab[blknum, 0, "loop_start"]
+
+        } else if (blktab[blknum, 0, "loop_type"] == "@foreach") {
+            delete blktab[blknum, 0, "level"]
+            delete blktab[blknum, 0, "loop_array_name"]
+        }
+
+        delete blktab[blknum, 0, "body_block"]
+        delete blktab[blknum, 0, "dstblk"]
+        delete blktab[blknum, 0, "loop_type"]
+        delete blktab[blknum, 0, "loop_type"]
+        delete blktab[blknum, 0, "loop_var"]
+        delete blktab[blknum, 0, "valid"]
     }
     seen[0 + blknum] = 1
 }
@@ -2578,7 +2768,7 @@ function blk_walk_IF(opcode, blknum, seen, indent)
                                 blktab[blknum, 0, "condition"]))
         blk_nicer_print_block(blktab[blknum, 0, "true_block"], seen, indent+1)
     } else if (opcode == OP_DELETE)
-        blk_delete(blktab[blknum, 0, "true_block"])
+        blk_walk_delete(blktab[blknum, 0, "true_block"], seen)
     if (blktab[blknum, 0, "seen_else"]) {
         if (opcode == OP_PRINT) {
             print_debugfile(sprintf("%s%2d %s",
@@ -2586,7 +2776,7 @@ function blk_walk_IF(opcode, blknum, seen, indent)
                                     "ELSE"))
             blk_nicer_print_block(blktab[blknum, 0, "false_block"], seen, indent+1)
         } else if (opcode == OP_DELETE)
-            blk_delete(blktab[blknum, 0, "false_block"])
+            blk_walk_delete(blktab[blknum, 0, "false_block"], seen)
     }
     if (opcode == OP_PRINT) {
         print_debugfile(sprintf("%s%2d %s",
@@ -2605,7 +2795,14 @@ function blk_walk_IF(opcode, blknum, seen, indent)
 }
 function blk_walk_LONGDEF(opcode, blknum, seen, indent)
 {
-    print "BLK_LONGDEF"; seen[0 + blknum] = 1
+    if (opcode == OP_DELETE) {
+        blk_walk_delete(blktab[blknum, 0, "body_block"], seen)
+        delete blktab[blknum, 0, "body_block"]
+        delete blktab[blknum, 0, "dstblk"]
+        delete blktab[blknum, 0, "name"]
+        delete blktab[blknum, 0, "valid"]
+    }
+    seen[0 + blknum] = 1
 }
 function blk_walk_STRING(opcode, blknum, seen, indent)
 {
@@ -2629,6 +2826,9 @@ function blk_walk_USER(opcode, blknum, seen, indent,
                        i)
 {
     if (opcode == OP_DELETE) {
+        #print_stderr("(blk_walk_USER) Recursively deleting body_block " blktab[blknum, 0, "body_block"])
+        blk_walk_delete(blktab[blknum, 0, "body_block"], seen)
+
         for (i = 1; i <= blktab[blknum, 0, "nparam"]; i++)
             delete blktab[blknum, i, "param_name"]
         delete blktab[blknum, 0, "body_block"]
@@ -2636,27 +2836,25 @@ function blk_walk_USER(opcode, blknum, seen, indent,
         delete blktab[blknum, 0, "name"]
         delete blktab[blknum, 0, "nparam"]
         delete blktab[blknum, 0, "valid"]
+        #print_stderr("(blk_walk_USER) DONE Deleted USER " blknum)
     }
     seen[0 + blknum] = 1
 }
 function blk_walk_WHILE(opcode, blknum, seen, indent)
 {
-    print "BLK_WHILE"; seen[0 + blknum] = 1
+    if (opcode == OP_DELETE) {
+        #print_stderr("(blk_walk_WHILE) Recursively deleting body_block " blktab[blknum, 0, "body_block"])
+        blk_walk_delete(blktab[blknum, 0, "body_block"], seen)
+
+        delete blktab[blknum, 0, "body_block"]
+        delete blktab[blknum, 0, "condition"]
+        delete blktab[blknum, 0, "dstblk"]
+        delete blktab[blknum, 0, "init_negate"]
+        delete blktab[blknum, 0, "valid"]
+    }
+    seen[0 + blknum] = 1
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
-function blk_nicer_print__obj(blknum, slot, indent,
-                              value)
-{
-    if (blk_type(blknum) != BLK_AGG)
-        panic(sprintf("(blk_nicer_print__obj) Block %d has type %s, not AGG",
-                      blknum, ppf__block_type(blk_type(blknum))))
-    if (blk_ll_slot_type(blknum, slot) != OBJ_TEXT)
-        panic(sprintf("(blk_nicer_print__obj) Block # %d slot %d is not OBJ_TEXT",
-                      blknum, slot))
-    value = blk_ll_slot_value(blknum, slot)
-    print sprintf("%s%2d %s",
-                  spaces(3*indent), blknum, value)
-}
 
 
 function blk_dump_block_raw(blknum,
@@ -2678,6 +2876,19 @@ function blk_dump_block_raw(blknum,
                             " => '" blktab[x[1], x[2], x[3]] "'" slot_type_str)
         }
     }
+}
+
+
+function blk_count(blknum,
+                   x, k, cnt)
+{
+    cnt = 0
+    for (k in blktab) {
+        split(k, x, SUBSEP)
+        if (x[1]+0 == blknum)
+            cnt++
+    }
+    return cnt
 }
 
 
@@ -2939,12 +3150,17 @@ function ppf__user(user_block,
 }
 
 
-function cmd_destroy(id)
+function cmd_destroy(info,
+                     user_block)
 {
-    dbg__print("cmd", 2, "(cmd_destroy) BROKEN!")
+    #print_stderr("cmd_destroy:")
+    if (flag_1false_p(info__get(info, "code"), TYPE_USER))
+        panic("(cmd_destroy) " info__get(info, "name") " is no longer a user command")
+
+    user_block = cmd_ll_read(info__get(info, "name"), info__get(info, "level"))
+    blk_master_delete(user_block)
     # delete namtab[id, GLOBAL_NAMESPACE]
-    # delete cmdtab[id, "definition"]
-    # delete cmdtab[id, "nparam"]
+    # delete symtab[name, "", level, "user_block"]
 }
 
 
@@ -2957,13 +3173,13 @@ function cmd_destroy(id)
 
 function cmd_ll_read(name, level)
 {
-    return cmdtab[name, level, "user_block"]
+    return symtab[name, "", level, "user_block"]
 }
 
 
 function cmd_ll_write(name, level, user_block)
 {
-    return cmdtab[name, level, "user_block"] = user_block
+    return symtab[name, "", level, "user_block"] = user_block
 }
 
 
@@ -3153,12 +3369,12 @@ function parse__file(    filename, file_block1, file_block2, pstat, d)
         dbg__print("parse", 2, sprintf("(parse__file) END File '%s' does not exist => %s",
                                      filename, ppf__bool(FALSE)))
         stk_pop(__source_stack) # Remove BLK_FILE for non-existent file
-        blk_delete(file_block1)
+        blk_master_delete(file_block1)
         return FALSE
     }
     if (filename in __active_files)
         error("Cannot recursively read '" filename "':" $0)
-    __active_files[filename] = TRUE
+    __active_files[filename] = file_block1
     sym_ll_incr("__NFILE__", "", GLOBAL_NAMESPACE, 1); __rnf++
     blktab[file_block1, 0, "open"]          = TRUE
     blktab[file_block1, 0, "ever_opened"]   = TRUE
@@ -3196,7 +3412,7 @@ function parse__file(    filename, file_block1, file_block2, pstat, d)
     sym_ll_write("__LINE__",      "", GLOBAL_NAMESPACE, blktab[file_block2, 0, "old.line"])
     sym_ll_write("__FILE_UUID__", "", GLOBAL_NAMESPACE, blktab[file_block2, 0, "old.file_uuid"])
 
-    blk_delete(file_block2)
+    blk_master_delete(file_block2)
     dbg__print("parse", 2, sprintf("(parse__file) END '%s' => %s",
                                  filename, ppf__bool(pstat)))
     return pstat
@@ -3372,7 +3588,7 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
                             # immediately be recognized as an available
                             # user command.  All we need to do is create
                             # a namtab entry with correct TYPE_USER.
-                            # NOTE - we don't have an entry in the cmdtab
+                            # NOTE - we don't have an entry in symtab[]
                             # yet.  That's okay because the command is
                             # only being declared, not defined, and it's
                             # not ready to run yet.  (That next bit
@@ -3847,6 +4063,8 @@ function ppf__flags(code,
 #                           0 => GLOBAL_NAMESPACE; NAME_NOT_FOUND => symbol not found
 #             tracing     : TRUE if this object/symbol is being traced
 #             type        : Char encoding obj type, also in code; one of TYPE_*
+#       If the entry is a TYPE_LIST:
+#             agg_block   : Block # of agg block
 #*****************************************************************************
 
 #*****************************************************************************
@@ -3979,6 +4197,8 @@ function nam__lookup(info,
                 info["errtext"] = sprintf("Cannot use brackets with %s '%s'", ppf__flag_type(type), name)
                 return ERR_SCAN_INVALID_NAME
             }
+            if (type == TYPE_LIST)
+                info["agg_block"] = symtab[name, "", level, "agg_block"]
             return level
         }
     dbg__print("nam", 2, sprintf("(nam__lookup) END Could not find name '%s' on any level in namtab => NAME_NOT_FOUND", name))
@@ -4000,7 +4220,7 @@ function info__create_from_text(text, info,
 
 # Remove any name at level "level" or greater
 function nam_purge(level,
-                    x, k, del_list)
+                   x, k, del_list, code, type, agg_block)
 {
     dbg__print("nam", 7, "(nam_purge) BEGIN")
 
@@ -4014,6 +4234,20 @@ function nam_purge(level,
         split(k, x, SUBSEP)
         dbg__print("nam", 3, sprintf("(nam_purge) Delete namtab['%s', %d]",
                                      x[1], x[2]))
+        code = nam_ll_read(x[1], x[2])
+        type = first(code)
+        if (double_underscores_p(x[1]) ||
+            type == TYPE_FUNCTION || type == TYPE_COMMAND || type == TYPE_INTERNAL)
+            continue
+        print_stderr(sprintf("(nam_purge) '%s' type %s", x[1], ppf__flag_type(type)))
+        if (type == TYPE_LIST) {
+            agg_block = symtab[x[1], "", x[2], "agg_block"]
+            lis_clear(x[1], x[2])
+            print_stderr("(nam_purge) Deleting agg_block " agg_block)
+            blk_master_delete(agg_block)
+            delete blktab[agg_block, 0, "count"]
+            delete symtab[x[1], "", x[2], "agg_block"]
+        }
         trace(TRACE_SYMBOL_READ_WRITE, x[1],
               sprintf("[Name Delete] \"%s\" (lev:%d)", x[1], x[2]))
         delete namtab[x[1], x[2]]
@@ -4693,16 +4927,33 @@ function nam_system_p(name)
 
 # Remove any symbol at level "level" or greater
 function sym_purge(level,
-                    x, k, del_list)
+                   x, k, tag, sym_del_list)
 {
     dbg__print("sym", 7, "(sym_purge) BEGIN")
     for (k in symtab) {
         split(k, x, SUBSEP)
-        if (x[3]+0 >= level)
-            del_list[x[1], x[2], x[3], x[4]] = TRUE
+        if (x[3]+0 >= level) {
+            if (double_underscores_p(x[1]))
+                continue
+            tag = x[4]
+            if (tag == "user_block") {
+                cmd_del_list[symtab[x[1], x[2], x[3], tag]] = TRUE
+                sym_del_list[x[1], x[2], x[3], tag] = TRUE
+            } else if (tag == "agg_block") {
+                blk_master_delete(symtab[x[1], x[2], x[3], tag])
+                sym_del_list[x[1], x[2], x[3], tag] = TRUE
+            } else if (tag == "symval" || 
+                       tag == "deferred_arg" || tag == "deferred_prog")
+                sym_del_list[x[1], x[2], x[3], tag] = TRUE
+            else
+                panic(sprintf("(sym_purge) Unsure: symtab['%s','%s',%d,'%s']",
+                              x[1], x[2], x[3], tag))
+        }
     }
 
-    for (k in del_list) {
+    # for (k in cmd_del_list)
+    #     blk_XXXdelete(k)
+    for (k in sym_del_list) {
         split(k, x, SUBSEP)
         dbg__print("sym", 3, sprintf("(sym_purge) Delete symtab['%s', '%s', %d, %s]",
                                      x[1], x[2], x[3], x[4]))
@@ -5753,9 +6004,11 @@ function symtab_whats_left(x, k)
             split(k, x, SUBSEP)
             if (double_underscores_p(x[1]))
                 continue
-            print sprintf("symtab['%s', '%s', %d, %s]=%s",
+            print sprintf("whats_left: symtab['%s', '%s', %d, %s]=%s",
                           x[1], x[2], x[3], x[4],
                           symtab[x[1], x[2], x[3], x[4]])
+            if (x[4] == "agg_block")
+                blk_master_delete(symtab[x[1], x[2], x[3], x[4]])
         }
 #         for (k in del_list) {
 #             split(k, x, SUBSEP)
@@ -6420,9 +6673,7 @@ function xeq_cmd__data(cmd, cmdline,
     # level = nam__lookup(info)
     level = info__create_from_text(lis, info)
     info__gate(OP_UPDATE, TYPE_LIST, info, __namespace, me, TRUE)
-    code = info["code"]
-    dbg__print("xeq", 5, sprintf("(xeq_cmd__data) code=%s", code))
-    lis_clear(lis, level, code)
+    lis_clear(lis, level)
 
     # create a new Agg block
     agg_block = blk_new(BLK_AGG)
@@ -6613,7 +6864,7 @@ function xeq_cmd__dump(cmd, cmdline,
     } else if (what ~ /(cmd|command)s?/) {
         what_type = TYPE_USER
         #buf = nam_dump_namtab(what_type, all_flag)
-        buf = dump__cmdtab(what_type, all_flag)
+        buf = dump__commands(what_type, all_flag)
     } else if (what ~ /name?s?/) {
         what_type = PTYPE_ANY
         buf = nam_dump_namtab(what_type, all_flag)
@@ -6838,26 +7089,27 @@ function dump__seqtab(type, include_sys,
 }
 
 
-function dump__cmdtab(type, include_sys,
+function dump__commands(type, include_sys,
                       x, k, keys, cnt, code, buf, i)
 {
-    dbg__print("cmd", 4, "(dump__cmdtab) BEGIN")
+    dbg__print("cmd", 4, "(dump__commands) BEGIN")
     if (first(type) != TYPE_USER)
-        panic("(dump__cmdtab) Bad type " ppf__flags(first(type)))
+        panic("(dump__commands) Bad type " ppf__flags(first(type)))
 
     # Build keys[] array, whose values are printable symbol names that
     # pass restrictive checks.
     cnt = 0
-    for (k in cmdtab) {
+    for (k in symtab) {
         split(k, x, SUBSEP)
         # print_debugfile("m2debug:x[1]=" x[1])
         # print_debugfile("m2debug:x[2]=" x[2])
         # print_debugfile("m2debug:x[3]=" x[3])
-        # print_debugfile("m2debug:value => " cmdtab[x[1], x[2], x[3]])
+        # print_debugfile("m2debug:x[4]=" x[4])
+        # print_debugfile("m2debug:value => " symtab[x[1], x[2], x[3], x[4]])
 
-        if (x[3] != "user_block") continue
+        if (x[4] != "user_block") continue      # Q&D
         code = nam_ll_read(x[1], x[2]) # name, level
-        dbg__print("cmd", 5, sprintf("(dump__cmdtab) name='%s', code=%s",
+        dbg__print("cmd", 5, sprintf("(dump__commands) name='%s', code=%s",
                                     x[1], code))
         if (flag_1true_p(code, TYPE_USER)) {
             # # I don't think there are any system sequences yet...
@@ -6873,7 +7125,7 @@ function dump__cmdtab(type, include_sys,
     buf = EMPTY
     for (i = 1; i <= cnt; i++)
         buf = buf cmd_definition_ppf(keys[i]) TOK_NEWLINE
-    dbg__print("cmd", 4, "(dump__cmdtab) END")
+    dbg__print("cmd", 4, "(dump__commands) END")
     return chomp(buf)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
@@ -7161,16 +7413,17 @@ function xeq_cmd__filedata(cmd, cmdline,
     # level = nam__lookup(info)
     level = info__create_from_text(lis, info)
     info__gate(OP_UPDATE, TYPE_LIST, info, __namespace, me, TRUE)
-    code = info__get(info, "code")
-    dbg__print("xeq", 5, sprintf("(xeq_cmd__filedata) code=%s", code))
-    lis_clear(lis, level, code)
+    lis_clear(lis, level)
 
     # create a new Agg block
-    agg_block = blk_new(BLK_AGG)
-    key = ""
-    dbg__print("parse", 5, sprintf("(xeq_cmd__filedata) symtab['%s','%s',%d,'agg_block'] = %d",
-                                 lis, key, level, agg_block))
-    symtab[lis, key, level, "agg_block"] = agg_block
+    #agg_block = blk_new(BLK_AGG)
+    # No!  I should use the agg block already allocated for lis.
+    agg_block = symtab[lis, "", level, "agg_block"]
+
+    # key = ""
+    # dbg__print("parse", 5, sprintf("(xeq_cmd__filedata) symtab['%s','%s',%d,'agg_block'] = %d",
+    #                              lis, key, level, agg_block))
+    # not if this isn't new: symtab[lis, key, level, "agg_block"] = agg_block
     blktab[agg_block, 0, "dstblk"] = agg_block
 
     # create a new literal file parser
@@ -8919,10 +9172,7 @@ function xeq_cmd__split(cmd, cmdline,
     # level = nam__lookup(info)
     level = info__create_from_text(lis, info)
     info__gate(OP_UPDATE, TYPE_LIST, info, __namespace, me, TRUE)
-
-    code = info["code"]
-    dbg__print("xeq", 5, sprintf("(xeq_cmd__split) code=%s", code))
-    lis_clear(lis, level, code)
+    lis_clear(lis, level)
 
     # Create a new Agg block
     agg_block = blk_new(BLK_AGG)
@@ -9162,13 +9412,16 @@ function xeq_cmd__undefine(cmd, cmdline,
 
     # A better way:
     # Scan sym => name, key
-    if ((nparts = nam__scan(name, info)) == ERROR)
-        error("[@undefine] Scan error, " __m2_msg)
-    if ((level = nam__lookup(info)) == NAME_NOT_FOUND) {
-        error("(xeq_cmd__undefine) '" name "' not found")
-    }
+    # if ((nparts = nam__scan(name, info)) == ERROR)
+    #     error("[@undefine] Scan error, " __m2_msg)
+    # if ((level = nam__lookup(info)) == NAME_NOT_FOUND) {
+    #     error("(xeq_cmd__undefine) '" name "' not found")
+    # }
+    level = info__create_from_text(name, info)
+    type = info__get(info, "type")
+    info__gate(OP_DELETE, type, info, __namespace, me, TRUE)
 
-    if ((type = info__get(info, "type")) == TYPE_SYMBOL) {
+    if (type == TYPE_SYMBOL) {
         name = info__get(info, "name")
         # assert_syminfo_unprotected(info, "@" cmd)
         # System symbols, even unprotected ones -- despite being subject
@@ -9197,7 +9450,7 @@ function xeq_cmd__undefine(cmd, cmdline,
     } else if (type == TYPE_SEQUENCE)
         seq_destroy(name)
     else if (type == TYPE_USER)
-        cmd_destroy(name)
+        cmd_destroy(info)
     else
         error("(xeq_cmd__undefine) '" name "' of type " type " cannot be destroyed")
 }
@@ -11549,6 +11802,12 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     initialize_prog_paths()
     __inc_path = "M2PATH" in ENVIRON ? ENVIRON["M2PATH"] : ""
 
+    # Compute "machine epsilon" - the smallest number which when added
+    # to 1, produces a sum != 1.
+    EPSILON = 1
+    while ((1 + EPSILON / 2) != 1)
+        EPSILON /= 2
+    
     # Initialize days per month
     split("31 31 28 29 31 31 30 30 31 31 30 30 31 31 31 31 30 30 31 31 30 30 31 31", monthdays)
     for (i = 0; i < 24; i++) {
@@ -12011,13 +12270,27 @@ BEGIN {
 }
 
 
+function close_open_files(delete_blocks_p,
+                          filename)
+{
+    for (filename in __active_files) {
+        #print_stderr("Attempting close of " filename)
+        if (filename != STDIN)
+            close(filename)
+        blktab[__active_files[filename], 0, "open"] = FALSE
+        if (delete_blocks_p)
+            blk_master_delete(__active_files[filename])
+    }
+}
+
+
 # Prepare to exit.  Normally, diverted_streams_final_disposition is
 # MODE_STREAMS_SHIP_OUT, so we usually undivert all pending streams.
 # When diverted_streams_final_disposition is MODE_STREAMS_DISCARD, any
 # diverted data is dropped.  Standard output is always flushed, and
 # program exits with value from global variable __exit_code.
 function end_program(diverted_streams_final_disposition,
-                     i, timestamp)
+                     i, timestamp, stream)
 {
     if (__exit_code == EX_OK &&
         diverted_streams_final_disposition == MODE_STREAMS_SHIP_OUT) {
@@ -12040,10 +12313,20 @@ function end_program(diverted_streams_final_disposition,
         for (i = 1; i <= __wrap_cnt; i++)
             dostring(__wrap_text[i])
 
-    # XXX - dev stuff here
-    if (tracing_event_p(TRACE_SYMBOL_READ_WRITE))
+    for (stream in strtab)
+        blk_master_delete(strtab[stream])
+
+    # Close open files, attempt to reclaim block
+    close_open_files(TRUE)
+
+    # NOTE - dev stuff here
+    nam_purge(GLOBAL_NAMESPACE)
+    #sym_purge(GLOBAL_NAMESPACE)
+
+    #if (tracing_event_p(TRACE_SYMBOL_READ_WRITE))
         symtab_whats_left()
-    if (tracing_event_p(TRACE_BLOCKS))
+
+#    if (tracing_event_p(TRACE_BLOCKS))
         blk_nicer_dump_blktab()
 
     if (debugging_enabled_p())

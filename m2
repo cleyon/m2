@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-11-05 13:42:39 cleyon>
+#  Time-stamp:  <2025-11-17 01:45:28 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -43,7 +43,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "5.1.2"
+    M2_VERSION = "5.1.3"
 
     # Specify a shell for m2 to use for running utility programs.
     # It is expected to be compatible with Bourne shell syntax.
@@ -9595,7 +9595,7 @@ function macro_set_expansion(macro, expanded_text)
 # Eventually the big while loop exits and dosubs() returns "L R".
 function macro_expand(macro,
                       i, j, l, M, nparam, p, pval, param, r, fn,
-                      x, inc_dec, pre_post, subcmd, lfn, incr, wrkm,
+                      x, inc_dec, pre_post, subcmd, lfn, incr, wrkM,
                       fninfo, level)
 {
     M = macro["urtext"]
@@ -11474,6 +11474,126 @@ function load_init_files(    old_debug)
 
 #*****************************************************************************
 #
+#       P R O C E S S   C O M M A N D   L I N E   A R G U M E N T S
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#       ARGC is known to be greater than one, so loop through all argument.
+#       Each arg is either a NAME=VALUE definition, or a file to parse.
+#
+#*****************************************************************************
+function process_command_line_arguments(    nfile, arg, i, eq, name, val, file)
+{
+    # Delay loading $HOME/.m2rc as long as possible.  This allows us
+    # to set symbols on the command line which will have taken effect
+    # by the time the init file loads.
+    nfile = 0
+    for (i = 1; i < ARGC; i++) {
+        # Show each arg as we process it
+        arg = ARGV[i]
+        dbg__print("args", 3, ("BEGIN: ARGV[" i "]:" arg))
+
+        # If it's a definition on the command line, define it
+        if (arg ~ /^([^= ][^= ]*)=(.*)/) {
+            eq   = index(arg, "=")
+            name = substr(arg, 1, eq-1)
+            val  = substr(arg, eq+1)
+
+            # Some args like debug and trace are merely aliases for other,
+            # harder-to-type symbol names.  They just get re-written.
+            # Other args like init or U trigger actions which are executed
+            # immediately, and then the loop continues with the next arg.
+            if (name == "debug") {
+                name = "__DEBUG__"
+            } else if (name == "fs") {
+                name = "__FS__"
+            } else if (name == "I") {      # I=<path>
+                # Include-path elements on command-line are prepended
+                # to M2PATH so they override env variable values.
+                if (!emptyp(val))
+                    __inc_path = val (emptyp(__inc_path) ? "" : ":" __inc_path)
+                continue
+            } else if (name == "init") {   # init=<VAL>
+                if (val > 0)
+                    # Positive value loads init files immediately
+                    # without needing to providing a command-line file.
+                    load_init_files()
+                else
+                    # Do not load the init files.  Inhibit init file
+                    # loading by pretending we already did it.
+                    __init_files_loaded = TRUE
+                continue
+            } else if (name == "secure") {
+                name = "__SECURE__"
+            } else if (name == "strict") {
+                val = to_bool(val) # (val > 0) # convert int value to bool
+                # Update strict settings
+                sym_ll_write("__STRICT__", "bool", GLOBAL_NAMESPACE, val)
+                sym_ll_write("__STRICT__",  "def", GLOBAL_NAMESPACE, val)
+                sym_ll_write("__STRICT__",  "env", GLOBAL_NAMESPACE, val)
+                sym_ll_write("__STRICT__", "file", GLOBAL_NAMESPACE, val)
+                sym_ll_write("__STRICT__",  "key", GLOBAL_NAMESPACE, val)
+                sym_ll_write("__STRICT__", "name", GLOBAL_NAMESPACE, val)
+                continue
+            } else if (name == "trace") {
+                name = "__TRACE__"
+            } else if (name == "U") {      # U=<name>
+                # Undefine name, like @undef
+                xeq_cmd__undefine("undefine", val)
+                continue
+            }
+            # If we reach here, we still have our NAME=VAL arg to process,
+            # and we haven't broken off taking some arg-triggered action.
+            # Remember, "NAME=" on command line defines with empty value.
+            if (emptyp(val)) {
+                dbg__print("args", 3, "BEGIN: Setting '" name "' to @null")
+                xeq_cmd__null("null", name)
+            } else {
+                dbg__print("args", 3, "BEGIN: Setting '" name "' to '" val "'")
+                xeq_cmd__define("define", name TOK_SPACE val)
+            }
+
+        # If not NAME=VAL, try to load arg as a file.
+        } else {
+            nfile++
+            file = search_file(arg)
+            if (emptyp(file)) {
+                warn("File '" arg "' not found", "ARGV", i)
+                __exit_code = EX_NOINPUT
+                continue
+            }
+            load_init_files()
+            if (! dofile(file)) {
+                warn("Problem parsing file '" file "'", "ARGV", i)
+                __exit_code = EX_M2_ERROR
+            }
+        }
+    }
+
+    # If we get here with __rnf still zero, that means we used
+    # up every ARGV defining symbols and didn't specify any files.
+    # (Well that used to be true, but you can also get here by
+    # specifying files that don't exist.)  So we check the number of
+    # files we've processed vs the number we were requested to handle.
+    #print_stderr("nfile=" nfile "  __rnf=" __rnf)
+    if (__rnf == 0) {
+        # Not specifying any input files, like the ARGC==1 situation,
+        # means to read standard input, so that is what we must now do.
+        if (nfile == 0) {
+            load_init_files()
+            __exit_code = dofile("-") ? EX_OK : EX_NOINPUT
+        } else {
+            # User specified file(s) but not one of them existed.
+            __exit_code = EX_NOINPUT
+        }
+    }
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
 #       M A I N
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -11484,125 +11604,22 @@ function load_init_files(    old_debug)
 BEGIN {
     initialize()
 
-    # No command line arguments: process standard input.
+    # In Awk, ARGC is never zero; no command line arguments is indicated
+    # by ARGC being equal to 1.  If so, process standard input.
     if (ARGC == 1) {
         load_init_files()
         __exit_code = dofile("-") ? EX_OK : EX_NOINPUT
 
-    # Else, process all command line arguments.  These might be file
-    # names to process, or user settings of the form NAME=VALUE.  ARGC
-    # is never zero, so if it's not 1 (no command line args, checked
-    # above), there must be parameters.
-    } else {
-        # Delay loading $HOME/.m2rc as long as possible.  This allows us
-        # to set symbols on the command line which will have taken effect
-        # by the time the init file loads.
-        _nfile = 0
-        for (_i = 1; _i < ARGC; _i++) {
-            # Show each arg as we process it
-            _arg = ARGV[_i]
-            dbg__print("args", 3, ("BEGIN: ARGV[" _i "]:" _arg))
-
-            # If it's a definition on the command line, define it
-            if (_arg ~ /^([^= ][^= ]*)=(.*)/) {
-                _eq   = index(_arg, "=")
-                _name = substr(_arg, 1, _eq-1)
-                _val  = substr(_arg, _eq+1)
-
-                # Some args like debug and trace are merely aliases for other,
-                # harder-to-type symbol names.  They just get re-written.
-                # Other args like init or U trigger actions which are executed
-                # immediately, and then the loop continues with the next arg.
-                if (_name == "debug") {
-                    _name = "__DEBUG__"
-                } else if (_name == "fs") {
-                    _name = "__FS__"
-                } else if (_name == "I") {      # I=<path>
-                    # Include-path elements on command-line are prepended
-                    # to M2PATH so they override env variable values.
-                    if (!emptyp(_val))
-                        __inc_path = _val (emptyp(__inc_path) ? "" : ":" __inc_path)
-                    continue
-                } else if (_name == "init") {   # init=<VAL>
-                    if (_val > 0)
-                        # Positive value loads init files immediately
-                        # without needing to providing a command-line file.
-                        load_init_files()
-                    else
-                        # Do not load the init files.  Inhibit init file
-                        # loading by pretending we already did it.
-                        __init_files_loaded = TRUE
-                    continue
-                } else if (_name == "secure") {
-                    _name = "__SECURE__"
-                } else if (_name == "strict") {
-                    _val = to_bool(_val) # (_val > 0) # convert int value to bool
-                    # Update strict settings
-                    sym_ll_write("__STRICT__", "bool", GLOBAL_NAMESPACE, _val)
-                    sym_ll_write("__STRICT__",  "def", GLOBAL_NAMESPACE, _val)
-                    sym_ll_write("__STRICT__",  "env", GLOBAL_NAMESPACE, _val)
-                    sym_ll_write("__STRICT__", "file", GLOBAL_NAMESPACE, _val)
-                    sym_ll_write("__STRICT__",  "key", GLOBAL_NAMESPACE, _val)
-                    sym_ll_write("__STRICT__", "name", GLOBAL_NAMESPACE, _val)
-                    continue
-                } else if (_name == "trace") {
-                    _name = "__TRACE__"
-                } else if (_name == "U") {      # U=<name>
-                    # Undefine name, like @undef
-                    xeq_cmd__undefine("undefine", _val)
-                    continue
-                }
-                # If we reach here, we still have our NAME=VAL arg to process,
-                # and we haven't broken off taking some arg-triggered action.
-                # Remember, "NAME=" on command line defines with empty value.
-                if (emptyp(_val)) {
-                    dbg__print("args", 3, "BEGIN: Setting '" _name "' to @null")
-                    xeq_cmd__null("null", _name)
-                } else {
-                    dbg__print("args", 3, "BEGIN: Setting '" _name "' to '" _val "'")
-                    xeq_cmd__define("define", _name TOK_SPACE _val)
-                }
-
-            # If not NAME=VAL, try to load arg as a file.
-            } else {
-                _nfile++
-                _loadfile = search_file(_arg)
-                if (emptyp(_loadfile)) {
-                    warn("File '" _arg "' not found", "ARGV", _i)
-                    __exit_code = EX_NOINPUT
-                    continue
-                }
-                load_init_files()
-                if (! dofile(_loadfile)) {
-                    warn("Problem parsing file '" _loadfile "'", "ARGV", _i)
-                    __exit_code = EX_M2_ERROR
-                }
-            }
-        }
-
-        # If we get here with __rnf still zero, that means we used
-        # up every ARGV defining symbols and didn't specify any files.
-        # (Well that used to be true, but if you can also get here by
-        # specifying files that don't exist.)  So we check the number of
-        # files we've processed vs the number we were requested to handle.
-        #print_stderr("_nfile=" _nfile "  __rnf=" __rnf)
-        if (__rnf == 0) {
-            # Not specifying any input files, like the ARGC==1 situation,
-            # means to read standard input, so that is what we must now do.
-            if (_nfile == 0) {
-                load_init_files()
-                __exit_code = dofile("-") ? EX_OK : EX_NOINPUT
-            } else {
-                # User specified file(s) but not one of them existed.
-                __exit_code = EX_NOINPUT
-            }
-        }
-    }
+    # Now, there must be at least one command line argument, so process
+    # them all.  Args might be file names to parse, or user settings
+    # (symbols to define) of the form NAME=VALUE.
+    } else
+        process_command_line_arguments()
 
     # Under normal execution, all blocks should have been popped from
     # the parse stack, so check that.  There should only be the terminal
     # block (created in initialize) remaining but we can't remove it
-    # because we might need it in end_program to ship out diversions and
+    # because we might need it in end_program() to ship out diversions and
     # wraps.  I also can't move this check into end_program(), because
     # that routine might be called during execution with parsers still
     # present on the stack.
@@ -11627,7 +11644,7 @@ function end_program(diverted_streams_final_disposition,
         diverted_streams_final_disposition == MODE_STREAMS_SHIP_OUT) {
 
         # In the normal case of MODE_STREAMS_SHIP_OUT, ship out any remaining
-        # diverted data.  See "STREAMS & DIVERSIONS" documentation above
+        # diverted data.  See "STREAMS & DIVERSIONS" documentation in man page
         # to see how the user can prevent this, if desired.
         #
         # Regardless of whether the parse stack is empty or not, streams

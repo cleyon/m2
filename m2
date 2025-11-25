@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-11-17 17:40:57 cleyon>
+#  Time-stamp:  <2025-11-25 15:28:50 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -684,9 +684,27 @@ function max(m, n)
 }
 
 
+function mth__sign(x)
+{
+    return (x > 0) - (x < 0)
+    # See _The Elements of Programming Style, 2ed_,
+    # Kernighan & Plauger, 1974, pp. 1--2.
+}
+
+# Compute "machine epsilon" - the smallest number which when added to 1,
+# produces a sum != 1.
+function mth__epsilon(    eps)
+{
+    eps = 1
+    while ((1 + eps / 2) != 1)
+        eps /= 2
+    #print sprintf("epsilon = %42.40e", eps)
+}
+
+
 # do normal rounding
 # https://www.gnu.org/software/gawk/manual/html_node/Round-Function.html
-function round(x,   ival, aval, fraction)
+function mth__round(x,   ival, aval, fraction)
 {
     ival = int(x)    # integer part, int() truncates
 
@@ -984,7 +1002,7 @@ function lower_namespace()
     if (__namespace == GLOBAL_NAMESPACE)
         panic("(lower_namespace) Cannot be called from global namespace")
     sym_purge(__namespace)
-    print_stderr("NAM_PURGE " __namespace)
+    #print_stderr("NAM_PURGE " __namespace)
     nam_purge(__namespace)
     __namespace--
     dbg__print("namespace", 4, "(lower_namespace) namespace now " __namespace)
@@ -4239,7 +4257,7 @@ function nam_purge(level,
         if (double_underscores_p(x[1]) ||
             type == TYPE_FUNCTION || type == TYPE_COMMAND || type == TYPE_INTERNAL)
             continue
-        print_stderr(sprintf("(nam_purge) '%s' type %s", x[1], ppf__flag_type(type)))
+        #print_stderr(sprintf("(nam_purge) '%s' type %s", x[1], ppf__flag_type(type)))
         if (type == TYPE_LIST) {
             agg_block = symtab[x[1], "", x[2], "agg_block"]
             lis_clear(x[1], x[2])
@@ -9983,18 +10001,18 @@ function _c3_calculate_function(fun, e,
                                  error(sprintf("%s%g): Math expression error", fun, e))
                              return log(e) / LOG10 }
     if (fun == "odd(")     { return e % 2 }
-    if (fun == "rad(")     { return _c3_to_rad(e) }  # e * (TAU / 360) }
+    if (fun == "rad(")     { return mth__deg2rad(e) }  # e * (TAU / 360) }
     if (fun == "randint(") { if (e < 1)
                                  error(sprintf("%s%g): Math expression error", fun, e))
                              return randint2(1,int(e)) }
-    if (fun == "round(")   { return round(e) }
-    if (fun == "sign(")    { return (e > 0) - (e < 0) } # cf _The Elements of Programming Style, 2ed_, Kernighan & Plauger, 1974, pp. 1-2
+    if (fun == "round(")   { return mth__round(e) }
+    if (fun == "sign(")    { return mth__sign(e) }
     if (fun == "sin(")     { return sin(e) }
     if (fun == "sqrt(")    { if (e < 0)
                                  error(sprintf("%s%g): Math expression error", fun, e))
                              return sqrt(e) }
     if (fun == "srand(")   { return srand(e) }
-    if (fun == "tan(")     { return _c3_tan(e) }
+    if (fun == "tan(")     { return mth__tan(e) }
     error(sprintf("@expr: Unknown function '%s'",
                   (last(fun) == "(") ? chop(fun) : fun))
 }
@@ -10005,7 +10023,7 @@ function _c3_calculate_function2(fun, e, e2,
                                  hmax, hmin, hr)
 {
     if (fun == "atan2(")   return atan2(e, e2)
-    if (fun == "gcd(")     return _c3_gcd(e, e2)
+    if (fun == "gcd(")     return mth__gcd(e, e2)
     if (fun == "hypot(")   { # Dangerous due to potentional overflow:
                              #    return sqrt(e^2 + e2^2)
                              # Better: the following algorithm computes
@@ -10016,7 +10034,7 @@ function _c3_calculate_function2(fun, e, e2,
                              hr = hmin / hmax
                              return hmax * sqrt(1 + hr^2)
                            }
-    if (fun == "lcm(")     return _c3_lcm(e, e2)
+    if (fun == "lcm(")     return mth__lcm(e, e2)
     if (fun == "max(")     return e > e2 ? e : e2
     if (fun == "min(")     return e < e2 ? e : e2
     if (fun == "pow(")     return e ^ e2
@@ -10033,13 +10051,13 @@ function _c3_advance(    tmp)
 }
 
 # convert degrees to radians
-function _c3_to_rad(e)
+function mth__deg2rad(e)
 {
     return e * DEG_RADIANS
 }
 
 # tangent
-function _c3_tan(e,    c)
+function mth__tan(e,    c)
 {
     c = cos(e)
     if (c == 0)
@@ -10048,17 +10066,17 @@ function _c3_tan(e,    c)
 }
 
 # greatest common divisor
-function _c3_gcd(e, e2)
+function mth__gcd(e, e2)
 {
-    return e2 ? _c3_gcd(e2, e % e2) \
+    return e2 ? mth__gcd(e2, e % e2) \
               : e
 }
 
 # least common multiple
-function _c3_lcm(e, e2)
+function mth__lcm(e, e2)
 {
     return (e == 0 || e2 == 0) ? 0 \
-        : abs(e * e2 / _c3_gcd(e, e2))
+        : abs(e * e2 / mth__gcd(e, e2))
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -10342,12 +10360,14 @@ function macro_expand(macro,
             macro_set_expansion(macro, xeq_fn__executable(fn, M, nparam, param))
         else if (fn == "expr" || fn == "sexpr")
             macro_set_expansion(macro, xeq_fn__expr(fn, M, nparam, param))
-        else if (fn == "format")
+        else if (fn == "format" || fn == "sprintf")
             macro_set_expansion(macro, xeq_fn__format(fn, M, nparam, param))
         else if (fn == "getenv" || fn == "sgetenv")
             macro_set_expansion(macro, xeq_fn__getenv(fn, M, nparam, param))
         else if (fn == "gregdate")
             macro_set_expansion(macro, xeq_fn__gregdate(fn, M, nparam, param))
+        else if (fn == "hr")
+            macro_set_expansion(macro, xeq_fn__hr(fn, M, nparam, param))
         else if (fn == "ifdef" || fn == "ifndef")
             macro_set_expansion(macro, xeq_fn__ifdef(fn, M, nparam, param))
         else if (fn == "ifelse")
@@ -10865,7 +10885,7 @@ function xeq_fn__expr(fn, M, nparam, param,
 #       format: Format value(s) according for sprintf format string
 #
 #*****************************************************************************
-# @format FMT SYM...@
+# @{format,sprintf} FMT SYM...@
 function xeq_fn__format(fn, M, nparam, param,
                         fmt, i, arg, result)
 {
@@ -10940,6 +10960,42 @@ function xeq_fn__gregdate(fn, M, nparam, param,
         error("Parameter must be integer: '" M "':" $0)
     JD = 0 + p + JD_MJD_DIFF
     return greg(JD)
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  H R  @
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#       hr : Convert (HOUR,MIN,SEC) to HR.DECIMAL
+#
+#*****************************************************************************
+# @hr HOUR MIN SEC@
+function xeq_fn__hr(fn, M, nparam, param,
+                    hours, mins, secs, sgn, retval)
+{
+    if (nparam != 3)
+        error("Bad parameters in '" M "':" $0)
+    hours = param[1] + 0.0
+    mins  = param[2] + 0.0
+    secs  = param[3] + 0.0
+    if (! integerp(hours))
+        error("Parameter HOURS invalid: '" M "':" $0)
+    if ((sgn = mth__sign(hours)) < 0)
+        hours = -hours
+    else if (sgn == 0)
+        sgn = 1
+    if ((! integerp(mins)) || mins < 0 || mins >= 60)
+        error("Parameter MINS invalid: '" M "':" $0)
+    if ((! floatp(secs)) || secs < 0 || secs >= 60)
+        error("Parameter SECS invalid: '" M "':" $0)
+
+    retval = sgn * (hours + mins/60.0 + secs/3600.0)
+    return ltrim(sprintf("%12.8f", retval))
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -11697,6 +11753,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
                         monthdays, month, leap)
 {
     # Constants
+    EPSILON                     = mth__epsilon()
     EULER                       = exp(1)
     JD_MJD_DIFF                 = 2400000.5
     LOG2                        = log(2)
@@ -11802,12 +11859,6 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     initialize_prog_paths()
     __inc_path = "M2PATH" in ENVIRON ? ENVIRON["M2PATH"] : ""
 
-    # Compute "machine epsilon" - the smallest number which when added
-    # to 1, produces a sum != 1.
-    EPSILON = 1
-    while ((1 + EPSILON / 2) != 1)
-        EPSILON /= 2
-    
     # Initialize days per month
     split("31 31 28 29 31 31 30 30 31 31 30 30 31 31 31 31 30 30 31 31 30 30 31 31", monthdays)
     for (i = 0; i < 24; i++) {
@@ -11932,10 +11983,10 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     # Also need to add handler in dosubs()  [search: SYMFUNC]
     # Functions cannot be used as symbol or sequence names.
     split("basename boolval center chr comma date dirname divnl dow epoch" \
-          " executable expr format getenv gregdate ifdef ifelse ifndef" \
+          " executable expr format geodist getenv gregdate hr ifdef ifelse ifndef" \
           " ifx index join lc left len ljust ltrim mid mjd mktemp ord rem right" \
           " rjust rot13 rtrim scenter scomma sexecutable sexpr sgetenv sjoin" \
-          " sljust space spaces srem srjust strftime substr tab tabs time" \
+          " sljust space spaces sprintf srem srjust strftime substr tab tabs time" \
           " trim tz uc utc uuid xbasename xdirname",
           array, TOK_SPACE)
     for (elem in array)
@@ -12313,21 +12364,21 @@ function end_program(diverted_streams_final_disposition,
         for (i = 1; i <= __wrap_cnt; i++)
             dostring(__wrap_text[i])
 
-    for (stream in strtab)
-        blk_master_delete(strtab[stream])
+    # for (stream in strtab)
+    #     blk_master_delete(strtab[stream])
 
     # Close open files, attempt to reclaim block
     close_open_files(TRUE)
 
     # NOTE - dev stuff here
-    nam_purge(GLOBAL_NAMESPACE)
+#    nam_purge(GLOBAL_NAMESPACE)
     #sym_purge(GLOBAL_NAMESPACE)
 
     #if (tracing_event_p(TRACE_SYMBOL_READ_WRITE))
-        symtab_whats_left()
+#        symtab_whats_left()
 
 #    if (tracing_event_p(TRACE_BLOCKS))
-        blk_nicer_dump_blktab()
+#        blk_nicer_dump_blktab()
 
     if (debugging_enabled_p())
         print_debugfile(sprintf("m2:%s %d",

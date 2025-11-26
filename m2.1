@@ -703,10 +703,14 @@ Print the date corresponding to Modified Julian Day MJD.
 The output format is always "YYYY\-MM\-DD" (__FMT__[date] is not used).
 See also
 .Va @mjd@ .
+.It @hms HR.ddddd@
+Convert decimal (fractional) hours to hours, minutes, and seconds.
+See also
+.Va @geodist@ , @hr@ .
 .It @hr HOUR MIN SEC@
 Convert hours, minutes, and seconds to fractional hours.
 See also
-.Va @geodist@ .
+.Va @geodist@ , @hr@ .
 .It @ifdef{SYMBOL}{TRUE_TEXT}{FALSE_TEXT}@
 If SYMBOL is defined, return TRUE_TEXT, else return FALSE_TEXT.
 The {FALSE_TEXT} clause is optional, and defaults to the empty string.

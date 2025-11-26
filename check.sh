@@ -71,7 +71,7 @@
 # Framework control messages begin with "!!!", followed by a KEYWORD and info:
 #       !!! START - Starting test runs
 # Test ids and results are shown on lines beginning and ending with "***":
-#       *** NEWCMD/004/simple ... PASS ***
+#       *** Testing: NEWCMD/004/simple ... PASS ***
 # Exit status codes and data streams are shown in sections whose titles appear
 #       >>> LIKE THIS <<<
 #
@@ -226,7 +226,7 @@ test_series()
     cd $SERIES
     test_id=`echo $CATEGORY/$SERIES | sed "s,${testdir}/,,"`
     if [ -f test.disabled ]; then
-        echo "*** $test_id ... Series disabled, skipping ***"
+        echo "*** Skipping: $test_id ... Series disabled ***"
         cd ..
         return
     fi
@@ -263,7 +263,7 @@ run_test()
 
     TESTNAME=`echo "$M2_FILE" | sed 's,^.*/,,;s,\.m2$,,'`   # remove CATEGORY and ext
     [ $debug = "true" ] && echo "TESTNAME is $TESTNAME"
-    printf "*** $test_id/$TESTNAME ... "
+    printf "*** Testing: $test_id/$TESTNAME ... "
     ntest=$(expr $ntest + 1)
 
     if [ ! -s "$M2_FILE" ]; then

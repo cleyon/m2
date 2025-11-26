@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-11-25 15:28:50 cleyon>
+#  Time-stamp:  <2025-11-25 22:27:37 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -1845,7 +1845,7 @@ function info__gate_1part(opcode, optype, info, oplevel, caller, assert_true_or_
                 return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
                                           sprintf("Name '%s' not defined", iname))
 
-            if (optype == TYPE_USER) {
+            if (optype == TYPE_USER || optype == TYPE_SYMBOL) {
                 if (info__get(info, "protected"))
                     return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
                                               sprintf("Name '%s' is protected", iname))
@@ -4261,8 +4261,10 @@ function nam_purge(level,
         if (type == TYPE_LIST) {
             agg_block = symtab[x[1], "", x[2], "agg_block"]
             lis_clear(x[1], x[2])
-            print_stderr("(nam_purge) Deleting agg_block " agg_block)
-            blk_master_delete(agg_block)
+            if (integerp(agg_block)) {
+                print_stderr("(nam_purge) Deleting agg_block " agg_block)
+                blk_master_delete(agg_block)
+            }
             delete blktab[agg_block, 0, "count"]
             delete symtab[x[1], "", x[2], "agg_block"]
         }
@@ -10366,6 +10368,8 @@ function macro_expand(macro,
             macro_set_expansion(macro, xeq_fn__getenv(fn, M, nparam, param))
         else if (fn == "gregdate")
             macro_set_expansion(macro, xeq_fn__gregdate(fn, M, nparam, param))
+        else if (fn == "hms")
+            macro_set_expansion(macro, xeq_fn__hms(fn, M, nparam, param))
         else if (fn == "hr")
             macro_set_expansion(macro, xeq_fn__hr(fn, M, nparam, param))
         else if (fn == "ifdef" || fn == "ifndef")
@@ -10960,6 +10964,40 @@ function xeq_fn__gregdate(fn, M, nparam, param,
         error("Parameter must be integer: '" M "':" $0)
     JD = 0 + p + JD_MJD_DIFF
     return greg(JD)
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  H M S  @
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#       hms : Convert decimal HR.DDDDD to HOUR, MIN, SEC
+#
+#*****************************************************************************
+# @hms HR.DDDDD@
+function xeq_fn__hms(fn, M, nparam, param,
+                     hr, hours, mn, mins, secs, sgn, retval, frc_s)
+{
+    if (nparam != 1)
+        error("Bad parameters in '" M "':" $0)
+    if (! floatp(hr = param[1]))
+        error("Parameter HR invalid: '" M "':" $0)
+    if ((sgn = mth__sign(hr)) < 0)
+        hr = -hr
+
+    hours = int(hr)
+    mins  = int(mn = ((hr - hours) * 60))
+    secs  =           (mn - mins ) * 60
+    frc_s = sprintf("%10.6f", secs)
+    gsub(/[ .]*/, "", frc_s)
+    retval = sprintf("%s%d.%02d%s",
+                     (sgn < 0 ? "-" : ""),
+                     hours, mins, substr(frc_s, 1, 7))
+    return retval
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -11983,7 +12021,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     # Also need to add handler in dosubs()  [search: SYMFUNC]
     # Functions cannot be used as symbol or sequence names.
     split("basename boolval center chr comma date dirname divnl dow epoch" \
-          " executable expr format geodist getenv gregdate hr ifdef ifelse ifndef" \
+          " executable expr format geodist getenv gregdate hms hr ifdef ifelse ifndef" \
           " ifx index join lc left len ljust ltrim mid mjd mktemp ord rem right" \
           " rjust rot13 rtrim scenter scomma sexecutable sexpr sgetenv sjoin" \
           " sljust space spaces sprintf srem srjust strftime substr tab tabs time" \

@@ -1,0 +1,4 @@
+Start foo, x=3
+In foo, bar(6)
+In bar, x=6
+End foo, x=3

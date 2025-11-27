@@ -688,6 +688,14 @@ using the first argument as a format specifier.
 Arguments must be compatible with format string.
 Also called
 .Ql @sprintf@ .
+.It @geodist LAT1 LON1 LAT2 LON2@
+Return distance between points (LAT1,LON2) and (LAT2,LON2) in kilometers.
+Divide distance by 1.609344 to convert to miles.
+For nautical miles, divide by 1.852.
+Latitude and longitude must be given in fractional degrees,
+so use
+.Va @hr@
+to convert degrees/minutes/seconds.
 .It @getenv VAR@
 Get value of environment variable
 .Va VAR .
@@ -707,7 +715,7 @@ See also
 Convert decimal (fractional) hours to hours, minutes, and seconds.
 See also
 .Va @geodist@ , @hr@ .
-.It @hr HOUR MIN SEC@
+.It @hr HOUR.MMSSssss | HOUR MIN SEC@
 Convert hours, minutes, and seconds to fractional hours.
 See also
 .Va @geodist@ , @hr@ .
@@ -1837,6 +1845,15 @@ Image:  @my_image@
 .%I Addison-Wesley
 .%D 1988
 .%O ISBN\ 0\-201\-07981\-X
+.Re
+.Rs
+.%A Thaddeus Vincenty
+.%T Direct and Inverse Solutions of Geodesics on the Ellipsoid with application of nested equations
+.%J Survey Review
+.%V XXIII
+.%N 176
+.%D 1975
+.%U http://www.ngs.noaa.gov/PUBS_LIB/inverse.pdf
 .Re
 .Ss "Other Ms"
 .Bl -tag -width M8___ -offset indent

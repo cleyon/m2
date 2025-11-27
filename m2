@@ -1,11 +1,11 @@
-#!/usr/local/bin/gawk -f
 #!/usr/bin/awk -f
 #!/usr/local/bin/mawk -f
+#!/usr/local/bin/gawk -f
 #
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-11-25 22:27:37 cleyon>
+#  Time-stamp:  <2025-11-26 19:16:54 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -43,7 +43,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "5.1.3"
+    M2_VERSION = "5.2.0"
 
     # Specify a shell for m2 to use for running utility programs.
     # It is expected to be compatible with Bourne shell syntax.
@@ -253,6 +253,13 @@ function ltrim(s)
 # rtrim() - Remove whitespace on right
 function rtrim(s)
 {
+    sub(/[ \t]+$/, "", s)
+    return s
+}
+# trim() - Remove whitespace on left & right
+function trim(s)
+{
+    sub(/^[ \t]+/, "", s)
     sub(/[ \t]+$/, "", s)
     return s
 }
@@ -693,13 +700,13 @@ function mth__sign(x)
 
 # Compute "machine epsilon" - the smallest number which when added to 1,
 # produces a sum != 1.
-function mth__epsilon(    eps)
-{
-    eps = 1
-    while ((1 + eps / 2) != 1)
-        eps /= 2
-    #print sprintf("epsilon = %42.40e", eps)
-}
+# function mth__epsilon(    eps)
+# {
+#     eps = 1
+#     while ((1 + eps / 2) != 1)
+#         eps /= 2
+#     #print sprintf("epsilon = %42.40e", eps)
+# }
 
 
 # do normal rounding
@@ -775,85 +782,106 @@ function uuid()
 
 
 # Vincenty's inverse formula (ellipsoidal model, WGS84)
-# Return value: Distance *IN METERS*
-#               or -1 if algorithm fails to converge.
+# Return value: Distance in Kilometers
+#               or may throw an error on failure to converge
 #
-# Thaddeus Vincenty, "Direct and Inverse Solutions of Geodesics on the Ellipsoid
-# with application of nested equations", Survey Review, vol XXIII no 176, 1975
-# http://www.ngs.noaa.gov/PUBS_LIB/inverse.pdf.
-#
-# Original Javascript code © 2002-2022 Chris Veness, MIT licensed
+# Original Javascript code (c) 2002-2022 Chris Veness, MIT licensed
 # http://www.movable-type.co.uk/scripts/latlong-vincenty.html
 function vincenty_distance(lat1, lon1, lat2, lon2,
                            \
                            phi1, lambda1, phi2, lambda2,
-                           a, f, L, U1, U2, sinU1, sinU2,
-                           lambda, lambdaP, iterLimit,
-                           sinLambda, sinSqSigma, sinSigma, cosSigma,
+                           a, f, L,
+                           sinU1, sinU2, cosU1, cosU2, tanU1, tanU2,
+                           lambda, lambdaP, iterations,
+                           sinLambda, cosLambda, sinSqSigma, sinSigma, cosSigma,
                            sigma, sinAlpha, cosSqAlpha,
-                           cos2SignaM, C, b, uSq, A, B, deltaSigma,
-                           distance, alpha1, alpha2)
+                           cos2SigmaM, C, b, uSq, A, B, deltaSigma,
+                           distance, alpha1, alpha2, antipodal, iterCheck)
 {
-    phi1 = lat1; lambda1 = lon1
-    phi2 = lat2; lambda2 = lon2
     a = 6378137.0               # WGS84 equatorial radius in meters
     f = 1 / 298.257223563       # WGS84 flattening
     b = a * (1 - f)             # Polar radius
-    L = _c3_to_rad(lon2 - lon1) # Longitude difference in radians
-    # U = Reduced latitude : tan(U) = (1-f) * tan(phi)
-    U1 = atan2((1 - f) * _c3_tan(_c3_to_rad(phi1)), 1) # Reduced latitude
-    U2 = atan2((1 - f) * _c3_tan(_c3_to_rad(phi2)), 1) # Reduced latitude
-    sinU1 = sin(U1); cosU1 = cos(U1)
-    sinU2 = sin(U2); cosU2 = cos(U2)
 
-    lambda = L; lambdaP = iterLimit = 100
+    phi1 = mth__deg2rad(lat1);  lambda1 = mth__deg2rad(lon1)
+    phi2 = mth__deg2rad(lat2);  lambda2 = mth__deg2rad(lon2)
+
+    L = lambda2 - lambda1       # L = Longitude difference (radians)
+    antipodal = abs(L) > TAU/4 || abs(phi2 - phi1) > TAU/4
+   #tan(U) = (1-f) * tan(phi)   # U = Reduced latitude
+    tanU1 = (1-f) * mth__tan(phi1)
+      cosU1 = 1 / sqrt((1 + tanU1*tanU1))
+      sinU1 = tanU1 * cosU1
+    tanU2 = (1-f) * mth__tan(phi2)
+      cosU2 = 1 / sqrt((1 + tanU2*tanU2))
+      sinU2 = tanU2 * cosU2
+
+    lambda = L
+    sigma = antipodal ? PI : 0 # angular distance P1..P2 on the sphere
+    sinSigma = 0
+      cosSigma = antipodal ? -1 : 1
+    cos2SigmaM = 1
+    cosSqAlpha = 1
+
+    iterations = 0
     do {
-        sinLambda = sin(lambda); cosLambda = cos(lambda)
-        sinSqSigma = (cosU2 * sinLambda)^2 + \
-                     (cosU1 * sinU2 - sinU1 * cosU2 * cosLambda)^2
+        sinLambda = sin(lambda)
+        cosLambda = cos(lambda)
+        sinSqSigma = (cosU2 * sinLambda)^2 \
+                   + (cosU1 * sinU2 - sinU1 * cosU2 * cosLambda)^2
+        if (abs(sinSqSigma) < 1e-24)
+            break      # co-incident/antipodal points (sigma < ~0.006mm)
         sinSigma = sqrt(sinSqSigma)
-        if (sinSigma == 0)      # Coordinates are the same
-            return 0
+        if (sinSigma == 0)
+            return 0            # Coordinates are the same
         cosSigma = sinU1 * sinU2 + cosU1 * cosU2 * cosLambda
         sigma = atan2(sinSigma, cosSigma)
         sinAlpha = cosU1 * cosU2 * sinLambda / sinSigma
         cosSqAlpha = 1 - sinAlpha^2
-        cos2SigmaM = cosSigma - 2 * sinU1 * sinU2 / cosSqAlpha
+        # on equatorial line cos^2 alpha = 0
+        cos2SigmaM = (cosSqAlpha != 0) ? (cosSigma - 2*sinU1*sinU2/cosSqAlpha) : 0
         C = f / 16 * cosSqAlpha * (4 + f * (4 - 3 * cosSqAlpha))
         lambdaP = lambda
-        lambda = L + (1 - C) * f * sinAlpha *                           \
+        lambda = L + (1 - C) * f * sinAlpha * \
             (sigma + C * sinSigma * (cos2SigmaM + C * cosSigma * (-1 + 2 * cos2SigmaM^2)))
-    } while (abs(lambda - lambdaP) > 1e-12 && --iterLimit > 0)
+        iterCheck = antipodal ? abs(lambda)-PI : abs(lambda)
+        if (iterCheck > PI)
+            error("(vincenty_distance) lambda > PI")
+    } while (abs(lambda - lambdaP) > 1e-12 && ++iterations < 1000)
 
-    if (iterLimit == 0) {
-        warn("(vincenty_distance) Failed to converge on solution")
-        return -1
+    if (iterations >= 1000) {
+        error("(vincenty_distance) Failed to converge on solution")
     }
 
     uSq = cosSqAlpha * (a^2 - b^2) / (b^2)
     A = 1 + uSq / 16384 * (4096 + uSq * (-768 + uSq * (320 - 175 * uSq)))
     B = uSq / 1024 * (256 + uSq * (-128 + uSq * (74 - 47 * uSq)))
-    deltaSigma = B * sinSigma * (cos2SigmaM + B / 4 * (cosSigma * (-1 + 2 * cos2SigmaM^2) - \
-                                                       B / 6 * cos2SigmaM * (-3 + 4 * sinSigma ^2) * (-3 + 4 * cos2SigmaM^2)))
+    deltaSigma = B * sinSigma * (cos2SigmaM + B / 4 * (cosSigma * (-1 + 2 * cos2SigmaM^2) \
+                                   - B / 6 * cos2SigmaM * (-3 + 4 * sinSigma ^2) * (-3 + 4 * cos2SigmaM^2)))
     distance = b * A * (sigma - deltaSigma) # Distance in meters
 
-    # note special handling of exactly antipodal points where sin^2 alpha = 0 (due to discontinuity
-    # atan2(0, 0) = 0 but atan2(eps, 0) = PI/2 [90 deg]) - in which case bearing is always meridional,
-    # due north (or due south!)
-    # alpha1 = azimuths of the geodesic; alpha2 the direction P1 P2 produced    
-
-    alpha1 = atan2(cosU2 * sinLambda, cosU1 * sinU2 - sinU1 * cosU2 * cosLambda)
-    alpha2 = atan2(cosU1 * sinLambda, -sinU1 * cosU2 + cosU1 * sinU2 * cosLambda)
-
-    # alpha1 = Math.abs(sinSqσ) < ε ? 0 : Math.atan2(cosU2*sinλ,  cosU1*sinU2-sinU1*cosU2*cosλ);
-    # alpha2 = Math.abs(sinSqσ) < ε ? π : Math.atan2(cosU1*sinλ, -sinU1*cosU2+cosU1*sinU2*cosλ);
-    print("alpha1=" alpha1 ", alpha2=" alpha2)
-
-    print("alpha1=" alpha1 ", alpha2=" alpha2)
-    return distance
+   #return distance             # meters
+    return distance / 1000      # kilometers
+   #return distance / 1609.344  # miles
+   #return distance / 1852      # nautical miles
 
     # NOTREACHED
-    # if you prefer km, return distance / 1000
+
+    # Note special handling of exactly antipodal points where sin^2 alpha = 0
+    # (due to discontinuity atan2(0, 0) = 0 but atan2(eps, 0) = PI/2 [90 deg]).
+    # In which case bearing is always meridional, due north (or due south!)
+    # alpha1 = azimuths of the geodesic
+    alpha1 = abs(sinSqSigma) < EPSILON ?  0 \
+        : atan2(cosU2 * sinLambda,  cosU1 * sinU2 - sinU1 * cosU2 * cosLambda)
+    # alpha2 = the direction P1 P2 produced
+    alpha2 = abs(sinSqSigma) < EPSILON ? PI \
+        : atan2(cosU1 * sinLambda, -sinU1 * cosU2 + cosU1 * sinU2 * cosLambda)
+    #print("alpha1=" alpha1 ", alpha2=" alpha2)
+
+    # When converting radians back to degrees, West is negative if using
+    # signed decimal degrees.  For bearings, values in the range -PI to
+    # +PI [-180 deg to +180 deg] need to be converted to 0 to +2PI
+    # [0-360]; this can be done by (bearing+2*PI)%2*PI [bearing+360)%360]
+    # where % is the modulo operator.
 }
 
 
@@ -2423,7 +2451,6 @@ function blk_new(block_type,
     } else
         panic("(blk_new) Uncaught block_type '" block_type "'")
 
-   
     msg = sprintf("[Block Create] %s => %d",
                   ppf__block_type(block_type), new_blknum)
     #print_stderr(msg)
@@ -2439,7 +2466,7 @@ function blk_walk_delete(blknum, seen,
     if (--blktab[blknum, 0, "refcnt"] > 0)
         warn("(blk_walk_delete) Block " blknum " has refcnt " blktab[blknum, 0, "refcnt"] ", continuing...")
 
-    block_type = blk_type(blknum)    
+    block_type = blk_type(blknum)
     if      (block_type == BLK_AGG)      blk_walk_AGG(OP_DELETE, blknum, seen, 0)
     else if (block_type == BLK_CASE)     blk_walk_CASE(OP_DELETE, blknum, seen, 0)
     else if (block_type == BLK_FILE)     blk_walk_FILE(OP_DELETE, blknum, seen, 0)
@@ -2470,7 +2497,7 @@ function blk_walk_delete(blknum, seen,
 function blk_master_delete(blknum,
                            block_type, seen)
 {
-    block_type = blk_type(blknum)    
+    block_type = blk_type(blknum)
 
     if (block_type == BLK_FILE &&
         blktab[blknum, 0, "open"] == TRUE) {
@@ -2615,7 +2642,7 @@ function blk_nicer_dump_blktab( \
             # print_stderr("Lint(" blknum "):")
             # blk_lint(blknum)
         }
-    }        
+    }
 }
 function blk_nicer_print_block(blknum, seen, indent,
                                block_type)
@@ -2628,7 +2655,7 @@ function blk_nicer_print_block(blknum, seen, indent,
     else if (block_type == BLK_IF)       blk_walk_IF(OP_PRINT, blknum, seen, indent)
     else if (block_type == BLK_LONGDEF)  blk_walk_LONGDEF(OP_PRINT, blknum, seen, indent)
     else if (block_type == BLK_STRING)   blk_walk_STRING(OP_PRINT, blknum, seen, indent)
-    else if (block_type == BLK_TERMINAL) blk_walk_TERMINAL(OP_PRINT, blknum, seen, ident)
+    else if (block_type == BLK_TERMINAL) blk_walk_TERMINAL(OP_PRINT, blknum, seen, indent)
     else if (block_type == BLK_USER)     blk_walk_USER(OP_PRINT, blknum, seen, indent)
     else if (block_type == BLK_WHILE)    blk_walk_WHILE(OP_PRINT, blknum, seen, indent)
     else
@@ -2642,7 +2669,7 @@ function blk_walk_AGG(opcode, blknum, seen, indent,
     count = blktab[blknum, 0, "count"] + 0
     if (opcode == OP_PRINT)
         print_debugfile(sprintf("%s%2d %s[%d]:",
-                                spaces(3*indent), blknum,                      
+                                spaces(3*indent), blknum,
                                 "AGG", count))
     for (i = 1; i <= count; i++)
         if (opcode == OP_PRINT)
@@ -2722,7 +2749,7 @@ function blk_walk_CASE(opcode, blknum, seen, indent,
         delete blktab[blknum, 0, "otherwise_block"]
         delete blktab[blknum, 0, "preamble_block"]
         delete blktab[blknum, 0, "seen_otherwise"]
-        delete blktab[blknum, 0, "valid"] 
+        delete blktab[blknum, 0, "valid"]
         #print_stderr("OP_DELETE CASE end : Deleted CASE block " blknum)
     }
     seen[0 + blknum] = 1
@@ -4947,7 +4974,7 @@ function nam_system_p(name)
 
 # Remove any symbol at level "level" or greater
 function sym_purge(level,
-                   x, k, tag, sym_del_list)
+                   x, k, tag, sym_del_list, cmd_del_list)
 {
     dbg__print("sym", 7, "(sym_purge) BEGIN")
     for (k in symtab) {
@@ -4962,7 +4989,7 @@ function sym_purge(level,
             } else if (tag == "agg_block") {
                 blk_master_delete(symtab[x[1], x[2], x[3], tag])
                 sym_del_list[x[1], x[2], x[3], tag] = TRUE
-            } else if (tag == "symval" || 
+            } else if (tag == "symval" ||
                        tag == "deferred_arg" || tag == "deferred_prog")
                 sym_del_list[x[1], x[2], x[3], tag] = TRUE
             else
@@ -10364,6 +10391,8 @@ function macro_expand(macro,
             macro_set_expansion(macro, xeq_fn__expr(fn, M, nparam, param))
         else if (fn == "format" || fn == "sprintf")
             macro_set_expansion(macro, xeq_fn__format(fn, M, nparam, param))
+        else if (fn == "geodist")
+            macro_set_expansion(macro, xeq_fn__geodist(fn, M, nparam, param))
         else if (fn == "getenv" || fn == "sgetenv")
             macro_set_expansion(macro, xeq_fn__getenv(fn, M, nparam, param))
         else if (fn == "gregdate")
@@ -10913,6 +10942,33 @@ function xeq_fn__format(fn, M, nparam, param,
 
 #*****************************************************************************
 #
+#       @  G E O D I S T  @
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#       geodist : Compute Earth surface distance between two points
+#
+#*****************************************************************************
+# @geodist LAT1 LON1 LAT2 LON2@
+function xeq_fn__geodist(fn, M, nparam, param,
+                         d, s)
+{
+    if (nparam != 4 || !floatp(param[1]) || !floatp(param[2]) ||
+                       !floatp(param[3]) || !floatp(param[4]))
+        error("Bad parameters in '" M "':" $0)
+
+    d = vincenty_distance(param[1], param[2],
+                          param[3], param[4])
+    #print sprintf("geodist: >%.8f<", d)
+    s = sprintf("%10.4f", d)
+    return trim(s)
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
 #       @  G E T E N V  @
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -11013,14 +11069,29 @@ function xeq_fn__hms(fn, M, nparam, param,
 #
 #*****************************************************************************
 # @hr HOUR MIN SEC@
+# @hr HOUR.MMSSsssss@
 function xeq_fn__hr(fn, M, nparam, param,
-                    hours, mins, secs, sgn, retval)
+                    hours, mins, secs, sgn, retval,
+                    h, dot)
 {
-    if (nparam != 3)
+    if (nparam == 1) {
+        h = param[1]
+        if (! floatp(h))
+            error("Bad parameters in '" M "':" $0)
+        dot = index(h, ".")
+        hours = substr(h, 1, dot-1) + 0
+        mins  = substr(h, dot+1, 2) + 0
+        secs  = substr(h, dot+3)
+        if (length(secs) > 2)
+            secs = substr(secs, 1, 2) "." substr(secs, 3)
+        secs = secs + 0.0
+    } else if (nparam == 3) {
+        hours = param[1] + 0
+        mins  = param[2] + 0
+        secs  = param[3] + 0.0
+    } else
         error("Bad parameters in '" M "':" $0)
-    hours = param[1] + 0.0
-    mins  = param[2] + 0.0
-    secs  = param[3] + 0.0
+
     if (! integerp(hours))
         error("Parameter HOURS invalid: '" M "':" $0)
     if ((sgn = mth__sign(hours)) < 0)
@@ -11033,7 +11104,7 @@ function xeq_fn__hr(fn, M, nparam, param,
         error("Parameter SECS invalid: '" M "':" $0)
 
     retval = sgn * (hours + mins/60.0 + secs/3600.0)
-    return ltrim(sprintf("%12.8f", retval))
+    return trim(sprintf("%12.8f", retval))
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -11791,7 +11862,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
                         monthdays, month, leap)
 {
     # Constants
-    EPSILON                     = mth__epsilon()
+   #EPSILON                     = mth__epsilon()
     EULER                       = exp(1)
     JD_MJD_DIFF                 = 2400000.5
     LOG2                        = log(2)

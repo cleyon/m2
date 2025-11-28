@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-11-26 19:16:54 cleyon>
+#  Time-stamp:  <2025-11-27 23:05:56 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -43,7 +43,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "5.2.0"
+    M2_VERSION = "5.2.1"
 
     # Specify a shell for m2 to use for running utility programs.
     # It is expected to be compatible with Bourne shell syntax.
@@ -1502,14 +1502,14 @@ function dbg__all_lev_standard()
     dbg__set_level("gate",       7)
     dbg__set_level("if",         5)
     dbg__set_level("io",         3)
-    dbg__set_level("nam",        7) # 3
+    dbg__set_level("nam",        3)
     dbg__set_level("namespace",  5)
     dbg__set_level("parse",      7)
     dbg__set_level("read",       0)
     dbg__set_level("seq",        3)
     dbg__set_level("ship_out",   5)
     dbg__set_level("stk",        5)
-    dbg__set_level("sym",        7) # 5
+    dbg__set_level("sym",        5)
     dbg__set_level("trace",      5)
     dbg__set_level("while",      5)
     dbg__set_level("xeq",        5)
@@ -12014,6 +12014,18 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
         if ("sh" in PROG) {
             sym_deferred_symbol("__PID__",      PTYPE_READONLY_INTEGER, "sh", "-c 'echo $PPID'")
         }
+    } else {
+        # Try to get some common identifiers through other means
+        if ("HOST" in ENVIRON)
+            sym_ll_fiat("__HOST__", "", PTYPE_READONLY_SYMBOL, ENVIRON["HOST"])
+        else if ("HOSTNAME" in ENVIRON)
+            sym_ll_fiat("__HOST__", "", PTYPE_READONLY_SYMBOL, ENVIRON["HOSTNAME"])
+        if ("UID" in ENVIRON)
+            sym_ll_fiat("__UID__", "",  PTYPE_READONLY_SYMBOL, ENVIRON["UID"])
+        if ("USER" in ENVIRON)
+            sym_ll_fiat("__USER__", "", PTYPE_READONLY_SYMBOL, ENVIRON["USER"])
+        else if ("LOGNAME" in ENVIRON)
+            sym_ll_fiat("__USER__", "", PTYPE_READONLY_SYMBOL, ENVIRON["LOGNAME"])
     }
 
     nam_ll_write("__FMT__",    GLOBAL_NAMESPACE, TYPE_ARRAY FLAG_SYSTEM FLAG_WRITABLE)

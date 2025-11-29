@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-11-27 23:05:56 cleyon>
+#  Time-stamp:  <2025-11-29 08:10:09 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -535,6 +535,20 @@ function ppf__bool(x)
 }
 
 
+# Just like sprintf() except it supports %r and %R for Roman numerals.
+function m2_sprintf(format, value)
+{
+    if (index(format, "%R") > 0) {
+        gsub(/%R/, to_roman(value), format)
+        return format
+    } else if (index(format, "%r") > 0) {
+        gsub(/%r/, tolower(to_roman(value)), format)
+        return format
+    } else
+        return sprintf(format, value)
+}
+
+
 function integerp(pat)
 {
     return pat ~ /^[-+]?[0-9]+$/
@@ -778,6 +792,26 @@ function uuid()
            "-" substr("89ab", randint2(1,4), 1) \
                    hex_digits(3) \
            "-" hex_digits(12)
+}
+
+
+function to_roman(i,
+                  value, res, x)
+{
+    i = int(i)
+    if (i <= 0 || i > 3999) {
+        warn("(to_roman) Argument " i " out of range")
+        return i
+    }
+    res = ""
+    for (x = 1; x <= 13; x++) {
+        value = __rv[x]
+        while (i >= value) {
+            res = res __roman[value]
+            i -= value
+        }
+    }
+    return res
 }
 
 
@@ -10470,7 +10504,7 @@ function macro_expand(macro,
             if (pre_post == -1)
                 seq_ll_incr(fn, incr * inc_dec)
             # Insert current value with desired formatting
-            macro_set_expansion(macro, sprintf(seqtab[fn, "fmt"], seq_ll_read(fn)))
+            macro_set_expansion(macro, m2_sprintf(seqtab[fn, "fmt"], seq_ll_read(fn)))
             # Handle postfix increment/decrement
             if (pre_post == +1)
                 seq_ll_incr(fn, incr * inc_dec)
@@ -11975,6 +12009,12 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
         leap  = i % 2
         __monthdays[month, leap] = monthdays[i+1]
     }
+
+    __roman[__rv[1]=1000] = "M"
+    __roman[__rv[2]= 900] = "CM"; __roman[__rv[6]=90] = "XC"; __roman[__rv[10]=9] = "IX"
+    __roman[__rv[3]= 500] = "D" ; __roman[__rv[7]=50] = "L" ; __roman[__rv[11]=5] = "V"
+    __roman[__rv[4]= 400] = "CD"; __roman[__rv[8]=40] = "XL"; __roman[__rv[12]=4] = "IV"
+    __roman[__rv[5]= 100] = "C" ; __roman[__rv[9]=10] = "X" ; __roman[__rv[13]=1] = "I"
 
     if (secure_level() < SEC_PARANOID) {
         # Set up some symbols that depend on external programs

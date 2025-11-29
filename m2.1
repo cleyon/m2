@@ -1038,6 +1038,11 @@ characters just like a macro.
 This injects the current value, formatted by calling
 .Fn sprintf
 with the specified format.
+To assist in generating outlines, sequence formats may include the non-standard
+.Ql %\&R
+and
+.Ql %\&r
+specifiers to print Roman numerals.
 The form
 .Ql @++ID@
 is used to generate an increasing sequence of values printed in a

@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-11-29 08:10:09 cleyon>
+#  Time-stamp:  <2025-11-30 13:44:22 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -43,7 +43,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "5.2.1"
+    M2_VERSION = "5.2.2"
 
     # Specify a shell for m2 to use for running utility programs.
     # It is expected to be compatible with Bourne shell syntax.
@@ -568,35 +568,30 @@ function with_trailing_slash(s)
 
 
 function split_subsep(s, item_arr,
-                      nitem, i, retval)
+                      nitem, i, ss, retval)
 {
-    while (length(s) > 0) {
-        nitem++
-        if ((i = index(s, SUBSEP)) > 0) {
-            item_arr[nitem] = substr(s, 1, i-1)
-            s = substr(s, i+1)
-        } else {
-            item_arr[nitem] = s
-            break
-        }
+    while ((ss = index(s, SUBSEP)) > 0) {
+        item_arr[++nitem] = substr(s, 1, ss-1)
+        s = substr(s, ss+1)
     }
+    if (! emptyp(s))
+        panic("(split_subsep) junk remaining in s: " s)
+
     return nitem
 }
 
 
 function ppf__sepstr(s,
-                     i, retval)
+                     i, ss, retval)
 {
-    while (length(s) > 0) {
-        if ((i = index(s, SUBSEP)) > 0) {
-            retval = retval "ELEM: " substr(s, 1, i-1) TOK_NEWLINE
-            retval = retval "SUBSEP" TOK_NEWLINE
-            s = substr(s, i+1)
-        } else {
-            retval = retval "REST: " s TOK_NEWLINE
-            break
-        }
+    while ((ss = index(s, SUBSEP)) > 0) {
+        retval = retval "ELEM: '" substr(s, 1, ss-1) "'" TOK_NEWLINE
+        retval = retval "SUBSEP" TOK_NEWLINE
+        s = substr(s, ss+1)
     }
+    if (! emptyp(s))
+        panic("(ppf__sepstr) junk remaining in s: " s)
+
     return chop(retval)
 }
 
@@ -3192,20 +3187,23 @@ function cmd_definition_ppf(name,
 }
 
 
-# s is the encoded version of the invocation:
-#       <name> SUBSEP <args> [ SUBSEP <arg-N> ... ]
+# s is the encoded version (2) of the invocation:
+#       <nitem> SUBSEP <name> SUBSEP [ { <arg-N> SUBSEP } ... ]
+# nitem includes itself, so for a minimal case of calling a command
+# with no arguments, nitem would be 2: one for itself, and one for <name>.
+# Note this is also the number of SUBSEPs expected.  When arguments
+# are supplied, nitem = # args + 2.
+#       4 SUBSEP <name> SUBSEP <arg1> SUBSEP <arg2> SUBSEP
+# In version 2, SUBSEP is a field terminator; previously it was a separator.
 function ppf__user_call(s,
                         nitem, citem, arg, retval)
 {
     # print_stderr(ppf__sepstr(s))
     nitem = split_subsep(s, citem)
-    if (nitem < 2 || nitem != 2+citem[2])
-        panic(sprintf("(execute__user) split_subsep() returned strange value: %d\n>>%s<<",
-                      nitem, ppf__sepstr(s)))
 
-    retval = TOK_AT citem[1]
-    for (arg = 3; arg <= nitem; arg++)
-        retval = retval TOK_LBRACE citem[arg] TOK_RBRACE
+    retval = TOK_AT citem[2]
+    for (arg = 1; arg <= nitem-2; arg++)
+        retval = retval TOK_LBRACE citem[2+arg] TOK_RBRACE
     return retval
 }
 
@@ -3858,6 +3856,10 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
 # often called on a static string, for example.
 #
 # This function returns an encoded version of the user command call.
+# Version 2:
+#     <narg> SUBSEP <name> SUBSEP [ { <argN> SUBSEP } ... ]
+#   Note: narg always >= 2, equal to # of SUBSEPs expected
+# (OLD) Version 1:
 #     <name> SUBSEP <narg> [ SUBSEP <argN> ... ]
 # When the call details are eventually decoded in execute__user(), the
 # OBJ_USER value is passed to split_subsep() to access individual items.
@@ -3866,7 +3868,6 @@ function scan__usercmd_call(    s, name, obj, i, oldi, c, nc, narg, nlbr,
                                 brpos, cb)
 {
     s = $0
-    narg = 0
     dbg__print("parse", 5, "(scan__usercmd_call) s='" s "'")
     if (emptyp(s))
         panic("(scan__usercmd_call) s cannot be empty!")
@@ -3875,7 +3876,7 @@ function scan__usercmd_call(    s, name, obj, i, oldi, c, nc, narg, nlbr,
     if ((brpos = index(s, TOK_LBRACE)) == NOT_FOUND) {
         name = substr(s, 2)
         dbg__print("parse", 3, sprintf("(scan__usercmd_call) OUT: name='%s'", name))
-        return name SUBSEP narg
+        return 2 SUBSEP name SUBSEP
     }
 
     # Read cmd name between @ and {
@@ -3884,6 +3885,7 @@ function scan__usercmd_call(    s, name, obj, i, oldi, c, nc, narg, nlbr,
 
     # Remove everything that came before.  We are now left with (hopefully)
     # a series of brace-enclosed arguments.
+    narg = 0
     s = substr(s, brpos)        # s == "{..."
     while (substr(s, 1, 1) == TOK_LBRACE) {
         cb = find_closing_brace(s, 1, TOK_LBRACE)
@@ -3910,10 +3912,10 @@ function scan__usercmd_call(    s, name, obj, i, oldi, c, nc, narg, nlbr,
     }
 
     dbg__print("parse", 2, sprintf("(scan__usercmd_call) END 3: narg=%d, s='%s'", narg, s))
-    retval = name SUBSEP narg SUBSEP
+    retval = narg+2 SUBSEP name SUBSEP
     for (j = 1; j <= narg; j++)
         retval = retval arg[j] SUBSEP
-    return chop(retval)
+    return retval
 }
 
 
@@ -8692,7 +8694,7 @@ function xeq_cmd__m2ctl(cmd, cmdline,
 #
 #*****************************************************************************
 function parse__newcmd(    name, user_block, body_block, pstat, nparam, p, pname,
-                           me, info)
+                           me, info, eq, defval, started_opt)
 {
     me = "@newcmd"
     nparam = 0
@@ -8711,9 +8713,20 @@ function parse__newcmd(    name, user_block, body_block, pstat, nparam, p, pname
     while (match(name, "{[^}]*}")) {
         p = ++nparam
         pname = substr(name, RSTART+1, RLENGTH-2)
+        if ((eq = index(pname, "=")) > 0) {
+            started_opt = TRUE
+            defval = substr(pname, eq+1)
+            pname = substr(pname, 1, eq-1)
+        } else if (started_opt)
+            error(me ": Required arguments must precede optional arguments: '" pname "'")
+        if (! nam_valid_with_strict_as(pname, TRUE))
+            error(me ": Invalid parameter name '" pname "'")
         dbg__print("cmd", 5, sprintf("(parse__newcmd) Parameter %d : %s",
                                      p, pname))
         blktab[user_block, p, "param_name"] = pname
+        if (blktab[user_block, p, "optional"] = to_bool(eq))
+            blktab[user_block, p, "default_value"] = defval
+
         name = substr(name, 1, RSTART-1) substr(name, RSTART+RLENGTH)
     }
     #assert_cmd_okay_to_define(name, "@newcmd")
@@ -8793,10 +8806,7 @@ function execute__user(user_invocation,
 
     # print_stderr(ppf__sepstr(user_invocation))
     nitem = split_subsep(user_invocation, citem)
-    if (nitem < 2 || nitem != 2+citem[2])
-        panic(sprintf("(execute__user) split_subsep() returned strange value: %d\n>>%s<<",
-                      nitem, ppf__sepstr(user_invocation)))
-    name = citem[1]
+    name = citem[2]
 
     # See if it's a user command
     if (nam__scan(name, info) == ERROR)
@@ -8819,7 +8829,7 @@ function execute__user(user_invocation,
 
 
 function execute__user_body(user_block, args,
-                            block_type, new_level, i, p, body_block)
+                            block_type, new_level, i, j, p, body_block)
 {
     block_type = blk_type(user_block)
     dbg__print("cmd", 3, sprintf("(execute__user_body) START dstblk=%d, user_block=%d, type=%s",
@@ -8831,25 +8841,38 @@ function execute__user_body(user_block, args,
     body_block = blktab[user_block, 0, "body_block"]
     dbg__print_block("cmd", 7, body_block, "(execute__user_body) body_block")
 
-    # Always raise namespace level (even if nparam == 0) because
-    # user code might run @local.
-    new_level = raise_namespace()
-
     # Evaluate arguments before any parameter instantiations.  It is
     # critical to do this first (and not all together in a loop as
     # before), because invoking nam_ll_write() before sym_ll_write()
     # will LOSE if a parameter has the same name as a global variable
     # due to namtab[] mismatch.
-    for (i = 1; i <= blktab[user_block, 0, "nparam"]; i++)
+    for (i = 1; i <= args[1] - 2; i++)
         # +2 to skip past first two entries (cmdname, nargs)
         args[i + 2] = dosubs(args[i + 2])
 
+    # Always raise namespace level (even if nparam == 0) because
+    # user code might run @local.
+    new_level = raise_namespace()
+
     # Instantiate parameters
-    for (i = 1; i <= blktab[user_block, 0, "nparam"]; i++) {
+    for (i = 1; i <= args[1] - 2; i++) {
         p = blktab[user_block, i, "param_name"]
         nam_ll_write(p, new_level, TYPE_SYMBOL)
         sym_ll_write(p, "", new_level, args[i + 2])
         dbg__print("cmd", 6, sprintf("(execute__user_body) Setting param %s to '%s'", p, args[i]))
+    }
+    # If we haven't supplied all expected parameters, see if the missing
+    # ones have default values
+    while (i <= blktab[user_block, 0, "nparam"]) {
+        if (! blktab[user_block, i, "optional"])
+            error("@" args[2] ": Insufficient parameters")
+
+        p = blktab[user_block, i, "param_name"]
+        nam_ll_write(p, new_level, TYPE_SYMBOL)
+        sym_ll_write(p, "", new_level, blktab[user_block, i, "default_value"])
+        dbg__print("cmd", 6, sprintf("(execute__user_body) Defaulting param %s to '%s'",
+                                     p, blktab[user_block, i, "default_value"]))
+        i++
     }
 
     dbg__print("cmd", 5, sprintf("(execute__user_body) CALLING execute__block(%d)", body_block))

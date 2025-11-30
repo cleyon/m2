@@ -1511,6 +1511,15 @@ Commands can only appear on a line of their own
 and may or may not produce output.
 Their definitions may include named parameters and complex logic.
 .Pp
+.Em Parameters :
+@newcmd accepts zero or more named formal parameters, enclosed in braces.
+A parameter may be designed as
+.Qq optional
+by suffixing its name with an equals sign
+.Ql = .
+Any default value may be supplied on the right hand side.
+All required parameters must be supplied with arguments when the command is invoked.
+.Pp
 .Em Example :
 .\"  See tests/FOR/007/table.m2
 .Bd -literal -offset indent -compact
@@ -1522,7 +1531,7 @@ Their definitions may include named parameters and complex logic.
 @endcmd
 @;
 @comment        @table{n} prints a table with a number of rows
-@newcmd table{n}
+@newcmd table{n=9}
 This table will have @n@ lines:
 |  N | N^2 | sqrt(N) |
 |----|-----|---------|
@@ -1531,7 +1540,7 @@ This table will have @n@ lines:
 @next i
 @endcmd
 @;
-@table{9}
+@table
 \ \ \ => This table will have 9 lines:
 \ \ \ => |  N | N^2 | sqrt(N) |
 \ \ \ => |----|-----|---------|

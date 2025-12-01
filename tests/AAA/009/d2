@@ -1,0 +1,2 @@
+d2: __DEPTH__ = @__DEPTH__@
+@include d3

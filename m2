@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-11-30 13:44:22 cleyon>
+#  Time-stamp:  <2025-11-30 21:04:23 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -43,7 +43,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "5.2.2"
+    M2_VERSION = "5.2.3"
 
     # Specify a shell for m2 to use for running utility programs.
     # It is expected to be compatible with Bourne shell syntax.
@@ -3463,9 +3463,10 @@ function parse__file(    filename, file_block1, file_block2, pstat, d)
 
     # # Set up new file context
     __buffer = EMPTY
+    sym_ll_incr( "__DEPTH__",     "", GLOBAL_NAMESPACE, 1);
     sym_ll_write("__FILE__",      "", GLOBAL_NAMESPACE, filename)
-    sym_ll_write("__LINE__",      "", GLOBAL_NAMESPACE, 0)
     sym_ll_write("__FILE_UUID__", "", GLOBAL_NAMESPACE, uuid())
+    sym_ll_write("__LINE__",      "", GLOBAL_NAMESPACE, 0)
 
     # Read the file and process each line
     dbg__print("parse", 5, "(parse__file) CALLING parse()")
@@ -3485,9 +3486,10 @@ function parse__file(    filename, file_block1, file_block2, pstat, d)
     if (file_block1 != file_block2)
         panic("(parse__file) File block mismatch")
     __buffer = blktab[file_block2, 0, "old.buffer"]
+    sym_ll_incr( "__DEPTH__",     "", GLOBAL_NAMESPACE, -1);
     sym_ll_write("__FILE__",      "", GLOBAL_NAMESPACE, blktab[file_block2, 0, "old.file"])
-    sym_ll_write("__LINE__",      "", GLOBAL_NAMESPACE, blktab[file_block2, 0, "old.line"])
     sym_ll_write("__FILE_UUID__", "", GLOBAL_NAMESPACE, blktab[file_block2, 0, "old.file_uuid"])
+    sym_ll_write("__LINE__",      "", GLOBAL_NAMESPACE, blktab[file_block2, 0, "old.line"])
 
     blk_master_delete(file_block2)
     dbg__print("parse", 2, sprintf("(parse__file) END '%s' => %s",
@@ -12104,8 +12106,9 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
       sym_ll_fiat("__CWD__",        "", PTYPE_READONLY_SYMBOL,  with_trailing_slash(ENVIRON["PWD"]))
     else if (secure_level() < SEC_PARANOID && ("pwd" in PROG))
       sym_deferred_symbol("__CWD__",    PTYPE_READONLY_SYMBOL,  "pwd", "")
-    sym_ll_fiat("__DIVNUM__",       "", PTYPE_READONLY_INTEGER, 0)
     sym_ll_fiat("__DEBUGFILE__",    "", PTYPE_WRITABLE_SYMBOL,  STDERR)
+    sym_ll_fiat("__DEPTH__",        "", PTYPE_READONLY_INTEGER, 0)
+    sym_ll_fiat("__DIVNUM__",       "", PTYPE_READONLY_INTEGER, 0)
     sym_ll_fiat("__EXPR__",         "", PTYPE_READONLY_NUMERIC, 0.0)
     sym_ll_fiat("__FILE__",         "", PTYPE_READONLY_SYMBOL,  "")
     sym_ll_fiat("__FILE_UUID__",    "", PTYPE_READONLY_SYMBOL,  "")

@@ -1,7 +1,7 @@
 @h1{First heading}
 @p{The first paragraph.}
 @h1{Second heading}
-@p{The second paragraph.
+@p{The second paragraph.@\n
 Yadda yadda yadda}
 @h1{Third heading}
 @p{The third paragraph.}

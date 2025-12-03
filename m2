@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-11-30 21:04:23 cleyon>
+#  Time-stamp:  <2025-12-03 11:42:17 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -43,7 +43,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "5.2.3"
+    M2_VERSION = "5.3.0"
 
     # Specify a shell for m2 to use for running utility programs.
     # It is expected to be compatible with Bourne shell syntax.
@@ -1441,9 +1441,16 @@ function readline(    retval, i, s, done, topsrc)
                     panic("(readline) getline returned strange value: " retval)
             }
         }
-        if (retval == OKAY && substr(s, length(s) - 1, 2) == "@\\") {
-            s = chop(chop(s))   # Remove "@\"
-            continue
+        if (retval == OKAY) {
+            if (substr(s, length(s) - 2, 3) == "@\\n") {
+                # Remove @\n and replace it with newline
+                s = substr(s, 1, length(s) - 3) TOK_NEWLINE
+                continue
+            } else if (substr(s, length(s) - 1, 2) == "@\\") {
+                # Remove @\
+                s = substr(s, 1, length(s) - 2)
+                continue
+            }
         }
         done = TRUE
     } while (!done)
@@ -3159,16 +3166,41 @@ function ppf__BLK_AGG(blknum,
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
 #*****************************************************************************
-# function cmd_defined_p(name, code)
-# {
-#     print_stderr("(cmd_defined_p) BROKEN")
-#     if (!cmd_valid_p(name))
-#         return FALSE
-#     if (! nam_ll_in(name, GLOBAL_NAMESPACE))
-#         return FALSE
-#     return TRUE
-#     #return flag_1true_p(code, TYPE_USER)
-# }
+function cmd_defined_p(text,
+                       nparts, info, name, key, level, i)
+{
+    dbg__print("cmd", 5, sprintf("(cmd_defined_p) text='%s' START", text))
+    if (!cmd_valid_p(text))
+        return FALSE
+
+    # Scan text => name, key
+    if ((nparts = nam__scan(text, info)) == ERROR) {
+        dbg__print("cmd", 2, sprintf("(cmd_defined_p) END nam__scan('%s') failed => %s", text, ppf__bool(FALSE)))
+        __m2_msg = "Scan error, " __m2_msg
+        return FALSE
+    }
+    name = info["name"]
+    key  = info["key"]
+
+    # Now call nam__lookup(info)
+    level = nam__lookup(info)
+    if (level == NAME_NOT_FOUND) {
+        dbg__print("cmd", 2, sprintf("(cmd_defined_p) END nam__lookup('%s') failed, maybe ok? => %s", text, ppf__bool(FALSE)))
+        return FALSE
+    }
+
+    # We've found some matching name on some level, but not sure if it's a Command or not.
+    # This step is necessary to make sure it's actually a Command.
+    for (i = nam_system_p(name) ? GLOBAL_NAMESPACE : __namespace; i >= GLOBAL_NAMESPACE; i--) {
+        if (info_defined_lev_p(info, i, TYPE_COMMAND)) {
+            dbg__print("cmd", 2, sprintf("(cmd_defined_p) END text='%s', level=%d => %s", text, i, ppf__bool(TRUE)))
+            return TRUE
+        }
+    }
+
+    dbg__print("cmd", 2, sprintf("(cmd_defined_p) END No command named '%s' on any level => %s", text, ppf__bool(FALSE)))
+    return FALSE
+}
 
 
 function cmd_definition_ppf(name,
@@ -3241,11 +3273,11 @@ function cmd_destroy(info,
 }
 
 
-# function cmd_valid_p(text)
-# {
-#     return nam_valid_strict_regexp_p(text) &&
-#            !double_underscores_p(text)
-# }
+function cmd_valid_p(text)
+{
+    return nam_valid_strict_regexp_p(text) &&
+           !double_underscores_p(text)
+}
 
 
 function cmd_ll_read(name, level)
@@ -3819,7 +3851,7 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
                     # *not* NAME_NOT_FOUND, something *was* found at "level".  See
                     # if it's a user command and ship it out if so.
                     if (flag_1true_p((code = nam_ll_read(name, level)), TYPE_USER)) {
-                        call_details = scan__usercmd_call()
+                        call_details = scan__usercmd_call($0)
                         dbg__print("parse", 3, sprintf("(parse) [%s] CALLING ship_out(OBJ_USER, '%s')", parser_label, call_details))
                         ship_out(OBJ_USER, call_details)
                         dbg__print("parse", 3, "(parse) [" parser_label "] RETURNED FROM ship_out()")
@@ -3840,36 +3872,16 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
 }
 
 
-# Unlike built-in commands, which must be complete on a single line, USER
-# commands might span multiple physical lines.  This is because (unlike
-# built-in commands), parameters are enclosed with braces, so one may write:
-#       @mycmd{Title}{A very very very
-#       very long title}
-# Call readline() repeatedly until braces are closed properly.
-#
-# More details on why it is possible to call readline() and and not call
-# it from dosubs().  This is because the only caller of
-# scan__usercmd_call is parse() -- specifically, in parse's main loop
-# where it is also executing readline().  An extra readline here in an
-# auxiliary function to help finish a command doesn't hurt things.
-#
-# dosubs() *cannot* call readline() [to assist in scanning multi-line
-# @ifelse@, perhaps] because readline's may be long over.  dosubs() is
-# often called on a static string, for example.
-#
-# This function returns an encoded version of the user command call.
-# Version 2:
+# Returns an encoded version of the user command call:
 #     <narg> SUBSEP <name> SUBSEP [ { <argN> SUBSEP } ... ]
-#   Note: narg always >= 2, equal to # of SUBSEPs expected
-# (OLD) Version 1:
-#     <name> SUBSEP <narg> [ SUBSEP <argN> ... ]
+# Note: narg always >= 2, and equal to # of SUBSEPs expected
 # When the call details are eventually decoded in execute__user(), the
 # OBJ_USER value is passed to split_subsep() to access individual items.
-function scan__usercmd_call(    s, name, obj, i, oldi, c, nc, narg, nlbr,
-                                readstat, arg, inarg, thisi, retval, j,
-                                brpos, cb)
+function scan__usercmd_call(s,
+                            name, obj, i, oldi, c, nc, narg, nlbr,
+                            readstat, arg, inarg, thisi, retval, j,
+                            brpos, cb)
 {
-    s = $0
     dbg__print("parse", 5, "(scan__usercmd_call) s='" s "'")
     if (emptyp(s))
         panic("(scan__usercmd_call) s cannot be empty!")
@@ -3891,19 +3903,29 @@ function scan__usercmd_call(    s, name, obj, i, oldi, c, nc, narg, nlbr,
     s = substr(s, brpos)        # s == "{..."
     while (substr(s, 1, 1) == TOK_LBRACE) {
         cb = find_closing_brace(s, 1, TOK_LBRACE)
-        if (cb == ERROR)
+        if (cb == ERROR || cb == EOF)
             error("(scan__usercmd_call) Could not find closing brace: " s)
-        else if (cb == EOF) {
-            # We ran out of characters looking for a "}".
-            # Try reading some more lines to fill our need.
-            readstat = readline()
-            if (readstat <= 0)
-                error(sprintf("(scan__usercmd_call) ERROR, missing '}'"))
-            dbg__print("parse", 9, "just read = >" $0 "<")
-            s = s TOK_NEWLINE $0
-            dbg__print("parse", 7, sprintf("(scan__usercmd_call) After readline, s='%s'", s))
-            continue
-        } else {
+        # Removing this because we can (once again) no longer call
+        # readline().  This is because dosubs() has now gained the
+        # ability to inject values returned from user commands, and
+        # dosubs of course cannot call readline.  dosubs() *cannot* call
+        # readline() [to assist in scanning multi-line @ifelse@,
+        # perhaps] because I/O may be long over.  dosubs() is often
+        # called on a static string, for example.
+        #
+        # You can always use  @\  line continuation...
+        #
+        # else if (cb == EOF) {
+        #     # We ran out of characters looking for a "}".
+        #     # Try reading some more lines to fill our need.
+        #     readstat = readline()
+        #     if (readstat <= 0)
+        #         error(sprintf("(scan__usercmd_call) ERROR, missing '}'"))
+        #     dbg__print("parse", 9, "just read = >" $0 "<")
+        #     s = s TOK_NEWLINE $0
+        #     dbg__print("parse", 7, sprintf("(scan__usercmd_call) After readline, s='%s'", s))
+        #     continue
+        else {
             # Found a }
             dbg__print("parse", 5, ("   (scan__usercmd_call) in loop, cb=" cb))
             inarg = substr(s, 2, cb - 2)
@@ -4918,7 +4940,7 @@ function syminfo_valid_p(syminfo,
 #     level = __namespace
 #
 #     # Error if name exists at that level
-#     if (sym_info_defined_lev_p(info, level))
+#     if (info_defined_lev_p(info, level, TYPE_SYMBOL))
 #         error("sym_create name already exists at that level")
 #
 #     # Error if first(code) != valid TYPE
@@ -5164,7 +5186,7 @@ function sym_defined_p(sym,
     # We've found some matching name on some level, but not sure if it's a Symbol or not.
     # This step is necessary to make sure it's actually a Symbol.
     for (i = nam_system_p(name) ? GLOBAL_NAMESPACE : __namespace; i >= GLOBAL_NAMESPACE; i--) {
-        if (sym_info_defined_lev_p(info, i)) {
+        if (info_defined_lev_p(info, i, TYPE_SYMBOL)) {
             dbg__print("sym", 2, sprintf("(sym_defined_p) END sym='%s', level=%d => %s", sym, i, ppf__bool(TRUE)))
             return TRUE
         }
@@ -5209,7 +5231,7 @@ function syminfo_defined_p(info,
         return FALSE
     itype = info__get(info, "type")
     if (itype == TYPE_SYMBOL)
-        return sym_info_defined_lev_p(info, ilevel)
+        return info_defined_lev_p(info, ilevel, itype)
     else if (itype == TYPE_ARRAY || itype == TYPE_LIST)
         return idx__key_exists_p(info, info__get(info, "key"))
     else if (itype == TYPE_SEQUENCE)
@@ -5226,18 +5248,21 @@ function syminfo_defined_p(info,
 # The caller is responsible for inquiring about nam_system_p(name),
 # and overriding level to zero if appropriate.  This code does
 # not make any assumptions about name/levels.
-function sym_info_defined_lev_p(info, level,
-                                name, key)
+function info_defined_lev_p(info, level, type,
+                            name, key)
 {
     name = info["name"]
     key  = info["key"]
-    dbg__print("sym", 5, sprintf("(sym_info_defined_lev_p) sym='%s' START", name))
+    dbg__print("sym", 5, sprintf("(info_defined_lev_p) sym='%s' START", name))
 
-    if ((name, key, 0+level, "symval") in symtab) {
-        dbg__print("sym", 5, sprintf("(sym_info_defined_lev_p) END [\"%s\",\"%s\",%d,\"symval\"] Found in symtab => TRUE", name, key, level))
+    if (type == TYPE_SYMBOL && (name, key, 0+level, "symval") in symtab) {
+        dbg__print("sym", 5, sprintf("(info_defined_lev_p) END [\"%s\",\"%s\",%d,\"symval\"] Found Symbol => TRUE", name, key, level))
+        return TRUE
+    } else if (type == TYPE_COMMAND && (name, key, 0+level, "user_block") in symtab) {
+        dbg__print("sym", 5, sprintf("(info_defined_lev_p) END [\"%s\",\"%s\",%d,\"symval\"] Found Command => TRUE", name, key, level))
         return TRUE
     } else {
-        dbg__print("sym", 5, sprintf("(sym_info_defined_lev_p) END [\"%s\",\"%s\",%d,\"symval\"] Not found => FALSE", name, key, level))
+        dbg__print("sym", 5, sprintf("(info_defined_lev_p) END [\"%s\",\"%s\",%d,\"symval\"] Not found => FALSE", name, key, level))
         return FALSE
     }
 }
@@ -8883,11 +8908,13 @@ function execute__user_body(user_block, args,
     lower_namespace()
 
     # If we've been asked to return, well now we have
-    if (__xeq_ctl == XEQ_RETURN)
+    if (__xeq_ctl == XEQ_RETURN) {
+        #print_stderr("(execute__user_body) Found RETURN, value is " __return_value)
         __xeq_ctl = XEQ_NORMAL
+    }
     # If things are still not normal, that's a problem
     if (__xeq_ctl != XEQ_NORMAL)
-        panic("(xeq_cmd__return) __xeq_ctl is not normal")
+        panic("(execute__user_body) __xeq_ctl is not normal")
 
     dbg__print("cmd", 2, "(execute__user_body) END")
 }
@@ -9045,13 +9072,16 @@ function xeq_cmd__readonly(cmd, cmdline,
 #
 #*****************************************************************************
 # @return
-function xeq_cmd__return(cmd, cmdline,
-                        level, block, block_type)
+function xeq_cmd__return(cmd, cmdline)
 {
     # Logical check
     if (__xeq_ctl != XEQ_NORMAL)
         panic("(xeq_cmd__return) __xeq_ctl is not normal")
 
+    # print_stderr("@return: cmdline='" cmdline "'")
+    __return_found = TRUE
+    __return_noarg = emptyp(cmdline)
+    __return_value = cmdline
     __xeq_ctl = XEQ_RETURN
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
@@ -9817,6 +9847,8 @@ function ship_out(obj_type, obj,
 
     } else if (obj_type == OBJ_USER) {
         dbg__print("ship_out", 3, sprintf("(ship_out) CALLING execute__user(obj)"))
+        # Don't care about @return value or not, since injection into
+        # the output stream is not possible
         execute__user(obj)
         dbg__print("ship_out", 3, sprintf("(ship_out) RETURNED FROM execute__user(obj)"))
 
@@ -10350,7 +10382,7 @@ function macro_set_expansion(macro, expanded_text)
 function macro_expand(macro,
                       i, j, l, M, nparam, p, pval, param, r, fn,
                       x, inc_dec, pre_post, subcmd, lfn, incr, wrkM,
-                      fninfo, level)
+                      fninfo, level, args, orf, orn, orv)
 {
     M = macro["urtext"]
     nparam = split(M, param)
@@ -10506,6 +10538,28 @@ function macro_expand(macro,
     # Check if it's an array
     } else if (sym_valid_p(fn) && arrayp(fn)) {
         macro_set_expansion(macro, sym_fetch(fn))
+
+    # Check if it's a Command
+    } else if (cmd_valid_p(fn) && cmd_defined_p(fn)) {
+        # print_stderr("(dosubs) " fn " is a user command")
+        # print_stderr("(dosubs) Args: '" M "'")
+        args = scan__usercmd_call(TOK_AT M)
+        # print_stderr("(dosubs) args:" ppf__sepstr(args))
+
+        # Save & restore @return values, so that nested User calls
+        # don't clobber values
+        orf = __return_found
+        orn = __return_noarg
+        orv = __return_value
+        __return_found = FALSE
+        __return_value = EMPTY
+        execute__user(args)
+        if ((!__return_found || __return_noarg) && strictp("def"))
+            error(TOK_AT fn ": Command did not return a value")
+        macro_set_expansion(macro, __return_value)
+        __return_found = orf
+        __return_noarg = orn
+        __return_value = orv
 
     # <SOMETHING ELSE> : Call a user-defined macro, handles arguments
     } else if (sym_valid_p(fn) && (sym_defined_p(fn) || sym_deferred_p(fn))) {

@@ -160,11 +160,25 @@ is not in the business of altering, without being requested, text which
 may be sent to other programs.
 In order to continue lines, the characters
 .Qq @\e
-must be used to terminate the line, indicating that the next line shall
-be joined to the first line.
+may be used at the end of a logical line, indicating that the next line shall
+be joined to the first line without any intervening whitespace.
+If you wish to append the next line with a newline separator,
+end the current line with
+.Qq @\en
 This allows m2 to work on files with backslashes without disturbing
 them, while still providing a mechanism for line continuation that will
 not be triggered spuriously.
+.Pp
+.Em Example :
+.Bd -literal -offset indent -compact
+Foo@\e
+bar
+\ \ \ => Foobar
+Foo@\en
+bar
+\ \ \ => Foo
+\ \ \ => bar
+.Ed
 .Ss Commands
 Control commands
 .Po
@@ -429,7 +443,7 @@ Variant
 does not print an error message if FILE does not exist.
 .It @readonly NAME
 Make NAME unchangeable \(em cannot be undone.
-.It @return
+.It @return [VALUE]
 Cease execution of a user command.
 @return is only valid inside a @newcmd definition.
 .It @sequence ID ACTION [N]
@@ -1413,9 +1427,11 @@ User modifiable.
 If True (the default), symbols inside
 .Qq @
 signs must be defined.
+User commands must @return a value.
 If non-strict (False),
 .Ql @XLERB@
 or other unrecognized text will ship out unmodified.
+If a user command does not provide a value, the expansion will be the empty string.
 User modifiable.
 .It __STRICT__[env]
 If True (the default), environment variables must be defined.
@@ -1509,9 +1525,9 @@ which is recognized and executed like other built-in commands (such as
 .Ql @if ,
 .Ql @define ,
 etc).
-Commands can only appear on a line of their own
-and may or may not produce output.
 Their definitions may include named parameters and complex logic.
+If the command returns a value, then it can be used in-line like other
+functions; but if not, an error is raised.
 .Pp
 .Em Parameters :
 @newcmd accepts zero or more named formal parameters, enclosed in braces.

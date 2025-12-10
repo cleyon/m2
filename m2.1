@@ -161,23 +161,28 @@ may be sent to other programs.
 In order to continue lines, the characters
 .Qq @\e
 may be used at the end of a logical line, indicating that the next line shall
-be joined to the first line without any intervening whitespace.
+be joined to the first line without any intervening newline.
 If you wish to append the next line with a newline separator,
 end the current line with
 .Qq @\en
 This allows m2 to work on files with backslashes without disturbing
 them, while still providing a mechanism for line continuation that will
 not be triggered spuriously.
+.Qq @\e-
+will also remove leading whitespace from the subsequent line.
 .Pp
 .Em Example :
 .Bd -literal -offset indent -compact
 Foo@\e
-bar
-\ \ \ => Foobar
+  bar
+\ \ \ => Foo  bar
 Foo@\en
 bar
 \ \ \ => Foo
 \ \ \ => bar
+Foo@\e-
+  bar
+\ \ \ => Foobar
 .Ed
 .Ss Commands
 Control commands
@@ -572,7 +577,7 @@ command line.
 Specifying more than one word between
 .Qq @
 characters, as in
-.Dl @xxxx AAA BBB CCC@
+.Dl @func AAA BBB CCC@
 is used as a crude form of function invocation.
 Macros can expand positional parameters whose actual values will be
 supplied when the macro is called.
@@ -725,6 +730,8 @@ Print the date corresponding to Modified Julian Day MJD.
 The output format is always "YYYY\-MM\-DD" (__FMT__[date] is not used).
 See also
 .Va @mjd@ .
+.It @hex SYM@
+Print value of SYM in hexadecimal.
 .It @hms HR.ddddd@
 Convert decimal (fractional) hours to hours, minutes, and seconds.
 See also
@@ -1495,13 +1502,14 @@ User id (effective uid).
 User name.
 .El
 .Ss User-Defined Commands
-Q.\ What is the difference between
+What are the differences between
 .Ql @define
 and
 .Ql @newcmd ?
-.br
-A.\ @define (and @longdef) create a
-.Em symbol
+.Pp
+.Em Symbols :
+@define (and @longdef) create a
+.Em symbol ,
 whose value can be expanded by surrounding it with "@" characters, as in:
 .br
 .Bd -literal -offset indent -compact
@@ -1509,25 +1517,61 @@ whose value can be expanded by surrounding it with "@" characters, as in:
 @define item air fryer
 Hello @name@, I just got a great deal on this new @item@ !!!
 .Ed
-You can also define and invoke
-.Em functions ,
-such as
+.Nm
+defines a number of built-in symbols, such as
+.Va __FILE__ .
+Consider
+.Ql name
+and
+.Ql item
+to be functions which take no parameters.
+.Pp
+.Em Functions :
+If the replacement text refers to $1, $2, etc, these glyphs will be
+replaced by the parameter values (words) supplied between the @
+characters.
+.Nm
+defines a number of built-in functions, such as
 .Ql @getenv@
 or
-.Ql @ifelse@ ,
-which are symbols that may optionally accept parameters.
+.Ql @ifelse@ .
 Symbols and functions can be used in-line with other text and generally
 produce or modify output in some way.
+Parameters may be specified with either syntax:
+.Ql @func AAA BBB CCC@
+(split on whitespace), or
+.Ql @func{AAA}{BBB}{CCC}@ .
+Available conditionals include @if[n]def@, @ifelse@, @ifx@.
 .Pp
+.Em Commands :
 @newcmd creates a new user
 .Em command
-which is recognized and executed like other built-in commands (such as
-.Ql @if ,
-.Ql @define ,
-etc).
-Their definitions may include named parameters and complex logic.
-If the command returns a value, then it can be used in-line like other
-functions; but if not, an error is raised.
+which is recognized and executed on a line of its own,
+like other built-in commands such as
+.Ql @define
+or
+.Ql @include .
+Available conditionals include @if and @case.
+Command definitions may include named parameters and complex control-flow logic
+including
+.Ql @for
+and
+.Ql while
+loops, and
+everyone's favorite capability,
+.Ql @eval .
+Parameters must be specified with the
+.Ql @func{AAA}{BBB}{CCC}@
+syntax.
+If a user command invokes
+.Ql @return
+and includes a return value,
+then the command may also be used in-line like
+other symbol functions; but if @return lacks a value, or control drops
+off the end without returning, an error is raised.
+Note that this invocation format requires a trailing
+.Qq @
+character, whereas the line-of-its-own invocation does not.
 .Pp
 .Em Parameters :
 @newcmd accepts zero or more named formal parameters, enclosed in braces.
@@ -1535,7 +1579,8 @@ A parameter may be designed as
 .Qq optional
 by suffixing its name with an equals sign
 .Ql = .
-Any default value may be supplied on the right hand side.
+The optional default value may be supplied on the right hand side;
+or, if omitted, the empty string is used.
 All required parameters must be supplied with arguments when the command is invoked.
 .Pp
 .Em Example :
@@ -1624,8 +1669,7 @@ Calling
 .Ql @traceon
 with one or more symbol names will enable tracing for those symbols: it
 does this by setting a flag in the name table.
-Note that, unlike m4, it is not possible to request tracing for a symbol
-that is not defined.
+Note that, unlike m4, it is not possible to trace a symbol that is not defined.
 .El
 .It Em Trace Off :
 .Bl -tag -width @tracemode_FLAGS___ -compact -offset indent
@@ -1665,69 +1709,62 @@ used repeatedly.
 .It Em Flag letters :
 These are the only values accepted by
 .Ql @tracemode .
-Most flags do not alter the value of
+Most do not alter the value of
 .Va __TRACE__ ;
-only the T and V flags can change it.
+only T and V can change it.
 .Pp
-These flags control and format trace output:
-.Bl -tag -width indent -offset indent
-.It f   \" BSD & GNU
-Show the current input file name in each trace output line.
-.It l   \" BSD & GNU
-Show the current input line number in each trace output line.
-.It t   \" BSD & GNU
-Trace all macro calls.
-.It T
-When encountered as an unadorned flag letter or with "+",
-.Va __TRACE__
-is set to True; "\-T" sets it to False.
-.El
-.Pp
-These control macro evaluation tracing:
 .Bl -tag -width indent -offset indent
 .It a   \" BSD & GNU
 Show the actual arguments in each macro call.
 This applies to all macro calls if the `t' flag is used, otherwise only
-the macros covered by calls of traceon.
+the macros covered by calls of @traceon.
 This flag is enabled by default.
+.It b   \" m2 only
+Print a message each time a block is created or destroyed.
 .\" .It c   \" BSD & GNU
 .\" [CURRENTLY NOT IMPLEMENTED]
-.\" Show several trace lines for each macro call.
+.\" Macro evaluation tracing: Show several trace lines for each macro call.
 .\" A line is shown when the macro is seen, but before the arguments are
 .\" collected; a second line when the arguments have been collected and a
 .\" third line after the call has completed.
 .It e   \" BSD & GNU
 Show the expansion of each macro call, if it is not void.
 This applies to all macro calls if the `t' flag is used,
-otherwise only the macros covered by calls of traceon.
+otherwise only the macros covered by calls of @traceon.
 This flag is enabled by default.
-.\" .It q   \" BSD & GNU
-.\" [NOT IMPLEMENTED] q option useless to m2 because it has no quote characters
-.\" Quote actual arguments and macro expansions in the
-.\" display with the current quotes.
-.\" .It x   \" BSD & GNU
-.\" [CURRENTLY NOT IMPLEMENTED]
-.\" Add a unique `macro call id' to each line of the trace output.
-.\" This is useful in connection with the `c' flag above.
-.El
-.Pp
-These are for miscellaneous traces:
-.Bl -tag -width indent -offset indent
-.It b   \" m2 only
-Print a message each time a block is created or destroyed.
+.It f   \" BSD & GNU
+Show the current input file name in each trace output line.
 .It i   \" GNU only
 Print a message each time the current input file is changed, giving file
 name and input line number.
+.It l   \" BSD & GNU
+Show the current input line number in each trace output line.
+.It m   \" m2 extension
+Print a message when a built-in command is executed.
 .It p   \" GNU only
 Print a message when a named file is found through the path search
 mechanism, giving the actual filename used.
+.\" .It q   \" BSD & GNU
+.\" [NOT IMPLEMENTED: q option is quite useless because m2 has no quote characters.]
+.\" Quote actual arguments and macro expansions in the
+.\" display with the current quotes.
 .It s   \" m2 extension
 Print a message when a symbol is read or written.
+.It t   \" BSD & GNU
+Trace all macro calls.
+.It T
+When encountered as an unadorned flag letter or with "+",
+.Va __TRACE__
+is set to True; "\-T" sets it to False.
 .It V   \" BSD & GNU
 A shorthand for all of the above flags.
 When flags are being set or added,
 .Va __TRACE__
 is set to True; if flags are being removed, it is not changed.
+.\" .It x   \" BSD & GNU
+.\" [CURRENTLY NOT IMPLEMENTED]
+.\" Add a unique `macro call id' to each line of the trace output.
+.\" This is useful in connection with the `c' flag above.
 .El
 .El
 .Sh IMPLEMENTATION NOTES

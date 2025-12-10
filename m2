@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-12-03 11:42:17 cleyon>
+#  Time-stamp:  <2025-12-09 23:22:23 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -898,13 +898,13 @@ function vincenty_distance(lat1, lon1, lat2, lon2,
     # Note special handling of exactly antipodal points where sin^2 alpha = 0
     # (due to discontinuity atan2(0, 0) = 0 but atan2(eps, 0) = PI/2 [90 deg]).
     # In which case bearing is always meridional, due north (or due south!)
+    #
     # alpha1 = azimuths of the geodesic
     alpha1 = abs(sinSqSigma) < EPSILON ?  0 \
         : atan2(cosU2 * sinLambda,  cosU1 * sinU2 - sinU1 * cosU2 * cosLambda)
     # alpha2 = the direction P1 P2 produced
     alpha2 = abs(sinSqSigma) < EPSILON ? PI \
         : atan2(cosU1 * sinLambda, -sinU1 * cosU2 + cosU1 * sinU2 * cosLambda)
-    #print("alpha1=" alpha1 ", alpha2=" alpha2)
 
     # When converting radians back to degrees, West is negative if using
     # signed decimal degrees.  For bearings, values in the range -PI to
@@ -1388,12 +1388,12 @@ function security_violation(text, file, line)
 # Return OKAY, ERROR, or EOF.  parse() is the only caller of readline.
 # That used to be true, but read_lines_until() now also calls readline.
 # (later) scan__usercmd_call() can also call readline, chasing closing `}'.
-function readline(    retval, i, s, done, topsrc)
+function readline(    retval, i, s, done, topsrc, trim_ws)
 {
     dbg__print("io", 6, "(readline) START")
     retval = OKAY               # uncharacteristically optimistic
     s = ""
-    done = FALSE
+    done = trim_ws = FALSE
     if (stk_empty_p(__source_stack))
         panic("(readline) Source stack empty")
     topsrc = stk_top(__source_stack)
@@ -1430,7 +1430,7 @@ function readline(    retval, i, s, done, topsrc)
             retval = getline < FILE()
             dbg__print("io", 7, "(readline) retval=" retval)
             if (retval == OKAY) {
-                s = s $0
+                s = s (trim_ws ? ltrim($0) : $0); trim_ws = FALSE
                 sym_ll_incr("__LINE__", "", GLOBAL_NAMESPACE, 1)
                 sym_ll_incr("__NLINE__", "", GLOBAL_NAMESPACE, 1)
             } else {
@@ -1445,6 +1445,11 @@ function readline(    retval, i, s, done, topsrc)
             if (substr(s, length(s) - 2, 3) == "@\\n") {
                 # Remove @\n and replace it with newline
                 s = substr(s, 1, length(s) - 3) TOK_NEWLINE
+                continue
+            } else if (substr(s, length(s) - 2, 3) == "@\\-") {
+                # Remove @\- and remember to eat upcoming leading whitespace
+                s = substr(s, 1, length(s) - 3)
+                trim_ws = TRUE
                 continue
             } else if (substr(s, length(s) - 1, 2) == "@\\") {
                 # Remove @\
@@ -1595,6 +1600,7 @@ function dbg__sys_level_p(dsys, lev)
 
 # Return the debug level for a given dsys.  If debugging is not enabled,
 # return its negative value (i.e., multiply by -1) to indicate this.
+# See additional comments in dbg__set_level for why this is useful.
 #
 # Caller can easily call abs() to get the correct value.  Currently,
 # dbg__sys_level_p() is the only caller of this, and negative values are always
@@ -1603,8 +1609,10 @@ function dbg__get_level(dsys)
 {
     if (dsys == EMPTY) panic("(dbg__get_level) dsys cannot be empty")
     if (! (dsys in __dbg_sysnames)) panic("(dbg__get_level) Unknown dsys name '" dsys "'")
-    if (!sym_ll_in("__DBG__", dsys, GLOBAL_NAMESPACE))
+    if (!sym_ll_in("__DBG__", dsys, GLOBAL_NAMESPACE)) {
+        warn("(dbg__get_level(" dsys "} not defined, returning 0")
         return 0
+    }
     return (sym_ll_read("__DBG__", dsys, GLOBAL_NAMESPACE)+0) \
          * (debugging_enabled_p() ? 1 : -1)
 }
@@ -2658,7 +2666,6 @@ function blk_nicer_dump_blktab( \
     for (k in blktab) {
         split(k, x, SUBSEP)
         blks[++cnt] = x[1]+0  # block #
-        print("building blks for dump, found " x[1], x[2], x[3])
     }
     nqsort(blks, 1, cnt)
 
@@ -2668,10 +2675,6 @@ function blk_nicer_dump_blktab( \
     # seen[TERMINAL] = TRUE
     for (i = 1; i <= cnt; i++) {
         blknum = blks[i]
-        #print blknum
-        #print TERMINAL
-        #if (blknum < TERMINAL) print_stderr("TERM LESS"); else if (blknum == TERMINAL) print_stderr("TERM EQUAL"); else if (blknum > TERMINAL) print_stderr("TERM GREATER"); else print_stderr("TERM UNKNOWN")
-        #if (blknum > TERMINAL && (! (blknum in seen))) {
         if ((! (blknum in seen))) {
             print_stderr("================================")
             blk_nicer_print_block(blknum, seen, 0) # 0 <-- indent level
@@ -3905,26 +3908,6 @@ function scan__usercmd_call(s,
         cb = find_closing_brace(s, 1, TOK_LBRACE)
         if (cb == ERROR || cb == EOF)
             error("(scan__usercmd_call) Could not find closing brace: " s)
-        # Removing this because we can (once again) no longer call
-        # readline().  This is because dosubs() has now gained the
-        # ability to inject values returned from user commands, and
-        # dosubs of course cannot call readline.  dosubs() *cannot* call
-        # readline() [to assist in scanning multi-line @ifelse@,
-        # perhaps] because I/O may be long over.  dosubs() is often
-        # called on a static string, for example.
-        #
-        # You can always use  @\  line continuation...
-        #
-        # else if (cb == EOF) {
-        #     # We ran out of characters looking for a "}".
-        #     # Try reading some more lines to fill our need.
-        #     readstat = readline()
-        #     if (readstat <= 0)
-        #         error(sprintf("(scan__usercmd_call) ERROR, missing '}'"))
-        #     dbg__print("parse", 9, "just read = >" $0 "<")
-        #     s = s TOK_NEWLINE $0
-        #     dbg__print("parse", 7, sprintf("(scan__usercmd_call) After readline, s='%s'", s))
-        #     continue
         else {
             # Found a }
             dbg__print("parse", 5, ("   (scan__usercmd_call) in loop, cb=" cb))
@@ -3934,7 +3917,6 @@ function scan__usercmd_call(s,
             s = substr(s, cb + 1)
         }
     }
-
     dbg__print("parse", 2, sprintf("(scan__usercmd_call) END 3: narg=%d, s='%s'", narg, s))
     retval = narg+2 SUBSEP name SUBSEP
     for (j = 1; j <= narg; j++)
@@ -4349,7 +4331,7 @@ function nam_purge(level,
             agg_block = symtab[x[1], "", x[2], "agg_block"]
             lis_clear(x[1], x[2])
             if (integerp(agg_block)) {
-                print_stderr("(nam_purge) Deleting agg_block " agg_block)
+                #print_stderr("(nam_purge) Deleting agg_block " agg_block)
                 blk_master_delete(agg_block)
             }
             delete blktab[agg_block, 0, "count"]
@@ -4368,8 +4350,8 @@ function nam_dump_namtab(filter_fs, include_sys,
                          include_system)
 {
     include_system = flag_1true_p(filter_fs, FLAG_SYSTEM)
-    print(sprintf("Begin namtab (%s%s):", filter_fs,
-                  include_system ? "+System" : ""))
+    print_debugfile(sprintf("Begin namtab (%s%s):", filter_fs,
+                            include_system ? "+System" : ""))
 
     for (k in namtab) {
         split(k, x, SUBSEP)
@@ -6403,7 +6385,6 @@ function bool__scan_factor(    e, r,         # ! factor | variable | ( expressio
 
     } else if (__btoken[__bf] == TOK_CANRUN_P) {
         name = __btoken[++__bf]
-        #print("(bool__scan_factor) CANRUN name='" name "'")
         if (emptyp(name)) return ERROR
         if (secure_level() >= SEC_PARANOID)
             security_violation("canrun(): Forbidden")
@@ -8621,7 +8602,6 @@ function xeq_cmd__m2ctl(cmd, cmdline,
         do {
             print_stderr("Enter line to scan as boolean expr (RETURN to end):")
             getstat = getline input < TTY
-            #print("just read '" input "'")
             if (emptyp(input)) {
                 print_stderr("Exiting boolean expr; RETURNING to regular commands!")
                 break
@@ -10488,6 +10468,8 @@ function macro_expand(macro,
             macro_set_expansion(macro, xeq_fn__getenv(fn, M, nparam, param))
         else if (fn == "gregdate")
             macro_set_expansion(macro, xeq_fn__gregdate(fn, M, nparam, param))
+        else if (fn == "hex")
+            macro_set_expansion(macro, xeq_fn__hex(fn, M, nparam, param))
         else if (fn == "hms")
             macro_set_expansion(macro, xeq_fn__hms(fn, M, nparam, param))
         else if (fn == "hr")
@@ -11072,7 +11054,6 @@ function xeq_fn__geodist(fn, M, nparam, param,
 
     d = vincenty_distance(param[1], param[2],
                           param[3], param[4])
-    #print sprintf("geodist: >%.8f<", d)
     s = sprintf("%10.4f", d)
     return trim(s)
 }
@@ -11133,6 +11114,34 @@ function xeq_fn__gregdate(fn, M, nparam, param,
         error("Parameter must be integer: '" M "':" $0)
     JD = 0 + p + JD_MJD_DIFF
     return greg(JD)
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  H E X  @
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#       hex: Print numeric value(s) in hexadecimal
+#
+#*****************************************************************************
+# @hex SYM...@
+function xeq_fn__hex(fn, M, nparam, param,
+                     p)
+{
+    if (nparam != 1)
+        error("Bad parameters in '" M "':" $0)
+    p = param[1]
+    if (sym_valid_p(p)) {
+        assert_sym_defined(p, "@" M "@")
+        return sprintf("%x", sym_fetch(p)+0)
+    } else if (integerp(p))
+        return sprintf("%x", p+0)
+    else
+        error("Bad parameters in '" M "':" $0)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -12224,7 +12233,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     # Also need to add handler in dosubs()  [search: SYMFUNC]
     # Functions cannot be used as symbol or sequence names.
     split("basename boolval center chr comma date dirname divnl dow epoch" \
-          " executable expr format geodist getenv gregdate hms hr ifdef ifelse ifndef" \
+          " executable expr format geodist getenv gregdate hex hms hr ifdef ifelse ifndef" \
           " ifx index join lc left len ljust ltrim mid mjd mktemp ord rem right" \
           " rjust rot13 rtrim scenter scomma sexecutable sexpr sgetenv sjoin" \
           " sljust space spaces sprintf srem srjust strftime substr tab tabs time" \
@@ -12540,10 +12549,10 @@ BEGIN {
         load_init_files()
         __exit_code = dofile("-") ? EX_OK : EX_NOINPUT
 
-    # Now, there must be at least one command line argument, so process
-    # them all.  Args might be file names to parse, or user settings
-    # (symbols to define) of the form NAME=VALUE.
     } else
+        # Otherwise, there must be at least one command line argument,
+        # so process them all.  Args might be file names to parse, or
+        # user settings (symbols to define) of the form NAME=VALUE.
         process_command_line_arguments()
 
     # Under normal execution, all blocks should have been popped from
@@ -12554,8 +12563,9 @@ BEGIN {
     # that routine might be called during execution with parsers still
     # present on the stack.
     if (stk_depth(__parse_stack) != 1) {
-        print_stderr("(main) Parse stack is not empty!")
+        print_stderr("Parse stack is not empty!")
         dump_parse_stack()
+        abend()
     }
 
     end_program(MODE_STREAMS_SHIP_OUT)

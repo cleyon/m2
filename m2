@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-12-09 23:22:23 cleyon>
+#  Time-stamp:  <2025-12-11 17:41:48 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -43,7 +43,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "5.3.0"
+    M2_VERSION = "5.3.1"
 
     # Specify a shell for m2 to use for running utility programs.
     # It is expected to be compatible with Bourne shell syntax.
@@ -581,19 +581,19 @@ function split_subsep(s, item_arr,
 }
 
 
-function ppf__sepstr(s,
-                     i, ss, retval)
-{
-    while ((ss = index(s, SUBSEP)) > 0) {
-        retval = retval "ELEM: '" substr(s, 1, ss-1) "'" TOK_NEWLINE
-        retval = retval "SUBSEP" TOK_NEWLINE
-        s = substr(s, ss+1)
-    }
-    if (! emptyp(s))
-        panic("(ppf__sepstr) junk remaining in s: " s)
-
-    return chop(retval)
-}
+# function ppf__sepstr(s,
+#                      i, ss, retval)
+# {
+#     while ((ss = index(s, SUBSEP)) > 0) {
+#         retval = retval "ELEM: '" substr(s, 1, ss-1) "'" TOK_NEWLINE
+#         retval = retval "SUBSEP" TOK_NEWLINE
+#         s = substr(s, ss+1)
+#     }
+#     if (! emptyp(s))
+#         panic("(ppf__sepstr) junk remaining in s: " s)
+#
+#     return chop(retval)
+# }
 
 
 function extract_cmd_name(text,
@@ -1725,34 +1725,25 @@ function tracing_event_p(event,
     if (index(TRACE_VALID_EVENTS, event) == NOT_FOUND)
         panic("(tracing_event_p) Unrecognized trace event '" event "'")
     trace_mode = sym_ll_read("__TRACEMODE__", "", GLOBAL_NAMESPACE)
-    if (flag_1true_p(trace_mode, TRACE_ALL))
-        return TRUE
-    return flag_1true_p(trace_mode, event)
+    return flag_anytrue_p(trace_mode, event TRACE_ALL)
 }
 
 
 function trace(event, sym, message,
                trace_mode)
 {
-    if (index(TRACE_VALID_EVENTS, event) == NOT_FOUND)
-        panic("(trace) Unrecognized trace event '" event "'")
-    if (double_underscores_p(sym) ||
-        sym_ll_read("__TRACE__", "", GLOBAL_NAMESPACE) == FALSE)
+    if (sym_ll_read("__TRACE__", "", GLOBAL_NAMESPACE) == FALSE ||
+        !tracing_event_p(event))
         return
+    if (event == TRACE_COMMAND || event == TRACE_EXPANSION || event == TRACE_SYMBOL_READ_WRITE) {
+        if (sym == EMPTY)
+            panic("(trace) sym cannot be empty")
+        if (double_underscores_p(sym) ||
+            !tracing_symbol_p(sym))
+            return
+    }
 
-    trace_mode = sym_ll_read("__TRACEMODE__", "", GLOBAL_NAMESPACE)
-    if (((event == TRACE_BLOCKS) &&
-         (flag_1true_p(trace_mode, TRACE_ALL) || (flag_1true_p(trace_mode, TRACE_BLOCKS)))) ||
-        ((event == TRACE_COMMAND) &&
-         (flag_1true_p(trace_mode, TRACE_ALL) || (flag_1true_p(trace_mode, TRACE_COMMAND) && tracing_symbol_p(sym)))) ||
-        ((event == TRACE_EXPANSION) &&
-         (flag_1true_p(trace_mode, TRACE_ALL) || (flag_1true_p(trace_mode, TRACE_EXPANSION) && tracing_symbol_p(sym)))) ||
-        ((event == TRACE_SYMBOL_READ_WRITE) &&
-         (flag_1true_p(trace_mode, TRACE_ALL) || (flag_1true_p(trace_mode, TRACE_SYMBOL_READ_WRITE) && tracing_symbol_p(sym)))) ||
-        ((event == TRACE_INPUT_FILE_CHG || event == TRACE_PATH_SEARCH) &&
-         (flag_1true_p(trace_mode, event))))
-
-        print_debugfile(trace_prefix() " " message)
+    print_debugfile(trace_prefix() " " message)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -2658,31 +2649,31 @@ function blk_dump_blktab(    x, k, blknum, seen, type)
 }
 
 
-function blk_nicer_dump_blktab( \
-                               x, k, blknum, seen, type,
-                               cnt, blks, i)
-{
-    cnt = 0
-    for (k in blktab) {
-        split(k, x, SUBSEP)
-        blks[++cnt] = x[1]+0  # block #
-    }
-    nqsort(blks, 1, cnt)
-
-    # # "Touching the Void" (2003 movie)  True story of mountaineers on the
-    # # west face of Siula Grande.  https://www.imdb.com/title/tt0379557/
-    # seen[VOID] = TRUE
-    # seen[TERMINAL] = TRUE
-    for (i = 1; i <= cnt; i++) {
-        blknum = blks[i]
-        if ((! (blknum in seen))) {
-            print_stderr("================================")
-            blk_nicer_print_block(blknum, seen, 0) # 0 <-- indent level
-            # print_stderr("Lint(" blknum "):")
-            # blk_lint(blknum)
-        }
-    }
-}
+# function blk_nicer_dump_blktab( \
+#                                x, k, blknum, seen, type,
+#                                cnt, blks, i)
+# {
+#     cnt = 0
+#     for (k in blktab) {
+#         split(k, x, SUBSEP)
+#         blks[++cnt] = x[1]+0  # block #
+#     }
+#     nqsort(blks, 1, cnt)
+#
+#     # # "Touching the Void" (2003 movie)  True story of mountaineers on the
+#     # # west face of Siula Grande.  https://www.imdb.com/title/tt0379557/
+#     # seen[VOID] = TRUE
+#     # seen[TERMINAL] = TRUE
+#     for (i = 1; i <= cnt; i++) {
+#         blknum = blks[i]
+#         if ((! (blknum in seen))) {
+#             print_stderr("================================")
+#             blk_nicer_print_block(blknum, seen, 0) # 0 <-- indent level
+#             # print_stderr("Lint(" blknum "):")
+#             # blk_lint(blknum)
+#         }
+#     }
+# }
 function blk_nicer_print_block(blknum, seen, indent,
                                block_type)
 {
@@ -2960,19 +2951,6 @@ function blk_dump_block_raw(blknum,
                             " => '" blktab[x[1], x[2], x[3]] "'" slot_type_str)
         }
     }
-}
-
-
-function blk_count(blknum,
-                   x, k, cnt)
-{
-    cnt = 0
-    for (k in blktab) {
-        split(k, x, SUBSEP)
-        if (x[1]+0 == blknum)
-            cnt++
-    }
-    return cnt
 }
 
 
@@ -6090,25 +6068,25 @@ function assert_sym_valid_name(sym, caller)
 # }
 
 
-function symtab_whats_left(x, k)
-{
-        for (k in symtab) {
-            split(k, x, SUBSEP)
-            if (double_underscores_p(x[1]))
-                continue
-            print sprintf("whats_left: symtab['%s', '%s', %d, %s]=%s",
-                          x[1], x[2], x[3], x[4],
-                          symtab[x[1], x[2], x[3], x[4]])
-            if (x[4] == "agg_block")
-                blk_master_delete(symtab[x[1], x[2], x[3], x[4]])
-        }
-#         for (k in del_list) {
+# function symtab_whats_left(x, k)
+# {
+#         for (k in symtab) {
 #             split(k, x, SUBSEP)
-#             dbg__print("sym", 3, sprintf("(arr_clear) Delete symtab['%s', '%s', %d, %s]",
-#                                         x[1], x[2], x[3], x[4]))
-#             delete symtab[x[1], x[2], x[3], x[4]]
+#             if (double_underscores_p(x[1]))
+#                 continue
+#             print sprintf("whats_left: symtab['%s', '%s', %d, %s]=%s",
+#                           x[1], x[2], x[3], x[4],
+#                           symtab[x[1], x[2], x[3], x[4]])
+#             if (x[4] == "agg_block")
+#                 blk_master_delete(symtab[x[1], x[2], x[3], x[4]])
 #         }
-}
+# #         for (k in del_list) {
+# #             split(k, x, SUBSEP)
+# #             dbg__print("sym", 3, sprintf("(arr_clear) Delete symtab['%s', '%s', %d, %s]",
+# #                                         x[1], x[2], x[3], x[4]))
+# #             delete symtab[x[1], x[2], x[3], x[4]]
+# #         }
+# }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
 
@@ -10895,14 +10873,12 @@ function xeq_fn__dirname(fn, M, nparam, param,
 #*****************************************************************************
 # @divnl STREAM@
 function xeq_fn__divnl(fn, M, nparam, param,
-                          stream)
+                       stream)
 {
-    if (nparam != 1)
-        error("Bad parameters in '" M "':" $0)
-    stream = param[1]
+    stream = (nparam == 0) ? DIVNUM() : param[1]
     if (! integerp(stream))
         error("Parameter must be integer: '" M "':" $0)
-    if (! stream_block_exists_p(stream))
+    if (stream <= 0 || !stream_block_exists_p(stream))
         return 0
     return blktab[stream_block(stream), 0, "count"]
 }

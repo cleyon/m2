@@ -670,8 +670,10 @@ Directory name of SYM implemented in Awk, assuming Unix style path
 separators.
 See also
 .Va @xdirname .
-.It @divnl STREAM@
+.It @divnl [STREAM]@
 Return the number of lines in STREAM, or 0 if empty.
+If STREAM is omitted, the current stream is assumed.
+If STREAM is negative or zero, return 0.
 .It @dow [MJD | YYYY MM DD]@
 Return the ISO day number corresponding to the date specified,
 where 1=Monday, 2=Tuesday, ..., 7=Sunday.

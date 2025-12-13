@@ -1,7 +1,8 @@
-.PHONY:	all man callgraph-full callgraph-sane callgraph-io vars funcs clean lint tags m2 \
-	check         test \
+.PHONY:	all man manview callgraph callgraph-full callgraph-sane callgraph-io vars funcs clean distclean lint tags \
+	debug check test \
 	check-quiet   test-quiet   quiet-check   quiet-test \
-	check-verbose test-verbose verbose-check verbose-test
+	check-verbose test-verbose verbose-check verbose-test \
+	testlog testlog-verbose testlog-quiet
 
 GOOD_M2=/Users/cleyon/bin-n.yuuko/m2
 AWK=/usr/bin/awk
@@ -65,6 +66,9 @@ vars:
 
 clean:
 	rm -f  m2.cat1  test.log.*  tests/*/*/*.run_*
+
+distclean: clean
+	rm -f *~ awkvars.out awkfuncs.out
 
 lint:
 	$(GAWK) --lint --posix -f m2 /dev/null

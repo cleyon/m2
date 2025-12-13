@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-12-11 17:41:48 cleyon>
+#  Time-stamp:  <2025-12-12 22:33:52 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -1346,14 +1346,14 @@ function error(text, file, line)
 # induce a panic merely by executing user code.  It is used when there
 # is an internal error, a logical inconsistency, or a "can't happen"
 # situation.  It prints its message and exits immediately with code 70.
-function abend(tag, code,
+function abend(id, code,
                filename, file_block)
 {
     if (code == EMPTY)
         code = EX_SOFTWARE
-    if (tag == EMPTY)
-        tag = "ABEND"
-    print_stderr(sprintf("m2:%s %d", tag, code))
+    if (id == EMPTY)
+        id = "ABEND"
+    print_stderr(sprintf("m2:%s %d", id, code))
 
     # Try to close any open files, but don't delete any blocks
     close_open_files(FALSE)
@@ -7059,10 +7059,11 @@ function nqsort(A, left, right,    i, lastpos)
 # *omits* newline.
 function dump__symtab(type, include_sys, # caller names this "all_flag"
                       x, k, code, buf, cond_matched,
+                      name, key, level, tag,
                       keys, cnt, i, blk, count)
 {
     dbg__print("sym", 4, "(dump__symtab) BEGIN")
-    if (first(type) != TYPE_SYMBOL)
+   if (first(type) != TYPE_SYMBOL)
         panic("(dump__symtab) Bad type " ppf__flags(first(type)))
     sym_define_all_deferred()
 
@@ -7071,43 +7072,49 @@ function dump__symtab(type, include_sys, # caller names this "all_flag"
     cnt = 0
     for (k in symtab) {
         split(k, x, SUBSEP)
+        name  = x[1]            # ; print "name  =", name
+        key   = x[2]            # ; print "key   =", key
+        level = x[3]            # ; print "level =", level
+        tag   = x[4]            # ; print "tag   =", tag
         dbg__print("sym", 8, sprintf("(dump__symbtab) ['%s','%s',%d,%s]",
-                                    x[1], x[2], x[3], x[4]))
-        # print "name  =", x[1]
-        # print "key   =", x[2]
-        # print "level =", x[3]
-        # print "elem  =", x[4]
+                                    name, key, level, tag))
 
-        code = nam_ll_read(x[1], x[3]) # name, level
+        code = nam_ll_read(name, level) # name, level
         dbg__print("sym", 7, sprintf("(dump__symtab) name='%s', key='%s', code=%s",
-                                    x[1], x[2], code))
+                                    name, key, code))
         if (!include_sys && flag_1true_p(code, FLAG_SYSTEM))
             continue
 
-        if (x[4] == "agg_block") {
+        if (tag == "agg_block") {
             if (flag_1false_p(code, TYPE_LIST))
                 panic("(dump__symtab) Found type 'agg_block' but not a List")
             # It's a block array so insert all the keys.
-            blk = symtab[x[1], x[2], x[3], x[4]]
+            blk = symtab[name, key, level, tag]
             count = blktab[blk, 0, "count"]
             #print_stderr("blk=" blk ", count=" count)
             if (count > 0)
                 for (i = 1; i <= count; i++) {
-                    #print_stderr("Adding keys[" cnt+1 "] = " x[1] "[" i "]")
-                    keys[++cnt] = x[1] "[" i "]"
+                    #print_stderr("Adding keys[" cnt+1 "] = " name "[" i "]")
+                    keys[++cnt] = name "[" i "]"
                 }
             continue
-        } else if (x[4] != "symval")
-            panic(sprintf("(dump__symtab) Unexpected elem type: ['%s','%s',%d,%s]",
-                          x[1], x[2], x[3], x[4]))
+
+        } else if (tag == "user_block") {
+            # Ignore user commands, even though they are in symtab.
+            # Instead, use "@dump cmds" to see user command definition.
+            continue
+
+        } else if (tag != "symval")
+            panic(sprintf("(dump__symtab) Unexpected tag type: ['%s','%s',%d,%s]",
+                          name, key, level, tag))
 
         # It's a regular symbol so process it
-        if ((flag_1true_p(code, TYPE_SYMBOL) && x[2] == EMPTY) ||
-            (flag_anytrue_p(code, TYPE_ARRAY TYPE_LIST)  && x[2] != EMPTY))
-            keys[++cnt] = x[1] (x[2] != EMPTY ? "[" x[2] "]" : "")
+        if ((flag_1true_p(code, TYPE_SYMBOL) && key == EMPTY) ||
+            (flag_anytrue_p(code, TYPE_ARRAY TYPE_LIST)  && key != EMPTY))
+            keys[++cnt] = name (key != EMPTY ? "[" key "]" : "")
         else
             panic(sprintf("(dump__symtab) Strange combo: ('%s','%s') code=%s",
-                          x[1], x[2], code))
+                          name, key, code))
     }
 
     qsort(keys, 1, cnt)

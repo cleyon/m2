@@ -1,0 +1,13 @@
+Defining all hooks...
+(m2 begin hook) FILE='@__FILE__@', DEPTH=@__DEPTH__@
+(file open hook) FILE='foo.m2', DEPTH=1
+Foo start
+(file suspend hook) FILE='foo.m2', DEPTH=1
+(file open hook) FILE='bar', DEPTH=2
+Bar start
+Bar end
+(file close hook) FILE='bar', DEPTH=2
+(file resume hook) FILE='foo.m2', DEPTH=1
+Foo end
+(file close hook) FILE='foo.m2', DEPTH=1
+(m2 end hook) FILE='@__FILE__@', DEPTH=@__DEPTH__@

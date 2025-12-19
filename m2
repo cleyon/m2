@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-12-12 22:33:52 cleyon>
+#  Time-stamp:  <2025-12-18 22:54:30 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -1101,6 +1101,30 @@ function check__parse_stack(expected_block_type,
 }
 
 
+function run_hook(hook_event,
+                  hook_func, user_block)
+{
+    if (! __init_files_loaded) {
+        dbg__print("hook", 7, "(run_hook) Hooks are not enabled yet")
+        return
+    }
+    if (hook_event != "m2_begin"     && hook_event != "m2_end"     &&
+        hook_event != "file_open"    && hook_event != "file_close" &&
+        hook_event != "file_suspend" && hook_event != "file_resume")
+        panic("(run_hook) Invalid hook '" hook_event "'")
+
+    hook_func = "__" hook_event "_hook"
+    if ((user_block = cmd_defined_p(hook_func)) <= 0) {
+        dbg__print("hook", 5, "(run_hook) Hook " hook_func " does not exist")
+        return
+    }
+
+    dbg__print("hook", 3, "(run_hook) CALLING " hook_func ", user_block=" user_block)
+    execute__user(2 SUBSEP hook_func SUBSEP)
+    dbg__print("hook", 3, "(run_hook) RETURNED FROM " hook_func)
+}
+
+
 function expand_braces(s,
                        atbr, cb, ltext, mtext, rtext,
                        macro)
@@ -1516,7 +1540,7 @@ BEGIN {
 
     namtab["__DBG__", GLOBAL_NAMESPACE] = TYPE_ARRAY FLAG_SYSTEM
     split("args block bool braces case cmd del divert dosubs dump expr for " \
-          "gate if io nam namespace parse read seq ship_out stk sym trace " \
+          "gate hook if io nam namespace parse read seq ship_out stk sym trace " \
           "while xeq",  _dbg_sys_array, TOK_SPACE)
     for (_dsys in _dbg_sys_array) {
         __dbg_sysnames[_dbg_sys_array[_dsys]] = TRUE
@@ -1541,6 +1565,7 @@ function dbg__all_lev_standard()
     dbg__set_level("expr",       3)
     dbg__set_level("for",        5)
     dbg__set_level("gate",       7)
+    dbg__set_level("hook",       3)
     dbg__set_level("if",         5)
     dbg__set_level("io",         3)
     dbg__set_level("nam",        3)
@@ -3148,7 +3173,7 @@ function ppf__BLK_AGG(blknum,
 #
 #*****************************************************************************
 function cmd_defined_p(text,
-                       nparts, info, name, key, level, i)
+                       nparts, info, name, key, level, i, user_block)
 {
     dbg__print("cmd", 5, sprintf("(cmd_defined_p) text='%s' START", text))
     if (!cmd_valid_p(text))
@@ -3175,7 +3200,8 @@ function cmd_defined_p(text,
     for (i = nam_system_p(name) ? GLOBAL_NAMESPACE : __namespace; i >= GLOBAL_NAMESPACE; i--) {
         if (info_defined_lev_p(info, i, TYPE_COMMAND)) {
             dbg__print("cmd", 2, sprintf("(cmd_defined_p) END text='%s', level=%d => %s", text, i, ppf__bool(TRUE)))
-            return TRUE
+            user_block = cmd_ll_read(name, level)
+            return user_block
         }
     }
 
@@ -3464,6 +3490,10 @@ function parse__file(    filename, file_block1, file_block2, pstat, d)
     }
     if (filename in __active_files)
         error("Cannot recursively read '" filename "':" $0)
+
+    if (sym_ll_read("__DEPTH__", "", GLOBAL_NAMESPACE) > 0)
+        run_hook("file_suspend")
+
     __active_files[filename] = file_block1
     sym_ll_incr("__NFILE__", "", GLOBAL_NAMESPACE, 1); __rnf++
     blktab[file_block1, 0, "open"]          = TRUE
@@ -3482,9 +3512,11 @@ function parse__file(    filename, file_block1, file_block2, pstat, d)
     sym_ll_write("__LINE__",      "", GLOBAL_NAMESPACE, 0)
 
     # Read the file and process each line
+    run_hook("file_open")
     dbg__print("parse", 5, "(parse__file) CALLING parse()")
     pstat = parse()
     dbg__print("parse", 5, "(parse__file) RETURNED FROM parse() => " ppf__bool(pstat))
+    run_hook("file_close")
 
     # Reached end of file
     flush_stdout(SYNC_FILE)
@@ -3503,8 +3535,11 @@ function parse__file(    filename, file_block1, file_block2, pstat, d)
     sym_ll_write("__FILE__",      "", GLOBAL_NAMESPACE, blktab[file_block2, 0, "old.file"])
     sym_ll_write("__FILE_UUID__", "", GLOBAL_NAMESPACE, blktab[file_block2, 0, "old.file_uuid"])
     sym_ll_write("__LINE__",      "", GLOBAL_NAMESPACE, blktab[file_block2, 0, "old.line"])
-
     blk_master_delete(file_block2)
+
+    if (sym_ll_read("__DEPTH__", "", GLOBAL_NAMESPACE) > 0)
+        run_hook("file_resume")
+
     dbg__print("parse", 2, sprintf("(parse__file) END '%s' => %s",
                                  filename, ppf__bool(pstat)))
     return pstat
@@ -12380,6 +12415,8 @@ function load_init_files(    old_debug)
     # FOR TESTING - start in Debug mode
     # enable_debugging()
     # dbg__all_lev_standard()
+
+    run_hook("m2_begin")
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -12597,6 +12634,8 @@ function end_program(diverted_streams_final_disposition,
     if (__wrap_cnt > 0)
         for (i = 1; i <= __wrap_cnt; i++)
             dostring(__wrap_text[i])
+
+    run_hook("m2_end")
 
     # for (stream in strtab)
     #     blk_master_delete(strtab[stream])

@@ -1619,6 +1619,34 @@ This table will have @n@ lines:
 \ \ \ => |  8 |  64 |  2.8284 |
 \ \ \ => |  9 |  81 |  3.0000 |
 .Ed
+.Ss Hooks
+If defined,
+.Nm
+will run specially named user commands
+.Po
+.Qq hooks
+.Pc
+at certain predefined points during its execution.
+Hook command names begin with
+.Qq __
+and end with
+.Qq _hook .
+.Bl -tag -width __m2_file_suspend_hook -offset indent
+.It __m2_begin_hook
+Invoked once at the beginning of m2 execution, after any
+initialization files are loaded.
+.It __m2_end_hook
+Invoked once at the end of m2 execution, after any streams or wraps
+have been executed.
+.It __file_open_hook
+Invoked whenever a new file is opened, but before its contents are read.
+.It __file_close_hook
+Invoked whenever an included file has been read and closed.
+.It __file_suspend_hook
+Invoked whenever a new file is about to be included.
+.It __file_resume_hook
+Invoked whenever a previously suspended file is about to be resumed.
+.El
 .Ss Debugging
 Symbol
 .Va __DEBUG__

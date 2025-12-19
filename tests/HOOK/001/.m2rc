@@ -1,0 +1,24 @@
+Defining all hooks...
+@newcmd __m2_begin_hook
+(m2 begin hook) FILE='@__FILE__@', DEPTH=@__DEPTH__@
+@endcmd
+@@
+@newcmd __file_open_hook
+(file open hook) FILE='@__FILE__@', DEPTH=@__DEPTH__@
+@endcmd
+@@
+@newcmd __file_suspend_hook
+(file suspend hook) FILE='@__FILE__@', DEPTH=@__DEPTH__@
+@endcmd
+@@
+@newcmd __file_resume_hook
+(file resume hook) FILE='@__FILE__@', DEPTH=@__DEPTH__@
+@endcmd
+@@
+@newcmd __file_close_hook
+(file close hook) FILE='@__FILE__@', DEPTH=@__DEPTH__@
+@endcmd
+@@
+@newcmd __m2_end_hook
+(m2 end hook) FILE='@__FILE__@', DEPTH=@__DEPTH__@
+@endcmd

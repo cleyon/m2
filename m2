@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2025-12-18 23:05:44 cleyon>
+#  Time-stamp:  <2026-01-14 17:26:18 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -7338,7 +7338,8 @@ function xeq_cmd__error(cmd, cmdline,
 #*****************************************************************************
 # @esyscmd      CMDLINE ...
 function xeq_cmd__esyscmd(cmd, cmdline,
-                          rc, shell_cmdline, output_file, getstat, line, output_text, me)
+                          rc, shell_cmdline, output_file, getstat, line,
+                          agg_block, me)
 {
     me = "@" cmd
     dbg__print("cmd", 3, sprintf("(xeq_cmd__esyscmd) START; cmdline='%s'", cmdline))
@@ -7351,6 +7352,7 @@ function xeq_cmd__esyscmd(cmd, cmdline,
     flush_stdout(SYNC_FORCE)
     rc = system(shell_cmdline)
     sym_ll_write("__SYSVAL__", "", GLOBAL_NAMESPACE, rc)
+    agg_block = blk_new(BLK_AGG)
 
     while (TRUE) {
         getstat = getline line < output_file
@@ -7358,7 +7360,7 @@ function xeq_cmd__esyscmd(cmd, cmdline,
             warn(me ": Error reading file '" output_file "'")
         if (getstat != OKAY)
             break
-        output_text = output_text line TOK_NEWLINE # Read a line
+        blk_append(agg_block, OBJ_TEXT, line)
     }
     close(output_file)
     if ("rm" in PROG)
@@ -7366,10 +7368,9 @@ function xeq_cmd__esyscmd(cmd, cmdline,
     else if (debugging_enabled_p())
         warn(me ": PROG[rm] not defined; '" output_file "' not deleted")
 
-    output_text = chomp(output_text)
-    dbg__print("cmd", 5, sprintf("(xeq_cmd__esyscmd) output_text='%s'", output_text))
-    if (!emptyp(output_text))
-        ship_out(OBJ_TEXT, output_text)
+    ship_out(OBJ_BLKNUM, agg_block)
+    blk_master_delete(agg_block)
+
     dbg__print("cmd", 3, sprintf("(xeq_cmd__esyscmd) END; rc=%d", rc))
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
@@ -9194,7 +9195,7 @@ function xeq_cmd__sequence(cmd, cmdline,
 # Set symbol "M2_SHELL" to override.
 function xeq_cmd__shell(cmd, cmdline,
                         delim, save_line, save_lineno, shell_text_in, input_file,
-                        output_text, output_file, sendto, getstat,
+                        agg_block, output_file, sendto, getstat,
                         shell_cmdline, line, shell_data_blk, readstat,
                         me)
 {
@@ -9243,13 +9244,15 @@ function xeq_cmd__shell(cmd, cmdline,
     shell_cmdline = sprintf("%s < %s > %s", sendto, input_file, output_file)
     flush_stdout(SYNC_FORCE)    # force flush stdout
     sym_ll_write("__SYSVAL__", "", GLOBAL_NAMESPACE, system(shell_cmdline))
+    agg_block = blk_new(BLK_AGG)
+
     while (TRUE) {
         getstat = getline line < output_file
         if (getstat == ERROR)
             warn(me ": Error reading file '" output_file "'")
         if (getstat != OKAY)
             break
-        output_text = output_text line TOK_NEWLINE # Read a line
+        blk_append(agg_block, OBJ_TEXT, line)
     }
     close(output_file)
     if ("rm" in PROG) {
@@ -9259,10 +9262,8 @@ function xeq_cmd__shell(cmd, cmdline,
         warn(me ": PROG[rm] not defined; '"  input_file "' not deleted")
         warn(me ": PROG[rm] not defined; '" output_file "' not deleted")
     }
-    output_text = chomp(output_text)
-    dbg__print("cmd", 5, sprintf("(xeq_cmd__shell) output_text='%s'", output_text))
-    if (!emptyp(output_text))
-        ship_out(OBJ_TEXT, output_text)
+    ship_out(OBJ_BLKNUM, agg_block)
+    blk_master_delete(agg_block)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 

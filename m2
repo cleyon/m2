@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-01-27 10:11:45 cleyon>
+#  Time-stamp:  <2026-01-27 10:15:54 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -280,13 +280,9 @@ function repeated(n, c,
 }
 
 # Return N spaces
-function spaces(n,
-                s)
+function spaces(n)
 {
-    s = ""
-    while (n-- > 0)
-        s = s TOK_SPACE
-    return s
+    return repeated(n, TOK_SPACE)
 }
 
 
@@ -3148,7 +3144,7 @@ function ppf__BLK_AGG(blknum,
     slotinfo = ""
     count = blktab[blknum, 0, "count"]
     if (count > 0 ) {
-        slotinfo = "  Slots:\n"
+        slotinfo = "  Slots:" TOK_NEWLINE
         for (x = 1; x <= count; x++)
             slotinfo = slotinfo sprintf("  [%d]=%s: %s\n",
                                         x,
@@ -6679,8 +6675,8 @@ function ppf__case(case_block,
                 ppf__block(blktab[case_block, x[2], "of_block"]) TOK_NEWLINE
     }
     if (blktab[case_block, 0, "seen_otherwise"])
-        buf = buf "@otherwise\n" \
-            ppf__block(blktab[case_block, 0, "otherwise_block"]) TOK_NEWLINE
+        buf = buf "@otherwise" TOK_NEWLINE \
+              ppf__block(blktab[case_block, 0, "otherwise_block"]) TOK_NEWLINE
     buf = buf "@endcase"
     return buf
 }
@@ -7886,10 +7882,9 @@ function ppf__for(for_block,
     if (ltype == "@for")
         buf = buf blktab[for_block, 0, "loop_start"] TOK_SPACE \
                   blktab[for_block, 0, "loop_end"]   TOK_SPACE \
-                  blktab[for_block, 0, "loop_incr"]
+                  blktab[for_block, 0, "loop_incr"]  TOK_NEWLINE
     else                        # foreach
-        buf = buf blktab[for_block, 0, "loop_array_name"]
-    buf = buf TOK_NEWLINE
+        buf = buf blktab[for_block, 0, "loop_array_name"] TOK_NEWLINE
     buf = buf ppf__block(blktab[for_block, 0, "body_block"]) TOK_NEWLINE
     buf = buf "@next "  blktab[for_block, 0, "loop_var"]
     return buf
@@ -8046,8 +8041,8 @@ function ppf__if(if_block,
     buf = "@if " blktab[if_block, 0, "condition"] TOK_NEWLINE \
         ppf__block(blktab[if_block, 0, "true_block"]) TOK_NEWLINE
     if (blktab[if_block, 0, "seen_else"])
-        buf = buf "@else\n" \
-            ppf__block(blktab[if_block, 0, "false_block"]) TOK_NEWLINE
+        buf = buf "@else" TOK_NEWLINE \
+              ppf__block(blktab[if_block, 0, "false_block"]) TOK_NEWLINE
     return buf "@endif"
 }
 

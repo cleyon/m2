@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-01-14 17:26:18 cleyon>
+#  Time-stamp:  <2026-01-27 10:11:45 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -43,7 +43,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "5.3.2"
+    M2_VERSION = "5.3.3"
 
     # Specify a shell for m2 to use for running utility programs.
     # It is expected to be compatible with Bourne shell syntax.
@@ -10477,8 +10477,8 @@ function macro_expand(macro,
             macro_set_expansion(macro, xeq_fn__divnl(fn, M, nparam, param))
         else if (fn == "dow")
             macro_set_expansion(macro, xeq_fn__dow(fn, M, nparam, param))
-        else if (fn == "executable" || fn == "sexecutable")
-            macro_set_expansion(macro, xeq_fn__executable(fn, M, nparam, param))
+        else if (fn == "execpath" || fn == "sexecpath")
+            macro_set_expansion(macro, xeq_fn__execpath(fn, M, nparam, param))
         else if (fn == "expr" || fn == "sexpr")
             macro_set_expansion(macro, xeq_fn__expr(fn, M, nparam, param))
         else if (fn == "format" || fn == "sprintf")
@@ -10968,16 +10968,16 @@ function xeq_fn__dow(fn, M, nparam, param,
 
 #*****************************************************************************
 #
-#       @  E X E C U T A B L E  @
+#       @  E X E C P A T H  @
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
-#       executable : Use sh command -v to return path to executable
+#       execpath : Use sh command -v to return path to executable
 #
 #*****************************************************************************
-# @executable PROG@
-function xeq_fn__executable(fn, M, nparam, param,
-                            p, silent, cmdline, result)
+# @execpath PROG@
+function xeq_fn__execpath(fn, M, nparam, param,
+                          p, silent, cmdline, result)
 {
     if (secure_level() >= SEC_PARANOID)
         security_violation(sprintf("@%s@: Forbidden", fn))
@@ -12252,9 +12252,9 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     # Also need to add handler in dosubs()  [search: SYMFUNC]
     # Functions cannot be used as symbol or sequence names.
     split("basename boolval center chr comma date dirname divnl dow epoch" \
-          " executable expr format geodist getenv gregdate hex hms hr ifdef ifelse ifndef" \
+          " execpath expr format geodist getenv gregdate hex hms hr ifdef ifelse ifndef" \
           " ifx index join lc left len ljust ltrim mid mjd mktemp ord rem right" \
-          " rjust rot13 rtrim scenter scomma sexecutable sexpr sgetenv sjoin" \
+          " rjust rot13 rtrim scenter scomma sexecpath sexpr sgetenv sjoin" \
           " sljust space spaces sprintf srem srjust strftime substr tab tabs time" \
           " trim tz uc utc uuid xbasename xdirname",
           array, TOK_SPACE)

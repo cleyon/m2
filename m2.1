@@ -685,10 +685,10 @@ Unix epoch time, the number of non-leap seconds which
 have passed since 00:00:00\ UTC on Thursday, 1\ January\ 1970.
 See section
 .Sx Dates and Times .
-.It @executable PROGRAM@
+.It @execpath PROGRAM@
 Return expanded path to PROGRAM, printing a warning if program is not found.
 Variant
-.Ql @sexecutable@
+.Ql @sexecpath@
 does not print a warning.
 See also
 .Va canrun() .
@@ -1289,7 +1289,7 @@ True if PROGRAM can be executed; checked with
 .Xr sh 1
 .Qq "command -v" .
 See also
-.Va @executable@ .
+.Va @execpath@ .
 .It defined(SYMBOL)
 True if SYMBOL is defined.
 .It env(VAR)

@@ -345,10 +345,14 @@ The command's exit code is saved in
 Parse and evaluate TEXT as a command.
 .It @exit [N]
 Immediately stop parsing; exit with status N.
-If N is omitted, the default value is 0.
-Negative values or values greater than 126 are changed to 1.
-If N is non-zero, diverted streams are discarded.
+If N is omitted, the current exit status is unchanged.
+Invalid N, values less than zero, or greater than 126, are changed to 1.
+If variant
+.Ql @sexit
+is used, or if exit status is non-zero, diverted streams are discarded.
 Commands deferred with @wrap are processed regardless of N value.
+See also
+.Va __EXIT__ .
 .It @filedata LIS FILE
 Read each line from FILE into list LIS.
 Any previously existing list entries are deleted before reading file contents.
@@ -1352,6 +1356,15 @@ See also
 Seconds since Epoch at m2 run start time.
 See section
 .Sx Dates and Times .
+.It __EXIT__
+Anticipated exit status.
+This is useful in
+.Va __m2_end_hook
+to determine if
+.Nm
+will end with a success or failure code.
+See also
+.Va @exit .
 .It __EXPR__
 Value from most recent @expr ...@ result.
 .It __FILE_UUID__

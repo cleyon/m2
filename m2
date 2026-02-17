@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-01-27 10:15:54 cleyon>
+#  Time-stamp:  <2026-02-17 18:51:27 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -43,7 +43,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "5.3.3"
+    M2_VERSION = "5.3.4"
 
     # Specify a shell for m2 to use for running utility programs.
     # It is expected to be compatible with Bourne shell syntax.
@@ -105,9 +105,9 @@ BEGIN {
     GLOBAL_NAMESPACE =  0;              TTY    = "/dev/tty"
 
     # Exit codes
-    EX_OK            =  0;              __exit_code = EX_OK
+    EX_OK            =  0
     EX_M2_ERROR      =  1
-    EX_USER_REQUEST  =  2
+    EX_USER_REQUEST  =  2       # @error
     EX_NOINPUT       = 66       # failure to process any files
     EX_SOFTWARE      = 70       # panic()
     EX_NOPERM        = 77       # security violation
@@ -181,11 +181,13 @@ BEGIN {
 
     # Set up critical symbols early
     namtab["__DEBUG__",     GLOBAL_NAMESPACE] = PTYPE_WRITABLE_BOOLEAN
+    namtab["__EXIT__",      GLOBAL_NAMESPACE] = PTYPE_READONLY_INTEGER
     namtab["__SECURE__",    GLOBAL_NAMESPACE] = PTYPE_WRITABLE_INTEGER
     namtab["__TRACE__",     GLOBAL_NAMESPACE] = PTYPE_WRITABLE_BOOLEAN
     namtab["__TRACEMODE__", GLOBAL_NAMESPACE] = PTYPE_READONLY_SYMBOL
     #
     symtab["__DEBUG__",     "", GLOBAL_NAMESPACE, "symval"] = FALSE
+    symtab["__EXIT__",      "", GLOBAL_NAMESPACE, "symval"] = EX_OK
     symtab["__SECURE__",    "", GLOBAL_NAMESPACE, "symval"] = __secure_level
     symtab["__TRACE__",     "", GLOBAL_NAMESPACE, "symval"] = FALSE
     symtab["__TRACEMODE__", "", GLOBAL_NAMESPACE, "symval"] = TRACE_DEFAULT_SET
@@ -1356,7 +1358,7 @@ function warn(text, file, line)
 function error(text, file, line)
 {
     warn(text, file, line)
-    __exit_code = EX_M2_ERROR
+    sym_ll_write("__EXIT__", "", GLOBAL_NAMESPACE, EX_M2_ERROR)
     if (! sym_ll_read("__LENIENT__", "", GLOBAL_NAMESPACE))
         end_program(MODE_STREAMS_DISCARD)
 }
@@ -1795,7 +1797,7 @@ function info__gate(opcode,      # OP_xxx operation
 
     if (info__get(info, "valid") == FALSE)
         return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
-                                  sprintf("Name '%s' is not valid",
+                                  sprintf("Name '%s' not valid",
                                           info__get(info, "urtext")))
 
     if (optype == PTYPE_ANY || optype == PTYPE_UNDEF)
@@ -3330,7 +3332,7 @@ function execute__command(name, cmdline,
     else if (name ==  "errprint")       xeq_cmd__error(name, cmdline)
     else if (name ==  "esyscmd")        xeq_cmd__esyscmd(name, cmdline)
     else if (name ==  "eval")           xeq_cmd__eval(name, cmdline)
-    else if (name ==  "exit")           xeq_cmd__exit(name, cmdline)
+    else if (name ~ /s?exit/)           xeq_cmd__exit(name, cmdline)
     else if (name ~ /s?filedata/)       xeq_cmd__filedata(name, cmdline)
     else if (name ~ /s?filedef(ine)?/)  xeq_cmd__filedefine(name, cmdline)
     else if (name ==  "ignore")         xeq_cmd__ignore(name, cmdline)
@@ -3368,21 +3370,29 @@ function execute__command(name, cmdline,
 }
 
 
-# function assert_cmd_okay_to_define(name, caller)
-# {
-#     if (caller == EMPTY)
-#         panic("(assert_cmd_okay_to_define) Empty caller!")
-#     if (!cmd_valid_p(name))
-#         error(sprintf("%s: Cmd '%s' not valid",
-#                       caller, name))
-#
-#     # FIXME This is not quite sufficient (I think).  I probably need
-#     # to do a full nam__scan() / nam__lookup() because I don't want
-#     # to shadow a system symbol.  At least I need to be more careful
-#     # than "it's not in the current namespace, looks good!!"
-#     if (nam_ll_in(name, __namespace))
-#         error("Cmd '" name "' not available:" $0)
-# }
+function assert_cmd_okay_to_define(name, caller)
+{
+    if (caller == EMPTY)
+        panic("(assert_cmd_okay_to_define) Empty caller!")
+    if (!cmd_valid_p(name))
+        error(sprintf("%s: Name '%s' not valid",
+                      caller, name))
+
+    # If name starts with "__", it must be a valid hook name, otherwise error
+    if (substr(name, 1, 2) == "__" &&
+        name !~ /__(m2_begin|m2_end|file_open|file_close|file_suspend|file_resume)_hook/)
+        error(sprintf("%s: Name '%s' not valid",
+                      caller, name))
+        
+    # FIXME This is not quite sufficient (I think).  I probably need
+    # to do a full nam__scan() / nam__lookup() because I don't want
+    # to shadow a system symbol.  At least I need to be more careful
+    # than "it's not in the current namespace, looks good!!"
+    if (nam_ll_in(name, __namespace) ||
+        nam_ll_in(name, GLOBAL_NAMESPACE))
+        error(sprintf("%s: Name '%s' not available:",
+                      caller, name))
+}
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
 
@@ -4218,7 +4228,7 @@ function nam__scan(text, info,
         if (key == EMPTY)
             panic("(nam__scan) key cannot be empty!")
         info["key_valid"] = nam_valid_with_strict_as(key, FALSE)
-            # info["errtext"] = "Key '" key "' is not valid"
+            # info["errtext"] = "Key '" key "' not valid"
     }
     if (count >= 1) {
         info["name"] = name = part[1]
@@ -4235,14 +4245,14 @@ function nam__scan(text, info,
     info["nparts"] = nparts = (count == 1) ? 1 : 2
     if (nparts == 1) {
         if ((info["valid"] = info["name_valid"]) == FALSE)
-            info["errtext"] = "Name '" name "' is not valid"
+            info["errtext"] = "Name '" name "' not valid"
     } else {
         # nparts == 2
         if ((info["valid"] = (info["name_valid"] && info["key_valid"])) == FALSE)
             info["errtext"] = sprintf("%s%s%s",
-                                      info["name_valid"] ? "" : "Name '" name "' is not valid",
+                                      info["name_valid"] ? "" : "Name '" name "' not valid",
                                       info["name_valid"] == FALSE && info["key_valid"] == FALSE ? "; " : "",
-                                      info["key_valid"] ? "" : "Key '" key "' is not valid")
+                                      info["key_valid"] ? "" : "Key '" key "' not valid")
     }
 
     dbg__print("nam", 4, sprintf("(nam__scan) '%s' => %d", text, nparts))
@@ -7317,7 +7327,7 @@ function xeq_cmd__error(cmd, cmdline,
         else
             print_stderr(message) # adds newline
     if (m2_will_exit) {
-        __exit_code = EX_USER_REQUEST
+        sym_ll_write("__EXIT__", "", GLOBAL_NAMESPACE, EX_USER_REQUEST)
         end_program(MODE_STREAMS_DISCARD)
     }
 }
@@ -7466,17 +7476,22 @@ function ppf__BLK_STRING(blknum)
 #
 #*****************************************************************************
 # @exit                 [CODE]
-function xeq_cmd__exit(cmd, cmdline)
+function xeq_cmd__exit(cmd, cmdline,
+                       silent, exit_code)
 {
-    __exit_code = (!emptyp(cmdline) && integerp(cmdline)) ? cmdline+0 : EX_OK
+    silent = first(cmd) == "s"
+    exit_code = sym_ll_read("__EXIT__", "", GLOBAL_NAMESPACE)
+    if (! emptyp(cmdline))
+        exit_code = integerp(cmdline) ? cmdline+0 : EX_M2_ERROR
 
     # For full portability, exit values should be between 0 and 126, inclusive.
     # Negative values, and values of 127 or greater, may not produce
     # consistent results across different operating systems.
-    if (__exit_code < 0 || __exit_code > 126)
-        __exit_code = 1
-    end_program(__exit_code == EX_OK ? MODE_STREAMS_SHIP_OUT \
-                                     : MODE_STREAMS_DISCARD)
+    if (exit_code < 0 || exit_code > 126)
+        exit_code = EX_M2_ERROR
+
+    sym_ll_write("__EXIT__", "", GLOBAL_NAMESPACE, exit_code)
+    end_program(!silent ? MODE_STREAMS_SHIP_OUT : MODE_STREAMS_DISCARD)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -7489,7 +7504,7 @@ function xeq_cmd__exit(cmd, cmdline)
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
 #*****************************************************************************
-# @{s,}filedata        LIS FILE
+# @filedata            LIS FILE
 # LIS must be known to be an array (regular or block).
 # Any existing array entries are deleted before reading file contents.
 # Yes, this implies that user code must say
@@ -7572,7 +7587,7 @@ function xeq_cmd__filedata(cmd, cmdline,
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
 #*****************************************************************************
-# @{s,}filedefine         NAME FILE
+# @filedefine             NAME FILE
 function xeq_cmd__filedefine(cmd, cmdline,
                              name, filename, line, val, getstat, silent, info,
                              me)
@@ -8226,7 +8241,7 @@ function xeq_cmd__ignore(cmd, cmdline,
 #       @paste does not process macros
 #
 #*****************************************************************************
-# @{s,}{include,paste}  FILE
+# @include, @paste      FILE
 function xeq_cmd__include(cmd, cmdline,
                           error_text, filename, silent, file_block, rc,
                           me)
@@ -8752,7 +8767,7 @@ function parse__newcmd(    name, user_block, body_block, pstat, nparam, p, pname
 
         name = substr(name, 1, RSTART-1) substr(name, RSTART+RLENGTH)
     }
-    #assert_cmd_okay_to_define(name, "@newcmd")
+    assert_cmd_okay_to_define(name, "@newcmd")
     info__create_from_text(name, info)
     info__gate(OP_CREATE, TYPE_COMMAND, info, __namespace, me, TRUE)
 
@@ -10794,7 +10809,7 @@ function xeq_fn__chr(fn, M, nparam, param,
 #         @comma 87654321.1234@ => 87,654,321.1234
 #
 #*****************************************************************************
-# @{s,}comma VAL@
+# @comma     VAL@
 function xeq_fn__comma(fn, M, nparam, param,
                        p, silent, val)
 {
@@ -11027,7 +11042,7 @@ function xeq_fn__expr(fn, M, nparam, param,
 #       format: Format value(s) according for sprintf format string
 #
 #*****************************************************************************
-# @{format,sprintf} FMT SYM...@
+# @format, @sprintf     FMT SYM...@
 function xeq_fn__format(fn, M, nparam, param,
                         fmt, i, arg, result)
 {
@@ -11471,7 +11486,7 @@ function xeq_fn__index(fn, M, nparam, param,
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
 #*****************************************************************************
-# @{s,}join LIS [FS]
+# @join     LIS [FS]
 function xeq_fn__join(fn, M, nparam, param,
                       info, nparts, level, s, lis, fs, fslen, silent,
                       code, size, k, x, keys, i, agg_block, me)
@@ -12235,8 +12250,8 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
           " dump dumpall dumpdef echo enddata eod error errprint esyscmd" \
           " eval exit filedata filedef filedefine ignore include incr initialize" \
           " input list literal local m2ctl nextfile null paste readonly secho" \
-          " sequence serror sfiledata sfiledef sfiledefine shell sinclude spaste split" \
-          " syscmd tracemode traceoff traceon typeout undef undefine" \
+          " sequence serror sexit sfiledata sfiledef sfiledefine shell sinclude" \
+          " spaste split syscmd tracemode traceoff traceon typeout undef undefine" \
           " undivert warn wrap",
           array, TOK_SPACE)
     for (elem in array)
@@ -12514,13 +12529,13 @@ function process_command_line_arguments(    nfile, arg, i, eq, name, val, file)
             file = search_file(arg)
             if (emptyp(file)) {
                 warn("File '" arg "' not found", "ARGV", i)
-                __exit_code = EX_NOINPUT
+                sym_ll_write("__EXIT__", "", GLOBAL_NAMESPACE, EX_NOINPUT)
                 continue
             }
             load_init_files()
             if (! dofile(file)) {
                 warn("Problem parsing file '" file "'", "ARGV", i)
-                __exit_code = EX_M2_ERROR
+                sym_ll_write("__EXIT__", "", GLOBAL_NAMESPACE, EX_M2_ERROR)
             }
         }
     }
@@ -12536,10 +12551,11 @@ function process_command_line_arguments(    nfile, arg, i, eq, name, val, file)
         # means to read standard input, so that is what we must now do.
         if (nfile == 0) {
             load_init_files()
-            __exit_code = dofile("-") ? EX_OK : EX_NOINPUT
+            sym_ll_write("__EXIT__", "", GLOBAL_NAMESPACE,
+                         dofile("-") ? EX_OK : EX_NOINPUT)
         } else {
             # User specified file(s) but not one of them existed.
-            __exit_code = EX_NOINPUT
+            sym_ll_write("__EXIT__", "", GLOBAL_NAMESPACE, EX_NOINPUT)
         }
     }
 }
@@ -12563,8 +12579,8 @@ BEGIN {
     # by ARGC being equal to 1.  If so, process standard input.
     if (ARGC == 1) {
         load_init_files()
-        __exit_code = dofile("-") ? EX_OK : EX_NOINPUT
-
+        sym_ll_write("__EXIT__", "", GLOBAL_NAMESPACE,
+                     dofile("-") ? EX_OK : EX_NOINPUT)
     } else
         # Otherwise, there must be at least one command line argument,
         # so process them all.  Args might be file names to parse, or
@@ -12606,11 +12622,13 @@ function close_open_files(delete_blocks_p,
 # MODE_STREAMS_SHIP_OUT, so we usually undivert all pending streams.
 # When diverted_streams_final_disposition is MODE_STREAMS_DISCARD, any
 # diverted data is dropped.  Standard output is always flushed, and
-# program exits with value from global variable __exit_code.
+# program exits with value from __EXIT__.
 function end_program(diverted_streams_final_disposition,
-                     i, timestamp, stream)
+                     i, timestamp, stream, exit_code)
 {
-    if (__exit_code == EX_OK &&
+    exit_code = sym_ll_read("__EXIT__", "", GLOBAL_NAMESPACE)
+
+    if (exit_code == EX_OK &&
         diverted_streams_final_disposition == MODE_STREAMS_SHIP_OUT) {
 
         # In the normal case of MODE_STREAMS_SHIP_OUT, ship out any remaining
@@ -12651,9 +12669,11 @@ function end_program(diverted_streams_final_disposition,
 
     if (debugging_enabled_p())
         print_debugfile(sprintf("m2:%s %d",
-                                __exit_code == EX_NOINPUT ? "NOFILE" : __exit_code == EX_OK ? "END" : "ERROR",
-                                __exit_code))
+                                (exit_code == EX_NOINPUT ? "NOFILE" \
+                               : exit_code == EX_OK      ? "END" \
+                               :                           "ERROR"),
+                                exit_code))
     flush_stdout(SYNC_FORCE)
-    exit __exit_code
+    exit exit_code
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =

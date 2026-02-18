@@ -142,7 +142,7 @@ Thus, the example above is correctly written:
 .Ed
 uses the value in
 .Va my_key
-to look up data from the List
+to look up data from the list
 .Va data_list .
 The
 .Qq @{...}
@@ -212,10 +212,10 @@ evaluate, control, or define macros for subsequent processing:
 .Bl -tag -width @if(_not)_defined -offset indent
 .It @append NAME TEXT
 Add TEXT to an already defined NAME.
-If NAME is a Symbol, TEXT is textually appended to its definition.
-If NAME is a List, TEXT is added as the next element.
+If NAME is a symbol, TEXT is textually appended to its definition.
+If NAME is a list, TEXT is added as the next element.
 .It @array ARR
-Declare ARR to be an Array.
+Declare ARR to be an array.
 See also
 .Va @list .
 .It @break
@@ -416,7 +416,7 @@ No prompt is issued; if you want one, use @echo.
 If NAME is omitted, value is stored in symbol
 .Va __INPUT__ .
 .It @list LIS
-Declare LIS to be a List.
+Declare LIS to be a list.
 See also
 .Va @array .
 .It @literal PATTERN
@@ -745,7 +745,7 @@ See also
 .It @hr HOUR.MMSSssss | HOUR MIN SEC@
 Convert hours, minutes, and seconds to fractional hours.
 See also
-.Va @geodist@ , @hr@ .
+.Va @geodist@ , @hms@ .
 .It @ifdef{SYMBOL}{TRUE_TEXT}{FALSE_TEXT}@
 If SYMBOL is defined, return TRUE_TEXT, else return FALSE_TEXT.
 The {FALSE_TEXT} clause is optional, and defaults to the empty string.
@@ -893,8 +893,6 @@ Base (file) name of SYM determined by external program.
 .It @xdirname SYM@
 Directory name of SYM determined by external program.
 .El
-.Pp
-Symbols can be suffixed with "[<key>]" to form simple arrays.
 .Ss Dates and Times
 .Va __DATE__ ,
 .Va __EPOCH__ ,
@@ -1119,7 +1117,15 @@ will increment the value and return it in decimal without special formatting.
 \ \ \ => # 2=Second header
 .Ed
 .Ss Arrays and Lists
-User arrays must be declared before use
+Elements of both arrays and lists are accessed
+by appending
+.Qq [<key>]
+to the array or list name.
+Arrays are stored internally as an Awk associative array, and can be
+indexed by any literal value.  Lists are implemented with a different
+mechanism that only allows integer indices.
+.Pp
+Arrays must be declared before use
 by executing the command
 .Ql @array
 and specifying the name of the array to create.
@@ -1127,12 +1133,12 @@ After array declaration, its elements can be accessed
 by using the array name immediately followed by the
 element key in brackets; as always, surrounded by
 .Qq @ .
-Accessing the bare array name, without brackets,
-as in
-.Ql @ARRAY@ ,
-will return the number of elements in the array.
 .Pp
-Arrays are loaded with data by the
+Lists must be declared before use
+by executing the command
+.Ql @list
+and specifying the name of the list to create.
+Lists are loaded with data by the
 .Ql @data
 or
 .Ql @filedata
@@ -1146,8 +1152,14 @@ file, use
 .Ql @filedata .
 Data loaded in this way are assigned integer
 keys from 1 to the number records.
-Lists can also be created with
+Lists can also be loaded with
 .Ql @split .
+.Pp
+For both arrays and lists,
+accessing the bare name, without brackets,
+as in
+.Ql @ARRAY@
+will return the number of elements in the array or list.
 .Ss Mathematical Expressions
 The
 .Ql @expr ...@
@@ -1300,8 +1312,8 @@ True if SYMBOL is defined.
 True if variable VAR is defined in process environment.
 .It exists(FILE)
 True if FILE exists.
-.It ELEM in ARRAY
-True if ARRAY (or List) contains ELEM and False if not.
+.It ELEM in ARR
+True if ARR (array or list) contains ELEM and False if not.
 .El
 .Pp
 Any other expression is evaluated as a mathematical expression and
@@ -1590,7 +1602,7 @@ character, whereas the line-of-its-own invocation does not.
 .Pp
 .Em Parameters :
 @newcmd accepts zero or more named formal parameters, enclosed in braces.
-A parameter may be designed as
+A parameter may be designated as
 .Qq optional
 by suffixing its name with an equals sign
 .Ql = .

@@ -284,6 +284,15 @@ If N is negative, text is discarded.
 See the
 .Sx Streams and Diversions
 section.
+.It @divpop
+Remove the current diversion and restore the previous diversion.
+See also
+.Va @divpush .
+.It @divpush N
+Create a new diversion to stream N while saving the current one to be
+restored later.
+See also
+.Va @divpop .
 .It @dump [WHAT] [FILE]
 Output names and definitions to FILE.
 WHAT can be one of "symbols", "sequences", "commands", "names",
@@ -988,6 +997,19 @@ Hello,
 \ \ \ => Hello,
 \ \ \ => world!
 .Ed
+.Pp
+A new diversion can also be created via
+.Ql @divpush ,
+which saves the current diverted stream on a stack.
+After the new diversion is complete,
+.Ql @divpop
+will restore the previous diversion.
+This is convenient when managing multiple output streams, without
+having to manually keep track of which one is current.
+It is an error to invoke
+.Ql @divpop
+without a previously corresponding
+.Ql @divpush .
 .Pp
 You can determine if a stream buffer contains text by using the function
 .Ql @divnl N@ ,

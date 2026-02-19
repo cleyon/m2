@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-02-17 18:51:27 cleyon>
+#  Time-stamp:  <2026-02-19 18:39:14 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -43,7 +43,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "5.3.4"
+    M2_VERSION = "5.3.5"
 
     # Specify a shell for m2 to use for running utility programs.
     # It is expected to be compatible with Bourne shell syntax.
@@ -3324,6 +3324,8 @@ function execute__command(name, cmdline,
     else if (name ==  "default")        xeq_cmd__define(name, cmdline)
     else if (name ==  "define")         xeq_cmd__define(name, cmdline)
     else if (name ==  "divert")         xeq_cmd__divert(name, cmdline)
+    else if (name ==  "divpop")         xeq_cmd__divpop(name, cmdline)
+    else if (name ==  "divpush")        xeq_cmd__divpush(name, cmdline)
     else if (name ==  "dumpdef")        xeq_cmd__dumpdef(name, cmdline)
     else if (name ~   /dump(all)?/)     xeq_cmd__dump(name, cmdline)
     else if (name ~ /s?echo/)           xeq_cmd__error(name, cmdline)
@@ -4650,6 +4652,11 @@ function stk_push(stack, new_elem,
     if (stack["name"] == "source_stack")
         trace(TRACE_INPUT_FILE_CHG, EMPTY,
               sprintf("[File Update] Input file now '%s'", blktab[new_elem, 0, "filename"]))
+    else if (stack["name"] == "stream_stack") {
+        sym_ll_write("__DIVNUM__", "", GLOBAL_NAMESPACE, new_elem)
+        dbg__print("divert", 2, sprintf("(stk_push) __DIVNUM__ now %d", new_elem))
+    }
+
     if (dbg__sys_level_p("stk", 5)) {
         siz = stack[0]
         print_debugfile(sprintf("m2debug:(stk_push) %s[%d] := %s",
@@ -4668,26 +4675,34 @@ function stk_empty_p(stack)
 function stk_top(stack)
 {
     if (stk_empty_p(stack))
-        panic("(stk_top) Empty stack")
+        panic("(stk_top) " stack["name"] ": Empty stack")
     return stack[stack[0]]
 }
 
 
 function stk_pop(stack,
-                 old_top, new_top, siz)
+                 old_top, new_top, siz, stkname)
 {
+    stkname = stack["name"]
     if (stk_empty_p(stack))
-        panic("(stk_pop) Empty stack")
+        panic("(stk_pop) " stkname ": Empty stack")
     siz = stack[0]
     old_top = stack[stack[0]--]
+    # You may think the LHS clause is redundant due to the stk_empty_p() check above;
+    # however, have having it here is required to keep "make lint" happy.
     if (!stk_empty_p(stack) && stack["name"] == "source_stack") {
-        new_top = stack[stack[0]]
+        new_top = stk_top(stack)
         trace(TRACE_INPUT_FILE_CHG, EMPTY,
               sprintf("[File Update] Input file now '%s'", blktab[new_top, 0, "filename"]))
+    } else if (stkname == "stream_stack") {
+        new_top = stk_empty_p(stack) ? -1 : stk_top(stack)
+        sym_ll_write("__DIVNUM__", "", GLOBAL_NAMESPACE, new_top)
+        dbg__print("divert", 2, sprintf("(stk_pop) __DIVNUM__ now %d", new_top))
     }
+
     if (dbg__sys_level_p("stk", 5)) {
         print_debugfile(sprintf("m2debug:(stk_pop) %s[%d] -> %s",
-                                stack["name"], siz, old_top))
+                                stkname, siz, old_top))
     }
     return old_top
 }
@@ -6928,8 +6943,60 @@ function xeq_cmd__divert(cmd, cmdline,
     if (!integerp(new_stream))
         return
 
-    sym_ll_write("__DIVNUM__", "", GLOBAL_NAMESPACE, int(new_stream))
+    new_stream = int(new_stream)
+    stk_pop(__stream_stack)
+    stk_push(__stream_stack, new_stream) # automagically sets __DIVNUM__
     dbg__print("divert", 2, sprintf("(xeq_cmd__divert) END; __DIVNUM__ now %d", new_stream))
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  D I V P U S H
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#
+#*****************************************************************************
+# @divpush              N
+function xeq_cmd__divpush(cmd, cmdline,
+                          new_stream, me)
+{
+    me = "@" cmd
+    $0 = cmdline
+    if (NF != 1)
+        error(me ": Bad parameters")
+    new_stream = dosubs($1)
+    if (!integerp(new_stream))
+        error(me ": Stream '" new_stream "' not valid")
+
+    stk_push(__stream_stack, int(new_stream))
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  D I V P O P
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#
+#*****************************************************************************
+# @divpop
+function xeq_cmd__divpop(cmd, cmdline,
+                         new_stream, me)
+{
+    me = "@" cmd
+    $0 = cmdline
+    if (NF != 0)
+        error(me ": Bad parameters")
+    if (stk_depth(__stream_stack) == 1)
+        error(me ": No stream")
+    stk_pop(__stream_stack)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -12112,6 +12179,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     __rot13_initialized         = FALSE # becomes True in initialize_rot13()
     __parse_stack[0]            = 0;    __parse_stack["name"]  = "parse_stack"
     __source_stack[0]           = 0;    __source_stack["name"] = "source_stack"
+    __stream_stack[0]           = 0;    __stream_stack["name"] = "stream_stack"
     __wrap_cnt                  = 0
     __xeq_ctl                   = XEQ_NORMAL
 
@@ -12200,7 +12268,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
       sym_deferred_symbol("__CWD__",    PTYPE_READONLY_SYMBOL,  "pwd", "")
     sym_ll_fiat("__DEBUGFILE__",    "", PTYPE_WRITABLE_SYMBOL,  STDERR)
     sym_ll_fiat("__DEPTH__",        "", PTYPE_READONLY_INTEGER, 0)
-    sym_ll_fiat("__DIVNUM__",       "", PTYPE_READONLY_INTEGER, 0)
+    sym_ll_fiat("__DIVNUM__",       "", PTYPE_READONLY_INTEGER, TERMINAL)
     sym_ll_fiat("__EXPR__",         "", PTYPE_READONLY_NUMERIC, 0.0)
     sym_ll_fiat("__FILE__",         "", PTYPE_READONLY_SYMBOL,  "")
     sym_ll_fiat("__FILE_UUID__",    "", PTYPE_READONLY_SYMBOL,  "")
@@ -12247,10 +12315,10 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     # Built-in commands
     # Also need to add entry in execute__command()  [search: DISPATCH]
     split("append array cleardivert data debug decr default define divert" \
-          " dump dumpall dumpdef echo enddata eod error errprint esyscmd" \
-          " eval exit filedata filedef filedefine ignore include incr initialize" \
-          " input list literal local m2ctl nextfile null paste readonly secho" \
-          " sequence serror sexit sfiledata sfiledef sfiledefine shell sinclude" \
+          " divpop divpush dump dumpall dumpdef echo enddata eod error errprint" \
+          " esyscmd eval exit filedata filedef filedefine ignore include incr" \
+          " initialize input list literal local m2ctl nextfile null paste readonly" \
+          " secho sequence serror sexit sfiledata sfiledef sfiledefine shell sinclude" \
           " spaste split syscmd tracemode traceoff traceon typeout undef undefine" \
           " undivert warn wrap",
           array, TOK_SPACE)
@@ -12304,6 +12372,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     __flag_label[FLAG_WRITABLE]  = "Writable"
 
     # Set up terminal to receive output as stream 0 (default)
+    stk_push(__stream_stack, TERMINAL) # sets __DIVNUM__
     __block_cnt = -1            # blk_new() increments first, so
     __terminal = blk_new(BLK_TERMINAL) # __terminal == block 0
     stk_push(__parse_stack, __terminal)
@@ -12351,8 +12420,8 @@ function initialize_rot13(    from, to, i)
 }
 
 
-# It is important that __PROG__ remain a read-only symbol.  Otherwise,
-# some bad person could entice you to evaluate:
+# It is important that __PROG__ remains a read-only symbol.
+# Otherwise, some bad person could entice you to evaluate:
 #       @define __PROG__[stat]  /bin/rm
 #       @include my_precious_file
 function initialize_prog_paths()
@@ -12640,7 +12709,7 @@ function end_program(diverted_streams_final_disposition,
         # always create a TERMINAL block to receive this data.  Since
         # the program is about to terminate anyway, we don't care about
         # managing the parse stack from here on out.
-        sym_ll_write("__DIVNUM__", "", GLOBAL_NAMESPACE, TERMINAL)
+        stk_push(__stream_stack, TERMINAL)
         undivert_all()
     }
 

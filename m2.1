@@ -824,7 +824,12 @@ Remove leading whitespace.
 Substring of SYM from BEG, LEN chars long.
 Also called
 .Ql @substr@ .
-BEG begins the string at position 1.
+Positive BEG starts that many characters from the beginning of the string,
+where the first character is position 1, not zero.
+Negative BEG starts that many characters from the end of the string.
+Positive LEN counts rightward from the starting position; negative LEN
+counts leftward.
+LEN may be omitted.
 .It @mjd [YEAR MONTH DAY]@
 Return the Modified Julian Day, which is
 the number of days since midnight on November\ 17, 1858.

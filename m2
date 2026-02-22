@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-02-19 18:39:14 cleyon>
+#  Time-stamp:  <2026-02-21 19:45:23 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -43,7 +43,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "5.3.5"
+    M2_VERSION = "5.3.6"
 
     # Specify a shell for m2 to use for running utility programs.
     # It is expected to be compatible with Bourne shell syntax.
@@ -10529,7 +10529,7 @@ function macro_expand(macro,
 
     # Check if it's a known function (formerly SYMFUNC)
     level = info__create_from_text(fn, fninfo)
-    #print_stderr("(macro_expand) fninfo[" info__get(fninfo, "name") "] => " info__get(fninfo, "type"))
+    dbg__print("dosubs", 5, "(macro_expand) fninfo[" info__get(fninfo, "name") "] => " info__get(fninfo, "type"))
 
     if (nam_ll_in(fn, GLOBAL_NAMESPACE) &&
         flag_1true_p((nam_ll_read(fn, GLOBAL_NAMESPACE)), TYPE_FUNCTION)) {
@@ -11748,23 +11748,40 @@ function xeq_fn__lrc(fn, M, nparam, param,
 #*****************************************************************************
 # @mid SYMBOL, START[, LENGTH]
 function xeq_fn__mid(fn, M, nparam, param,
-                     p, x, y, result)
+                     sym, str, pos, len, result,
+                     p, n, s)
 {
     if (nparam < 2 || nparam > 3)
         error("Bad parameters in '" M "':" $0)
-    p = param[1]
-    assert_sym_valid_name(p, "@" M "@")
-    assert_sym_defined(p, "@" M "@")
-    x = param[2]
-    if (!integerp(x))
-        error("Value '" x "' must be numeric:" $0)
+    sym = param[1]
+    assert_sym_valid_name(sym, "@" M "@")
+    assert_sym_defined(sym, "@" M "@")
+    s = length(str = sym_fetch(sym))
+    pos = param[2]
+    if (!integerp(pos))
+        error("Value '" pos "' must be numeric:" $0)
+    p = abs(pos)
     if (nparam == 2) {
-        result = substr(sym_fetch(p), x)
-    } else if (nparam == 3) {
-        y = param[3]
-        if (!integerp(y))
-            error("Value '" y "' must be numeric:" $0)
-        result = substr(sym_fetch(p), x, y)
+        # len absent
+        if (pos >= 0)
+            result = substr(str, p)
+        else
+            result = substr(str, s-p+1)
+    } else {                    # nparam must be 3
+        len = param[3]
+        if (!integerp(len))
+            error("Value '" len "' must be numeric:" $0)
+        n = abs(len)
+        if (pos >= 0)
+            if (len >= 0)
+                result = substr(str, p, n)
+            else
+                result = substr(str, p-n, (p-n <= 0) ? min(n, p - 1) : n)
+        else
+            if (len >= 0)
+                result = substr(str, s-p+1, n)
+            else
+                result = substr(str, s-p-n+1, (s-p-n+1 <= 0) ? min(n, s - p) : n)
     }
     return result
 }

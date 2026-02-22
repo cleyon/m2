@@ -1,0 +1,27 @@
+define t 123456789abcdef
+mid t 5 4 => 5678
+mid t -5 4 => bcde
+mid t 5 -4 => 1234
+mid t 6 -4 => 2345
+mid t -5 -4 => 789a
+mid t -5 -5 => 6789a
+mid t -5 -6 => 56789a
+mid t -5 -7 => 456789a
+mid t -5 -8 => 3456789a
+mid t -5 -9 => 23456789a
+mid t -5 -10 => 123456789a
+mid t -5 -11 => 123456789a
+mid t -5 -12 => 123456789a
+mid t -5 -13 => 123456789a
+mid t 5 => 56789abcdef
+mid t -5 => bcdef
+mid t -5 99 => bcdef
+mid t -5 -99 => 123456789a
+mid t 5 99 => 56789abcdef
+mid t 5 -99 => 1234
+mid t 6 -99 => 12345
+mid t -1 1 => f
+mid t -2 1 => e
+mid t -99 3 => 123
+mid t 3 -2 => 12
+mid t -3 -1 => c

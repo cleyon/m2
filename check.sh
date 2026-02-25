@@ -71,7 +71,7 @@
 # Framework control messages begin with "!!!", followed by a KEYWORD and info:
 #       !!! START - Starting test runs
 # Test ids and results are shown on lines beginning and ending with "***":
-#       *** Testing: NEWCMD/004/simple ... PASS ***
+#       *** TEST - NEWCMD/004/simple.m2 ... PASS ***
 # Exit status codes and data streams are shown in sections whose titles appear
 #       >>> LIKE THIS <<<
 #
@@ -258,12 +258,15 @@ run_test()
 
     if [ ! -f $M2_FILE ]; then
         M2_FILE="${M2_FILE}.m2"
-        [ -f $M2_FILE ] || { framework_error "run_test: $M2_FILE does not exist!"; return; }
+        if [ ! -f $M2_FILE ]; then
+            echo "*** TEST - $test_id ... SKIP - No test files ***"
+            return
+        fi
     fi
 
     TESTNAME=`echo "$M2_FILE" | sed 's,^.*/,,;s,\.m2$,,'`   # remove CATEGORY and ext
     [ $debug = "true" ] && echo "TESTNAME is $TESTNAME"
-    printf "*** Testing: $test_id/$TESTNAME ... "
+    printf "*** TEST - %s/%s.m2 ... " $test_id $TESTNAME
     ntest=$(expr $ntest + 1)
 
     if [ ! -s "$M2_FILE" ]; then
@@ -331,7 +334,6 @@ run_test()
     #
     if ! cmp -s ${TESTNAME}.run_err ${TESTNAME}.expected_err; then
         echo "FAIL - Unexpected error messages ***"
-        echo "    (file $CATEGORY/$SERIES/$M2_FILE)"
         fail=$(expr $fail + 1)
         echo ">>> EXPECTED ERRORS <<<"
         cat_or_nodata ${TESTNAME}.expected_err
@@ -345,7 +347,6 @@ run_test()
     #
     if ! cmp -s ${TESTNAME}.run_exit ${TESTNAME}.expected_exit; then
         echo "FAIL - Unexpected exit code ***"
-        echo "    (file $CATEGORY/$SERIES/$M2_FILE)"
         fail=$(expr $fail + 1)
         echo ">>> EXPECTED EXIT CODE <<<"
         cat_or_nodata ${TESTNAME}.expected_exit
@@ -358,7 +359,6 @@ run_test()
     #
     if ! cmp -s ${TESTNAME}.run_out ${TESTNAME}.expected_out; then
         echo "FAIL - Unexpected output ***"
-        echo "    (file $CATEGORY/$SERIES/$M2_FILE)"
         fail=$(expr $fail + 1)
         # Always create diff file
         diff -c ${TESTNAME}.expected_out ${TESTNAME}.run_out > ${TESTNAME}.run_diff

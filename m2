@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-02-24 21:31:14 cleyon>
+#  Time-stamp:  <2026-02-24 22:02:45 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -12281,7 +12281,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     }
 
     nam_ll_write("__FMT__",    GLOBAL_NAMESPACE, TYPE_ARRAY FLAG_SYSTEM FLAG_WRITABLE)
-    nam_ll_write("__STRICT__", GLOBAL_NAMESPACE, TYPE_ARRAY FLAG_SYSTEM FLAG_WRITABLE)
+    nam_ll_write("__STRICT__", GLOBAL_NAMESPACE, TYPE_ARRAY FLAG_SYSTEM FLAG_WRITABLE FLAG_BOOLEAN)
 
     if ("COLUMNS" in ENVIRON)
       sym_ll_fiat("__COLUMNS__",    "", PTYPE_WRITABLE_INTEGER, ENVIRON["COLUMNS"])

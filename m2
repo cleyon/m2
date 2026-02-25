@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-02-21 19:45:23 cleyon>
+#  Time-stamp:  <2026-02-24 21:31:14 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -16,7 +16,7 @@
 #  DESCRIPTION
 #       Line-oriented macro processor
 #
-#  Copyright (c) 2025 Christopher Leyon
+#  Copyright (c) 2025-2026 Christopher Leyon
 #  All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
@@ -43,7 +43,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "5.3.6"
+    M2_VERSION = "5.3.7"
 
     # Specify a shell for m2 to use for running utility programs.
     # It is expected to be compatible with Bourne shell syntax.
@@ -3385,7 +3385,7 @@ function assert_cmd_okay_to_define(name, caller)
         name !~ /__(m2_begin|m2_end|file_open|file_close|file_suspend|file_resume)_hook/)
         error(sprintf("%s: Name '%s' not valid",
                       caller, name))
-        
+
     # FIXME This is not quite sufficient (I think).  I probably need
     # to do a full nam__scan() / nam__lookup() because I don't want
     # to shadow a system symbol.  At least I need to be more careful
@@ -8364,7 +8364,8 @@ function search_file(f,
     if (first(f) == TOK_SLASH)
         # If path is absolute, do not invoke path search mechanism
         return pe ? f : EMPTY
-    icount = split(__inc_path, paths, TOK_COLON)
+    icount = split(sym_ll_read("__INCPATH__", "", GLOBAL_NAMESPACE),
+                   paths, TOK_COLON)
     for (i = 1; i <= icount; i++) {
         p = with_trailing_slash(paths[i]) f
         if (path_exists_p(p)) {
@@ -8374,6 +8375,19 @@ function search_file(f,
         }
     }
     return EMPTY
+}
+
+function rm_INCPATH(elem,
+                    i, tmpip, icount, paths)
+{
+    tmpip = EMPTY
+    icount = split(sym_ll_read("__INCPATH__", "", GLOBAL_NAMESPACE),
+                   paths, TOK_COLON)
+    for (i = 1; i <= icount; i++)
+        if (paths[i] != elem)
+            # Only retain items which don't match the element we want to remove
+            tmpip = tmpip paths[i] TOK_COLON
+    sym_ll_write("__INCPATH__", "", GLOBAL_NAMESPACE, chop(tmpip))
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -8774,9 +8788,6 @@ function xeq_cmd__m2ctl(cmd, cmdline,
 
     } else if ($1 == "dump_parse_stack") {
         dump_parse_stack()
-
-    } else if ($1 == "incpath") {
-        print_stderr("__inc_path = " __inc_path)
 
     } else if ($1 == "set_dbg") { # Set __DBG__[dsys] level directly
         dsys = $2                 # Note, does not affect __DEBUG__
@@ -12202,7 +12213,6 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
 
     srand()                     # Seed random number generator
     initialize_prog_paths()
-    __inc_path = "M2PATH" in ENVIRON ? ENVIRON["M2PATH"] : ""
 
     # Initialize days per month
     split("31 31 28 29 31 31 30 30 31 31 30 30 31 31 31 31 30 30 31 31 30 30 31 31", monthdays)
@@ -12303,6 +12313,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
       sym_ll_fiat("__HOME__",       "", PTYPE_READONLY_SYMBOL,  with_trailing_slash(ENVIRON["HOME"]))
     else if ("LOGDIR" in ENVIRON)
       sym_ll_fiat("__HOME__",       "", PTYPE_READONLY_SYMBOL,  with_trailing_slash(ENVIRON["LOGDIR"]))
+    sym_ll_fiat("__INCPATH__",      "", PTYPE_READONLY_SYMBOL,  "M2PATH" in ENVIRON ? ENVIRON["M2PATH"] : EMPTY)
     sym_ll_fiat("__INPUT__",        "", PTYPE_WRITABLE_SYMBOL,  EMPTY)
     sym_ll_fiat("__LENIENT__",      "", PTYPE_WRITABLE_BOOLEAN, FALSE) # Undocumented
     sym_ll_fiat("__LINE__",         "", PTYPE_READONLY_INTEGER, 0)
@@ -12529,7 +12540,8 @@ function load_init_files(    old_debug)
 #       Each arg is either a NAME=VALUE definition, or a file to parse.
 #
 #*****************************************************************************
-function process_command_line_arguments(    nfile, arg, i, eq, name, val, file)
+function process_command_line_arguments(    nfile, arg, i, eq, name, val, file,
+                                            oldip)
 {
     # Delay loading $HOME/.m2rc as long as possible.  This allows us
     # to set symbols on the command line which will have taken effect
@@ -12556,9 +12568,12 @@ function process_command_line_arguments(    nfile, arg, i, eq, name, val, file)
                 name = "__FS__"
             } else if (name == "I") {      # I=<path>
                 # Include-path elements on command-line are prepended
-                # to M2PATH so they override env variable values.
-                if (!emptyp(val))
-                    __inc_path = val (emptyp(__inc_path) ? "" : ":" __inc_path)
+                # to __INCPATH__ so they override M2PATH env variable values.
+                if (!emptyp(val)) {
+                    oldip = sym_ll_read("__INCPATH__", "", GLOBAL_NAMESPACE)
+                    sym_ll_write("__INCPATH__", "", GLOBAL_NAMESPACE,
+                                 val (!emptyp(oldip) ? TOK_COLON : "") oldip)
+                }
                 continue
             } else if (name == "init") {   # init=<VAL>
                 if (val > 0)
@@ -12569,6 +12584,11 @@ function process_command_line_arguments(    nfile, arg, i, eq, name, val, file)
                     # Do not load the init files.  Inhibit init file
                     # loading by pretending we already did it.
                     __init_files_loaded = TRUE
+                continue
+            } else if (name == "R") {      # R=<path>
+                # Remove element on command-line from Include-path
+                if (!emptyp(val))
+                    rm_INCPATH(val)
                 continue
             } else if (name == "secure") {
                 name = "__SECURE__"

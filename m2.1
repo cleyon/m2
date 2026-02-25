@@ -1,4 +1,5 @@
-.\" Copyright (c) 2025 Christopher Leyon                   -*- mode: nroff -*-
+.\"                                                        -*- mode: nroff -*-
+.\" Copyright (c) 2025-2026 Christopher Leyon
 .\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
@@ -576,9 +577,8 @@ variants
 .Pc
 are used, no message is printed.
 If @include or @paste cannot find the specified FILE in the current directory,
-it will consult the include path which is initialized from the
-.Ev M2PATH
-environment variable.
+it will consult the include path found in
+.Va __INCPATH__ .
 Directories can be inserted into the include path by specifying
 .Ql I=<directory>
 on the command line.
@@ -586,6 +586,9 @@ Paths specified this way are examined before entries from M2PATH,
 to allow run-specific overrides.
 The include path is also used, if needed, for file names passed on the
 command line.
+Elements may be removed from the include path by specifying
+.Ql R=<directory>
+on the command line.
 .Ss Functions
 Specifying more than one word between
 .Qq @
@@ -723,7 +726,7 @@ Arguments must be compatible with format string.
 Also called
 .Ql @sprintf@ .
 .It @geodist LAT1 LON1 LAT2 LON2@
-Return distance between points (LAT1,LON2) and (LAT2,LON2) in kilometers.
+Return distance between points (LAT1,LON1) and (LAT2,LON2) in kilometers.
 Divide distance by 1.609344 to convert to miles.
 For nautical miles, divide by 1.852.
 Latitude and longitude must be given in fractional degrees,
@@ -1455,6 +1458,20 @@ User's home directory, including trailing slash.
 FQDN host name (eg myhost.example.com).
 .It __HOST__
 Short host name (eg myhost).
+.It __INCPATH__
+The
+.Qq include path
+used by
+.Ql @include
+and
+.Ql @paste
+to find files.
+Elements are separated by
+colon
+.Qq \&:
+characters.
+Initialized from environment variable
+.Ev M2PATH .
 .It __INPUT__
 The data read by @input; user modifiable.
 .It __LINE__
@@ -1610,20 +1627,24 @@ Command definitions may include named parameters and complex control-flow logic
 including
 .Ql @for
 and
-.Ql while
+.Ql @while
 loops, and
 everyone's favorite capability,
 .Ql @eval .
 Parameters must be specified with the
 .Ql @func{AAA}{BBB}{CCC}@
 syntax.
-If a user command invokes
+You may invoke a user command merely for its execution side effects:
+it is not required for a command to include a
 .Ql @return
-and includes a return value,
+statement or value.
+However, if a command
+.Em does
+return a value,
 then the command may also be used in-line like
 other symbol functions; but if @return lacks a value, or control drops
 off the end without returning, an error is raised.
-Note that this invocation format requires a trailing
+Note that this invocation format requires an in-line trailing
 .Qq @
 character, whereas the line-of-its-own invocation does not.
 .Pp
@@ -1683,21 +1704,35 @@ Hook command names begin with
 .Qq __
 and end with
 .Qq _hook .
+Hooks take no formal parameters.
 .Bl -tag -width __m2_file_suspend_hook -offset indent
 .It __m2_begin_hook
 Invoked once at the beginning of m2 execution, after any
 initialization files are loaded.
+.Va __FILE__
+is undefined.
+.It __file_open_hook
+Invoked whenever a new file is opened, but before its contents are read.
+.Va __FILE__
+is the newly opened file.
+.It __file_close_hook
+Invoked whenever an included file has been read and closed.
+.Va __FILE__
+is still the recently closed file.
+.It __file_suspend_hook
+Invoked whenever a new file is about to be included, temporarily
+superseding the current input file..
+.Va __FILE__
+is the current, about to be suspended file.
+.It __file_resume_hook
+Invoked whenever a previously suspended file is about to be resumed.
+.Va __FILE__
+is the newly resumed, originally current file.
 .It __m2_end_hook
 Invoked once at the end of m2 execution, after any streams or wraps
 have been executed.
-.It __file_open_hook
-Invoked whenever a new file is opened, but before its contents are read.
-.It __file_close_hook
-Invoked whenever an included file has been read and closed.
-.It __file_suspend_hook
-Invoked whenever a new file is about to be included.
-.It __file_resume_hook
-Invoked whenever a previously suspended file is about to be resumed.
+.Va __FILE__
+is undefined.
 .El
 .Ss Debugging
 Symbol
@@ -1882,7 +1917,13 @@ A colon-separated list of directories to try (if necessary) for the
 and
 .Ql @paste
 commands.
-Note: M2PATH does not apply to the @filedefine or @filedata commands.
+Note: M2PATH does not apply to the
+.Ql @filedefine
+or
+.Ql @filedata
+commands.
+See also
+.Va __INCPATH__ .
 .It Ev M2RC
 Specifies a file which, if it exists, overrides
 .Pa $HOME/.m2rc

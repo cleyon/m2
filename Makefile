@@ -82,7 +82,7 @@ check-verbose test-verbose verbose-check verbose-test:
 	@date
 
 check test check-quiet test-quiet quiet-check quiet-test:
-	@date
+#	@date
 	@/usr/bin/time ./check.sh </dev/null 2>&1 | grep -v 'PASS \*\*\*$$'
 	@date
 
@@ -92,6 +92,6 @@ testlog-verbose:
 	@date
 
 testlog testlog-quiet:
-	@date
+#	@date
 	@timeout 90 /usr/bin/time nice ./check.sh </dev/null | grep -v 'PASS \*\*\*$$' >test.log.`ts` 2>&1
 	@date

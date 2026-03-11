@@ -10,3 +10,5 @@ m2.ps
 .DS_Store
 TODO
 test.log.*
+.gawk_history
+.gawkrc

@@ -70,8 +70,17 @@
 # ===========
 # Framework control messages begin with "!!!", followed by a KEYWORD and info:
 #       !!! START - Starting test runs
+# Complete list of control messages:
+#       !!! BEGIN - <date>
+#       !!! END - <date>
+#       !!! ERROR - Failure in testing framework
+#       !!! REPORT - <N> tests
+#       !!! START - Starting test runs
+#       !!! STATUS - { SUCCESS, FAILURE, INTERRUPTED, DISASTER }
+#       !!! STOP - Stopping test runs
+#
 # Test ids and results are shown on lines beginning and ending with "***":
-#       *** TEST - NEWCMD/004/simple.m2 ... PASS ***
+#       *** RUN - NEWCMD/004/simple.m2 ... PASS ***
 # Exit status codes and data streams are shown in sections whose titles appear
 #       >>> LIKE THIS <<<
 #
@@ -150,20 +159,20 @@ summarize_tests()
     fi
 
     if [ $ntest -ne 0 ]; then
-        pass_pct=`echo "scale=3; $npass*100/$ntest" | bc`
-        skip_pct=`echo "scale=3; $nskip*100/$ntest" | bc`
-        fail_pct=`echo "scale=3; $nfail*100/$ntest" | bc`
+        pass_pct=`echo "scale=5; $npass*100/$ntest" | bc`
+        skip_pct=`echo "scale=5; $nskip*100/$ntest" | bc`
+        fail_pct=`echo "scale=5; $nfail*100/$ntest" | bc`
         if [ $intr = "true" ]; then
-            intr_pct=`echo "scale=3; 1*100/$ntest" | bc`
+            intr_pct=`echo "scale=5; 1*100/$ntest" | bc`
         fi
     fi
 
     [ $ntest -ne 1 ] && plural="s" || plural=""
-    printf "!!! SUMMARY - %d test%s:\n" $ntest $plural
-    [ $npass -gt 0 ]   && printf "!!!     %3d passed (%.1f%%)\n"  $npass $pass_pct
-    [ $nfail -gt 0 ]   && printf "!!!     %3d failed (%.1f%%)\n"  $nfail $fail_pct
-    [ $nskip -gt 0 ]   && printf "!!!     %3d skipped (%.1f%%)\n" $nskip $skip_pct
-    [ $intr = "true" ] && printf "!!!     %3d interrupted (%.1f%%)\n"  1 $intr_pct
+    printf "!!! REPORT - %d test%s:\n" $ntest $plural
+    [ $npass -gt 0 ]   && printf "!!!     %3d passed (%.2f%%)\n"  $npass $pass_pct
+    [ $nfail -gt 0 ]   && printf "!!!     %3d failed (%.2f%%)\n"  $nfail $fail_pct
+    [ $nskip -gt 0 ]   && printf "!!!     %3d skipped (%.2f%%)\n" $nskip $skip_pct
+    [ $intr = "true" ] && printf "!!!     %3d interrupted (%.2f%%)\n"  1 $intr_pct
 }
 
 
@@ -259,14 +268,14 @@ run_test()
     if [ ! -f $M2_FILE ]; then
         M2_FILE="${M2_FILE}.m2"
         if [ ! -f $M2_FILE ]; then
-            echo "*** TEST - $test_id ... SKIP - No test files ***"
+            echo "*** RUN - $test_id ... SKIP - No test files ***"
             return
         fi
     fi
 
     TESTNAME=`echo "$M2_FILE" | sed 's,^.*/,,;s,\.m2$,,'`   # remove CATEGORY and ext
     [ $debug = "true" ] && echo "TESTNAME is $TESTNAME"
-    printf "*** TEST - %s/%s.m2 ... " $test_id $TESTNAME
+    printf "*** RUN - %s/%s.m2 ... " $test_id $TESTNAME
     ntest=$(expr $ntest + 1)
 
     if [ ! -s "$M2_FILE" ]; then
@@ -281,7 +290,7 @@ run_test()
     fi
 
     rm -f ${TESTNAME}.expected_* ${TESTNAME}.run_*
-    trap 'echo; echo "!!! INTERRUPT - Aborting"; rm -f ${TESTNAME}.expected_* ${TESTNAME}.run_*; summarize_tests; echo "!!! END - `date`"; exit 1' 1 2 3 15
+    trap 'echo; echo "!!! STOP - Stopping test runs"; echo "!!! STATUS - INTERRUPTED: Some tests did not run"; rm -f ${TESTNAME}.expected_* ${TESTNAME}.run_*; summarize_tests; echo "!!! END - `date`"; exit 1' 1 2 3 15
 
     if [ ! -r "$M2_FILE" ]; then
         echo "FAIL - Unreadable test file ***"
@@ -441,14 +450,14 @@ case $# in
        test_something $1 ;;
     *) framework_error "Invocation error: Bad # parameters" ;;
 esac
-echo   "!!! STOP - Stopping test runs"
+echo "!!! STOP - Stopping test runs"
 
 if [ ${rc} -eq 0 ] ; then
-    echo "!!! SUCCESS - All tests completed successfully"
+    echo "!!! STATUS - SUCCESS: All tests completed successfully"
 elif [ $nfail -eq $ntest ]; then
-    echo "!!! DISASTER - All tests failed"
+    echo "!!! STATUS - DISASTER: All tests failed"
 else
-    echo "!!! FAILURE - Some tests failed"
+    echo "!!! STATUS - FAILURE: Some tests failed"
 fi
 
 summarize_tests

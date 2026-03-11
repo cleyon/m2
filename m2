@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-03-11 08:06:51 cleyon>
+#  Time-stamp:  <2026-03-11 13:36:17 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -677,11 +677,10 @@ function mktemp(path_template,
     while (tries-- > 0) {
         #file_path = leading_elements  hex_digits(RLENGTH)
         for (i = 1; i <= RLENGTH; i++)
-            rp = rp substr(LOTS_O_LETTERS, randint2(1, 62), 1)
+            rp = rp substr(LETTERS_NUMBERS, randint2(1, 36), 1)
         file_path = leading_elements  rp
-        if (path_exists_p(file_path))
-            continue
-        return file_path
+        if (! path_exists_p(file_path))
+            return file_path
     }
     panic("(mktemp) Could not create temporary file name from template '" path_template "'")
 }
@@ -12127,8 +12126,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     JD_MJD_DIFF                 = 2400000.5
     LOG2                        = log(2)
     LOG10                       = log(10)
-    LOTS_O_LETTERS              = "ABCDEFGHIJKLMNOPQRSTUVWXYZ" \
-                                  "abcdefghijklmnopqrstuvwxyz" \
+    LETTERS_NUMBERS             = "ABCDEFGHIJKLMNOPQRSTUVWXYZ" \
                                   "0123456789"
     MAX_DBG_LEVEL               = 10
     MAX_PARAM                   = 20

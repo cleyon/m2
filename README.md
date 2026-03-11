@@ -25,8 +25,6 @@ on a typical Unix system.
    commands in subshells.  1 prevents this but does allow safe commands
    from PROG[].  2 prohibits invoking any external programs.
 
-4. Increase the number of diversions (streams) allowed; default is 9.
-
 # Test Suite
 
 m2 includes a test suite which exercises most commands and functions.

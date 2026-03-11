@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-03-11 13:36:17 cleyon>
+#  Time-stamp:  <2026-03-11 15:02:12 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -43,7 +43,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "5.3.8"
+    M2_VERSION = "5.4.0"
 
     # Specify a shell for m2 to use for running utility programs.
     # It is expected to be compatible with Bourne shell syntax.
@@ -4562,12 +4562,12 @@ function seq_definition_ppf(name,
     buf =         AT_SEQUENCE name TOK_TAB "create" TOK_NEWLINE
     if (seq_ll_read(name) != SEQ_DEFAULT_INIT)
         buf = buf AT_SEQUENCE name TOK_TAB "setval " seq_ll_read(name) TOK_NEWLINE
-    if (seqtab[name, "init"] != SEQ_DEFAULT_INIT)
-        buf = buf AT_SEQUENCE name TOK_TAB "setinit " seqtab[name, "init"] TOK_NEWLINE
-    if (seqtab[name, "incr"] != SEQ_DEFAULT_INCR)
-        buf = buf AT_SEQUENCE name TOK_TAB "setincr " seqtab[name, "incr"] TOK_NEWLINE
-    if (seqtab[name, "fmt"] != sym_ll_read("__FMT__", "seq"))
-        buf = buf AT_SEQUENCE name TOK_TAB "format " seqtab[name, "fmt"] TOK_NEWLINE
+    if (symtab[name, EMPTY, ROOT_LEVEL, "init"] != SEQ_DEFAULT_INIT)
+        buf = buf AT_SEQUENCE name TOK_TAB "setinit " symtab[name, EMPTY, ROOT_LEVEL, "init"] TOK_NEWLINE
+    if (symtab[name, EMPTY, ROOT_LEVEL, "incr"] != SEQ_DEFAULT_INCR)
+        buf = buf AT_SEQUENCE name TOK_TAB "setincr " symtab[name, EMPTY, ROOT_LEVEL, "incr"] TOK_NEWLINE
+    if (symtab[name, EMPTY, ROOT_LEVEL, "fmt"] != sym_ll_read("__FMT__", "seq"))
+        buf = buf AT_SEQUENCE name TOK_TAB "format " symtab[name, EMPTY, ROOT_LEVEL, "fmt"] TOK_NEWLINE
     return chop(buf)
 }
 
@@ -4575,38 +4575,38 @@ function seq_definition_ppf(name,
 function seq_destroy(name)
 {
     delete namtab[name, ROOT_LEVEL]
-    delete seqtab[name, "incr"]
-    delete seqtab[name, "init"]
-    delete seqtab[name, "fmt"]
-    delete seqtab[name, "seqval"]
+    delete symtab[name, EMPTY, ROOT_LEVEL, "incr"]
+    delete symtab[name, EMPTY, ROOT_LEVEL, "init"]
+    delete symtab[name, EMPTY, ROOT_LEVEL, "fmt"]
+    delete symtab[name, EMPTY, ROOT_LEVEL, "seqval"]
 }
 
 
 function seq_ll_read(name)
 {
-    return seqtab[name, "seqval"]
+    return symtab[name, EMPTY, ROOT_LEVEL, "seqval"]
 }
 
 
 function seq_ll_write(name, new_val)
 {
-    return seqtab[name, "seqval"] = new_val
+    return symtab[name, EMPTY, ROOT_LEVEL, "seqval"] = new_val
 }
 
 
 function seq_ll_incr(name, incr)
 {
     if (incr == EMPTY)
-        incr = seqtab[name, "incr"]
-    seqtab[name, "seqval"] += incr
+        incr = symtab[name, EMPTY, ROOT_LEVEL, "incr"]
+    symtab[name, EMPTY, ROOT_LEVEL, "seqval"] += incr
 }
 # function seqinfo_ll_incr(seqinfo, incr,
 #                          name)
 # {
 #     name = info__get(seqinfo, "name")
 #     if (incr == EMPTY)
-#         incr = seqtab[name, "incr"]
-#     seqtab[name, "seqval"] += incr
+#         incr = symtab[name, EMPTY, ROOT_LEVEL, "incr"]
+#     symtab[name, EMPTY, ROOT_LEVEL, "seqval"] += incr
 # }
 
 
@@ -5120,7 +5120,7 @@ function sym_define_all_deferred(    x, k, def_list, sym, code)
         return
 
     for (k in namtab) {
-        split(k, x, SUBSEP)
+        split(k, x, SUBSEP)     # [NAME, LEVEL]
         sym = x[1]
         code = nam_ll_read(sym, ROOT_LEVEL)
         if (flag_1true_p(code, FLAG_DEFERRED)) {
@@ -7050,7 +7050,7 @@ function xeq_cmd__dump(cmd, cmdline,
         buf = dump__symtab(what_type, all_flag)
     } else if (what ~ /seq(uence)?s?/) {
         what_type = TYPE_SEQUENCE
-        buf = dump__seqtab(what_type, all_flag)
+        buf = dump__sequences(what_type, all_flag)
     } else if (what ~ /(cmd|command)s?/) {
         what_type = TYPE_USER
         #buf = nam_dump_namtab(what_type, all_flag)
@@ -7249,29 +7249,33 @@ function dump__symtab(type, include_sys, # caller names this "all_flag"
 }
 
 
-function dump__seqtab(type, include_sys,
-                      x, k, keys, cnt, code, buf, i)
+function dump__sequences(type, include_sys,
+                      x, k, keys, cnt, code, buf, i,
+                      name)
 {
-    dbg__print("seq", 4, "(dump__seqtab) BEGIN")
+    dbg__print("seq", 4, "(dump__sequences) BEGIN")
     if (first(type) != TYPE_SEQUENCE)
-        panic("(dump__seqtab) Bad type " ppf__flags(first(type)))
+        panic("(dump__sequences) Bad type " ppf__flags(first(type)))
 
     # Build keys[] array, whose values are printable symbol names that
     # pass restrictive checks.
     cnt = 0
-    for (k in seqtab) {
+    include_sys = TRUE
+    for (k in namtab) {
         split(k, x, SUBSEP)
         # print "name  =", x[1]
-        # print "elem  =", x[2]
-        if (x[2] != "seqval") continue
-        code = nam_ll_read(x[1], ROOT_LEVEL) # name, level
-        dbg__print("seq", 7, sprintf("(dump__seqtab) name='%s', code=%s",
-                                    x[1], code))
-        if (flag_1true_p(code, TYPE_SEQUENCE)) {
-            # I don't think there are any system sequences yet...
-            if (!include_sys && flag_1true_p(code, FLAG_SYSTEM))
-                continue
-            keys[++cnt] = x[1]
+        # print "level =", x[2]
+        if (0+x[2] == ROOT_LEVEL) {
+            code = nam_ll_read(name = x[1], ROOT_LEVEL)
+            dbg__print("seq", 7, sprintf("(dump__sequences) name='%s', code=%s",
+                                         name, code))
+
+            if (flag_1true_p(code, TYPE_SEQUENCE)) {
+                # I don't think there are any system sequences yet...
+                if (!include_sys && flag_1true_p(code, FLAG_SYSTEM))
+                    continue
+                keys[++cnt] = x[1]
+            }
         }
     }
 
@@ -7281,7 +7285,7 @@ function dump__seqtab(type, include_sys,
     buf = EMPTY
     for (i = 1; i <= cnt; i++)
         buf = buf seq_definition_ppf(keys[i]) TOK_NEWLINE
-    dbg__print("seq", 4, "(dump__seqtab) END")
+    dbg__print("seq", 4, "(dump__sequences) END")
     return chomp(buf)
 }
 
@@ -9224,18 +9228,18 @@ function xeq_cmd__sequence(cmd, cmdline,
             info__gate(OP_CREATE, TYPE_SEQUENCE, info, ROOT_LEVEL, me, TRUE)
             #
             nam_ll_write(id, ROOT_LEVEL, TYPE_SEQUENCE FLAG_INTEGER)
-            seqtab[id, "incr"] = SEQ_DEFAULT_INCR
-            seqtab[id, "init"] = SEQ_DEFAULT_INIT
-            seqtab[id, "fmt"]  = sym_ll_read("__FMT__", "seq", ROOT_LEVEL)
+            symtab[id, EMPTY, ROOT_LEVEL, "incr"] = SEQ_DEFAULT_INCR
+            symtab[id, EMPTY, ROOT_LEVEL, "init"] = SEQ_DEFAULT_INIT
+            symtab[id, EMPTY, ROOT_LEVEL, "fmt"]  = sym_ll_read("__FMT__", "seq", ROOT_LEVEL)
             seq_ll_write(id, SEQ_DEFAULT_INIT)
         } else if (action == "delete") {
             seq_destroy(id)
         } else if (action == "next") { # Increment counter only, no output
-            seq_ll_incr(id, seqtab[id, "incr"])
+            seq_ll_incr(id, symtab[id, EMPTY, ROOT_LEVEL, "incr"])
         } else if (action == "prev") { # Decrement counter only, no output
-            seq_ll_incr(id, -seqtab[id, "incr"])
+            seq_ll_incr(id, -symtab[id, EMPTY, ROOT_LEVEL, "incr"])
         } else if (action == "restart") { # Set current counter value to initial value
-            seq_ll_write(id, seqtab[id, "init"])
+            seq_ll_write(id, symtab[id, EMPTY, ROOT_LEVEL, "init"])
         } else
             error("Bad parameters:" $0)
     } else {    # NF >= 4
@@ -9255,14 +9259,14 @@ function xeq_cmd__sequence(cmd, cmdline,
             # m2 can't police your format string and a bad value might
             # cause a crash if printf() fails.
             dbg__print("seq", 2, sprintf("(xeq_cmd__sequence) fmt now '%s'", arg))
-            seqtab[id, "fmt"] = arg
+            symtab[id, EMPTY, ROOT_LEVEL, "fmt"] = arg
         } else if (action == "setincr") {
             # setincr N :: Set increment value to N.
             if (!integerp(arg))
                 error(sprintf("@sequence setincr: Value '%s' must be numeric", arg))
             if (arg+0 == 0)
                 error(sprintf("@sequence setincr: Bad parameters: %s", saveline))
-            seqtab[id, "incr"] = int(arg)
+            symtab[id, EMPTY, ROOT_LEVEL, "incr"] = int(arg)
         } else if (action == "setinit") {
             # setinit N :: Set initial  value to N.  If current
             # value == old init value (i.e., never been used), then set
@@ -9270,9 +9274,9 @@ function xeq_cmd__sequence(cmd, cmdline,
             # current value remains unchanged.
             if (!integerp(arg))
                 error(sprintf("@sequence setinit: Value '%s' must be numeric", arg))
-            if (seq_ll_read(id) == seqtab[id, "init"])
+            if (seq_ll_read(id) == symtab[id, EMPTY, ROOT_LEVEL, "init"])
                 seq_ll_write(id, int(arg))
-            seqtab[id, "init"] = int(arg)
+            symtab[id, EMPTY, ROOT_LEVEL, "init"] = int(arg)
         } else if (action == "setval") {
             # setval N :: Set counter value directly to N.
             if (!integerp(arg))
@@ -10682,12 +10686,12 @@ function macro_expand(macro,
             #   | ++foo    |       -1 |      +1 |
             #   | foo--    |       +1 |      -1 |
             #   | foo++    |       +1 |      +1 |
-            incr = seqtab[fn, "incr"]
+            incr = symtab[fn, EMPTY, ROOT_LEVEL, "incr"]
             # Handle prefix increment/decrement
             if (pre_post == -1)
                 seq_ll_incr(fn, incr * inc_dec)
             # Insert current value with desired formatting
-            macro_set_expansion(macro, m2_sprintf(seqtab[fn, "fmt"], seq_ll_read(fn)))
+            macro_set_expansion(macro, m2_sprintf(symtab[fn, EMPTY, ROOT_LEVEL, "fmt"], seq_ll_read(fn)))
             # Handle postfix increment/decrement
             if (pre_post == +1)
                 seq_ll_incr(fn, incr * inc_dec)
@@ -10711,7 +10715,7 @@ function macro_expand(macro,
                 } else if (subcmd == "nextval") {
                     # - nextval :: Increment and return new value of
                     # counter.  No prefix/suffix.
-                    seq_ll_incr(fn, seqtab[fn, "incr"])
+                    seq_ll_incr(fn, symtab[fn, EMPTY, ROOT_LEVEL, "incr"])
                     macro_set_expansion(macro, seq_ll_read(fn))
                 } else
                     error("Bad parameters in '" M "':" $0)

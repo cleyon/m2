@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-03-12 21:36:49 cleyon>
+#  Time-stamp:  <2026-03-12 22:17:04 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -43,7 +43,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "5.4.0"
+    M2_VERSION = "5.4.1"
 
     # Specify a shell for m2 to use for running utility programs.
     # It is expected to be compatible with Bourne shell syntax.
@@ -667,8 +667,9 @@ function path_exists_p(path)
 
 
 function mktemp(path_template,
-                leading_elements, file_path, tries, rp, i)
+                leading_elements, file_path, tries, rp, i, letters_numbers)
 {
+    letters_numbers = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" # 36
     if (match(path_template, "X+$") == NOT_FOUND)
         error("(mktemp) Invalid template '" path_template "': missing 1 or more Xs")
     # Leading elements are everything up to but not including trailing "X"s
@@ -677,7 +678,7 @@ function mktemp(path_template,
     while (tries-- > 0) {
         #file_path = leading_elements  hex_digits(RLENGTH)
         for (i = 1; i <= RLENGTH; i++)
-            rp = rp substr(LETTERS_NUMBERS, randint2(1, 36), 1)
+            rp = rp substr(letters_numbers, randint2(1, 36), 1)
         file_path = leading_elements  rp
         if (! path_exists_p(file_path))
             return file_path
@@ -1030,20 +1031,9 @@ function curr_dstblk(    top_block)
 
 function ppf__mode(mode)
 {
-         if (mode == MODE_AT_LITERAL)       return "Literal"
-    else if (mode == MODE_AT_PROCESS)       return "ProcessAt"
-    else if (mode == MODE_IO_CAPTURE)       return "CaptureIO"
-    else if (mode == MODE_IO_SILENT)        return "SilentIO"
-    else if (mode == MODE_TEXT_PRINT)       return "PrintText"
-    else if (mode == MODE_TEXT_STRING)      return "StringText"
-    else if (mode == MODE_STREAMS_DISCARD)  return "DiscardStream"
-    else if (mode == MODE_STREAMS_SHIP_OUT) return "ShipOutStream"
-    else if (mode == MODE_XEQ_NORMAL)       return "XeqNormal"
-    else if (mode == MODE_XEQ_BREAK)        return "XeqBreak"
-    else if (mode == MODE_XEQ_CONTINUE)     return "XeqContinue"
-    else if (mode == MODE_XEQ_RETURN)       return "XeqReturn"
-    else
+    if (! (mode in __mode_label))
         panic("(ppf__mode) Unknown mode '" mode "'")
+    return __mode_label[mode]
 }
 
 
@@ -4734,7 +4724,7 @@ function stk_pop(stack,
 #         = 0         Standard output (TERMINAL)
 #         > 0         Stream # N
 #
-#       The strtab[] array maintains the mapping of stream number to
+#       The div2blk[] array maintains the mapping of stream number to
 #       block number.  Accessing a new stream allocates a new agg_block,
 #       which is how m2 provides an unlimited number of streams.
 #
@@ -4754,7 +4744,7 @@ function stream_block_exists_p(stream)
         error("(stream_exists_p) Bad stream: " stream)
     if (stream <= TERMINAL)
         return FALSE
-    return (stream in strtab)
+    return (stream in div2blk)
 }
 
 # Given a stream, return its associated block number (a BLK_AGG).
@@ -4767,8 +4757,8 @@ function stream_block(stream)
         error("(stream_block) Bad stream: " stream)
     if (! stream_block_exists_p(stream))
         # Create/initialize empty agg block
-        strtab[stream] = blk_new(BLK_AGG)
-    return strtab[stream]
+        div2blk[stream] = blk_new(BLK_AGG)
+    return div2blk[stream]
 }
 
 
@@ -4818,7 +4808,7 @@ function undivert(stream,
 function undivert_all(    stream, keys, cnt, i)
 {
     cnt = 0
-    for (stream in strtab)
+    for (stream in div2blk)
         keys[++cnt] = stream
     nqsort(keys, 1, cnt)
 
@@ -4882,7 +4872,7 @@ function cleardivert(stream,
 function cleardivert_all(    stream, keys, cnt, i)
 {
     cnt = 0
-    for (stream in strtab)
+    for (stream in div2blk)
         keys[++cnt] = stream
     nqsort(keys, 1, cnt)
 
@@ -11953,8 +11943,6 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     JD_MJD_DIFF                 = 2400000.5
     LOG2                        = log(2)
     LOG10                       = log(10)
-    LETTERS_NUMBERS             = "ABCDEFGHIJKLMNOPQRSTUVWXYZ" \
-                                  "0123456789"
     MAX_DBG_LEVEL               = 10
     MAX_PARAM                   = 20
     NOT_FOUND                   = 0     # index() when search fails
@@ -11997,19 +11985,18 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     NAME_NOT_FOUND              = -104 # nam__{lookup,find} no result - not considered an error
 
     # Various modes
-    MODE_AT_LITERAL             = "L" # atmode - scan literally
-    MODE_AT_PROCESS             = "P" # atmode - scan with "@" macro processing
-    MODE_IO_CAPTURE             = "I" # build command for getline
-    MODE_IO_SILENT              = "X" # discard all command output
-    MODE_TEXT_PRINT             = "P" # executed text is printed
-    MODE_TEXT_STRING            = "S" # executed text is stored in a string
-    MODE_STREAMS_DISCARD        = "D" # diverted streams final disposition
-    MODE_STREAMS_SHIP_OUT       = "O" # diverted streams final disposition
-                                      # Execution control states for loops:
-    MODE_XEQ_NORMAL             = "N" # Normal execution continues
-    MODE_XEQ_BREAK              = "B" # execution inhibited due to @break
-    MODE_XEQ_CONTINUE           = "C" # execution inhibited due to @continue
-    MODE_XEQ_RETURN             = "R" # execution inhibited due to @return
+    MODE_AT_LITERAL             = "L"; __mode_label[MODE_AT_LITERAL]       = "Literal"
+    MODE_AT_PROCESS             = "P"; __mode_label[MODE_AT_PROCESS]       = "ProcessAt"
+    MODE_IO_CAPTURE             = "I"; __mode_label[MODE_IO_CAPTURE]       = "CaptureIO"
+    MODE_IO_SILENT              = "X"; __mode_label[MODE_IO_SILENT]        = "SilentIO"
+    MODE_TEXT_PRINT             = "P"; __mode_label[MODE_TEXT_PRINT]       = "PrintText"
+    MODE_TEXT_STRING            = "S"; __mode_label[MODE_TEXT_STRING]      = "StringText"
+    MODE_STREAMS_DISCARD        = "D"; __mode_label[MODE_STREAMS_DISCARD]  = "DiscardStream"
+    MODE_STREAMS_SHIP_OUT       = "O"; __mode_label[MODE_STREAMS_SHIP_OUT] = "ShipOutStream"
+    MODE_XEQ_NORMAL             = "N"; __mode_label[MODE_XEQ_NORMAL]       = "XeqNormal"
+    MODE_XEQ_BREAK              = "B"; __mode_label[MODE_XEQ_BREAK]        = "XeqBreak"
+    MODE_XEQ_CONTINUE           = "C"; __mode_label[MODE_XEQ_CONTINUE]     = "XeqContinue"
+    MODE_XEQ_RETURN             = "R"; __mode_label[MODE_XEQ_RETURN]       = "XeqReturn"
 
     # When to flush standard output
     SYNC_FORCE                  = 0 # only on request or end of job
@@ -12239,11 +12226,11 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     __flag_label[FLAG_WRITABLE]  = "Writable"
 
     # Set up terminal to receive output as stream 0 (default)
+    div2blk[0] = TERMINAL
     stk_push(__stream_stack, TERMINAL) # sets __DIVNUM__
     __block_cnt = -1            # blk_new() increments first, so
     __terminal = blk_new(BLK_TERMINAL) # __terminal == block 0
     stk_push(__parse_stack, __terminal)
-    strtab[0] = TERMINAL
 }
 
 
@@ -12602,8 +12589,8 @@ function end_program(diverted_streams_final_disposition,
 
     run_hook("m2_end")
 
-    # for (stream in strtab)
-    #     blk_master_delete(strtab[stream])
+    # for (stream in div2blk)
+    #     blk_master_delete(div2blk[stream])
 
     # Close open files, attempt to reclaim block
     close_open_files(TRUE)

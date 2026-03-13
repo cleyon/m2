@@ -1,0 +1,8 @@
+First line, no space:@\
+rest of first line
+Second line, one space:@\
+ rest of second line
+Third line, two spaces:  @\
+rest of third line
+Fourth line, four spaces:  @\
+  rest of fouth line

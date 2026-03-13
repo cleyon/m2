@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-03-12 21:14:06 cleyon>
+#  Time-stamp:  <2026-03-12 21:36:49 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -1466,7 +1466,7 @@ function readline(    retval, i, s, done, topsrc, trim_ws)
                     panic("(readline) getline returned strange value: " retval)
             }
         }
-        if (retval == OKAY) {
+        if (retval == OKAY && curr_atmode() == MODE_AT_PROCESS) {
             if (substr(s, length(s) - 2, 3) == "@\\n") {
                 # Remove @\n and replace it with newline
                 s = substr(s, 1, length(s) - 3) TOK_NEWLINE

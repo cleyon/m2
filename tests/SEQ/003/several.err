@@ -1,0 +1,5 @@
+@sequence bar	create
+@sequence charlie	create
+@sequence foo	create
+@sequence foo	setval 5
+@sequence foo	setinit 5

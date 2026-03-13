@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-03-11 15:02:12 cleyon>
+#  Time-stamp:  <2026-03-12 21:14:06 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -1038,6 +1038,10 @@ function ppf__mode(mode)
     else if (mode == MODE_TEXT_STRING)      return "StringText"
     else if (mode == MODE_STREAMS_DISCARD)  return "DiscardStream"
     else if (mode == MODE_STREAMS_SHIP_OUT) return "ShipOutStream"
+    else if (mode == MODE_XEQ_NORMAL)       return "XeqNormal"
+    else if (mode == MODE_XEQ_BREAK)        return "XeqBreak"
+    else if (mode == MODE_XEQ_CONTINUE)     return "XeqContinue"
+    else if (mode == MODE_XEQ_RETURN)       return "XeqReturn"
     else
         panic("(ppf__mode) Unknown mode '" mode "'")
 }
@@ -4909,19 +4913,20 @@ function sym_valid_p(sym,
 {
     dbg__print("sym", 5, sprintf("(sym_valid_p) sym='%s' START", sym))
 
-    # Scan sym => name, key
     if ((nparts = nam__scan(sym, info)) == ERROR) {
-        __msg_m2 = "Invalid name: '" sym "'"
         #error("(sym_valid_p) ERROR nam__scan('" sym "') failed")
+        dbg__print("sym", 4, sprintf("(sym_valid_p) END sym='%s' => %s",
+                                     sym, ppf__bool(FALSE)))
+        __msg_m2 = "Invalid name: '" sym "'"
         return FALSE
     }
-    # nparts must be either 1 or 2
-    retval = (nparts == 1) ?  info["name_valid"] \
-                           : (info["name_valid"] && info["key_valid"])
+    retval = syminfo_valid_p(info)
     dbg__print("sym", 4, sprintf("(sym_valid_p) END sym='%s' => %s",
                                  sym, ppf__bool(retval)))
     return retval
 }
+
+
 function syminfo_valid_p(syminfo,
                          name, retval)
 {
@@ -4931,16 +4936,9 @@ function syminfo_valid_p(syminfo,
     retval = info__get(syminfo, "errorp") == FALSE &&
              info__get(syminfo, "valid") == TRUE
 
-    # # If a key is given, it must also be valid
-    # if (retval && info__get(syminfo, "nparts") == 2)
-    #     retval = info__get(syminfo, "key_valid")
-
-    # retval = (nparts == 1) ?  info["name_valid"] \
-    #                        : (info["name_valid"] && info["key_valid"])
     dbg__print("sym", 4, sprintf("(syminfo_valid_p) END sym='%s' => %s",
                                  name, ppf__bool(retval)))
     return retval
-
 }
 
 
@@ -5294,104 +5292,33 @@ function info_defined_lev_p(info, level, type,
 
 
 function sym_store(sym, new_val,
-                    nparts, info, name, key, level, code, good, dbg5)
+                   info)
 {
-    # Fetch debug level first before it might possibly change
-    dbg5 = dbg__sys_level_p("sym", 5)
-    if (dbg5)
-        print_debugfile(sprintf("m2debug:(sym_store) START sym='%s'", sym))
-
-    # Scan sym => name, key
-    if ((nparts = nam__scan(sym, info)) == ERROR)
+    dbg__print("sym", 5, sprintf("m2debug:(sym_store) START sym='%s'", sym))
+    if (nam__scan(sym, info) == ERROR)
         error("(sym_store) Scan error: " __m2_msg)
-    name = info["name"]
-    key  = info["key"]
-
-    # Compute level
-    # Now call nam__lookup(info)
-    level = nam__lookup(info)
-    # It's okay if nam__lookup returns NAME_NOT_FOUND because we might be
-    # attempting to store a new, non-existing symbol.
-
-    # At this point:
-    #   level == NAME_NOT_FOUND             -> no matching name of any kind
-    #   level == ROOT_LEVEL -> found in global
-    #   0 < level < ns-1          -> find in other non-global frame
-    #   level == __curr_level      -> found in current level
-    # Just because we found a namtab entry doesn't
-    # mean it's okay to just muck about with symtab.
-
-    good = FALSE
-    do {
-        if (level == NAME_NOT_FOUND) {   # name not found in nam
-            # No namtab entry, no code : This means a normal
-            # @define in the root level
-            if (info["has_bracket"])
-                error(sprintf("(sym_store) '%s' is not an Array; cannot use brackets here", name))
-            # Do scalar store
-            level = info["level"] = ROOT_LEVEL
-            code  = info["code"]  = TYPE_SYMBOL
-            nam_ll_write(name, level, code)
-            good = TRUE
-            break # - - - - - - - - - - - - - - - - - - - - - - - - - -
-        }
-
-        # At this point we know nam__lookup() found *something* because
-        # level != NAME_NOT_FOUND
-        code = info["code"]
-
-        # Error if we found an array without key,
-        # or a plain symbol with a subscript.
-        if (flag_1true_p(code, TYPE_ARRAY) && !info["has_bracket"])
-            error(sprintf("(sym_store) '%s' is an Array, so brackets are required", name))
-        if (flag_1false_p(code, TYPE_ARRAY) && info["has_bracket"])
-            error(sprintf("(sym_store) '%s' is not an Array; cannot use brackets here", name))
-
-        if (flag_1true_p(code, TYPE_SYMBOL) &&
-            !sym_ll_protected(name, code) &&
-            !info["has_bracket"] &&
-            flag_1false_p(code, FLAG_READONLY)) {
-            good = TRUE
-            break # - - - - - - - - - - - - - - - - - - - - - - - - - -
-        }
-
-        if (flag_1true_p(code, TYPE_ARRAY) &&
-            !sym_ll_protected(name, code) &&
-            info["has_bracket"] &&
-            flag_1false_p(code, FLAG_READONLY)) {
-            good = TRUE
-            break # - - - - - - - - - - - - - - - - - - - - - - - - - -
-        }
-
-        if (dbg5) {
-            print_debugfile(sprintf("m2debug:(sym_store) LOOP BOTTOM: name='%s', key='%s', level=%d, code='%s', good=%s",
-                                 name, key, level, code, ppf__bool(good)))
-            nam_dump_namtab(TYPE_SYMBOL, FALSE)
-            print_debugfile(dump__symtab(TYPE_SYMBOL, FALSE)) # print_debugfile() adds newline.  FALSE means omit system symbols
-        }
-    } while (FALSE)
-
-    # if nam_system_p(name)          level = 0
-    # Error if name does not exist at that level
-    # Error if symbol is an array but sym doesn't have array[key] syntax
-    # Error if symbol is not an array but sym has array[key] syntax
-    # Error if you don't have permission to write to the symbol
-    #   == Error ("read-only") if (flag_true(FLAG_READONLY))
-    # Error if new_val is not consistent with symbol type (haha)
-    #   or else coerce it to something acceptable (boolean)
-    # Special processing (CONVFMT, __DEBUG__)
-
-    # Add entry:        symtab[name, key, level, "symval"] = new_val
-    if (good) {
-        dbg__print("sym", 2, sprintf("(sym_store) [\"%s\",\"%s\",%d,\"symval\"]=%s",
-                                     name, key, level, new_val))
-        sym_ll_write(name, key, level, new_val)
-    } else {
-        warn(sprintf("(sym_store) !good sym='%s'", sym))
-    }
-    if (dbg5)
-        print_debugfile(sprintf("m2debug:(sym_store) END;"))
+    nam__lookup(info)
+    syminfo_store(info, new_val)
 }
+
+
+#*****************************************************************************
+#
+#       S Y M I N F O  _  S T O R E
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#       if nam_system_p(name)          level = 0
+#       Error if name does not exist at that level
+#       Error if symbol is an array but sym doesn't have array[key] syntax
+#       Error if symbol is not an array but sym has array[key] syntax
+#       Error if you don't have permission to write to the symbol
+#         == Error ("read-only") if (flag_true(FLAG_READONLY))
+#       Error if new_val is not consistent with symbol type (haha)
+#         or else coerce it to something acceptable (boolean)
+#       Special processing (CONVFMT, __DEBUG__)
+#
+#*****************************************************************************
 function syminfo_store(info, new_val,
                        iname, ikey, ilevel, good, ihasbracket, itype, icode, dbg5,
                        idxable)
@@ -5403,18 +5330,25 @@ function syminfo_store(info, new_val,
     ikey  = info__get(info, "key")
     ilevel = info__get(info, "level")
     ihasbracket = info__get(info, "has_bracket")
-    itype = info__get(info, "type")
     if (dbg5)
         print_debugfile(sprintf("m2debug:(syminfo_store) START name='%s', level=%d",
                                 iname, ilevel))
 
+    # At this point:
+    #   ilevel == NAME_NOT_FOUND             -> no matching name of any kind
+    #   ilevel == ROOT_LEVEL -> found in global
+    #   0 < ilevel < ns-1          -> find in other non-global frame
+    #   ilevel == __curr_level      -> found in current level
+    # Just because we found a namtab entry doesn't
+    # mean it's okay to just muck about with symtab.
+
     good = FALSE
     do {
-        if (ilevel == NAME_NOT_FOUND) {   # name not found in nam
+        if (ilevel == NAME_NOT_FOUND) {   # name not found in namtab
             # No namtab entry, no code : This means a normal
             # @define in the root level
             if (ihasbracket)
-                error(sprintf("(syminfo_store) '%s' is not an array; cannot use brackets here", iname))
+                error(sprintf("(syminfo_store) '%s' is not indexable; cannot use brackets here", iname))
             # Do scalar store
             ilevel = info["level"] = ROOT_LEVEL
             itype = icode  = info["code"]  = TYPE_SYMBOL
@@ -5423,19 +5357,25 @@ function syminfo_store(info, new_val,
             break # - - - - - - - - - - - - - - - - - - - - - - - - - -
         }
 
+
         # At this point we know nam__lookup() found *something* because
         # ilevel != NAME_NOT_FOUND
+        itype = info__get(info, "type")
+        if (itype != TYPE_SYMBOL && itype != TYPE_LIST && itype != TYPE_ARRAY)
+            error(sprintf("Name '%s' has type %s which is not valid here",
+                          iname, ppf__flag_type(itype)))
+
         icode = info__get(info, "code")
         idxable = info__satisfies_type(info, PTYPE_IDXABLE)
 
         # Error if we found an array without key,
         # or a plain symbol with a subscript.
         if (idxable && !ihasbracket)
-            error(sprintf("(syminfo_store) '%s' is an array, so brackets are required", iname))
+            error(sprintf("(syminfo_store) '%s' is indexable, so brackets are required", iname))
         if (!idxable && ihasbracket)
-            error(sprintf("(syminfo_store) '%s' is not an array; cannot use brackets here", iname))
+            error(sprintf("(syminfo_store) '%s' is not indexable; cannot use brackets here", iname))
 
-        if (itype == TYPE_SYMBOL &&      #flag_1true_p(icode, TYPE_SYMBOL) &&
+        if (itype == TYPE_SYMBOL &&
             !sym_ll_protected(iname, icode) &&
             ! ihasbracket &&
             flag_1false_p(icode, FLAG_READONLY)) {
@@ -5443,7 +5383,7 @@ function syminfo_store(info, new_val,
             break # - - - - - - - - - - - - - - - - - - - - - - - - - -
         }
 
-        if (idxable && # itype == TYPE_ARRAY &&       # flag_1true_p(icode, TYPE_ARRAY) &&
+        if (idxable &&
             !sym_ll_protected(iname, icode) &&
             ihasbracket &&
             flag_1false_p(icode, FLAG_READONLY)) {
@@ -5458,16 +5398,6 @@ function syminfo_store(info, new_val,
             print_debugfile(dump__symtab(TYPE_SYMBOL, FALSE)) # print_debugfile() adds newline.  FALSE means omit system symbols
         }
     } while (FALSE)
-
-    # if nam_system_p(iname)          ilevel = 0
-    # Error if name does not exist at that level
-    # Error if symbol is an array but sym doesn't have array[key] syntax
-    # Error if symbol is not an array but sym has array[key] syntax
-    # Error if you don't have permission to write to the symbol
-    #   == Error ("read-only") if (flag_true(FLAG_READONLY))
-    # Error if new_val is not consistent with symbol type (haha)
-    #   or else coerce it to something acceptable (boolean)
-    # Special processing (CONVFMT, __DEBUG__)
 
     # Add entry:        symtab[iname, ikey, ilevel, "symval"] = new_val
     if (good) {
@@ -5614,119 +5544,19 @@ function lis__ll_incr(lis, idx, level, incr,
 
 
 function sym_fetch(sym,
-                   nparts, info, iname, ikey, icode, level, val, good,
-                   agg_block, count, i)
+                   info)
 {
     dbg__print("sym", 5, sprintf("(sym_fetch) START; sym='%s'", sym))
-
-    # Scan sym => name, key
-    if ((nparts = nam__scan(sym, info)) == ERROR)
+    if (nam__scan(sym, info) == ERROR)
         error("(sym_fetch) Scan error, '" sym "'")
-    iname = info["name"]
-    ikey  = info["key"]
-
-    # Now call nam__lookup(info)
-    level = nam__lookup(info)
-    if (level == NAME_NOT_FOUND)
-        error("(sym_fetch) nam__lookup(info) failed")
-
-    # Now we know it's a symbol, level & code.  Still need to look in
-    # symtab because NAME[KEY] might not be defined.
-    icode = info["code"]
-    dbg__print("sym", 5, sprintf("(sym_fetch) nam__lookup ok; level=%d, code=%s", level, icode))
-
-    # Sanity checks
-    good = FALSE
-
-    # 0. Sequences return their value
-    if (info__get(info, "type") == TYPE_SEQUENCE) {
-        val = seq_ll_read(iname)
-        dbg__print("sym", 2, sprintf("(sym_fetch) END sym='%s', level=%d RETURNING %d",
-                                    sym, level, val))
-        return val
-    }
-
-    # 1. Fetching @ARRNAME@ without key return # elements in ARRNAME.
-    # 'idxable' means Array or List.
-    if (info["idxable"] == TRUE && info["has_bracket"] == FALSE) {
-        val = idx__size(iname, level, icode)
-        dbg__print("sym", 2, sprintf("(sym_fetch) END sym='%s', level=%d RETURNING %d",
-                                    sym, level, val))
-        return val
-    }
-
-    # 2. Error if symbol is not an Array or List but sym has array[key] syntax
-    if (info["idxable"] == FALSE && info["has_bracket"] == TRUE)
-        error("(sym_fetch) Name is not an Array or List but has Name[Key] syntax")
-
-    # Now, idxable and hasbracket are either both TRUE or both FALSE.
-    # (Earlier version referred to `is_array' but now with Lists we use
-    # a more general term to encompass both types)
-    do {
-        # 3. Check code for TYPE_SYMBOL
-        if (info["idxable"] == FALSE &&
-            info["has_bracket"] == FALSE &&
-            flag_1true_p(icode, TYPE_SYMBOL) &&
-            emptyp(ikey)) {
-            good = TRUE
-            break # - - - - - - - - - - - - - - - - - - - - - - - - - -
-        }
-        # 4. Check code for TYPE_ARRAY
-        if (info["idxable"] == TRUE &&
-            info["has_bracket"] == TRUE &&
-            flag_anytrue_p(icode, __base_type[PTYPE_IDXABLE]) &&
-            ikey != EMPTY) {
-            good = TRUE
-            break # - - - - - - - - - - - - - - - - - - - - - - - - - -
-        }
-
-        panic(sprintf("(sym_fetch) LOOP BOTTOM: sym='%s', name='%s', key='%s', level=%d, code='%s'",
-                      sym, iname, ikey, level, icode))
-        # print_debugfile(sprintf("m2debug:(sym_fetch) LOOP BOTTOM: sym='%s', name='%s', key='%s', level=%d, code='%s'",
-        #                      sym, iname, ikey, level, icode))
-    } while (FALSE)
-
-    if (flag_1true_p(icode, FLAG_DEFERRED))
-        sym_deferred_define_now(sym)
-
-    if (flag_1true_p(icode, TYPE_LIST)) {
-        # Look up block
-        if (!integerp(ikey))
-            error(sprintf("(sym_fetch) Block array indices must be integers"))
-        if (! ((iname, "", level, "agg_block") in symtab))
-            panic(sprintf("(sym_fetch) Could not find ['%s','%s',%d,'agg_block'] in symtab",
-                          iname, "", level))
-
-        agg_block = symtab[iname, "", level, "agg_block"]
-        count = blktab[agg_block, 0, "count"]+0
-        if (ikey >= 1 && ikey <= count) {
-            # Make sure slot holds text, which it pretty much has to
-            if (blk_ll_slot_type(agg_block, ikey) != OBJ_TEXT)
-                panic(sprintf("(sym_fetch) Block # %d slot %d is not OBJ_TEXT", agg_block, ikey))
-            val = blk_ll_slot_value(agg_block, ikey)
-        } else
-            error(sprintf("(sym_fetch) Out of bounds"))
-    } else {
-        # It's a normal symbol
-        if (! sym_ll_in(iname, ikey, level))
-            error(sprintf("(sym_fetch) Not in symtab: name='%s', key='%s', level=%d",
-                          iname, ikey, level))
-        val = sym_ll_read(iname, ikey, level)
-    }
-
-    dbg__print("sym", 2, sprintf("(sym_fetch) END sym='%s', level=%d => %s", iname, level, ppf__bool(TRUE)))
-    if (flag_1true_p(icode, FLAG_INTEGER))
-        return 0 + val
-    else if (flag_1true_p(icode, FLAG_NUMERIC))
-        return 0.0 + val
-    else if (flag_1true_p(icode, FLAG_BOOLEAN))
-        return sym_ll_read("__FMT__", to_bool(val)) # !! (0 + val))
-    else
-        return val
+    nam__lookup(info)
+    return syminfo_fetch(info)
 }
+
+
 function syminfo_fetch(syminfo,
                        sym, nparts, info, iname, ikey, icode, level, val, good,
-                       is_array, agg_block, count, has_bracket)
+                       idxable, agg_block, count, has_bracket)
 {
     sym = info__get(syminfo, "name")
     dbg__print("sym", 5, sprintf("(syminfo_fetch) START; sym='%s'", sym))
@@ -5753,25 +5583,25 @@ function syminfo_fetch(syminfo,
         return val
     }
 
-    # 1. Fetching @ARRNAME@ without key return # elements in ARRNAME.
-    is_array = info__get(syminfo, "idxable")
+    # 1. Fetching @ARRAY@ without key returns number elements in ARRAY.
+    idxable = info__get(syminfo, "idxable") # 'idxable' means Array or List.
     has_bracket = info__get(syminfo, "has_bracket")
-    if (is_array == TRUE && has_bracket == FALSE) {
+    if (idxable == TRUE && has_bracket == FALSE) {
         val = idx__size(iname, level, icode)
         dbg__print("sym", 2, sprintf("(syminfo_fetch) END sym='%s', level=%d RETURNING %d",
                                     sym, level, val))
         return val
     }
 
-    # 2. Error if symbol is not an array but sym has array[key] syntax
-    if (is_array == FALSE && has_bracket == TRUE)
-        error("(syminfo_fetch) Symbol is not an array but sym has array[key] syntax")
+    # 2. Error if symbol is not an Array or List but sym has array[key] syntax
+    if (idxable == FALSE && has_bracket == TRUE)
+        error("(syminfo_fetch) Name is not an Array or List but has array[key] syntax")
 
-    # Now, either both is_array and has_bracket are TRUE
+    # Now, either both idxable and has_bracket are TRUE
     # or both are FALSE.
     do {
         # 3. Check code for TYPE_SYMBOL
-        if (is_array == FALSE &&
+        if (idxable == FALSE &&
             has_bracket == FALSE &&
             flag_1true_p(icode, TYPE_SYMBOL) &&
             emptyp(ikey)) {
@@ -5779,9 +5609,9 @@ function syminfo_fetch(syminfo,
             break # - - - - - - - - - - - - - - - - - - - - - - - - - -
         }
         # 4. Check code for TYPE_ARRAY
-        if (is_array == TRUE &&
+        if (idxable == TRUE &&
             has_bracket == TRUE &&
-            flag_1true_p(icode, TYPE_ARRAY) &&
+            flag_anytrue_p(icode, __base_type[PTYPE_IDXABLE]) &&
             ikey != EMPTY) {
             good = TRUE
             break # - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -5789,13 +5619,11 @@ function syminfo_fetch(syminfo,
 
         panic(sprintf("(syminfo_fetch) LOOP BOTTOM: sym='%s', name='%s', key='%s', level=%d, code='%s'",
                       sym, iname, ikey, level, icode))
-        # print_debugfile(sprintf("m2debug:(syminfo_fetch) LOOP BOTTOM: sym='%s', name='%s', key='%s', level=%d, code='%s'",
-        #                      sym, iname, ikey, level, icode))
     } while (FALSE)
 
     if (flag_1true_p(icode, FLAG_DEFERRED)) {
-        warn("(syminfo_fetch) about to define deferred symbol")
-#        sym_deferred_define_now(sym)
+        #warn("(syminfo_fetch) about to define deferred symbol")
+        sym_deferred_define_now(sym)
     }
 
     if (flag_1true_p(icode, TYPE_LIST)) {
@@ -5845,9 +5673,6 @@ function sym_value_or_literal(s)
 function syminfo_increment(info, incr,
                            iname, ikey, ilevel, itype)
 {
-    # if (incr == EMPTY)
-    #     incr = 1
-
     # Scan sym => name, key
     # Compute level
     # if nam_system_p(name)          level = 0
@@ -5860,15 +5685,13 @@ function syminfo_increment(info, incr,
     # Error if value is not consistent with symbol type (haha)
     #   or else coerce it to something acceptable (boolean)
 
-    # Add entry:        symtab[name, key, level, "symval"] += incr
-    #symtab[sym, "", ROOT_LEVEL, "symval"] += incr
     iname  = info__get(info, "name")
     ikey   = info__get(info, "key")
     ilevel = info__get(info, "level")
     itype  = info__get(info, "type")
 
     if (itype == TYPE_LIST)
-        lis__ll_incr(iname, info__get(info, "key"), ilevel, incr)
+        lis__ll_incr(iname, ikey, ilevel, incr)
     else if (itype == TYPE_ARRAY || itype == TYPE_SYMBOL)
         sym_ll_incr(iname, ikey, ilevel, incr)
     else if (itype == TYPE_SEQUENCE)
@@ -9283,7 +9106,7 @@ function xeq_cmd__sequence(cmd, cmdline,
                 error(sprintf("@sequence setval: Value '%s' must be numeric", arg))
             seq_ll_write(id, int(arg))
         } else
-           error("Bad parameters:" saveline)
+            error("Bad parameters:" me TOK_SPACE saveline)
     }
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
@@ -12182,10 +12005,11 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     MODE_TEXT_STRING            = "S" # executed text is stored in a string
     MODE_STREAMS_DISCARD        = "D" # diverted streams final disposition
     MODE_STREAMS_SHIP_OUT       = "O" # diverted streams final disposition
-    MODE_XEQ_NORMAL             = "N" # execution control states for loops
-    MODE_XEQ_BREAK              = "B"
-    MODE_XEQ_CONTINUE           = "C"
-    MODE_XEQ_RETURN             = "R"
+                                      # Execution control states for loops:
+    MODE_XEQ_NORMAL             = "N" # Normal execution continues
+    MODE_XEQ_BREAK              = "B" # execution inhibited due to @break
+    MODE_XEQ_CONTINUE           = "C" # execution inhibited due to @continue
+    MODE_XEQ_RETURN             = "R" # execution inhibited due to @return
 
     # When to flush standard output
     SYNC_FORCE                  = 0 # only on request or end of job
@@ -12225,9 +12049,8 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
 
     srand()                     # Seed random number generator
     __m2_config_fs = flag_set_clear(PTYPE_ANY,
-                                   #MODE_TEXT_PRINT  MODE_XEQ_NORMAL, # set by default
                                     MODE_TEXT_PRINT  MODE_XEQ_NORMAL, # set by default
-                                    MODE_TEXT_STRING MODE_XEQ_BREAK MODE_XEQ_CONTINUE MODE_XEQ_RETURN)
+                                    MODE_TEXT_STRING MODE_XEQ_BREAK MODE_XEQ_CONTINUE MODE_XEQ_RETURN) # cleared
     initialize_prog_paths()
 
     # Initialize days per month

@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-03-13 21:48:57 cleyon>
+#  Time-stamp:  <2026-03-14 09:39:27 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -1825,6 +1825,10 @@ function info__gate_1part(opcode, optype, info, oplevel, caller, assert_true_or_
         #print_stderr("opcode=" opcode)
         if (opcode == OP_CREATE) {
             if (optype == TYPE_SEQUENCE) {
+                if (! seq_valid_p(iname))
+                    return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
+                                              sprintf("Invalid name '%s'",
+                                                      iname))
                 if (ilevel != NAME_NOT_FOUND)
                     return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
                                               sprintf("Name '%s' already defined as a %s",
@@ -2077,16 +2081,6 @@ function info__gate_2parts(opcode, optype, info, oplevel, caller, assert_true_or
 }
 
 
-# function info__gate_text(opcode, optype, text, oplevel, caller, assertTrueOrExit,
-#                          info)
-# {
-#     if (caller == EMPTY)
-#         panic("(info__gate_text) Empty caller")
-#     info__create_from_text(text, info)
-#     return info__gate(opcode, optype, info, oplevel, caller, assertTrueOrExit)
-# }
-
-
 function info__satisfies_type(info, type_target,
                               itype, base_types, type_array, tentry)
 {
@@ -2177,67 +2171,6 @@ function arrayp(arr,
     # Maybe more checks later as I think of them
     return TRUE
 }
-
-
-# Check that arr is really an ARRAY and that it's writable
-# function assert_array_okay_to_define(arr, caller,
-#                                      nparts, level, info, code)
-# {
-#     if (caller == EMPTY)
-#         panic("(assert_array_okay_to_define) Empty caller!")
-#     # Check namtab
-#     if ((nparts = nam__scan(arr, info)) == ERROR)
-#         error("(assert_array_okay_to_define) Scan error, " __m2_msg)
-#     if (nparts == 2)
-#         error(sprintf("%s: Array '%s' cannot have subscripts", caller, arr))
-#
-#     # Now call nam__lookup(info).  Must be TYPE_ARRAY && !FLAG_SYSTEM
-#     level = nam__lookup(info)
-#     if (level == NAME_NOT_FOUND)
-#         error(sprintf("%s: Name '%s' not found", caller, arr))
-#     if (info["type"] != TYPE_ARRAY)
-#         error(sprintf("%s: Name '%s' not an array", caller, arr))
-#     code = info["code"]
-#     if (flag_anytrue_p(code, FLAG_SYSTEM FLAG_READONLY))
-#         error(sprintf("%s: Array '%s' not writable", caller, arr))
-#
-#     # Maybe more checks later as I think of them
-# }
-
-
-# Check that lis is really a List and that it's writable
-# function assert_list_okay_to_define(lis, caller,
-#                                     nparts, level, info, code)
-# {
-#     if (caller == EMPTY)
-#         panic("(assert_list_okay_to_define) Empty caller!")
-#     # Check namtab
-#     if ((nparts = nam__scan(lis, info)) == ERROR)
-#         error("(assert_list_okay_to_define) Scan error, " __m2_msg)
-#     if (nparts == 2)
-#         error(sprintf("%s: List '%s' cannot have subscripts", caller, lis))
-#
-#     # Now call nam__lookup(info).  Must be TYPE_LIST && !FLAG_SYSTEM
-#     level = nam__lookup(info)
-#     if (level == NAME_NOT_FOUND)
-#         error(sprintf("%s: Name '%s' not found", caller, lis))
-#     if (info["type"] != TYPE_LIST)
-#         error(sprintf("%s: Name '%s' not a List", caller, lis))
-#     code = info["code"]
-#     if (flag_anytrue_p(code, FLAG_SYSTEM FLAG_READONLY))
-#         error(sprintf("%s: List '%s' not writable", caller, lis))
-#
-#     # Maybe more checks later as I think of them
-# }
-
-# function arr__assert_okay_to_define(arr, caller,
-#                                     level, info, type)
-# {
-#     if (caller == EMPTY)
-#         panic("(arr__assert_okay_to_define) Empty caller!")
-#     if ((level = info__create_from_text(arr, info)) == ERR_SCAN_INVALID_NAME)
-#         error(sprintf("%s: %s", caller, info["errtext"]))
-# }
 
 
 function array_deref_info(info, caller)
@@ -4582,44 +4515,6 @@ function seq_ll_incr(name, incr)
         incr = symtab[name, EMPTY, ROOT_LEVEL, "incr"]
     symtab[name, EMPTY, ROOT_LEVEL, "seqval"] += incr
 }
-# function seqinfo_ll_incr(seqinfo, incr,
-#                          name)
-# {
-#     name = info__get(seqinfo, "name")
-#     if (incr == EMPTY)
-#         incr = symtab[name, EMPTY, ROOT_LEVEL, "incr"]
-#     symtab[name, EMPTY, ROOT_LEVEL, "seqval"] += incr
-# }
-
-
-# function assert_seq_valid_name(name, caller)
-# {
-#     if (caller == EMPTY)
-#         panic("(assert_seq_valid_name) Empty caller!")
-#     if (! seq_valid_p(name))
-#         error(sprintf("%s: Sequence name '%s' not valid",
-#                       caller, name))
-# }
-# function assert_seqinfo_valid_name(info, caller,
-#                                    name)
-# {
-#     if (caller == EMPTY)
-#         panic("(assert_seqinfo_valid_name) Empty caller!")
-#     name = info__get(info, "name")
-#     if (! seq_valid_p(name))
-#         error(sprintf("%s: Sequence name '%s' not valid",
-#                       caller, name))
-# }
-
-
-# function assert_seq_okay_to_define(name, caller)
-# {
-#     if (caller == EMPTY)
-#         panic("(assert_seq_okay_to_define) Empty caller!")
-#     assert_seq_valid_name(name, caller)
-#     if (nam_ll_in(name, ROOT_LEVEL))
-#         error(sprintf("%s: Name '%s' not available", caller, name))
-# }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
 
@@ -4918,47 +4813,6 @@ function syminfo_valid_p(syminfo,
                                  name, ppf__bool(retval)))
     return retval
 }
-
-
-# function sym_create(sym, code,
-#                      nparts, name, key, info, level)
-# {
-#     dbg__print("sym", 4, sprintf("sym_create: START (sym=%s, code=%s)", sym, code))
-#
-#     # Scan sym => name, key
-#     if ((nparts = nam__scan(sym, info)) == ERROR) {
-#         error("ERROR because nam__scan failed")
-#     }
-#     name = info["name"]
-#     key  = info["key"]
-#
-#     # I believe this code can never create system symbols, therefore
-#     # there's no need to look it up.  This is because m2 internally
-#     # wouldn't call this function (it would be done more directly in
-#     # code, with the level specified directly), and the user certainly
-#     # can't do it.
-#     #level = nam_system_p(name) ? ROOT_LEVEL : __curr_level
-#     level = __curr_level
-#
-#     # Error if name exists at that level
-#     if (info_defined_lev_p(info, level, TYPE_SYMBOL))
-#         error("sym_create name already exists at that level")
-#
-#     # Error if first(code) != valid TYPE
-#     if (!flag_1true_p(code, TYPE_SYMBOL))
-#         error("sym_create asked to create a non-symbol")
-#
-#     # Add entry:        namtab[name,level] = code
-#     # Create an entry in the name table
-#     #dbg__print("sym", 2, sprintf("...
-#     # print_debugfile(sprintf("m2debug:sym_create: namtab += [\"%s\",%d]=%s", name, level, code))
-#     if (! nam_ll_in(name, level)) {
-#         nam_ll_write(name, level, code)
-#     }
-#     # What if things aren't compatible?
-#
-#     # MORE
-# }
 
 
 # This is only for internal use, to easily create and define symbols at
@@ -5679,77 +5533,6 @@ function syminfo_increment(info, incr,
 }
 
 
-# function sym_protected_p(sym,
-#                          nparts, info, name, key, code, level, retval)
-# {
-#     dbg__print("sym", 5, sprintf("(sym_protected_p) START sym='%s'", sym))
-#
-#     # Scan sym => name, key
-#     if ((nparts = nam__scan(sym, info)) == ERROR)
-#         error("(sym_protected_p) Scan error, '" sym "'")
-#     name = info["name"]
-#     key  = info["key"]
-#
-#     # Now call nam__lookup(info)
-#     level = nam__lookup(info)
-#     if (level == NAME_NOT_FOUND)
-#         return double_underscores_p(name)
-#
-#     # Error if (! name in namtab)
-#     if (!nam_ll_in(name, level))
-#         error("not in namtab!?  name=" name ", level=" level)
-#
-#     # Error if name does not exist at that level
-#     code = nam_ll_read(name, level)
-#     retval = sym_ll_protected(name, code)
-#     dbg__print("sym", 4, sprintf("(sym_protected_p) END; sym '%s' => %s", sym, ppf__bool(retval)))
-#     return retval
-# }
-# function syminfo_protected_p(syminfo,
-#                              name, type, code, retval)
-# {
-#     name = info__get(syminfo, "name")
-#     type = info__get(syminfo, "type")
-#     dbg__print("sym", 5, sprintf("(syminfo_protected_p) START sym='%s'", name))
-#
-#     if (type == PTYPE_UNDEF) {
-#         #warn("(syminfo_protected_p) type is PTYPE_UNDEF")
-#         retval = double_underscores_p(name)
-#     } else if (type == TYPE_SYMBOL || type == TYPE_ARRAY || type == TYPE_SEQUENCE) {
-#         code = info__get(syminfo, "code")
-#         if (flag_1true_p(code, FLAG_READONLY))
-#             retval = TRUE
-#         else if (flag_1true_p(code, FLAG_WRITABLE))
-#             retval = FALSE
-#         else
-#             retval = double_underscores_p(name)
-#     } else
-#         panic(sprintf("(syminfo_protected_p) Called on '%s' which has type %s",
-#                       name, type))
-#
-#     # # Scan sym => name, key
-#     # if ((nparts = nam__scan(sym, info)) == ERROR)
-#     #     error("(syminfo_protected_p) Scan error, '" sym "'")
-#     # name = info["name"]
-#     # key  = info["key"]
-#     #
-#     # # Now call nam__lookup(info)
-#     # level = nam__lookup(info)
-#     # if (level == NAME_NOT_FOUND)
-#     #     return double_underscores_p(name)
-#     #
-#     # # Error if (! name in namtab)
-#     # if (!nam_ll_in(name, level))
-#     #     error("not in namtab!?  name=" name ", level=" level)
-#     #
-#     # # Error if name does not exist at that level
-#     # code = nam_ll_read(name, level)
-#     # retval = sym_ll_protected(name, code)
-#
-#     dbg__print("sym", 4, sprintf("(syminfo_protected_p) END; sym '%s' => %s",
-#                                  name, ppf__bool(retval)))
-#     return retval
-# }
 
 
 # Protected symbols cannot be changed by the user.
@@ -5800,15 +5583,7 @@ function assert_sym_defined(sym, caller,    s)
         error(sprintf("%s: Symbol '%s' not defined",
                       caller, sym))
 }
-# function assert_syminfo_defined(syminfo, caller,
-#                                 s)
-# {
-#     if (caller == EMPTY)
-#         panic("(assert_syminfo_defined) Empty caller!")
-#     if (! syminfo_defined_p(syminfo))
-#         error(sprintf("%s: Symbol '%s' not defined",
-#                       caller, info__get(syminfo, "name")))
-# }
+
 
 # function syminfo_okay_to_define_p(syminfo,
 #                                   name, code, type)
@@ -5829,12 +5604,17 @@ function assert_sym_defined(sym, caller,    s)
 #         panic("(syminfo_okay_to_define_p) Cannot handle type '" type "'")
 #         return FALSE
 #     }
+#
+# What follows is from assert_sym_okay_to_define():
+#     # assert_sym_valid_name(name)
+#     # assert_sym_unprotected(name)
+#
 #     # if (nam_ll_in(name, __curr_level) &&
 #     #     flag_alltrue_p((code = nam_ll_read(name, __curr_level)), TYPE_SYMBOL) &&
 #     #     flag_allfalse_p(code, FLAG_READONLY))
 #     #     return TRUE
 #     # if (nam_ll_in(name, __curr_level)) return FALSE
-#     #
+#
 #     # if (nam_ll_in(name, ROOT_LEVEL) &&
 #     #     flag_alltrue_p((code = nam_ll_read(name, ROOT_LEVEL)), TYPE_SYMBOL) &&
 #     #     flag_allfalse_p(code, FLAG_READONLY))
@@ -5849,71 +5629,10 @@ function assert_sym_defined(sym, caller,    s)
 #     # if (double_underscores_p(name))
 #     #     return FALSE
 #
-#     # # You can redefine a symbol, but not a command, function, or sequence
-#     # # if (!name_available_in_all_p(name, TYPE_USER TYPE_FUNCTION TYPE_SEQUENCE))
-#     # #     error("Name '" name "' not available:" $0)
-#     # return TRUE
-# }
-
-# function assert_sym_okay_to_define(name,
-#                                    code)
-# {
-#     assert_sym_valid_name(name)
-#     assert_sym_unprotected(name)
-#
-#     if (nam_ll_in(name, __curr_level) &&
-#         flag_alltrue_p((code = nam_ll_read(name, __curr_level)), TYPE_SYMBOL) &&
-#         flag_allfalse_p(code, FLAG_READONLY))
-#         return TRUE
-#     if (nam_ll_in(name, __curr_level)) return FALSE
-#
-#     if (nam_ll_in(name, ROOT_LEVEL) &&
-#         flag_alltrue_p((code = nam_ll_read(name, ROOT_LEVEL)), TYPE_SYMBOL) &&
-#         flag_allfalse_p(code, FLAG_READONLY))
-#         return TRUE
-#     if (nam_ll_in(name, ROOT_LEVEL)) return FALSE
-#
-#     # Can't shadow a system symbol
-#     if (nam_ll_in(name, ROOT_LEVEL) &&
-#         flag_alltrue_p((code = nam_ll_read(name, ROOT_LEVEL)), TYPE_SYMBOL FLAG_SYSTEM))
-#         return FALSE
-#
-#     if (double_underscores_p(name))
-#         return FALSE
-#
 #     # You can redefine a symbol, but not a command, function, or sequence
 #     # if (!name_available_in_all_p(name, TYPE_USER TYPE_FUNCTION TYPE_SEQUENCE))
 #     #     error("Name '" name "' not available:" $0)
 #     return TRUE
-# }
-# function assert_syminfo_okay_to_define(syminfo, caller,
-#                                        name, code, type)
-# {
-#     if (caller == EMPTY)
-#         panic("(assert_syminfo_okay_to_define) Empty caller!")
-#
-#     assert_syminfo_valid_name(syminfo, caller)
-#     assert_syminfo_unprotected(syminfo, caller)
-#
-#     if (! syminfo_okay_to_define_p(syminfo))
-#         error(sprintf("%s: Symbol '%s' cannot be defined here",
-#                       caller, info__get(syminfo, "name")))
-# }
-
-
-# Throw an error if symbol IS protected
-# function assert_sym_unprotected(sym)
-# {
-#     if (sym_protected_p(sym))
-#         error("Symbol '" sym "' protected:" $0)
-# }
-# function assert_syminfo_unprotected(syminfo, caller)
-# {
-#     if (caller == EMPTY)
-#         panic("(assert_syminfo_unprotected) Empty caller!")
-#     if (syminfo_protected_p(syminfo))
-#         error(sprintf("%s: Symbol '%s' protected",
-#                       caller, info__get(syminfo, "name")))
 # }
 
 
@@ -5925,35 +5644,6 @@ function assert_sym_valid_name(sym, caller)
     if (! sym_valid_p(sym))
         error("Symbol '" sym "' not valid:" $0)
 }
-# function assert_syminfo_valid_name(syminfo, caller)
-# {
-#     if (caller == EMPTY)
-#         panic("(assert_syminfo_valid_name) Empty caller!")
-#     if (! syminfo_valid_p(syminfo))
-#         error(sprintf("%s: Name '%s' not valid",
-#                       caller, info__get(syminfo, "name")))
-# }
-
-
-# function symtab_whats_left(x, k)
-# {
-#         for (k in symtab) {
-#             split(k, x, SUBSEP)
-#             if (double_underscores_p(x[1]))
-#                 continue
-#             print sprintf("whats_left: symtab['%s', '%s', %d, %s]=%s",
-#                           x[1], x[2], x[3], x[4],
-#                           symtab[x[1], x[2], x[3], x[4]])
-#             if (x[4] == "agg_block")
-#                 blk_master_delete(symtab[x[1], x[2], x[3], x[4]])
-#         }
-# #         for (k in del_list) {
-# #             split(k, x, SUBSEP)
-# #             dbg__print("sym", 3, sprintf("(arr_clear) Delete symtab['%s', '%s', %d, %s]",
-# #                                         x[1], x[2], x[3], x[4]))
-# #             delete symtab[x[1], x[2], x[3], x[4]]
-# #         }
-# }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
 
@@ -6311,7 +6001,6 @@ function xeq_cmd__array(cmd, cmdline,
     name = $1
     info__create_from_text(name, info)
     info__gate(OP_CREATE, TYPE_ARRAY, info, __curr_level, me, TRUE)
-    # assert_syminfo_okay_to_define(info, me)
     # if (nam_ll_in(name, __curr_level))
     #     error(sprintf("%s: Array '%s' already defined",
     #                   me, name))
@@ -6603,13 +6292,9 @@ function xeq_cmd__data(cmd, cmdline,
         error(me ": Bad parameters")
 
     lis = $1
-    # assert_list_okay_to_define(lis, me)
     save_line = $0
     save_lineno = LINE()
 
-    # # Check ARR.  assert_list_okay_to_define() passed, so this won't fail
-    # nam__scan(lis, info)
-    # level = nam__lookup(info)
     level = info__create_from_text(lis, info)
     info__gate(OP_UPDATE, TYPE_LIST, info, __curr_level, me, TRUE)
     lis_clear(lis, level)
@@ -6679,7 +6364,6 @@ function xeq_cmd__define(cmd, cmdline,
 #NEW:
     # if ((level = info__create_from_text(name, info)) == ERR_SCAN_INVALID_NAME)
     #     error(sprintf("%s: Invalid name '%s'", me, name))
-    # assert_syminfo_okay_to_define(info, me)
     # if (syminfo_defined_p(info)) {
     #     if (nop_if_defined)
     #         return
@@ -7414,11 +7098,7 @@ function xeq_cmd__filedata(cmd, cmdline,
     silent = first(cmd) == "s"
     lis = $1
     filename = $2
-    # assert_list_okay_to_define(lis, me)
 
-    # Check LIS.  assert_list_okay_to_define() passed, so this won't fail
-    # nam__scan(lis, info)
-    # level = nam__lookup(info)
     level = info__create_from_text(lis, info)
     info__gate(OP_UPDATE, TYPE_LIST, info, __curr_level, me, TRUE)
     lis_clear(lis, level)
@@ -7488,7 +7168,6 @@ function xeq_cmd__filedefine(cmd, cmdline,
     name  = $1
     info__create_from_text(name, info)
     info__gate(OP_CREATE, PTYPE_SCALAR, info, __curr_level, me, TRUE)
-    # assert_syminfo_okay_to_define(info, me)
     # These contortions because a filename might have embedded spaces
     $1 = ""
     sub("^[ \t]*", "")
@@ -8227,9 +7906,7 @@ function xeq_cmd__incr(cmd, cmdline,
     name = $1
     info__create_from_text(name, info)
     info__gate(OP_UPDATE, PTYPE_NUMBER, info, __curr_level, me, TRUE)
-    # assert_syminfo_okay_to_define(info, me)
     # assert_sym_defined(name, me)
-    # assert_syminfo_defined(info, me)
     # if (!sym_defined_p(name) && !seq_defined_p(name))
     #     error(sprintf("%s: Name '%s' not defined",
     #                   me, name))
@@ -8272,7 +7949,6 @@ function xeq_cmd__input(cmd, cmdline,
     name = (NF == 0) ? "__INPUT__" : $1
     info__create_from_text(name, info)
     info__gate(OP_CREATE, PTYPE_SCALAR, info, __curr_level, me, TRUE)
-    # assert_syminfo_okay_to_define(info, me)
 
     input = EMPTY
     getstat = getline input < TTY
@@ -8302,7 +7978,6 @@ function xeq_cmd__list(cmd, cmdline,
     name = $1
     info__create_from_text(name, info)
     info__gate(OP_CREATE, TYPE_LIST, info, __curr_level, me, TRUE)
-    # assert_syminfo_okay_to_define(info, me)
     # if (nam_ll_in(name, __curr_level))
     #     error(sprintf("%s: List '%s' already defined",
     #                   m3, name))
@@ -8376,7 +8051,6 @@ function xeq_cmd__local(cmd, cmdline,
         error(sprintf("%s: Invalid name '%s'", me, name))
     info__create_from_text(name, info)
     info__gate(OP_CREATE, TYPE_SYMBOL, info, __curr_level, me, TRUE)
-    # assert_syminfo_okay_to_define(info, me)
     if (flag_1true_p(info__get(info, "code"), FLAG_SYSTEM))
         error(sprintf("%s: Name '%s' is protected",
                       me, name))
@@ -8413,7 +8087,6 @@ function parse__longdef(    name, sym_block, body_block, pstat,
     name = $2
     info__create_from_text(name, info)
     info__gate(OP_CREATE, PTYPE_SCALAR, info, __curr_level, me, TRUE)
-    # assert_syminfo_okay_to_define(info, "@longdef")
     blktab[sym_block, 0, "name"] = name
     blktab[sym_block, 0, "body_block"] = body_block
     blktab[sym_block, 0, "dstblk"] = body_block
@@ -8462,7 +8135,6 @@ function xeq__BLK_LONGDEF(longdef_block,
     name = blktab[longdef_block, 0, "name"]
     info__create_from_text(name, info)
     info__gate(OP_CREATE, PTYPE_SCALAR, info, __curr_level, me, TRUE)
-    # assert_syminfo_okay_to_define(info, "@longdef")
 
     body_block = blktab[longdef_block, 0, "body_block"]
     dbg__print_block("sym", 3, body_block, "(xeq__BLK_LONGDEF) body_block")
@@ -8899,7 +8571,6 @@ function xeq_cmd__null(cmd, cmdline,
     name = $1
     info__create_from_text(name, info)
     info__gate(OP_CREATE, PTYPE_SCALAR, info, __curr_level, me, TRUE)
-    # assert_syminfo_okay_to_define(info, me)
     # XXX No checking, dangerous!
     sym_store(name, "")
     dbg__print("xeq", 2, "(xeq_cmd__null) END")
@@ -8947,9 +8618,6 @@ function xeq_cmd__readonly(cmd, cmdline,
     # if ((level = info__create_from_text(name, info)) == NAME_NOT_FOUND)
     #     error(me ": " info["errtext"])
     #
-    # assert_syminfo_okay_to_define(info, me)
-    # assert_syminfo_defined(info, me)
-    # assert_syminfo_unprotected(info, me)
     # code = info__get(info, "code")
     # if (flag_allfalse_p(code, TYPE_ARRAY TYPE_SYMBOL))
     #     error("@readonly: Name must be symbol or array")
@@ -9014,8 +8682,9 @@ function xeq_cmd__sequence(cmd, cmdline,
     if (NF == 0)
         error("Bad parameters: Missing sequence name:" $0)
     id = $1
+    if (! seq_valid_p(id))
+        error(me ": Name '" id "' is not valid")
     level = info__create_from_text(id, info)
-    #assert_seqinfo_valid_name(info, me)
 
     if (NF == 1)
         $2 = "create"
@@ -9024,7 +8693,6 @@ function xeq_cmd__sequence(cmd, cmdline,
         error("Name '" id "' not defined [sequence]:" $0)
     if (NF == 2) {
         if (action == "create") {
-            # assert_seq_okay_to_define(id, "@" cmd)
             info__gate(OP_CREATE, TYPE_SEQUENCE, info, ROOT_LEVEL, me, TRUE)
             #
             nam_ll_write(id, ROOT_LEVEL, TYPE_SEQUENCE FLAG_INTEGER)
@@ -9208,11 +8876,6 @@ function xeq_cmd__split(cmd, cmdline,
         wantfs = FALSE
 
     # Check array LIS.
-    # assert_list_okay_to_define(lis, me)
-    # # Since assert_list_okay_to_define() passed,
-    # # these calls won't fail either...
-    # nam__scan(lis, info)
-    # level = nam__lookup(info)
     level = info__create_from_text(lis, info)
     info__gate(OP_UPDATE, TYPE_LIST, info, __curr_level, me, TRUE)
     lis_clear(lis, level)
@@ -9466,7 +9129,6 @@ function xeq_cmd__undefine(cmd, cmdline,
 
     if (type == TYPE_SYMBOL) {
         name = info__get(info, "name")
-        # assert_syminfo_unprotected(info, "@" cmd)
         # System symbols, even unprotected ones -- despite being subject
         # to user modification -- cannot be undefined.
         # if (nam_system_p(name))
@@ -9832,7 +9494,6 @@ function _c3_expr(    var, e, op1, op2, m2,
         var = _c3_advance()
         sub(/=.*$/, "", var)
         info__create_from_text(var, info)
-        # assert_syminfo_okay_to_define(info, "@expr")
         info__gate(OP_UPDATE, TYPE_SYMBOL, info, __curr_level, "@expr", TRUE)
         # match() sets RLENGTH which includes the match character [^=].
         # But that's the start of the value -- I need to back up over it
@@ -11398,7 +11059,6 @@ function xeq_fn__join(fn, M, nparam, param,
 
     # # TODO Need real checks here!
     # assert_sym_valid_name(lis, me)
-    # assert_list_defined(lis, me)
 
     if (nparam > 1) {
         fs = param[2]        # too simple
@@ -12585,9 +12245,6 @@ function end_program(diverted_streams_final_disposition,
     # NOTE - dev stuff here
 #    nam_purge(ROOT_LEVEL)
     #sym_purge(ROOT_LEVEL)
-
-    #if (tracing_event_p(TRACE_SYMBOL_READ_WRITE))
-#        symtab_whats_left()
 
 #    if (tracing_event_p(TRACE_BLOCKS))
 #        blk_nicer_dump_blktab()

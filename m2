@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-03-12 22:17:04 cleyon>
+#  Time-stamp:  <2026-03-13 21:48:57 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -1836,12 +1836,23 @@ function info__gate_1part(opcode, optype, info, oplevel, caller, assert_true_or_
                 retval = TRUE; break
 
             } else if (optype == TYPE_COMMAND) {
+                # If name starts with "__", it must be a valid hook name.
+                # Double underscores are right out.
+                #    name !~ /__(m2_begin|m2_end|file_open|file_close|file_suspend|file_resume)_hook/)
                 if (!cmd_valid_p(iname) ||
                     double_underscores_p(iname) ||
                     (substr(iname, 1, 2) == "__" &&
-                     iname !~ /__(m2_begin|m2_end|file_open|file_close|file_suspend|file_resume)_hook/))
+                     iname !~ /__((m2_(begin|end))|(file_(open|close|suspend|resume)))_hook/))
                     return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
                                               sprintf("Command name '%s' not valid", iname))
+                # FIXME This is not quite sufficient (I think).  I probably need
+                # to do a full nam__scan() / nam__lookup() because I don't want
+                # to shadow a system symbol.  At least I need to be more careful
+                # than "it's not in the current level, looks good!!"
+                if (nam_ll_in(iname, __curr_level) ||
+                    nam_ll_in(iname, ROOT_LEVEL))
+                    return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
+                                              sprintf("Command name '%s' not available", iname))
                 retval = TRUE; break
 
             } else if (optype == TYPE_SYMBOL ||
@@ -3373,31 +3384,6 @@ function execute__command(name, cmdline,
         panic(sprintf("(execute__command) [@%s] Level mismatch; old_level=%d, __curr_level=%d",
                       name, old_level, __curr_level))
 }
-
-
-function assert_cmd_okay_to_define(name, caller)
-{
-    if (caller == EMPTY)
-        panic("(assert_cmd_okay_to_define) Empty caller!")
-    if (!cmd_valid_p(name))
-        error(sprintf("%s: Command name '%s' not valid",
-                      caller, name))
-
-    # If name starts with "__", it must be a valid hook name, otherwise error
-    if (substr(name, 1, 2) == "__" &&
-        name !~ /__(m2_begin|m2_end|file_open|file_close|file_suspend|file_resume)_hook/)
-        error(sprintf("%s: Command name '%s' not valid",
-                      caller, name))
-
-    # FIXME This is not quite sufficient (I think).  I probably need
-    # to do a full nam__scan() / nam__lookup() because I don't want
-    # to shadow a system symbol.  At least I need to be more careful
-    # than "it's not in the current level, looks good!!"
-    if (nam_ll_in(name, __curr_level) ||
-        nam_ll_in(name, ROOT_LEVEL))
-        error(sprintf("%s: Name '%s' not available:",
-                      caller, name))
-}
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
 
@@ -3732,15 +3718,17 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
                             # not ready to run yet.  (That next bit
                             # happens in xeq__BLK_USER.)
                             #
-                            # XXX There should be a gate here.  It should not
-                            # be possible to shadow an existing name, unless
+                            # OLDTHINK: There should be a gate here.  It should
+                            # not be possible to shadow an existing name, unless
                             # you are re-defining a command.
-                            if (! nam_ll_in(name, __curr_level)) {
-                                new_cmd_name = blktab[new_block, 0, "name"]
-                                dbg__print("parse", 3, sprintf("(parse) [" parser_label "] Declaring new user command '%s' at level %d",
-                                                               new_cmd_name, __curr_level))
-                                nam_ll_write(new_cmd_name, __curr_level, TYPE_USER)
-                            }
+                            #
+                            # NEW HOTNESS: parse__newcmd() already passed
+                            #   info__gate(OP_CREATE, TYPE_COMMAND, ..., TRUE)
+                            # so presumably the name is safe to declare.
+                            new_cmd_name = blktab[new_block, 0, "name"]
+                            dbg__print("parse", 3, sprintf("(parse) [" parser_label "] Declaring new user command '%s' at level %d",
+                                                           new_cmd_name, __curr_level))
+                            nam_ll_write(new_cmd_name, __curr_level, TYPE_USER)
                             return TRUE
                         }
                         error(sprintf("%s: Parse error; Missing terminator; wanted '%s' but found '@endcmd'",
@@ -8672,7 +8660,6 @@ function parse__newcmd(    name, user_block, body_block, pstat, nparam, p, pname
 
         name = substr(name, 1, RSTART-1) substr(name, RSTART+RLENGTH)
     }
-    assert_cmd_okay_to_define(name, "@newcmd")
     info__create_from_text(name, info)
     info__gate(OP_CREATE, TYPE_COMMAND, info, __curr_level, me, TRUE)
 

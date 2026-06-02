@@ -1,4 +1,4 @@
-@define __SECURE__ 1
+@define __SECURE__ 2
 Secure level is @__SECURE__@
 @if exists(/etc/passwd)
 Password file exists

@@ -1,0 +1,11 @@
+This is line 1; line 2 is @for loop
+This is line 3; LINE=3
+This is line 4; LINE=4
+This is line 5; LINE=5
+This is line 3; LINE=3
+This is line 4; LINE=4
+This is line 5; LINE=5
+This is line 3; LINE=3
+This is line 4; LINE=4
+This is line 5; LINE=5
+This is line 7; line 6 was the @next command

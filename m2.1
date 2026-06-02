@@ -35,7 +35,7 @@
 .Sh DESCRIPTION
 .Nm
 is a line-oriented macro processor, a
-.Qq little brother
+.Dq little brother
 to the
 .Xr m4 1
 macro processor found on Unix systems.
@@ -54,7 +54,9 @@ or
 .Ql NAME=
 to define with empty value.
 .It
-Include files.  Special include directives in a file are
+Include files.  Special
+.Ic @include
+directives in a file are
 replaced with the contents of the named file.
 Includes can
 be nested, with one included file including another.
@@ -65,21 +67,28 @@ Different parts of the text can be included in the final output, often
 based upon whether a macro is or is not defined.
 .It
 Comments are removed from the output.
-.Ql @comment
+.Ic @comment
 commands appear on a line of their own and are dropped from the output.
-.Ql @rem ...@
+.Ic @rem ...@
 macros are embedded in the input text and produce no output.
 Use
-.Ql @ignore
+.Ic @ignore
 for a multi-line comment.
 .It
 Manage multiple output data streams with diversions.
 Different streams may be saved to different files.
+.It
+Partition symbol names into different namespaces.
+.Va Legal::approved
+and
+.Va Audit::approved
+are both co-existing symbols named
+.Dq approved .
 .El
-.Ss Syntax
+.Ss m2 Syntax
 .Nm
 does not scan
-.Qq tokens
+.Dq tokens
 or replace unadorned text: macro
 substitution must be explicitly requested by enclosing the macro
 name in
@@ -90,7 +99,7 @@ Thus, any occurrence of
 in the input is replaced in the output by the corresponding value.
 To compensate for the burden of having to manually invoke
 macro expansion, there is conversely no need to
-.Qq quote
+.Dq quote
 identifiers to protect against unwanted or inadvertent replacement,
 which, depending upon the insistence of
 .Em other
@@ -117,25 +126,30 @@ invocations was a conscious design decision by m1's author, but it
 presents challenges when attempting to parse more advanced syntax, such
 as invoking macros in a nested fashion.
 It is difficult to distinguish, purely lexically:
-.Dl This is @one and 2@ AND ALSO @three and 4@.
+.Dl @one + 2@\~\~AND ALSO\~\~@three + 4@
 from
-.Dl This is @mid mySym @myBegPos1 Field1@ myLen@.
+.Dl @substr Symbol\~\~@Pos1 Field1@\~\~Length@
 .Pp
 To alleviate scanning ambiguities, any characters enclosed in
 at\&-sign braces
-.Qq @{...}
+.Ql @{...}
 will be recursively scanned and expanded.
 The text between the braces is implicitly interpreted as if it
 were surrounded by
-.Qq @
+.Ql @
 characters, so
 .Ql @{SYMBOL}
-is correct.
+is correct; it means
+.Ql @SYMBOL@ .
 Thus, the example above is correctly written:
 .\"  See file tests/SUBSTR/002/examp.m2
-.Dl This is @mid mySym @{myBegPos1 Field1} @{myLen}@.
+.Dl @substr Symbol @{Pos1 Field1} @{Length}@
 .\"  This syntax is admittedly klunky, but with repeated exposure,
 .\"  it soon becomes almost numbingly bearable.
+.Qq @{Length}
+is still required to use braces even though there are no parameters
+because you must still expand the value of the symbol
+.Va Length .
 .Pp
 .Em Example :
 .Bd -literal -offset indent -compact
@@ -146,452 +160,14 @@ uses the value in
 to look up data from the list
 .Va data_list .
 The
-.Qq @{...}
+.Ql @{...}
 is required whenever you invoke macros inside other macros, and failure
 to do so will result in obscure and hard\&-to-debug errors.
 .Pp
-There may be occasions when you wish to continue a logical line
-onto the next physical line.
-It is common in many Unix programs for a
-.Ql \e
-character at end of line to do this.
-However,
-.Nm
-is not in the business of altering, without being requested, text which
-may be sent to other programs.
-In order to continue lines, the characters
-.Qq @\e
-may be used at the end of a logical line, indicating that the next line shall
-be joined to the first line without any intervening newline.
-If you wish to append the next line with a newline separator,
-end the current line with
-.Qq @\en
-This allows m2 to work on files with backslashes without disturbing
-them, while still providing a mechanism for line continuation that will
-not be triggered spuriously.
-.Qq @\e-
-will also remove leading whitespace from the subsequent line.
-.Pp
-.Em Example :
-.Bd -literal -offset indent -compact
-Foo@\e
-  bar
-\ \ \ => Foo  bar
-Foo@\en
-bar
-\ \ \ => Foo
-\ \ \ => bar
-Foo@\e-
-  bar
-\ \ \ => Foobar
-.Ed
-.Ss Commands
-Control commands
-.Po
-such as
-.Ql @if ,
-.Ql @define ,
-etc
-.Pc
-are distinguished by an
-.Qq @
-as the first character at the beginning of a line.
-They consume the entire line.
-Some commands have a
-.Qq silent
-alternate form, distinguished by a leading
-.Qq s
-in the command name, which prints fewer error messages or performs some
-slightly altered function.
-For example, the silent variant to include a file is
-.Ql @sinclude .
-.Pp
-The following table lists control commands to
-evaluate, control, or define macros for subsequent processing:
-.Pp
-.\" This table could use a little formatting TLC...
-.Bl -tag -width @if(_not)_defined -offset indent
-.It @append NAME TEXT
-Add TEXT to an already defined NAME.
-If NAME is a symbol, TEXT is textually appended to its definition.
-If NAME is a list, TEXT is added as the next element.
-.It @array ARR
-Declare ARR to be an array.
-See also
-.Va @list .
-.It @break
-Interrupt execution of enclosing loop.
-@break is only valid inside a @for, @foreach, or @while block.
-.It @case NAME [PREAMBLE ...] [@of TEXT ...] [@otherwise ...] @endcase
-Evaluate value of NAME, comparing it with
-each successive @of TEXT.
-If a matching @of branch is found, execute the preamble (if any) and the
-of\&-branch text and commands.
-If no @of text matches, use text from @otherwise block if present.
-Execution of the @otherwise block does
-.Em not
-execute the preamble.
-(The purpose of the preamble is to provide "boiler-plate" header text for
-known cases.
-The text and commands of the @otherwise block are expected
-to compensate for the lack of a preamble.)
-.It @cleardivert [N ...]
-Clear stream(s) specified by N.
-If no arguments are provided then all streams are cleared.
-See the
-.Sx Streams and Diversions
-section.
-.It @comment [TEXT]
-Comment; ignore line.  Also @@, @c, @;, and @#.
-.Ql @comment ,
-.Ql @c ,
-and
-.Ql @@
-must be followed by whitespace in order to be recognized as comment commands.
-.Ql @;
-and
-.Ql @#
-are recognized as comments whenever they appear in columns 1 and 2.
-.It @continue
-Continue next iteration of enclosing loop.
-@continue is only valid inside a @for, @foreach, or @while block.
-.It @data LIS ... @enddata
-Store all lines until
-.Ql @enddata
-into list
-.Va LIS .
-Any previously existing list entries are deleted.
-LIS must declared with
-.Va @list .
-See also
-.Va @filedata .
-.It @debug [TEXT]
-If debugging, send TEXT to the debug file.
-See also
-.Va __DEBUG__ .
-.It @decr NAME [N]
-Subtract N (default 1) from an already defined NAME.  See note at @incr.
-.It @default NAME VAL
-Like @define, but no\&-op if NAME already defined.
-.It @define NAME [TEXT]
-Set value of NAME to TEXT.
-If TEXT is missing, a value of 1 is assumed.
-See also
-.Va @null .
-.It @divert [N]
-Divert subsequent text to stream N.
-Default 0 resets to standard output.
-If N is negative, text is discarded.
-See the
-.Sx Streams and Diversions
-section.
-.It @divpop
-Remove the current diversion and restore the previous diversion.
-See also
-.Va @divpush .
-.It @divpush N
-Create a new diversion to stream N while saving the current one to be
-restored later.
-See also
-.Va @divpop .
-.It @dump [WHAT] [FILE]
-Output names and definitions to FILE.
-WHAT can be one of "symbols", "sequences", "commands", "names",
-or an integer, which is assumed to be a block number.
-.\"   "@dump blocks" also works (poorly) and is deliberately undocumented.
-If WHAT is omitted, "symbols" is assumed.
-If FILE is omitted, output is sent to
-.Va __DEBUGFILE__ .
-.It @dumpall WHAT [FILE]
-Like @dump but include System symbols.
-.It @dumpdef [SYM ...]
-Output definition of SYM to
-.Va __DEBUGFILE__ .
-More than one symbol may be listed.
-If no symbols are specified, all symbols are dumped.
-.It @echo [TEXT]
-Send TEXT to standard error.
-Also called @errprint.
-.Ql @warn
-is similar, but adds the current file name and line number to output.
-Variant
-.Ql @secho
-does not automatically add a newline to output.
-.It @else
-Switch to the alternate condition branch of an @if block.
-Only one @else statement is allowed per @if block.
-.It @endcase
-Indicate the end of a @case structure.
-Also called @esac thanks to Algol\ 68.
-.It @endcmd
-Indicate the end of a @newcmd definition.
-.It @enddata
-Indicate the end of a @data block.
-Also called @eod.
-.It @endif
-Indicate the end of an @if or @unless condition block.
-Also called @fi, keeping the dream alive.
-.It @endlongdef
-Indicate the end of a multi-line @longdef.
-.It @endwhile
-Indicate the end of a @while or @until loop.
-Also called @wend, by few.
-.It @error [TEXT]
-Send TEXT to standard error; exit code 2.
-Any diverted streams are discarded, although any wrapped text is evaluated.
-Variant
-.Ql @serror
-prints only TEXT, omitting file and line number information, for
-complete control over error messages.
-.It @esyscmd CMDLINE ...
-Execute CMDLINE in a subshell.
-Standard output is captured into the output stream as normal.
-Standard input is set to
-.Pa /dev/null ,
-but standard error is not modified.
-The command's exit code is saved in
-.Va __SYSVAL__ .
-.It @eval TEXT
-Parse and evaluate TEXT as a command.
-.It @exit [N]
-Immediately stop parsing; exit with status N.
-If N is omitted, the current exit status is unchanged.
-Invalid N, values less than zero, or greater than 126, are changed to 1.
-If variant
-.Ql @sexit
-is used, or if exit status is non-zero, diverted streams are discarded.
-Commands deferred with @wrap are processed regardless of N value.
-See also
-.Va __EXIT__ .
-.It @filedata LIS FILE
-Read each line from FILE into list LIS.
-Any previously existing list entries are deleted before reading file contents.
-Variant
-.Ql @sfiledata
-does not print an error message if FILE does not exist.
-LIS must be declared as a list, therefore user code must say
-.Ql @list LIS
-before @filedata can be used.
-See also
-.Va @data .
-.It @filedefine NAME FILE
-Read FILE contents to define NAME.
-This is not intended to be a full\&-blown file inputter (use @filedata
-for that) but rather just to read short snippets like a file path
-or username.
-Multi-line values are accepted but the final
-trailing newline, if any, is stripped.
-Variant
-.Ql @sfiledefine
-does not print an error message if FILE does not exist.
-See also
-.Va @define .
-.It @for VAR START END [INCR] ... @next VAR
-Execute a loop with VAR taking on successive
-integer values specified by START and END.
-Default INCR is 1.
-.It @foreach VAR ARR|LIS ... @next VAR
-Execute a loop with VAR taking on successive values of
-.Em keys
-to an array or list.
-NOTE: Different Awk implementations may return array keys in differing order.
-However, lists and data created with
-.Ql @data
-or
-.Ql @filedata
-are guaranteed to return their integer indices in numerical order.
-.It @if EXPR ... [@else ...] @endif
-Include subsequent lines of text if boolean expression is True.
-If EXPR is a simple NAME, check if NAME is True.
-See section
-.Sx Boolean Expressions .
-.It @ignore PATTERN
-Discard input until a line that matches regular expression PATTERN is found.
-.It @include FILE
-Read and process contents of FILE.
-Variant
-.Ql @sinclude
-does not print an error message if FILE does not exist.
-See also
-.Va @paste .
-.It @incr NAME [N]
-Add N (1) to an already defined NAME.
-@incr and @decr may be used on both symbols and sequences.
-Note: Unlike m4, @incr modifies the named symbol and produces no expansion output.
-.It @initialize NAME VAL
-Like @define, but error if NAME already defined.
-.It @input [NAME]
-Read a single line from keyboard to define NAME.
-No prompt is issued; if you want one, use @echo.
-If NAME is omitted, value is stored in symbol
-.Va __INPUT__ .
-.It @list LIS
-Declare LIS to be a list.
-See also
-.Va @array .
-.It @literal PATTERN
-Read and print input literally, without interpretation, until line that
-matches regular expression PATTERN.
-.It @local NAME
-Declare NAME as a symbol local to the current level.
-.It @longdef NAME ... @endlongdef
-Set value of NAME to <...> (all lines until @endlongdef).
-.It @newcmd NAME ... @endcmd
-Create a user command NAME (lines until @endcmd).
-.It @next VAR
-Continue execution of next iteration of enclosing @for or @foreach loop.
-.It @nextfile
-Ignore remainder of current file and resume processing with the next file.
-.It @null NAME
-Set value of NAME to the empty string.
-Note the difference between this command and
-.Ql @define NAME
-which sets the value of NAME to 1.
-.It @of TEXT
-Begin a new branch of an enclosing @case structure
-matching TEXT at run time.
-Every branch's TEXT label must be unique.
-.It @otherwise
-Begin a new branch of an enclosing @case structure
-which is executed if no @of branch triggers.
-Only one @otherwise branch is permitted per @case structure.
-.It @paste FILE
-Insert FILE contents literally, with no changes or macros.
-Variant
-.Ql @spaste
-does not print an error message if FILE does not exist.
-.It @readonly NAME
-Make NAME unchangeable \(em cannot be undone.
-.It @return [VALUE]
-Cease execution of a user command.
-@return is only valid inside a @newcmd definition.
-.It @sequence ID ACTION [N]
-Create and manage sequences.
-See the
-.Sx Sequences
-section.
-.It @shell PATTERN [PROG]
-Evaluate input until PATTERN and send raw data to PROG.
-Output stream is captured; shell exit status is stored in
-.Va __SYSVAL__ .
-If PROG is not specified, the value of symbol
-.Va M2_SHELL
-will be used if defined; if not, the value of environment variable
-.Ev SHELL
-will be used.
-If also not defined, the value of
-.Va __PROG__[sh]
-will be used.
-PROG should default to a reasonable shell, but might be overridden to
-run other useful programs such as an alternative shell, an email message
-reader, or /usr/bin/bc.
-It must be a program that functions as a filter (in the Unix sense,
-i.e., reading from standard input and writing to standard output).
-Standard error is not redirected, so any errors will appear on the terminal.
-.It @split NAME LIS [FS]
-Split value of NAME into N individual fields, storing them in LIS elements 1..N.
-Any previous entries in LIS are deleted.
-If
-.Va FS
-is specified, use it as field separator.
-If not and symbol
-.Va __FS__
-is defined, use its value as field separator.
-If neither condition is true, use Awk's default
-.Va FS ,
-which means fields will be split on whitespace.
-See also
-.Va @join@ , @list .
-.It @syscmd CMDLINE ...
-Execute CMDLINE using Awk's system() function.
-Standard output and standard error are both discarded.
-The command's exit code is saved in
-.Va __SYSVAL__ .
-.It @tracemode [FLAG...]
-With no arguments, reset trace flags to default value.
-Preceding flag with
-.Qq +
-or
-.Qq \-
-will add to or remove from trace flags;
-otherwise, overwrite trace flags with new value.
-See also
-.Va __TRACEMODE__ .
-.It @traceoff [SYM ...]
-Disable tracing for specified symbols.
-If SYM is omitted, disable tracing for all symbols.
-.It @traceon [SYM ...]
-Enable tracing for specified symbols.
-If SYM is omitted, enable tracing for all symbols.
-See also
-.Va __TRACE__ .
-.It @typeout
-Print remainder of input file literally; no macro processing will be done.
-.It @undefine NAME
-Remove definition of NAME.
-Symbols can also be removed from the command line with
-.Ql U=<symName>
-.It @undivert [N ...] | N FILE
-Inject stream N (default all) into current stream.
-If no arguments are provided then all streams are injected.
-With second form, stream N is output to FILE.
-Undiverted streams are automatically cleared.
-See the
-.Sx Streams and Diversions
-section.
-.It @unless EXPR ... [@else ...] @endif
-Include subsequent text if EXPR is False.
-If EXPR is a simple NAME, check if NAME == 0 (or undefined).
-See section
-.Sx Boolean Expressions .
-.It @until EXPR ... @endwhile
-Repeatedly evaluate input lines while boolean expression is False
-and stop when it becomes True.
-.It @while EXPR ... @endwhile
-Repeatedly evaluate input lines while boolean expression is True
-and stop when it becomes False.
-.It @wrap TEXT
-Defer TEXT until m2 has processed all files and diversions and is about to exit.
-Wrapped text will be evaluated as a command; output will occur after diverted streams, if any.
-Wraps are always processed, even if @error or @exit commands are encountered.
-.\"     An m2 internal panic() will exit immediately without processing wraps.
-.El
-.Ss Including Files
-.Nm
-can incorporate the contents of files into its data stream.
-.Ql @include
-retrieves and processes the file data for macros, while
-.Ql @paste
-reads the file contents with no modifications.
-Attempting to
-.Ql @include
-or
-.Ql @paste
-a non-existent file results in an error.
-However, if the
-.Qq silent
-variants
-.Po
-.Ql @sinclude ,
-.Ql @spaste
-.Pc
-are used, no message is printed.
-If @include or @paste cannot find the specified FILE in the current directory,
-it will consult the include path found in
-.Va __INCPATH__ .
-Directories can be inserted into the include path by specifying
-.Ql I=<directory>
-on the command line.
-Paths specified this way are examined before entries from M2PATH,
-to allow run-specific overrides.
-The include path is also used, if needed, for file names passed on the
-command line.
-Elements may be removed from the include path by specifying
-.Ql R=<directory>
-on the command line.
-.Ss Functions
+.Bl -inset
+.It Em Functions :
 Specifying more than one word between
-.Qq @
+.Ql @
 characters, as in
 .Dl @func AAA BBB CCC@
 is used as a crude form of function invocation.
@@ -614,7 +190,7 @@ simply ignored.
 \ \ \ => Hello, world!  m2 sends you greetings.
 .Ed
 .Pp
-.Em WARNING :
+.Em Note :
 Parameters passed using this syntax are parsed by splitting on
 white space.
 This means that in:
@@ -627,96 +203,949 @@ will provide two arguments: 'a b' and 'c'.  In order for this syntax to
 be recognized, there must be no whitespace between the function name and
 the first open brace; and no text at all between the final closing brace
 and the trailing
-.Qq @ .
+.Ql @ .
 .Pp
 .Em Example :
 .Bd -literal -offset indent -compact
 @define foo Arg1='$1' Arg2='$2' Arg3='$3'  narg=$#
 @foo "a b" c@
-@foo{a b}{c}@
-@foo{a b}{c}{}@
 \ \ \ => Arg1='"a' Arg2='b"' Arg3='c'  narg=3
+@foo{a b}{c}@
 \ \ \ => Arg1='a b' Arg2='c' Arg3=''  narg=2
+@foo{a b}{c}{}@
 \ \ \ => Arg1='a b' Arg2='c' Arg3=''  narg=3
 .Ed
 .Pp
-The following definitions are recognized:
+See the
+.Sx Functions
+section for a complete list of built-in functions.
+.It Em Commands :
+Control commands
+.Po
+such as
+.Ic @if ,
+.Ic @define ,
+etc
+.Pc
+are distinguished by an
+.Ql @
+as the first character at the beginning of a line.
+They consume the entire line.
+Some commands have a
+.Dq silent
+alternate form, distinguished by a leading
+.Ql s
+in the command name, which prints fewer error messages or performs some
+slightly altered function.
+For example, the silent variant to include a file is
+.Ic @sinclude .
+See the
+.Sx Commands
+section for a complete list of built-in commands.
+.It Em Namespaces :
+.Nm
+implements
+.Dq namespaces
+in a manner similar to, but not dependent upon, gawk's example.
+A
+.Dq qualified name
+is an identifier that
+consists of a namespace name, the qualification separator
+.Qq :: ,
+and then the symbol name proper.
+A qualified name may reference an array or list and thus
+may be followed with a bracketed key value to evaluate.
+There is always a
+.Dq current
+namespace into which unadorned symbols (those not found elsewhere in
+the search list) are defined.
+The current namespace can be changed with the
+.Ic @namespace
+command; it can be retrieved with the
+.Ic @ns@
+function.
+See section
+.Sx Namespaces
+for further details.
+.It Em Lists and Arrays :
+Lists are ordered collections with integer keys.
+Arrays are unordered collections with arbitrary text keys.
+Elements of both arrays and lists are accessed
+by appending
+.Ql Bq Ar key
+to the array or list name.
+Lists and arrays must be declared before use.
+See section
+.Sx Lists and Arrays
+for further details.
+.It Em Line Continuation :
+There may be occasions when you wish to continue a logical line
+onto the next physical line.
+It is common in many Unix programs for a
+.Ql \e
+character at end of line to do this.
+However,
+.Nm
+is not in the business of altering, without being requested, text which
+may be sent to other programs.
+In order to continue lines, the characters
+.Ic @\e
+may be used at the end of a logical line, indicating that the next line shall
+be joined to the first line without any intervening newline.
+If you wish to append the next line with a newline separator,
+end the current line with
+.Ic @\en
+This allows
+.Nm
+to work on files with backslashes without disturbing
+them, while still providing a mechanism for line continuation that will
+not be triggered spuriously.
+.Ic @\e-
+will also remove leading whitespace from the subsequent line.
+.Pp
+.Em Example :
+.Bd -literal -offset indent -compact
+Foo@\e
+  bar
+\ \ \ => Foo  bar
+Foo@\en
+bar
+\ \ \ => Foo
+\ \ \    bar
+Foo@\e-
+  bar
+\ \ \ => Foobar
+.Ed
+.El
+.Ss Boolean Expressions
+Boolean expressions are used in the
+.Ic @if
+and
+.Ic @while
+commands and the
+.Ic @ifx@
+function.
+They support the
+.Qq && ,
+.Qq || ,
+and
+.Qq \&!
+operators for logical AND, OR, and NOT, respectively.
+The && and || operators will
+.Dq short-circuit
+and not evaluate their right-hand side terms if the result is
+determined by the left-hand side.
+Parentheses may be used to enforce evaluation order.
+.Pp
+The following boolean predicate functions return either True or False.
+Arguments to these functions are scanned for macro expansion.
+.Pp
+.Bl -tag -width elem_IN_array____ -offset indent
+.It Fn canrun PROGRAM
+True if
+.Va PROGRAM
+can be executed; checked with
+.Xr sh 1
+.Qq "command -v" .
+See also
+.Ic @execpath@ .
+.It Fn defined SYMBOL
+True if
+.Va SYMBOL
+is defined.
+If the qualified namespace
+.Qq ENV
+is used, return True if the symbol is defined as a variable
+in the process environment.
+See also
+.Ic @ifdef@ .
+.It Fn exists FILE
+True if
+.Va FILE
+exists.
+.It Ar ELEM Cm in Ar ARR
+True if
+.Va ARR
+(array or list) contains
+.Va ELEM
+and False if not.
+.El
+.Pp
+Any other expression is evaluated as a mathematical expression and
+considered True if the result is non-zero.
+.Ss Commands
+The following table lists control commands to
+evaluate, control, or define macros for subsequent processing:
+.Pp
+.\" This table could use a little formatting TLC...
+.Bl -tag -width @if(_not)_defined -offset indent
+.It Ic @append Ar NAME TEXT
+Add
+.Va TEXT
+to an already defined
+.Va NAME .
+If
+.Va NAME
+is a symbol,
+.Va TEXT
+is textually appended to its definition.
+If
+.Va NAME
+is a list,
+.Va TEXT
+is added as the next element.
+.It Ic @array Ar ARR
+Declare
+.Va ARR
+to be an array.
+The name must not be qualified.
+See also
+.Ic @list .
+.It Ic @break
+Interrupt execution of enclosing loop.
+.Ic @break
+is only valid inside a
+.Ic @for ,
+.Ic @foreach ,
+or
+.Ic @while
+block.
+.It Ic @case Ar NAME Oo Ar PREAMBLE... Oc Oo Ic @of Va TEXT ... Oc Oo Ic @otherwise Va ... Oc Ic @endcase
+Evaluate value of
+.Va NAME ,
+comparing it with
+each successive
+.Ic @of Va TEXT .
+If a matching
+.Ic @of
+branch is found, execute the
+.Va PREAMBLE
+(if any) and the
+of\&-branch text and commands.
+If no
+.Ic @of
+text matches, use text from
+.Ic @otherwise
+block if present.
+Execution of the
+.Ic @otherwise
+block does
+.Sy not
+execute the
+.Va PREAMBLE .
+(The purpose of the preamble is to provide "boiler-plate" header text for
+known cases.
+The text and commands of the
+.Ic @otherwise
+block are expected
+to compensate for the lack of a preamble.)
+.It Ic @cleardivert Op Ar N ...
+Clear stream(s) specified by
+.Va N .
+If no arguments are provided then all streams are cleared.
+See the
+.Sx Streams and Diversions
+section.
+.It Ic @comment Op Ar TEXT
+Comment; ignore line.  Also
+.Ic @@ ,
+.Ic @c ,
+.Ic @; ,
+and
+.Ic @# .
+.Ic @comment ,
+.Ic @c ,
+and
+.Ic @@
+must be followed by whitespace in order to be recognized as comment commands.
+.Ic @;
+and
+.Ic @#
+are recognized as comments whenever they appear in columns 1 and 2.
+.It Ic @continue
+Continue next iteration of enclosing loop.
+.Ic @continue
+is only valid inside a
+.Ic @for ,
+.Ic @foreach ,
+or
+.Ic @while
+block.
+.It Ic @data Ar LIS Ar ... Ic @enddata
+Store all lines until
+.Ic @enddata
+into list
+.Va LIS .
+Any previously existing list entries are deleted.
+.Va LIS
+must declared with
+.Ic @list .
+See also
+.Ic @filedata .
+.It Ic @debug Op Ar TEXT
+If debugging, send
+.Va TEXT
+to the debug file.
+See also
+.Va __DEBUG__ .
+.It Ic @decr Ar NAME Op Ar N
+Subtract
+.Va N
+(default 1) from an already defined
+.Va NAME .
+See note at
+.Ic @incr .
+.It Ic @default Ar NAME VAL
+Like
+.Ic @define ,
+but no\&-op if
+.Va NAME
+already defined.
+.It Ic @define Ar NAME Op Ar TEXT
+Set value of
+.Va NAME
+to
+.Va TEXT .
+If
+.Va TEXT
+is missing, a value of 1 is assumed.
+See also
+.Ic @set .
+.It Ic @divert Op Ar N
+Divert subsequent text to stream
+.Va N .
+Default 0 resets to standard output.
+If
+.Va N
+is negative, text is discarded.
+No error message or action if argument is not an integer.
+See the
+.Sx Streams and Diversions
+section.
+.It Ic @divpop
+Remove the current diversion and restore the previous diversion.
+See also
+.Ic @divpush .
+.It Ic @divpush Ar N
+Create a new diversion to stream
+.Ar N
+while saving the current one to be restored later.
+See also
+.Ic @divpop .
+.It Ic @dump Op Ar WHAT Op Ar FILE
+Output names and definitions to
+.Va FILE .
+.Va WHAT
+can be one of
+.Cm symbols ,
+.Cm sequences ,
+.Cm commands ,
+.Cm names ,
+or an integer, which is assumed to be a block number.
+.\"   "@dump blocks" also works (poorly) and is deliberately undocumented.
+If
+.Va WHAT
+is omitted,
+.Cm symbols
+is assumed.
+If
+.Va FILE
+is omitted, output is sent to
+.Va __DEBUGFILE__ .
+.It Ic @dumpall Op Ar WHAT Op Ar FILE
+Like
+.Ic @dump
+but include System symbols.
+.It Ic @dumpdef Op Ar SYM ...
+Output definition of
+.Va SYM
+to
+.Va __DEBUGFILE__ .
+More than one symbol may be listed.
+If no symbols are specified, all symbols are dumped.
+.It Ic @echo Op Ar TEXT
+Send
+.Va TEXT
+to standard error.
+Also called
+.Ic @errprint .
+.Ic @warn
+is similar, but adds the current file name and line number to output.
+Variant
+.Ic @secho
+does not automatically add a newline to output.
+.It Ic @else
+Switch to the alternate condition branch of an
+.Ic @if
+block.
+Only one
+.Ic @else
+statement is allowed per
+.Ic @if
+block.
+.It Ic @endcase
+Indicate the end of a
+.Ic @case
+structure.
+Also called
+.Ic @esac
+thanks to Algol\ 68.
+.It Ic @endcmd
+Indicate the end of a
+.Ic @newcmd
+definition.
+.It Ic @enddata
+Indicate the end of a
+.Ic @data
+block.
+Also called
+.Ic @eod .
+.It Ic @endif
+Indicate the end of an
+.Ic @if
+or
+.Ic @unless
+condition block.
+Also called
+.Ic @fi ,
+keeping the dream alive.
+.It Ic @endlongdef
+Indicate the end of a multi-line
+.Ic @longdef .
+.It Ic @endwhile
+Indicate the end of a
+.Ic @while
+or
+.Ic @until
+loop.
+Also called
+.Ic @wend ,
+by few.
+.It Ic @error Op Ar TEXT
+Send
+.Va TEXT
+to standard error; exit code 2.
+Any diverted streams are discarded, although any wrapped text is evaluated.
+For complete control over error messages, variant
+.Ic @serror
+prints only
+.Va TEXT ,
+omitting file and line number information.
+.It Ic @esyscmd Ar CMDLINE...
+Execute
+.Va CMDLINE
+in a subshell.
+Standard output is captured into the output stream as normal.
+Standard input is set to
+.Pa /dev/null ,
+but standard error is not modified.
+The command's exit code is saved in
+.Va __SYSVAL__ .
+.It Ic @eval Ar TEXT
+Parse and evaluate
+.Va TEXT
+as a command.
+.It Ic @exit Op Ar N
+Immediately stop parsing; exit with status
+.Va N .
+If
+.Va N
+is omitted, the current exit status is unchanged.
+Invalid
+.Va N ,
+values less than zero, or greater than 126, are changed to 1.
+If variant
+.Ic @sexit
+is used, or if exit status is non-zero, diverted streams are discarded.
+Commands deferred with
+.Ic @wrap
+are processed regardless of
+.Va N
+value.
+See also
+.Va __EXIT__ .
+.It Ic @filedata Ar LIS FILE
+Read each line from
+.Va FILE
+into list
+.Va LIS .
+Any previously existing list entries are deleted before reading file contents.
+Variant
+.Ic @sfiledata
+does not print an error message if
+.Va FILE
+does not exist.
+.Va LIS
+must be declared as a list, therefore user code must say
+.Ql @list LIS
+before
+.Ic @filedata
+can be used.
+See also
+.Ic @data .
+.It Ic @filedefine Ar NAME FILE
+Read
+.Va FILE
+contents to define
+.Va NAME .
+This is not intended to be a full\&-blown file inputter (use
+.Ic @filedata
+for that) but rather just to read short snippets like a file path
+or username.
+Multi-line values are accepted but the final
+trailing newline, if any, is stripped.
+Variant
+.Ic @sfiledefine
+does not print an error message if
+.Va FILE
+does not exist.
+See also
+.Ic @define .
+.It Ic @for Ar VAR START END Oo Ar INCR Oc Ar ... Oc Ic @next Ar VAR
+Execute a loop with
+.Va VAR
+taking on successive
+integer values specified by
+.Va START
+and
+.Va END .
+Default
+.Va INCR
+is 1.
+.It Ic @foreach Ar VAR ARR No | Ar LIS ... Ic @next Ar VAR
+Execute a loop with
+.Va VAR
+taking on successive values of
+.Em keys
+to an array or list.
+.Em Note :
+Different Awk implementations may return array keys in differing order.
+However, lists and data created with
+.Ic @data
+or
+.Ic @filedata
+are guaranteed to return their integer indices in numerical order.
+.It Ic @if Ar EXPR ... Oo Ic @else Ar ... Oc Ic @endif
+Include subsequent lines of text if boolean expression is True.
+If
+.Va EXPR
+is a simple NAME, check if NAME is True.
+See section
+.Sx Boolean Expressions .
+.It Ic @ignore Ar PATTERN
+Discard input until a line that matches regular expression
+.Va PATTERN
+is found.
+.It Ic @import Ar LIB FILE
+Like
+.Ic @include
+but the library name
+.Va LIB
+is added to the namespace search list.
+See also
+.Va __NSPATH__ .
+.It Ic @include Ar FILE
+Read and process contents of
+.Va FILE .
+The current namespace is temporarily set to
+.Qq m2
+while
+.Va FILE
+is being processed.
+Variant
+.Ic @sinclude
+does not print an error message if
+.Va FILE
+does not exist.
+See also
+.Ic @nsinclude
+and
+.Ic @paste .
+.It Ic @incr Ar NAME Op Ar N
+Add
+.Va N
+(default 1) to an already defined
+.Va NAME .
+.Ic @incr
+and
+.Ic @decr
+may be used on both symbols and sequences.
+.Em Note :
+Unlike
+.Xr m4 1 ,
+.Ic @incr
+modifies the named symbol and produces no expansion output.
+.It Ic @initialize Ar NAME VAL
+Like
+.Ic @define ,
+but error if
+.Va NAME
+already defined.
+.It Ic @input Op Ar NAME
+Read a single line from keyboard to define
+.Va NAME .
+No prompt is issued; if you want one, use
+.Ic @echo .
+If
+.Va NAME
+is omitted, value is stored in symbol
+.Va __INPUT__ .
+.It Ic @list Ar LIS
+Declare
+.Va LIS
+to be a list.
+The name must not be qualified.
+See also
+.Ic @array .
+.It Ic @literal Ar PATTERN
+Read and print input literally, without interpretation, until line that
+matches regular expression
+.Va PATTERN .
+.It Ic @local Ar NAME
+Declare
+.Va NAME
+as a symbol local to the current level.
+The name must not be qualified.
+.It Ic @longdef Ar NAME ... Ic @endlongdef
+Set value of
+.Va NAME
+to all lines until
+.Ic @endlongdef .
+.It Ic @namespace Ar NAMESPACE
+Make
+.Va NAMESPACE
+the current namespace.
+The name should not be quoted.
+See also
+.Ic @ns@ .
+.It Ic @newcmd Ar NAME ... Ic @endcmd
+Create a user command
+.Va NAME
+whose definition will be all lines until
+.Ic @endcmd .
+.It Ic @next Ar VAR
+Continue execution of next iteration of enclosing
+.Ic @for
+or
+.Ic @foreach
+loop.
+.It Ic @nextfile
+Ignore remainder of current file and resume processing with the next file.
+.It Ic @nsinclude Ar FILE
+Similar to
+.Ic @include
+but the current namespace remains unchanged.
+.It Ic @of Ar TEXT
+Begin a new branch of an enclosing
+.Ic @case
+structure matching
+.Va TEXT
+at run time.
+Every branch's
+.Va TEXT
+label must be unique.
+.It Ic @otherwise
+Begin a new branch of an enclosing
+.Ic @case
+structure which is executed if no
+.Ic @of
+branch triggers.
+Only one
+.Ic @otherwise
+branch is permitted per
+.Ic @case
+structure.
+.It Ic @paste Ar FILE
+Insert
+.Va FILE
+contents literally, with no changes or macros.
+Variant
+.Ic @spaste
+does not print an error message if
+.Va FILE
+does not exist.
+.It Ic @readonly Ar NAME
+Make
+.Va NAME
+unchangeable \(em cannot be undone.
+.It Ic @return Op Ar VALUE
+Cease execution of a user command.
+.Ic @return
+is only valid inside a
+.Ic @newcmd
+definition.
+.It Ic @sequence Ar ID Cm ACTION Op Ar N
+Create and manage sequences.
+See the
+.Sx Sequences
+section.
+.It Ic @set Ar NAME Op Ar TEXT
+Like
+.Ic @define ,
+but if
+.Va TEXT
+is missing,
+.Va NAME
+is set to the empy string.
+See also
+.Ic @define .
+.It Ic @shell Ar PATTERN Op Ar PROG
+Evaluate input until
+.Va PATTERN
+and send raw data to
+.Va PROG .
+Output stream is captured; shell exit status is stored in
+.Va __SYSVAL__ .
+If
+.Va PROG
+is not specified, the value of symbol
+.Va M2_SHELL
+will be used if defined; if not, the value of environment variable
+.Ev SHELL
+will be used.
+If also not defined, the value of
+.Va __PROG__[sh]
+will be used.
+.Va PROG
+should default to a reasonable shell, but might be overridden to
+run other useful programs such as an alternative shell, an email message
+reader, or
+.Pa /usr/bin/bc .
+It must be a program that functions as a filter (in the Unix sense,
+i.e., reading from standard input and writing to standard output).
+Standard error is not redirected, so any errors will appear on the terminal.
+.It Ic @split Ar NAME LIS Op Ar FS
+Split value of
+.Va NAME
+into N individual fields, storing them in
+.Va LIS
+elements 1..N.
+Any previous entries in
+.Va LIS
+are deleted.
+If
+.Va FS
+is specified, use it as field separator.
+If not and symbol
+.Va __FS__
+is defined, use its value as field separator.
+If neither condition is true, use Awk's default
+.Va FS ,
+which means fields will be split on whitespace.
+See also
+.Ic @join@ ,
+.Ic @list .
+.It Ic @syscmd Ar CMDLINE...
+Execute
+.Va CMDLINE
+using Awk's
+.Fn system
+function.
+Standard output and standard error are both discarded.
+The command's exit code is saved in
+.Va __SYSVAL__ .
+.It Ic @tracemode Op Ar FLAG...
+With no arguments, reset trace flags to default value.
+Preceding flag with
+.Ql +
+or
+.Ql \-
+will add to or remove from trace flags;
+otherwise, overwrite trace flags with new value.
+See also
+.Va __TRACEMODE__ .
+.It Ic @traceoff Op Ar SYM ...
+Disable tracing for specified symbols.
+If
+.Va SYM
+is omitted, disable tracing for all symbols.
+.It Ic @traceon Op Ar SYM ...
+Enable tracing for specified symbols.
+If
+.Va SYM
+is omitted, enable tracing for all symbols.
+See also
+.Va __TRACE__ .
+Symbols can also be traced from the command line with
+.Ql T=<symName>
+.It Ic @typeout
+Print remainder of input file literally; no macro processing will be done.
+.It Ic @undefine Ar NAME
+Remove definition of
+.Va NAME .
+Symbols can also be removed from the command line with
+.Ql U=<symName>
+.It Ic @undivert Oo Ar N ... Oc No | Ar N FILE
+Inject stream
+.Va N
+(default all) into current stream.
+If no arguments are provided then all streams are injected.
+With second form, stream
+.Va N
+is output to
+.Va FILE .
+After a stream has been undiverted, it is implicitly cleared.
+See the
+.Sx Streams and Diversions
+section.
+.It Ic @unless Ar EXPR ... Oo Ic @else Ar ... Oc Ic @endif
+Include subsequent text if
+.Va EXPR
+is False.
+If
+.Va EXPR
+is a simple NAME, check if NAME\ ==\ 0 (or undefined).
+See section
+.Sx Boolean Expressions .
+.It Ic @until Ar EXPR ... Ic @endwhile
+Repeatedly evaluate input lines while boolean expression
+.Va EXPR
+is False and stop when it becomes True.
+.It Ic @while Ar EXPR ... Ic @endwhile
+Repeatedly evaluate input lines while boolean expression
+.Va EXPR
+is True and stop when it becomes False.
+.It Ic @wrap Ar TEXT
+Defer
+.Va TEXT
+until
+.Nm
+has processed all files and diversions and is about to exit.
+Wrapped text will be evaluated as a command; output will occur after diverted streams, if any.
+Wraps are always processed, even if
+.Ic @error
+or
+.Ic @exit
+commands are encountered.
+.\"     An m2 internal panic() will exit immediately without processing wraps.
+.El
+.Ss Debugging
+Symbol
+.Va __DEBUG__
+controls debugging; set it to True or False to enable or disabled debugging messages.
+Debugging output is generated by the
+.Ic @debug
+command and by
+.Nm
+execution.
+The debug file is maintained in symbol
+.Va __DEBUGFILE__ .
+At security level 0, the user may specify a file path for debugging and tracing output.
+At higher security levels, the debug file is forced to
+.Pa /dev/stderr ,
+which is also the default value.
+.Pp
+See also the
+.Sx Tracing
+section for additional information.
+.Ss Functions
+The following built-in functions are recognized:
 .Pp
 .Bl -tag -width @right_SYM_[N]@ -offset indent
-.It @basename SYM@
-Base (file) name of SYM implemented in Awk, assuming Unix style path
-separators.
+.It Ic @basename Ar SYM Ns Ic @
+Base (file) name of
+.Va SYM
+implemented in Awk, assuming Unix style path separators.
 See also
-.Va @xbasename .
-.It @boolval [SYM]@
-Output a formatted representation of the truthiness of SYM.
+.Ic @xbasename@ .
+.It Ic @boolval Oo Ar SYM Oc Ns Ic @
+Output a formatted representation of the truthiness of
+.Va SYM .
 If the argument is not a symbol, use its value as a boolean state.
-If SYM is omitted entirely, return True or False with 50/50 chance.
+If
+.Va SYM
+is omitted entirely, return True or False with 50/50 chance.
 See system symbols
 .Va __FMT__[0] ,
 .Va __FMT__[1] ,
 and
 .Va __STRICT__[bool] .
-.It @center SYM [WIDTH]@
-Center the value of SYM in a field of WIDTH columns.
-If WIDTH is omitted, the value of
+.It Ic @center Ar SYM Oo Ar WIDTH Oc Ns Ic @
+Center the value of
+.Va SYM
+in a field of
+.Va WIDTH
+columns.
+If
+.Va WIDTH
+is omitted, the value of
 .Va __COLUMNS__
 is used.
-Strings longer than WIDTH are truncated as necessary.
+Strings longer than
+.Va WIDTH
+are truncated as necessary.
 Variant
-.Ql @scenter@
+.Ic @scenter@
 does not truncate output.
-.It @chr SYM@
-Output character with ASCII code SYM.
-.It @comma SYM@
-Output the value of SYM, or a literal number, with comma-separated
-groupings of digits.
+.It Ic @chr Ar SYM Ns Ic @
+Output character with ASCII code
+.Va SYM .
+.It Ic @comma Ar SYM Ns Ic @
+Output the value of
+.Va SYM ,
+or a literal number, with comma-separated groupings of digits.
 Variant
-.Ql @scomma@
+.Ic @scomma@
 .Em removes
 commas, and as an added bonus, any leading
-.Qq $
+.Ql $
 as well.
-.It @date@
-Current date (format as __FMT__[date]).
+.It Ic @date@
+Current date (format as
+.Va __FMT__[date] ) .
 See section
-.Sx Dates and Times .
-.It @dirname SYM@
-Directory name of SYM implemented in Awk, assuming Unix style path
-separators.
+.Sx Times and Dates .
+.It Ic @dirname Ar SYM Ns Ic @
+Directory name of
+.Va SYM
+implemented in Awk, assuming Unix style path separators.
 See also
-.Va @xdirname .
-.It @divnl [STREAM]@
-Return the number of lines in STREAM, or 0 if empty.
-If STREAM is omitted, the current stream is assumed.
-If STREAM is negative or zero, return 0.
-.It @dow [MJD | YYYY MM DD]@
+.Ic @xdirname@ .
+.It Ic @divnl Oo Ar STREAM Oc Ns Ic @
+Return the number of lines in
+.Va STREAM ,
+or 0 if empty.
+If
+.Va STREAM
+is omitted, the current stream is assumed.
+If
+.Va STREAM
+is negative or zero, return 0.
+.It Ic @dow Oo Ar MJD No | Ar YYYY MM DD Oc Ns Ic @
 Return the ISO day number corresponding to the date specified,
 where 1=Monday, 2=Tuesday, ..., 7=Sunday.
 With no parameters, use current date.
 See also
 .Va __DOW__ .
-.It @epoch@
+.It Ic @empty Ar SYM Ns Ic @
+Return 1 if
+.Va SYM Ap s
+value is the empty string, 0 if non-empty.
+See also
+.Ic @set .
+.It Ic @epoch@
 Unix epoch time, the number of non-leap seconds which
 have passed since 00:00:00\ UTC on Thursday, 1\ January\ 1970.
 See section
-.Sx Dates and Times .
-.It @execpath PROGRAM@
-Return expanded path to PROGRAM, printing a warning if program is not found.
+.Sx Times and Dates .
+.It Ic @execpath Ar PROGRAM Ns Ic @
+Return expanded path to
+.Va PROGRAM ,
+printing a warning if program is not found.
 Variant
-.Ql @sexecpath@
+.Ic @sexecpath@
 does not print a warning.
 See also
-.Va canrun() .
-.It @expr MATH@
+.Fn canrun .
+.It Ic @expr Ar MATH Ns Ic @
 Evaluate and print mathematical expression.
 Variant
-.Ql @sexpr@
+.Ic @sexpr@
 performs the same calculations but does not output the result.
 However, assignments are still performed and
 .Va __EXPR__
 is still set.
-.It @format FMT [ARG ...]@
+.It Ic @format Ar FMT Oo Ar ARG ... Oc Ns Ic @
 Print up to five parameters (args 2..6),
 .\" Five params is entirely arbitrary, limited only by my patience
 .\" for repeatedly typing printf()'s for cases that will likely
@@ -724,371 +1153,772 @@ Print up to five parameters (args 2..6),
 using the first argument as a format specifier.
 Arguments must be compatible with format string.
 Also called
-.Ql @sprintf@ .
-.It @geodist LAT1 LON1 LAT2 LON2@
-Return distance between points (LAT1,LON1) and (LAT2,LON2) in kilometers.
+.Ic @sprintf@ .
+.It Ic @geodist Ar LAT1 LON1 LAT2 LON2 Ns Ic @
+Return distance between points
+.Po
+.Va LAT1 , LON1
+.Pc
+and
+.Po
+.Va LAT2 , LON2
+.Pc
+in kilometers.
 Divide distance by 1.609344 to convert to miles.
 For nautical miles, divide by 1.852.
 Latitude and longitude must be given in fractional degrees,
 so use
-.Va @hr@
+.Ic @hr@
 to convert degrees/minutes/seconds.
-.It @getenv VAR@
-Get value of environment variable
-.Va VAR .
-An error is thrown if
-.Va VAR
-is not defined.
-To ignore error and continue with empty string, disable
-.Va __STRICT__[env]
-or use variant
-.Ql @sgetenv@ .
-.It @gregdate MJD@
-Print the date corresponding to Modified Julian Day MJD.
-The output format is always "YYYY\-MM\-DD" (__FMT__[date] is not used).
+.It Ic @gregdate Ar MJD Ns Ic @
+Print the date corresponding to Modified Julian Day
+.Va MJD .
+The output format is always "YYYY\-MM\-DD" (
+.Va __FMT__[date]
+is not used).
 See also
-.Va @mjd@ .
-.It @hex SYM@
-Print value of SYM in hexadecimal.
-.It @hms HR.ddddd@
+.Ic @mjd@ .
+.It Ic @hex Ar SYM Ns Ic @
+Print value of
+.Va SYM
+in hexadecimal.
+.It Ic @hms Ar HR.ddddd Ns Ic @
 Convert decimal (fractional) hours to hours, minutes, and seconds.
 See also
-.Va @geodist@ , @hr@ .
-.It @hr HOUR.MMSSssss | HOUR MIN SEC@
+.Ic @geodist@ , @hr@ .
+.It Ic @hr Ar HOUR.MMSSssss No | Ar HOUR MIN SEC Ns Ic @
 Convert hours, minutes, and seconds to fractional hours.
 See also
-.Va @geodist@ , @hms@ .
-.It @ifdef{SYMBOL}{TRUE_TEXT}{FALSE_TEXT}@
-If SYMBOL is defined, return TRUE_TEXT, else return FALSE_TEXT.
-The {FALSE_TEXT} clause is optional, and defaults to the empty string.
-.It @ifelse{arg1}{arg2}{arg3}{arg4}...@
-@ifelse@ takes three or more arguments.
+.Ic @geodist@ , @hms@ .
+.It Ic @ifdef{ Ns Ar SYMBOL Ns Ic }{ Ns Ar TRUE_TEXT Ns Ic }{ Ns Ar FALSE_TEXT Ns Ic }@
+If
+.Va SYMBOL
+is defined, return
+.Va TRUE_TEXT ,
+else return
+.Va FALSE_TEXT .
+The
+.Ql Bro Va FALSE_TEXT Brc
+clause is optional, and defaults to the empty string.
+.It Ic @ifelse{ Ns Ar arg1 Ns Ic }{ Ns Ar arg2 Ns Ic }{ Ns Ar arg3 Ns Ic }{ Ns arg4 Ns Ic } Ns Ar ... Ns Ic @
+.Ic @ifelse@
+takes three or more arguments.
 If the first argument is equal to the second, then the value is the
 third argument.
 If not equal, and if there are more than four arguments, then the
 process repeats with arguments 4, 5, 6, and 7.
 Otherwise, the value is either the fourth argument if present, or null
 if omitted.
-All arguments must appear on the same line.\" Unfortunately!
+Long lines may be split using
+.Ic @\e .
 This baroque arrangement is modeled after
 .Xr m4 1 .
-For a saner syntax, try the @case or @if commands.
-However, @ifelse@ is a function, not a command, so it can be used
-in-line with other text, whereas @if and @case cannot.
-.It @ifx{BOOL_EXP}{TRUE_TEXT}{FALSE_TEXT}@
-Evaluate BOOL_EXP; if True, return TRUE_TEXT else return FALSE_TEXT.
+For a saner syntax, try the
+.Ic @case
+or
+.Ic @if
+commands.
+However,
+.Ic @ifelse@
+is a function, not a command, so it can be used
+in-line with other text, whereas
+.Ic @if
+and
+.Ic @case
+cannot.
+.It Ic @ifx{ Ns Ar BOOL_EXP Ns Ic }{ Ns Ar TRUE_TEXT Ns Ic }{ Ns Ar FALSE_TEXT Ns Ic }@
+Evaluate
+.Va BOOL_EXP ;
+if True, return
+.Va TRUE_TEXT
+else return
+.Va FALSE_TEXT .
 All three brace-enclosed clauses must be present.
 Resulting text is again processed for macro substitutions.
-@ifx stands for "IF <eXpression>".
-.It @ifndef{SYMBOL}{TRUE_TEXT}{FALSE_TEXT}@
-If SYMBOL is
+.Ic @ifx
+stands for
+.Dq IF eXpression .
+.It Ic @ifndef{ Ns Ar SYMBOL Ns Ic }{ Ns Ar TRUE_TEXT Ns Ic }{ Ns Ar FALSE_TEXT Ns Ic }@
+If
+.Va SYMBOL
+is
 .Em not
-defined, return TRUE_TEXT, else return FALSE_TEXT.
-The {FALSE_TEXT} clause is optional, and defaults to the empty string.
-.It @index SYM SUBSTR@
-Return the position of SUBSTR within the value of SYM.
-Note that
+defined, return
+.Va TRUE_TEXT ,
+else return
+.Va FALSE_TEXT .
+The
+.Ql Bro Va FALSE_TEXT Brc
+clause is optional, and defaults to the empty string.
+.It Ic @index Ar SYM SUBSTR Ns Ic @
+Return the position of
+.Va SUBSTR
+within the value of
+.Va SYM .
+.Em Note :
 .Nm
 follows the Awk convention of numbering characters in a string from 1;
-this is different from m4, which is zero-based.
-If SUBSTR is not found, the returned value is 0.
-.It @join LIS [FS]@
-Concatenate each element of LIS into a single string,
-inserting FS between elements to separate them.
-If FS is omitted, then the value of
+this is different from
+.Xr m4 1 ,
+which is zero-based.
+If
+.Va SUBSTR
+is not found, the returned value is 0.
+.It Ic @join Ar LIS Oo Ar FS Oc Ns Ic @
+Concatenate each element of
+.Va LIS
+into a single string,
+inserting
+.Va FS
+between elements to separate them.
+If
+.Va FS
+is omitted, then the value of
 .Va __FS__
 is used;
 if not defined, then a single space shall be the separator.
 Variant
-.Ql @sjoin@
-adds a final FS after the last element (useful when
+.Ic @sjoin@
+adds a final
+.Va FS
+after the last element (useful when
 .Va __FS__
 is a newline).
 See also
-.Va @split .
-.It @lc SYM@
+.Ic @split .
+.It Ic @lc Ar SYM Ns Ic @
 Lower case.
-.It @left SYM [N]@
-Substring of SYM from 1 to Nth character.
-.It @len SYM@
-Number of characters in SYM's value.
-.It @ljust SYM [WIDTH]@
-Left-justify the value of SYM in a field of WIDTH columns.
-If WIDTH is omitted, the value of
+.It Ic @left Ar SYM Oo Ar N Oc Ns Ic @
+Substring of
+.Va SYM
+from 1 to
+.Va N Ns th
+character.
+.It Ic @len Ar SYM Ns Ic @
+Number of characters in
+.Va SYM Ap s
+value.
+.It Ic @ljust Ar SYM Oo Ar WIDTH Oc Ns Ic @
+Left-justify the value of
+.Va SYM
+in a field of
+.Va WIDTH
+columns.
+If
+.Va WIDTH
+is omitted, the value of
 .Va __COLUMNS__
 is used.
-Strings longer than WIDTH are truncated as necessary.
+Strings longer than
+.Va WIDTH
+are truncated as necessary.
 Variant
-.Ql @sljust@
+.Ic @sljust@
 does not truncate output.
-.It @ltrim SYM@
+.It Ic @ltrim Ar SYM Ns Ic @
 Remove leading whitespace.
-.It @mid SYM BEG [LEN]@
-Substring of SYM from BEG, LEN chars long.
+.It Ic @mid Ar SYM BEGIN Oo Ar LEN Oc Ns Ic @
+Substring of
+.Va SYM
+from
+.Va BEGIN ,
+.Va LEN
+chararacters long.
 Also called
-.Ql @substr@ .
-Positive BEG starts that many characters from the beginning of the string,
+.Ic @substr@ .
+Positive
+.Va BEGIN
+starts counting from the beginning of the string,
 where the first character is position 1, not zero.
-Negative BEG starts that many characters from the end of the string.
-Positive LEN counts rightward from the starting position; negative LEN
+Negative
+.Va BEGIN
+starts counting backward from the end of the string.
+Positive
+.Va LEN
+counts rightward from the starting position; negative
+.Va LEN
 counts leftward.
-LEN may be omitted.
-.It @mjd [YEAR MONTH DAY]@
+.Va LEN
+may be omitted, in which case all characters to the right of (including)
+.Va BEGIN
+are returned.
+See also the section entitled
+.Sx @mid@ Parameters .
+.It Ic @mjd Oo Ar YEAR MONTH DAY Oc Ns Ic @
 Return the Modified Julian Day, which is
 the number of days since midnight on November\ 17, 1858.
 Without parameters, the current date is used.
 See also
-.Va @gregdate@ .
-.It @mktemp [SYM | TEMPLATE]
+.Ic @gregdate@ .
+.It Ic @mktemp Oo Ar SYM No | Ar TEMPLATE Oc Ns Ic @
 Output a unique file path which does not currently exist.
-TEMPLATE is expected to end with at least six
+.Va TEMPLATE
+is expected to end with at least six
 .Ql X
 characters,
 which are replaced by random letters and digits.
 If the template does not contain a
 .Ql /
 character, a suitable temporary directory will be provided.
+.Em Note :
 Unlike standard
 .Xr mktemp 1 ,
 this function does
-.Em not
+.Sy not
 actually create the file; it merely returns a likely path.
 It makes no guarantees that such a path can
 actually be created, so the caller must still take care.
-.It @ord SYM@
-Output ASCII code of first character in SYM.
-.It @rem COMMENT@
+.It Ic @ns@
+Return the current namespace.
+See also
+.Ic @namespace .
+.It Ic @ord Ar SYM Ns Ic @
+Output ASCII code of first character in
+.Va SYM .
+.It Ic @rem Oo Ar COMMENT Oc Ns Ic @
 Embedded comment text is ignored.
 Variant
-.Ql @srem@
+.Ic @srem@
 also discards preceding whitespace.
-.It @right SYM [N]@
-Substring of SYM from N to last character.
-.It @rjust SYM [WIDTH]@
-Right-justify the value of SYM in a field of WIDTH columns.
-If WIDTH is omitted, the value of
+.It Ic @right Ar SYM Oo Ar N Oc Ns Ic @
+Substring of
+.Va SYM
+from
+.Va N Ap th
+to last character.
+.It Ic @rjust Ar SYM Oo Ar WIDTH Oc Ns Ic @
+Right-justify the value of
+.Va SYM
+in a field of
+.Va WIDTH
+columns.
+If
+.Va WIDTH
+is omitted, the value of
 .Va __COLUMNS__
 is used.
-Strings longer than WIDTH are truncated as necessary.
+Strings longer than
+.Va WIDTH
+are truncated as necessary.
 Variant
-.Ql @srjust@
+.Ic Ic @srjust@
 does not truncate output.
-.It @rot13 SYM@
-Output value of SYM (or literal string if SYM not defined) with rot13 text.
-.It @rtrim SYM@
+.It Ic @rot13 Ar SYM Ns Ic @
+Output value of
+.Va SYM
+(or literal string if
+.Va SYM
+not defined) with rot13 text.
+.It Ic @rtrim Ar SYM Ns Ic @
 Remove trailing whitespace.
-.It @space [N]@
-Output N (default 1) space characters, ASCII 0x20.
+.It Ic @space Oo Ar N Oc Ns Ic @
+Output
+.Va N
+(default 1) space characters, ASCII 0x20.
 Also called
-.Ql @spaces@ .
-.It @strftime FMT@
+.Ic @spaces@ .
+.It Ic @strftime Ar FMT Ns Ic @
 Current date/time in user-specified format.
-.It @tab [N]@
-Output N (default 1) tab characters, ASCII 0x09.
+.It Ic @tab Oo Ar N Oc Ns Ic @
+Output
+.Va N
+(default 1) tab characters, ASCII 0x09.
 Also called
-.Ql @tabs@ .
-.It @time@
-Current time (format as __FMT__[time]).
+.Ic @tabs@ .
+.It Ic @time@
+Current time (format as
+.Va __FMT__[time] ) .
 See section
-.Sx Dates and Times .
-.It @trim SYM@
+.Sx Times and Dates .
+.It Ic @trim Ar SYM Ns Ic @
 Remove both leading and trailing whitespace.
-.It @tz@
-Time zone name (format as __FMT__[tz]).
+.It Ic @tz@
+Time zone name (format as
+.Va __FMT__[tz] ) .
 See section
-.Sx Dates and Times .
-.It @uc SYM@
+.Sx Times and Dates .
+.It Ic @uc Ar SYM Ns Ic @
 Upper case.
-.It @utc@
+.It Ic @utc@
 Current timestamp in UTC time zone, displayed in ISO\ 8601 format
-(format as __FMT__[utc]).
-.It @uuid@
+(format as
+.Va __FMT__[utc] ) .
+.It Ic @uuid@
 UUID (Universally Unique Identifier) version 4, such as
-c3525388\&-e400\&\-43a7\&-bc95\&\-9df5fa3c4a52.
-.It @xbasename SYM@
-Base (file) name of SYM determined by external program.
-.It @xdirname SYM@
-Directory name of SYM determined by external program.
+.Qq c3525388\&-e400\&\-43a7\&-bc95\&\-9df5fa3c4a52 .
+.It Ic @xbasename Ar SYM Ns Ic @
+Base (file) name of
+.Va SYM
+determined by external program.
+.It Ic @xdirname Ar SYM Ns Ic @
+Directory name of
+.Va SYM
+determined by external program.
 .El
-.Ss Dates and Times
-.Va __DATE__ ,
-.Va __EPOCH__ ,
-.Va __TIME__ ,
-.Va __TIMESTAMP__ ,
+.Ss Hooks
+If defined,
+.Nm
+will run specially named user commands
+.Po
+.Dq hooks
+.Pc
+at certain predefined points during its execution.
+Hook command names begin with
+.Qq __
+and end with
+.Qq _hook .
+Hooks take no formal parameters.
+.Bl -tag -width __m2_file_suspend_hook -offset indent
+.It Ic __m2_begin_hook
+Invoked once at the beginning of
+.Nm
+execution, after any
+initialization files are loaded.
+.Va __FILE__
+is undefined.
+.It Ic __file_open_hook
+Invoked whenever a new file is opened, but before its contents are read.
+.Va __FILE__
+is the newly opened file.
+.It Ic __file_close_hook
+Invoked whenever an included file has been read and closed.
+.Va __FILE__
+is still the recently closed file.
+.It Ic __file_suspend_hook
+Invoked whenever a new file is about to be included, temporarily
+superseding the current input file..
+.Va __FILE__
+is the current, about to be suspended file.
+.It Ic __file_resume_hook
+Invoked whenever a previously suspended file is about to be resumed.
+.Va __FILE__
+is the newly resumed, originally current file.
+.It Ic __m2_end_hook
+Invoked after all input has been processed
+but before any streams or wraps are executed.
+.Va __FILE__
+is undefined.
+.It Ic __m2_exit_hook
+Invoked at the very end of
+.Nm
+execution, just before exiting.
+.El
+.Ss Including Files
+.Nm
+can incorporate the contents of files into its data stream.
+.Ic @include
+retrieves and processes the file data for macros, while
+.Ic @paste
+reads the file contents with no modifications.
+Attempting to
+.Ic @include
+or
+.Ic @paste
+a non-existent file results in an error.
+However, if the
+.Dq silent
+variants
+.Po
+.Ic @sinclude ,
+.Ic @spaste
+.Pc
+are used, no message is printed.
+If
+.Ic @include
+or
+.Ic @paste
+cannot find the specified
+.Va FILE
+in the current directory,
+it will consult the include path found in
+.Va __INCPATH__ .
+Directories can be inserted into the include path by specifying
+.Ql I=<directory>
+on the command line.
+Paths specified this way are examined before entries from
+.Ev M2PATH ,
+to allow run-specific overrides.
+The include path is also used, if needed, for file names passed on the
+command line.
+Elements may be removed from the include path by specifying
+.Ql R=<directory>
+on the command line.
+.Ss Lists and Arrays
+Arrays are stored internally as an Awk associative array, and can be
+indexed by any literal value.  Lists are implemented with a different
+mechanism that only allows integer indices.
+.Pp
+Arrays must be declared before use
+by executing the command
+.Ic @array
+and specifying the name of the array to create.
+After array declaration, its elements can be accessed
+by using the array name immediately followed by the
+element key in brackets; as always, surrounded by
+.Ql @ .
+.Pp
+Lists must be declared before use
+by executing the command
+.Ic @list
+and specifying the name of the list to create.
+Lists are loaded with data by the
+.Ic @data
+or
+.Ic @filedata
+commands.
+.Ic @data
+requires the data to be present in\-line
+in the input file, which is read until
+.Ic @enddata .
+If you wish to read your data from an external
+file, use
+.Ic @filedata .
+Data loaded in this way are assigned integer
+keys from 1 to the number records.
+Lists can also be loaded with
+.Ic @split .
+.Pp
+For both arrays and lists,
+accessing the bare name, without brackets,
+as in
+.Ql @ Ns Ar ARRAY Ns @
+will return the number of elements in the array or list.
+.Ss Mathematical Expressions
+The
+.Ic @expr ...@
+function evaluates mathematical expressions and
+inserts their results.
+.Ic @expr@
+supports the standard arithmetic operators:
+.Dl (\ \ )\ \ +\ \ \-\ \ *\ \ /\ \ %\ \ ^
+and the comparison operators:
+.Dl <\ \ <=\ \ ==\ \ !=\ \ >=\ \ >
+and return 0 or 1 as per Awk.
+Logical negation is available with
+.Ql \&! .
+No other boolean operators are valid.
+.Ql &&
 and
-.Va __TZ__
-are fixed at program start and do not change.
-.Ql @date@ ,
-.Ql @epoch@ ,
-.Ql @time@ ,
+.Ql ||
+are
+.Sy not supported !
+.Po
+However, see section
+.Sx Boolean Expressions .
+.Pc
+.Pp
+.Ic @expr@
+supports the following functions:
+.Pp
+.Bl -tag -width defined(sym)____ -compact -offset indent
+.It Fn abs x
+Absolute value of
+.Va x ,
+|x|
+.It Fn acos x
+Arc-cosine of
+.Va x ,
+\-1 \*(Le x \*(Le 1
+.It Fn asin x
+Arc-sine of
+.Va x ,
+\-1 \*(Le x \*(Le 1
+.It Fn atan2 y x
+Arctangent of
+.Va y / x ,
+\-\*(Pi \*(Le atan2 \*(Le \*(Pi
+.It Fn ceil x
+Ceiling of
+.Va x ,
+smallest integer \*(Ge x
+.It Fn cos x
+Cosine of
+.Va x ,
+in radians
+.It Fn defined sym
+1 if
+.Va sym
+is defined, else 0
+.It Fn deg x
+Convert radians to degrees
+.It Fn exp x
+Exponential (anti-logarithm) of
+.Va x ,
+e^x
+.It Fn floor x
+Floor of
+.Va x ,
+largest integer \*(Le x
+.It Fn gcd x y
+Greatest common divisor of
+.Va x
 and
-.Ql @tz@
-do change to reflect the current time and date.
-Of course, time zones don't normally change; the difference is that
-.Ql @__TZ__@
-prints
-.Qq \-0800
-while
-.Ql @tz@
-prints
-.Qq PST .
+.Va y
+.It Fn hypot x y
+Hypotenuse of a right-angled triangle
+.It Fn int x
+Integer part of
+.Va x
+.It Fn lcm x y
+Least common multiple of
+.Va x
+and
+.Va y
+.It Fn lg x
+Logarithm of
+.Va x ,
+base 2
+.It Fn log x
+Natural logarithm of
+.Va x ,
+base e
+.It Fn log10 x
+Common logarithm of
+.Va x ,
+base 10
+.It Fn max x y
+The larger of
+.Va x
+and
+.Va y
+.It Fn min x y
+The smaller of
+.Va x
+and
+.Va y
+.It Fn odd x
+Return 1 if
+.Va x
+is odd, 0 if even
+.It Fn pow x y
+Raise
+.Va x
+to the
+.Va y
+power, x^y
+.It Fn rad x
+Convert degrees to radians
+.It Fn rand
+Random float, 0 \*(Le rand \*(Lt 1
+.It Fn randint x
+Random integer, 1 \*(Le randint \*(Le x
+.It Fn round x
+Normal rounding to nearest integer
+.It Fn sign x
+Signum of
+.Va x
+[\-1, 0, or +1]
+.It Fn sin x
+Sine of
+.VA x ,
+in radians
+.It Fn sqrt x
+Square root of
+.Va x
+.It Fn tan x
+Tangent of
+.Va x ,
+in radians
+.El
+.Pp
+.Ic @expr@
+will automatically use symbols' and sequences' values in expressions.
+Inside
+.Ql "@expr ...@" ,
+there is no need to surround symbol names
+with
+.Ql @
+characters to retrieve their values.
+.Ic @expr@
+also recognizes the predefined constants
+.Cm e ,
+.Cm pi ,
+and
+.Cm tau .
+.Pp
+The most recent expression value is automatically stored in
+.Va __EXPR__ .
+.Ic @expr@
+can also assign values to symbols with the
+.Ql =
+assignment operator.
+Assignment is itself an expression, so
+.Ql @expr x=5@
+assigns the value 5 to
+.Va x
+and also outputs the result.
+To assign a value to a variable without printing, use
+.Ic @define .
+.Ss Ic @mid@ Parameters
+Unlike standard Awk
+.Fn substr ,
+.Ic @mid@
+accepts negative arguments for both
+.Va BEGIN
+and
+.Va LEN .
+Consider the symbol SYM containing the seven character string
+.Dq ABCDEFG ,
+counting characters from 1 (as in Awk), and also backwards from the
+end of the string:
+.Bd -offset indent
+.TS
+tab(&);
+l r r r r r r r.
+BEGIN (+)&1&2&3&4&5&6&7
+\~&A&B&C&D&E&F&G
+BEGIN (-)&-7&-6&-5&-4&-3&-2&-1
+.TE
+.Ed
+.Pp
+Note that there is no position 0.
+The character at position 5 is
+.Qq E ,
+which is the same character as that at position -3.
+After locating the initial character, the length of +2 prints two
+characters to the right, which includes the initial character.
+.Bd -literal -offset indent -compact
+@mid SYM 5 2@
+\ \ \ => EF
+@mid SYM -3 2@
+\ \ \ => EF
+.Ed
+.Pp
+Positive lengths look to the right, negative lengths look to the left.
+From the same initial position, the two characters looking left are
+.Qq CD ,
+and note they do
+.Em not
+include the initial character.
+.Bd -literal -offset indent -compact
+@mid SYM -3 -2@
+\ \ \ => CD
+.Ed
+.Pp
+If
+.Va BEGIN
+does have a value of zero, it is coerced to either +1 or -1,
+depending on the sign of
+.Va LEN .
+.Ss Namespaces
+Every symbol is implicitly qualified at parse time; unqualified names
+are resolved by searching each namespace in the namespace search list.
+The current namespace is always the first element of this list.
+As an exception, symbols beginning and ending with double underscores are
+forced into the
+.Qq __m2__
+namespace.
+To prevent misunderstandings, it is an error to attempt to access the
+.Qq awk
+namespace.
+.Pp
+In m2 as in gawk, when files are included with the
+.Ic @include
+command, the
+current namespace is temporarily changed from its previous value to
+.Qq m2
+by pushing this onto the namespace stack.
+After the file contents are processed,
+the previous namespace is restored by popping the stack.
+A similar mechanism applies when processing file names given on the command line.
+A different command,
+.Ic @nsinclude ,
+performs the same function as
+.Ic @include
+but does not change the namespace.
+m2 provides a third command,
+.Ic @import ,
+which functions
+like
+.Ic @include ,
+but also adds the library name to the namespace search list in
+.Va __NSPATH__ .
+This list is searched in order whenever unqualified names are parsed.
+All three commands have silent "s" variants which do not complain
+if the included file does not exist.
 .Pp
 .Em Example :
+.\"  See tests/NS/004/example.m2
 .Bd -literal -offset indent -compact
-@define timestamp @date@T@time@@__TZ__@
-@timestamp@
-\ \ \ => 1945\&\-07\&\-16T05:30:00\&\-0600
-.Ed
-.Ss Streams and Diversions
-Instead of printing lines immediately to standard output,
-the stream of text can be
-.Qq diverted
-to a temporary buffer area.
-Later, you can choose whether to print that diverted text,
-write it to an ASCII file, or discard it entirely.
-.Nm
-attempts to follow m4 in its use of
-.Ql @divert
-and
-.Ql @undivert .
-Each stream is identified by its number, a non-negative integer.
-Unlike traditional m4 which limits you to nine streams, m2 streams are
-created as needed without a pre-determined limit.\" beyond Awk's memory capacity, that is
-Stream 0 is interpreted as resuming printing to standard output.
-Text diverted to a negative stream is discarded.
-The current stream number is available in the system symbol
-.Va __DIVNUM__ .
-.Bl -inset
-.It Em Divert :
-No error message or action if argument is not an integer.
-.Bl -tag -width @undivert_-1____ -compact -offset indent
-.It @divert
-Same as
-.Ql @divert 0
-.It @divert \-1
-All subsequent output is discarded.
-.It @divert 0
-Resume normal output: all subsequent output is sent
-to standard output (aka stream # 0).
-.It @divert N
-All subsequent output is sent to stream N.
-.It @divert N1 N2...
-Error!  Multiple arguments are not allowed.
-.El
-.It Em Undivert :
-After a stream has been undiverted, it is implicitly cleared.
-.Bl -tag -width @undivert_-1____ -compact -offset indent
-.It @undivert
-Inject all diversions, in numerical order, into the current stream.
-.It @undivert \-1
-No effect.
-.It @undivert 0
-No effect.
-.It @undivert N
-Inject only stream N into the current stream.
-.It @undivert N1 N2...
-Inject all specified diversions (in argument order, not numerical
-order), into current stream.
-.It @undivert N FILE
-As an extension to m4's undivert, m2 allows you to
-output a stream's collected text directly to a file.
-Only one stream number may be specified this way.
-This form is only available at standard security level.
-.El
-.It Em Example :
-.br
-.Bd -literal -offset indent -compact
-@divert 1
-world!
-@divert
-Hello,
-\ \ \ => Hello,
-\ \ \ => world!
+@define X A very normal @define command
+@namespace ns1
+@define X This is ns1 symbol 'X'
+In @ns@, X=@X@
+\ \ \ => In ns1, X=This is ns1 symbol 'X'
+@namespace ns2
+@define X This is ns2 symbol 'X'
+In @ns@, X=@X@
+\ \ \ => In ns2, X=This is ns2 symbol 'X'
+@namespace m2
+Now in namespace @ns@
+\ \ \ => Now in namespace m2
+ns1::X=@ns1::X@
+\ \ \ => ns1::X=This is ns1 symbol 'X'
+ns2::X=@ns2::X@
+\ \ \ => ns2::X=This is ns2 symbol 'X'
+In m2, X=@X@
+\ \ \ => In m2, X=A very normal @define command
 .Ed
 .Pp
-A new diversion can also be created via
-.Ql @divpush ,
-which saves the current diverted stream on a stack.
-After the new diversion is complete,
-.Ql @divpop
-will restore the previous diversion.
-This is convenient when managing multiple output streams, without
-having to manually keep track of which one is current.
-It is an error to invoke
-.Ql @divpop
-without a previously corresponding
-.Ql @divpush .
-.Pp
-You can determine if a stream buffer contains text by using the function
-.Ql @divnl N@ ,
-which returns the number of lines stored in a diversion.
-This allows the user to alter processing depending on the availability
-of text in a stream.
-.It Em End-of-Data Processing :
-There is an implicit
-.Ql @divert 0
-and
-.Ql @undivert
-performed when
 .Nm
-reaches the end of its input.
-If you want to avoid this and discard any diverted data that has not
-shipped out yet, add the following to the end of your input data:
-.Bd -literal -offset indent -compact
-@divert \-1
-@undivert
-.Ed
-This is the tried-and-true, vanilla m4 way of discarding diverted data.
-GNU m4 and
-.Nm
-implement a
-.Ql @cleardivert
-command which performs a similar operation.
-@cleardivert with no arguments clears all diverted streams.
-.Pp
-Diverted text will not be processed if m2 exits due to
-.Ql @error
-or
-.Ql @exit
-(non-zero status) commands.
-However, commands specified with
-.Ql @wrap
-.Em are
-still processed, regardless of exit status.
-.El
+implements a special namespace named
+.Qq ENV
+which contains symbols for every process environment variable.
+Simply refer to
+.Qq @ENV::variable@
+to expand
+.Va variable Ap s
+value.
+The value of
+.Va __STRICT__[env]
+determines whether accessing an undefined environment
+variable results in the empty string or an error.
+If this concerns you, use
+.Qq defined(ENV::variable)
+to determine if
+.Va variable
+is defined in the process environment.
 .Ss Sequences
 .Nm
 supports named sequences, which are integer values.  By default,
 sequences begin at 0 and increment by 1 as appropriate.  These
 defaults can be changed, and the value can be updated or restarted.
 You create and manage sequences with the
-.Ql @sequence <ID> <ACTION> [<ARG>]
+.Ql Ic @sequence Ar ID Cm ACTION Oo Ar ARG Oc
 command.
 Valid actions are:
 .Pp
 .Bl -tag -width ID_format_STR____ -compact -offset indent
-.It ID [create]
-Create a new sequence named ID
-.It ID delete
-Destroy sequence named ID
-.It ID format STR
-Format string used to print value (%d)
-.It ID next
-Increment value (no output)
-.It ID prev
-Decrement value (no output)
-.It ID restart
-Set current value to initial value
-.It ID setincr N
-Set increment to N (1)
-.It ID setinit N
-Set initial value to N (0)
-.It ID setval N
-Set value directly to N
+.It Ar ID Oo Cm create Oc
+Create a new sequence named
+.Va ID .
+.It Ar ID Cm delete
+Destroy sequence named
+.Va ID .
+.It Ar ID Cm format Ar STR
+Specify format string for printing (default
+.Qq %d ) .
+.It Ar ID Cm next
+Increment value (no output).
+.It Ar ID Cm prev
+Decrement value (no output).
+.It Ar ID Cm restart
+Reset current value to initial value.
+.It Ar ID Cm setincr Ar N
+Set increment to
+.Va N
+(default 1).
+.It Ar ID Cm setinit Ar N
+Set initial value to
+.Va N
+(default 0).
+.It Ar ID Cm setval Ar N
+Set value directly to
+.Va N .
 .El
 .Pp
 To use a sequence, surround the sequence ID with
-.Qq @
+.Ql @
 characters just like a macro.
 This injects the current value, formatted by calling
 .Fn sprintf
@@ -1116,19 +1946,19 @@ Sequence values can be modified in three ways:
 .Bl -enum
 .It
 The
-.Ql @sequence
+.Ic @sequence
 command actions
-.Ic next ,
-.Ic prev ,
-.Ic restart ,
+.Cm next ,
+.Cm prev ,
+.Cm restart ,
 and
-.Ic setval
+.Cm setval
 will change the value as specified without generating any output.
 .It
 Used inline,
-.Qq ++
+.Ql ++
 or
-.Qq --
+.Ql --
 (prefix or postfix) will automatically
 modify the sequence while outputting the desired value.
 .It
@@ -1142,212 +1972,136 @@ will increment the value and return it in decimal without special formatting.
 @sequence counter create
 @sequence counter format # %d=
 @++counter@ First header
-@++counter@ Second header
 \ \ \ => # 1=First header
+@++counter@ Second header
 \ \ \ => # 2=Second header
 .Ed
-.Ss Arrays and Lists
-Elements of both arrays and lists are accessed
-by appending
-.Qq [<key>]
-to the array or list name.
-Arrays are stored internally as an Awk associative array, and can be
-indexed by any literal value.  Lists are implemented with a different
-mechanism that only allows integer indices.
+.Ss Streams and Diversions
+Instead of printing lines immediately to standard output,
+the stream of text can be
+.Dq diverted
+to a temporary buffer area.
+Later, you can choose whether to print that diverted text,
+write it to an ASCII file, or discard it entirely.
+.Nm
+attempts to follow
+.Xr m4 1
+in its use of
+.Ic @divert
+and
+.Ic @undivert .
+Each stream is identified by its number, a non-negative integer.
+Unlike traditional m4 which limits you to nine streams,
+.Nm
+streams are
+created as needed without a pre-determined limit.\" beyond Awk's memory capacity, that is
+Stream 0 is interpreted as resuming printing to standard output.
+Text diverted to a negative stream is discarded.
+The current stream number is available in the system symbol
+.Va __DIVNUM__ .
+.Bl -inset
+.It Em Divert :
+.Bl -tag -width @undivert_N1_N2____ -compact -offset indent
+.It @divert
+Same as
+.Ql @divert 0
+.It @divert 0
+Resume normal output: all subsequent output is sent
+to standard output (aka stream # 0).
+.It @divert \-1
+All subsequent output is discarded.
+.It @divert Ar N
+All subsequent output is sent to stream
+.Va N .
+.It @divert Ar N1 N2 ...
+Error!  Multiple arguments are not allowed.
+.El
+.It Em Undivert :
+.Bl -tag -width @undivert_N1_N2____ -compact -offset indent
+.It @undivert
+Inject all diversions, in numerical order, into the current stream.
+.It @undivert 0
+No effect.
+.It @undivert \-1
+No effect.
+.It @undivert Ar N
+Inject only stream
+.Va N
+into the current stream.
+.It @undivert Ar N1 N2 ...
+Inject all specified diversions into current stream,
+in argument order (not numerical order).
+.It @undivert Ar N FILE
+As an extension to m4's undivert,
+.Nm
+allows you to
+output a stream's collected text directly to a file.
+Only one stream number may be specified this way.
+This form is only available at standard security level.
+.El
+.It Em Example :
+.br
+.Bd -literal -offset indent -compact
+@divert 1
+world!
+@divert
+Hello,
+\ \ \ => Hello,
+\ \ \ => world!
+.Ed
 .Pp
-Arrays must be declared before use
-by executing the command
-.Ql @array
-and specifying the name of the array to create.
-After array declaration, its elements can be accessed
-by using the array name immediately followed by the
-element key in brackets; as always, surrounded by
-.Qq @ .
+A new diversion can also be created via
+.Ic @divpush ,
+which saves the current diverted stream on a stack.
+After the new diversion is complete,
+.Ic @divpop
+will restore the previous diversion.
+This is convenient when managing multiple output streams, without
+having to manually keep track of which one is current.
+It is an error to invoke
+.Ic @divpop
+without a previously corresponding
+.Ic @divpush .
 .Pp
-Lists must be declared before use
-by executing the command
-.Ql @list
-and specifying the name of the list to create.
-Lists are loaded with data by the
-.Ql @data
+You can determine if a stream buffer contains text by using the function
+.Ic @divnl Ns Ic @ ,
+which returns the number of lines stored in a diversion.
+This allows the user to alter processing depending on the availability
+of text in a stream.
+.It Em End-of-Data Processing :
+There is an implicit
+.Ql @divert 0
+and
+.Ql @undivert
+performed when
+.Nm
+reaches the end of its input.
+If you want to avoid this and discard any diverted data that has not
+shipped out yet, add the following to the end of your input data:
+.Bd -literal -offset indent -compact
+@divert \-1
+@undivert
+.Ed
+This is the tried-and-true, vanilla m4 way of discarding diverted data.
+GNU m4 and
+.Nm
+implement a
+.Ic @cleardivert
+command which performs a similar operation.
+.Ic @cleardivert
+with no arguments clears all diverted streams.
+.Pp
+Diverted text will not be processed if
+.Nm
+exits due to
+.Ic @error
 or
-.Ql @filedata
-commands.
-.Ql @data
-requires the data to be present in\-line
-in the input file, which is read until
-.Ql @enddata .
-If you wish to read your data from an external
-file, use
-.Ql @filedata .
-Data loaded in this way are assigned integer
-keys from 1 to the number records.
-Lists can also be loaded with
-.Ql @split .
-.Pp
-For both arrays and lists,
-accessing the bare name, without brackets,
-as in
-.Ql @ARRAY@
-will return the number of elements in the array or list.
-.Ss Mathematical Expressions
-The
-.Ql @expr ...@
-function evaluates mathematical expressions and
-inserts their results.
-.Ql @expr@
-supports the standard arithmetic operators:
-.Dl (\ \ )\ \ +\ \ \-\ \ *\ \ /\ \ %\ \ ^
-and the comparison operators:
-.Dl <\ \ <=\ \ ==\ \ !=\ \ >=\ \ >
-and return 0 or 1 as per Awk.
-Logical negation is available with
-.Qq \&! .
-No other boolean operators are valid.
-.Qq &&
-and
-.Qq ||
-are
-.Em not supported !
-.Po
-However, see section
-.Sx Boolean Expressions .
-.Pc
-.Pp
-.Ql @expr@
-supports the following functions:
-.Pp
-.Bl -tag -width defined(sym)____ -compact -offset indent
-.It abs(x)
-Absolute value of x, |x|
-.It acos(x)
-Arc-cosine of x, \-1 \*(Le x \*(Le 1
-.It asin(x)
-Arc-sine of x, \-1 \*(Le x \*(Le 1
-.It atan2(y,x)
-Arctangent of y/x, \-\*(Pi \*(Le atan2 \*(Le \*(Pi
-.It ceil(x)
-Ceiling of x, smallest integer \*(Ge x
-.It cos(x)
-Cosine of x, in radians
-.It defined(sym)
-1 if sym is defined, else 0
-.It deg(x)
-Convert radians to degrees
-.It exp(x)
-Exponential (anti-logarithm) of x, e^x
-.It floor(x)
-Floor of x, largest integer \*(Le x
-.It gcd(x,y)
-Greatest common divisor of x and y
-.It hypot(x,y)
-Hypotenuse of a right-angled triangle
-.It int(x)
-Integer part of x
-.It lcm(x,y)
-Least common multiple of x and y
-.It lg(x)
-Logarithm of x, base 2
-.It log(x)
-Natural logarithm of x, base e
-.It log10(x)
-Common logarithm of x, base 10
-.It max(x,y)
-The larger of x and y
-.It min(x,y)
-The smaller of x and y
-.It odd(x)
-Return 1 if x is odd, 0 if even
-.It pow(x,y)
-Raise x to the y power, x^y
-.It rad(x)
-Convert degrees to radians
-.It rand()
-Random float, 0 \*(Le rand \*(Lt 1
-.It randint(x)
-Random integer, 1 \*(Le randint \*(Le x
-.It round(x)
-Normal rounding to nearest integer
-.It sign(x)
-Signum of x [\-1, 0, or +1]
-.It sin(x)
-Sine of x, in radians
-.It sqrt(x)
-Square root of x
-.It tan(x)
-Tangent of x, in radians
+.Ic @exit
+(non-zero status) commands.
+However, commands specified with
+.Ic @wrap
+are still processed, regardless of exit status.
 .El
-.Pp
-.Ql @expr@
-will automatically use symbols' and sequences' values in expressions.
-Inside
-.Ql "@expr ...@" ,
-there is no need to surround symbol names
-with
-.Qq @
-characters to retrieve their values.
-.Ql @expr@
-also recognizes the predefined constants
-.Va e ,
-.Va pi ,
-and
-.Va tau .
-.Pp
-The most recent expression value is automatically stored in
-.Va __EXPR__ .
-.Ql @expr@
-can also assign values to symbols with the
-.Qq =
-assignment operator.
-Assignment is itself an expression, so
-.Ql @expr x=5@
-assigns the value 5 to
-.Va x
-and also outputs the result.
-To assign a value to a variable without printing, use
-.Ql @define .
-.Ss Boolean Expressions
-Boolean expressions are used in the
-.Ql @if
-and
-.Ql @while
-commands and the
-.Ql @ifx
-function.
-They support the
-.Qq && ,
-.Qq || ,
-and
-.Qq \&!
-operators for logical AND, OR, and NOT, respectively.
-The && and || operators will
-.Qq short-circuit
-and not evaluate their right-hand side terms if the result is
-determined by the left-hand side term.
-Parentheses may be used to enforce evaluation order.
-.Pp
-The following boolean predicate functions return either True or False.
-Arguments to these functions are scanned for macro expansion.
-.Pp
-.Bl -tag -width elem_IN_array____ -offset indent
-.It canrun(PROGRAM)
-True if PROGRAM can be executed; checked with
-.Xr sh 1
-.Qq "command -v" .
-See also
-.Va @execpath@ .
-.It defined(SYMBOL)
-True if SYMBOL is defined.
-.It env(VAR)
-True if variable VAR is defined in process environment.
-.It exists(FILE)
-True if FILE exists.
-.It ELEM in ARR
-True if ARR (array or list) contains ELEM and False if not.
-.El
-.Pp
-Any other expression is evaluated as a mathematical expression and
-considered True if the result is non-zero.
 .Ss System Symbols
 Symbols that start and end with
 .Qq __
@@ -1356,115 +2110,130 @@ like
 .Va __FOO__
 .Pc
 are called
-.Qq system
+.Dq system
 symbols.
 Except for certain writable symbols, they cannot be created or modified by the user.
 The following are pre-defined; example values, defaults, or types are shown:
 .Pp
 .Bl -tag -width __FMT__[number]___ -offset indent
-.It __COLUMNS__
+.It Va __COLUMNS__
 Width of terminal screen, in characters.
 Value from environment variable
-.Va COLUMNS ;
+.Ev COLUMNS ;
 if not present, fetch
 .Qq cols
 value from
 .Xr tput 1 .
 If security level prevents this, use default value of 80.
 User modifiable.
-.It __CWD__
+.It Va __CWD__
 Current working directory, including trailing slash.
-.It __DATE__
-m2 run start date as
+.It Va __DATE__
+.Nm
+run start date as
 .Em YYYYMMDD
 (eg: 19450716).
 See section
-.Sx Dates and Times .
-.It __DEBUGFILE__
+.Sx Times and Dates .
+.It Va __DEBUGFILE__
 File path for debug and trace output (user modifiable, default
 .Pa /dev/stderr ) .
-.It __DEBUG__
-Debugging enabled? (boolean, user modifiable, default FALSE).
-.It __DEPTH__
+.It Va __DEBUG__
+Debugging enabled? (boolean, user modifiable, default False).
+.It Va __DEPTH__
 Depth of file inclusion.
-.It __DIVNUM__
+.It Va __DIVNUM__
 Current stream number.
 0, the default value, indicates output to the terminal (standard output).
-.It __DOW__
+.It Va __DOW__
 Abbreviated weekday name (Sun, Mon, Tue, etc).
 See also
-.Va @dow@ .
-.It __EPOCH__
-Seconds since Epoch at m2 run start time.
+.Ic @dow@ .
+.It Va __EPOCH__
+Seconds since Epoch at
+.Nm
+run start time.
 See section
-.Sx Dates and Times .
-.It __EXIT__
+.Sx Times and Dates .
+.It Va __EXIT__
 Anticipated exit status.
 This is useful in
-.Va __m2_end_hook
+.Ic __m2_end_hook
 to determine if
 .Nm
 will end with a success or failure code.
 See also
-.Va @exit .
-.It __EXPR__
-Value from most recent @expr ...@ result.
-.It __FILE_UUID__
+.Ic @exit .
+.It Va __EXPR__
+Value from most recent
+.Ic @expr@
+result.
+.It Va __FILE_UUID__
 UUID unique to this file.
-.It __FILE__
+.It Va __FILE__
 Current file name.
-.It __FMT__[date]
-Date format for @date@.
+.It Va __FMT__[date]
+Date format for
+.Ic @date@ .
 Default is "%Y\&-%m\&-%d"; user modifiable.
-.It __FMT__[number]
-Format for printing numbers (sync w/CONVFMT); user modifiable.
-.It __FMT__[seq]
+.It Va __FMT__[number]
+Format for printing numbers (synchronized with
+.Va CONVFMT ) ;
+user modifiable.
+.It Va __FMT__[seq]
 Format for printing sequence values.
 Default is "%d"; user modifiable.
-.It __FMT__[time]
-Time format for @time@.
+.It Va __FMT__[time]
+Time format for
+.Ic @time@ .
 Default is "%H:%M:%S"; user modifiable.
-.It __FMT__[tz]
-Time format for @tz@.
+.It Va __FMT__[tz]
+Time format for
+.Ic @tz@ .
 Default is "%Z"; user modifiable.
-.It __FMT__[utc]
-Date format for @utc@.
+.It Va __FMT__[utc]
+Date format for
+.Ic @utc@ .
 Default is "%Y\&-%m\&-%dT%H:%M:%S%z"; user modifiable.
-.It __FMT__[0]          \" bracket 0
-Text output when @boolval@ is False.
+.It Va __FMT__[0]          \" bracket 0
+Text output when
+.Ic @boolval@
+is False.
 Default is "0"; user modifiable.
 A Fortran programmer might change this to
 .Qq .FALSE.
 while a Lisp programmer might change this to
 .Qq nil .
-.It __FMT__[1]          \" bracket 1
-Text output when @boolval@ is True.
+.It Va __FMT__[1]          \" bracket 1
+Text output when
+.Ic @boolval@
+is True.
 Default is "1"; user modifiable.
 A Fortran programmer might change this to
 .Qq .TRUE.
 while a Lisp programmer might change this to
 .Qq t .
-.It __FS__
+.It Va __FS__
 If defined, value to use as field separator for
-.Ql @split
+.Ic @split
 and
-.Ql @join@ .
+.Ic @join@ .
 User modifiable.
-.It __GID__
+.It Va __GID__
 Group id (effective gid).
-.It __HOME__
+.It Va __HOME__
 User's home directory, including trailing slash.
-.It __HOSTNAME__
+.It Va __HOSTNAME__
 FQDN host name (eg myhost.example.com).
-.It __HOST__
+.It Va __HOST__
 Short host name (eg myhost).
-.It __INCPATH__
+.It Va __INCPATH__
 The
-.Qq include path
+.Dq include path
 used by
-.Ql @include
+.Ic @include
 and
-.Ql @paste
+.Ic @paste
 to find files.
 Elements are separated by
 colon
@@ -1472,116 +2241,324 @@ colon
 characters.
 Initialized from environment variable
 .Ev M2PATH .
-.It __INPUT__
-The data read by @input; user modifiable.
-.It __LINE__
-Current line number inside
+.It Va __INPUT__
+The data read by
+.Ic @input ;
+user modifiable.
+.It Va __LENIENT__
+Controls how error conditions are handled.
+In the default case (0), errors are processed normally.
+If the value is negative, errors cause in an immediate abnormal
+program end.
+If positive, errors are not fatal: they are instead treated
+as warnings, and execution continues.
+.Po
+.Em Note :
+Subsequent
+.Nm
+processing may be adversely affected in this case.
+.Pc
+.It Va __NSPATH__
+Colon-separated list of namespaces to be searched during unqualfied name resolution.
+Can be modified with
+.Ic @import
+and by other means.
+.It Va __LINE__
+Current line number inside current
 .Va __FILE__ .
-.It __M2_UUID__
-UUID unique to this m2 run.
-.It __M2_VERSION__
-m2 version.
-.It __NFILE__
+.It Va __M2_UUID__
+UUID unique to this
+.Nm
+run.
+.It Va __M2_VERSION__
+.Nm
+version.
+.It Va __NFILE__
 Number of files processed so far (e.g., 2).
-.It __NLINE__
+.It Va __NLINE__
 Number of lines read so far from all files.
-.It __OSNAME__
+.It Va __OSNAME__
 Operating system name.
-.It __PID__
-m2 process id.
-.It __PROG__[...]
+.It Va __PID__
+.Nm
+process id.
+.It Va __PROG__[...]
 Paths to various system utility programs.
-.It __SECURE__
-Security level (0, 1, or 2).
+.It Va __SECURE__
+Security level (0, 2, or 3).
 See
 .Sx SECURITY CONSIDERATIONS
 for further information.
-.It __STRICT__[bool]
+.It Va __STRICT__[bool]
 If True (the default), it is an error to pass an undefined symbol to
-.Ql @boolval@ .
+.Ic @boolval@ .
 If non-strict (False), undefined variables are considered False.
 User modifiable.
-.It __STRICT__[def]
+.It Va __STRICT__[def]
 If True (the default), symbols inside
 .Qq @
 signs must be defined.
-User commands must @return a value.
-If non-strict (False),
-.Ql @XLERB@
-or other unrecognized text will ship out unmodified.
+User commands must
+.Ic @return
+a value.
+If non-strict (False), unrecognized symbol text will ship out unmodified.
 If a user command does not provide a value, the expansion will be the empty string.
 User modifiable.
-.It __STRICT__[env]
+.It Va __STRICT__[env]
 If True (the default), environment variables must be defined.
 If non-strict (False), unknown environment variables expand to an empty string.
-(This action can also be accomplished in strict mode with @sgetenv@.)
 User modifiable.
-.It __STRICT__[file]
+.It Va __STRICT__[file]
 If True (the default), reading a non-existent file with
-.Ql @include
+.Ic @include
 causes an error.
 If non-strict (False), attempts to read non-existent files result in a warning message.
 For completely silent behavior, use
-.Ql @sinclude .
+.Ic @sinclude .
 User modifiable.
-.It __STRICT__[key]
+.It Va __STRICT__[key]
 If True (the default), it is an error to specify a non-existent key when
 indexing an array or list.
 If non-strict (False), reading a non-existing index will return the
 empty string.
-.It __STRICT__[name]
-If True (the default), symbol names are limited to the following syntax for names:
-.Dl /^[A\-Za\-z#_][A\-Za\-z#_0\-9]*$/
-If non-strict (False), symbol names are much more liberal.
-User modifiable.
-.It __SYNC__
+.It Va __SYNC__
 Frequency to flush output (0..2).
 0=End only, 1=Every file (default), 2=Every line.
 User modifiable.
-.It __SYSVAL__
-Exit status of most recent @shell or @syscmd command.
-.It __TIMESTAMP__
+.It Va __SYSVAL__
+Exit status of most recent
+.Ic @shell
+or
+.Ic @syscmd
+command.
+.It Va __TIMESTAMP__
 ISO 8601 timestamp, with "T" separator.
 See section
-.Sx Dates and Times .
-.It __TIME__
-m2 run start time as
+.Sx Times and Dates .
+.It Va __TIME__
+.Nm
+run start time as
 .Em HHMMSS
 (eg 053000).
 See section
-.Sx Dates and Times .
-.It __TMPDIR__
+.Sx Times and Dates .
+.It Va __TMPDIR__
 Location for temporary files.
-Default is /tmp/; user modifiable.
-.It __TRACEMODE__
+Default is
+.Pa /tmp/ ;
+user modifiable.
+.It Va __TRACEMODE__
 String containing trace control flags.
 Default is
 .Qq ae .
-.It __TRACE__
+.It Va __TRACE__
 If True, tracing is enabled.
 If False (the default), tracing messages are inhibited
 regardless of the settings in
 .Va __TRACEMODE__ .
 User modifiable.
-.It __TZ__
+.It Va __TZ__
 Time zone numeric offset from UTC (\-0800).
 See section
-.Sx Dates and Times .
-.It __UID__
+.Sx Times and Dates .
+.It Va __UID__
 User id (effective uid).
-.It __USER__
+.It Va __USER__
 User name.
 .El
+.Ss Times and Dates
+.Va __DATE__ ,
+.Va __EPOCH__ ,
+.Va __TIME__ ,
+.Va __TIMESTAMP__ ,
+and
+.Va __TZ__
+are fixed at program start and do not change.
+.Ic @date@ ,
+.Ic @epoch@ ,
+.Ic @time@ ,
+and
+.Ic @tz@
+do change to reflect the current time and date.
+Of course, time zones don't normally change; the difference is that
+.Ic @__TZ__@
+prints
+.Qq \-0800
+while
+.Ic @tz@
+prints
+.Qq PST .
+.Pp
+.Em Example :
+.Bd -literal -offset indent -compact
+@define timestamp @date@T@time@@__TZ__@
+@timestamp@
+\ \ \ => 1945\&\-07\&\-16T05:30:00\&\-0600
+.Ed
+.Ss Tracing
+Tracing an
+.Nm
+file results in printing additional diagnostic information
+to the debug file when certain triggering events occur.
+It most frequently happens when a macro is expanded but there are other
+possible triggers.
+These lines are prefixed with "M2Trace:" for easy identification.
+System symbol
+.Va __TRACE__
+provides control over tracing output; nothing will be printed for any
+event if its value is False.
+Once it is True, tracing output is managed by calling the commands
+.Ic @traceon
+and
+.Ic @traceoff ,
+to control which macros will be traced, and
+.Ic @tracemode
+which controls various options.
+.Bl -inset
+.It Em Trace On :
+Calling
+.Ic @traceon
+implicitly sets
+.Va __TRACE__
+to True.
+.Bl -tag -width @tracemode_FLAGS___ -compact -offset indent
+.It @traceon
+Called without arguments, bare
+.Ic @traceon
+will trace
+.Sy ALL
+symbols, including internal built-ins: it does this by enabling the "t"
+option in the trace mode.
+.It @traceon SYM ...
+Calling
+.Ic @traceon
+with one or more symbol names will enable tracing for those symbols.
+Tracing information is kept separately from the symbol table,
+so it is possible to request tracing for symbols that are not yet defined.
+.El
+.It Em Trace Off :
+.Bl -tag -width @tracemode_FLAGS___ -compact -offset indent
+.It @traceoff
+Calling
+.Ic @traceoff
+with no arguments will clear the "t" flag from the trace modes and also set
+.Va __TRACE__
+to False.
+.It @traceoff SYM ...
+Calling
+.Ic @traceoff
+with one or more symbol names will disable tracing for those symbols.
+It makes no changes to the "t" trace mode nor to
+the value of
+.Va __TRACE__ .
+.El
+.It Em Trace Configuration :
+Tracing is configured by specifying one or more flag letters, of which
+"t" is just one of several.
+.Bl -tag -width @tracemode_FLAGS___ -compact -offset indent
+.It @tracemode
+With no arguments, the trace flags are reset to their default values.
+.\"     BSD default = eq
+.\"     GNU default = aqe
+Currently, the
+.Nm
+default value is "ae", although this is subject to change.
+.It @tracemode [{+|\-}]FLAG...
+Otherwise, if the argument consists of the various flag letters shown
+below, the value of trace flags is set to the argument, overriding its
+previous value.
+If the first character is "+" or "\-", then the subsequent letters are
+either added to or removed from the existing trace flags; + and \- may be
+used repeatedly.
+.El
+.It Em Flag letters :
+These are the only values accepted by
+.Ic @tracemode .
+Most do not alter the value of
+.Va __TRACE__ ;
+only T and V can change it.
+.Pp
+.Bl -tag -width indent -offset indent
+.It a   \" BSD & GNU
+Show the actual arguments in each macro call.
+This applies to all macro calls if the `t' flag is used, otherwise only
+the macros covered by calls of
+.Ic @traceon .
+This flag is enabled by default.
+.It b   \" m2 only
+Print a message each time a block is created or destroyed.
+.\" .It c   \" BSD & GNU
+.\" [CURRENTLY NOT IMPLEMENTED]
+.\" Macro evaluation tracing: Show several trace lines for each macro call.
+.\" A line is shown when the macro is seen, but before the arguments are
+.\" collected; a second line when the arguments have been collected and a
+.\" third line after the call has completed.
+.It e   \" BSD & GNU
+Show the expansion of each macro call, if it is not void.
+This applies to all macro calls if the `t' flag is used,
+otherwise only the macros covered by calls of
+.Ic @traceon .
+This flag is enabled by default.
+.It E   \" m2 extension
+Print a message when an environment variable is read, written, or queried.
+.It f   \" BSD & GNU
+Show the current input file name in each trace output line.
+.It i   \" GNU only
+Print a message each time the current input file is changed, giving file
+name and input line number.
+.It l   \" BSD & GNU
+Show the current input line number in each trace output line.
+.It m   \" m2 extension
+Print a message when a built-in command is executed.
+.It p   \" GNU only
+Print a message when a named file is found through the path search
+mechanism, giving the actual filename used.
+.\" .It q   \" BSD & GNU
+.\" Quote actual arguments and macro expansions in the
+.\" display with the current quotes.
+.\" [m2 - NOT IMPLEMENTED: this is quite useless because m2 has no quote characters.]
+.It q   \" m2 extension
+Print a message when a namespace qualification is performed.
+.It r   \" m2 extension
+Print a message whenever an input line is read.
+.It s   \" m2 extension
+Print a message when a symbol is read or written.
+.It t   \" BSD & GNU
+Trace all macro calls.
+.It T
+When encountered as an unadorned flag letter or with "+",
+.Va __TRACE__
+is set to True; "\-T" sets it to False.
+.It V   \" BSD & GNU
+A shorthand for all of the above flags.
+When flags are being set or added,
+.Va __TRACE__
+is set to True; if flags are being removed, it is not changed.
+.\" .It x   \" BSD & GNU
+.\" [CURRENTLY NOT IMPLEMENTED]
+.\" Add a unique `macro call id' to each line of the trace output.
+.\" This is useful in connection with the `c' flag above.
+.El
+.El
+.Pp
+See also the
+.Sx Debugging
+section for additional information.
 .Ss User-Defined Commands
 What are the differences between
-.Ql @define
+.Ic @define
 and
-.Ql @newcmd ?
+.Ic @newcmd ?
 .Pp
 .Em Symbols :
-@define (and @longdef) create a
+.Ic @define
+(and
+.Ic @longdef )
+create a
 .Em symbol ,
-whose value can be expanded by surrounding it with "@" characters, as in:
+whose value can be expanded by surrounding it with
+.Ql @
+characters, as in:
 .br
 .Bd -literal -offset indent -compact
 @define name John Doe
@@ -1599,59 +2576,73 @@ to be functions which take no parameters.
 .Pp
 .Em Functions :
 If the replacement text refers to $1, $2, etc, these glyphs will be
-replaced by the parameter values (words) supplied between the @
+replaced by the parameter values (words) supplied between the
+.Ql @
 characters.
 .Nm
 defines a number of built-in functions, such as
-.Ql @getenv@
+.Ic @date@
 or
-.Ql @ifelse@ .
+.Ic @ifx@ .
 Symbols and functions can be used in-line with other text and generally
 produce or modify output in some way.
 Parameters may be specified with either syntax:
 .Ql @func AAA BBB CCC@
 (split on whitespace), or
 .Ql @func{AAA}{BBB}{CCC}@ .
-Available conditionals include @if[n]def@, @ifelse@, @ifx@.
+Available conditionals include
+.Ic @ifdef@ ,
+.Ic @ifelse@ ,
+and
+.Ic @ifx@ .
 .Pp
 .Em Commands :
-@newcmd creates a new user
+.Ic @newcmd
+creates a new user
 .Em command
 which is recognized and executed on a line of its own,
 like other built-in commands such as
-.Ql @define
+.Ic @define
 or
-.Ql @include .
-Available conditionals include @if and @case.
+.Ic @include .
+Available conditionals include
+.Ic @if
+and
+.Ic @case .
 Command definitions may include named parameters and complex control-flow logic
 including
-.Ql @for
+.Ic @for
 and
-.Ql @while
+.Ic @while
 loops, and
 everyone's favorite capability,
-.Ql @eval .
+.Ic @eval .
 Parameters must be specified with the
 .Ql @func{AAA}{BBB}{CCC}@
 syntax.
 You may invoke a user command merely for its execution side effects:
 it is not required for a command to include a
-.Ql @return
+.Ic @return
 statement or value.
 However, if a command
-.Em does
+.Sy does
 return a value,
 then the command may also be used in-line like
-other symbol functions; but if @return lacks a value, or control drops
+other symbol functions; but if
+.Ic @return
+lacks a value, or control drops
 off the end without returning, an error is raised.
-Note that this invocation format requires an in-line trailing
-.Qq @
+.Em Note :
+This invocation format requires an in-line trailing
+.Ql @
 character, whereas the line-of-its-own invocation does not.
 .Pp
 .Em Parameters :
-@newcmd accepts zero or more named formal parameters, enclosed in braces.
+.Ic @newcmd
+accepts zero or more named formal parameters, enclosed in braces.
+Formal parameter names must not be qualified.
 A parameter may be designated as
-.Qq optional
+.Dq optional
 by suffixing its name with an equals sign
 .Ql = .
 The optional default value may be supplied on the right hand side;
@@ -1692,213 +2683,24 @@ This table will have @n@ lines:
 \ \ \ => |  8 |  64 |  2.8284 |
 \ \ \ => |  9 |  81 |  3.0000 |
 .Ed
-.Ss Hooks
-If defined,
-.Nm
-will run specially named user commands
-.Po
-.Qq hooks
-.Pc
-at certain predefined points during its execution.
-Hook command names begin with
-.Qq __
-and end with
-.Qq _hook .
-Hooks take no formal parameters.
-.Bl -tag -width __m2_file_suspend_hook -offset indent
-.It __m2_begin_hook
-Invoked once at the beginning of m2 execution, after any
-initialization files are loaded.
-.Va __FILE__
-is undefined.
-.It __file_open_hook
-Invoked whenever a new file is opened, but before its contents are read.
-.Va __FILE__
-is the newly opened file.
-.It __file_close_hook
-Invoked whenever an included file has been read and closed.
-.Va __FILE__
-is still the recently closed file.
-.It __file_suspend_hook
-Invoked whenever a new file is about to be included, temporarily
-superseding the current input file..
-.Va __FILE__
-is the current, about to be suspended file.
-.It __file_resume_hook
-Invoked whenever a previously suspended file is about to be resumed.
-.Va __FILE__
-is the newly resumed, originally current file.
-.It __m2_end_hook
-Invoked once at the end of m2 execution, after any streams or wraps
-have been executed.
-.Va __FILE__
-is undefined.
-.El
-.Ss Debugging
-Symbol
-.Va __DEBUG__
-controls debugging; set it to True or False to enable or disabled debugging messages.
-Debugging output is generated by the
-.Ql @debug
-command and by m2 execution.
-The debug file is maintained in symbol
-.Va __DEBUGFILE__ .
-At security level 0, the user may specify a file path for debugging and tracing output.
-At higher security levels, the debug file is forced to
-.Pa /dev/stderr ,
-which is also the default value.
-.Ss Tracing
-Tracing an
-.Nm
-file results in printing additional diagnostic information
-to the debug file when certain triggering events occur.
-It most frequently happens when a macro is expanded but there are other
-possible triggers.
-These lines are prefixed with "m2trace:" for easy identification.
-System symbol
-.Va __TRACE__
-provides control over tracing output; nothing will be printed for any
-event if its value is False.
-Once it is True, tracing output is managed by calling the commands
-.Ql @traceon
-and
-.Ql @traceoff ,
-to control which macros will be traced, and
-.Ql @tracemode
-which controls various options.
-.Bl -inset
-.It Em Trace On :
-Calling
-.Ql @traceon
-implicitly sets
-.Va __TRACE__
-to True.
-.Bl -tag -width @tracemode_FLAGS___ -compact -offset indent
-.It @traceon
-Called without arguments, bare
-.Ql @traceon
-will trace
-.Em ALL
-symbols, including internal built-ins: it does this by enabling the "t"
-option in the trace mode.
-.It @traceon SYM ...
-Calling
-.Ql @traceon
-with one or more symbol names will enable tracing for those symbols: it
-does this by setting a flag in the name table.
-Note that, unlike m4, it is not possible to trace a symbol that is not defined.
-.El
-.It Em Trace Off :
-.Bl -tag -width @tracemode_FLAGS___ -compact -offset indent
-.It @traceoff
-Calling
-.Ql @traceoff
-with no arguments will clear the "t" flag from the trace modes and also set
-.Va __TRACE__
-to False.
-No changes are made to the name table flags.
-.It @traceoff SYM ...
-Calling
-.Ql @traceoff
-with one or more symbol names will disable tracing for those symbols by
-clearing the name table flag.
-It makes no changes to the "t" trace mode nor to
-the value of
-.Va __TRACE__ .
-.El
-.It Em Trace Configuration :
-Tracing is configured by specifying one or more flag letters, of which
-"t" is just one of several.
-.Bl -tag -width @tracemode_FLAGS___ -compact -offset indent
-.It @tracemode
-With no arguments, the trace flags are reset to their default values.
-.\"     BSD default = eq
-.\"     GNU default = aqe
-Currently, the m2 default value is "ae", although this is subject to change.
-.It @tracemode [{+|\-}]FLAG...
-Otherwise, if the argument consists of the various flag letters shown
-below, the value of trace flags is set to the argument, overriding its
-previous value.
-If the first character is "+" or "\-", then the subsequent letters are
-either added to or removed from the existing trace flags; + and \- may be
-used repeatedly.
-.El
-.It Em Flag letters :
-These are the only values accepted by
-.Ql @tracemode .
-Most do not alter the value of
-.Va __TRACE__ ;
-only T and V can change it.
-.Pp
-.Bl -tag -width indent -offset indent
-.It a   \" BSD & GNU
-Show the actual arguments in each macro call.
-This applies to all macro calls if the `t' flag is used, otherwise only
-the macros covered by calls of @traceon.
-This flag is enabled by default.
-.It b   \" m2 only
-Print a message each time a block is created or destroyed.
-.\" .It c   \" BSD & GNU
-.\" [CURRENTLY NOT IMPLEMENTED]
-.\" Macro evaluation tracing: Show several trace lines for each macro call.
-.\" A line is shown when the macro is seen, but before the arguments are
-.\" collected; a second line when the arguments have been collected and a
-.\" third line after the call has completed.
-.It e   \" BSD & GNU
-Show the expansion of each macro call, if it is not void.
-This applies to all macro calls if the `t' flag is used,
-otherwise only the macros covered by calls of @traceon.
-This flag is enabled by default.
-.It f   \" BSD & GNU
-Show the current input file name in each trace output line.
-.It i   \" GNU only
-Print a message each time the current input file is changed, giving file
-name and input line number.
-.It l   \" BSD & GNU
-Show the current input line number in each trace output line.
-.It m   \" m2 extension
-Print a message when a built-in command is executed.
-.It p   \" GNU only
-Print a message when a named file is found through the path search
-mechanism, giving the actual filename used.
-.\" .It q   \" BSD & GNU
-.\" [NOT IMPLEMENTED: q option is quite useless because m2 has no quote characters.]
-.\" Quote actual arguments and macro expansions in the
-.\" display with the current quotes.
-.It s   \" m2 extension
-Print a message when a symbol is read or written.
-.It t   \" BSD & GNU
-Trace all macro calls.
-.It T
-When encountered as an unadorned flag letter or with "+",
-.Va __TRACE__
-is set to True; "\-T" sets it to False.
-.It V   \" BSD & GNU
-A shorthand for all of the above flags.
-When flags are being set or added,
-.Va __TRACE__
-is set to True; if flags are being removed, it is not changed.
-.\" .It x   \" BSD & GNU
-.\" [CURRENTLY NOT IMPLEMENTED]
-.\" Add a unique `macro call id' to each line of the trace output.
-.\" This is useful in connection with the `c' flag above.
-.El
-.El
 .Sh IMPLEMENTATION NOTES
 .Nm
 is written in portable
-.Qq standard
+.Dq standard
 Awk and does not require GNU Awk or any other files.
 Even later Awk additions such as
 .Fn systime
 are avoided.
-m2 is tested for compatibility with BSD\ Awk version 20210215,
+.Nm
+is tested for compatibility with BSD\ Awk version 20210215,
 GNU\ Awk 5.3.0, mawk 1.3.4\ 2024012, GoAWK 1.29.1,
 and BusyBox Awk\ v1.36.1
 .Sh ENVIRONMENT
 .Bl -tag -width indent
 .It Ev COLUMNS
 If available, used to determine the output line width.
+Available through symbol
+.Va __COLUMNS__ .
 .It Ev HOME
 Used to access your
 .Pa $HOME/.m2rc
@@ -1909,18 +2711,20 @@ Available through symbol
 Used as an alternative source for
 .Va __HOME__
 in case
-.Va HOME
+.Ev HOME
 is not defined in your environment.
 .It Ev M2PATH
 A colon-separated list of directories to try (if necessary) for the
-.Ql @include
+.Ic @include
 and
-.Ql @paste
+.Ic @paste
 commands.
-Note: M2PATH does not apply to the
-.Ql @filedefine
+.Em Note :
+.Ev M2PATH
+does not apply to the
+.Ic @filedefine
 or
-.Ql @filedata
+.Ic @filedata
 commands.
 See also
 .Va __INCPATH__ .
@@ -1937,6 +2741,8 @@ Available through symbol
 Used as a possible default shell.
 .It Ev TMPDIR
 Used as a possible temporary directory.
+Available through symbol
+.Va __TMPDIR__ .
 .El
 .Sh FILES
 .Bl -tag -width indent
@@ -1954,7 +2760,7 @@ To inhibit automatically loading these init files, specify
 on the command line.
 Specifying
 .Ar init=1
-causes the init files to be loaded (if not done so already)
+causes the init files to be loaded immediately (if not done so already)
 without the need to specify an input file.
 .It Xo
 .Pa /dev/stdin ,
@@ -1969,18 +2775,20 @@ I/O may be performed on these paths.
 .Bl -tag -width flag -compact
 .It Li 0
 Normal process completion, or
-.Ql @exit
+.Ic @exit
 command.
 .It Li 1
 Internal error generated by Awk error() function.
 .It Li 2
 User requested
-.Ql @error
+.Ic @error
 command in input.
 .It Li 66
 A file specified on command line could not be read.
 .It Li 70
-An internal error, not from user code, caused m2 to abend.
+An internal error, not from user code, caused
+.Nm
+to abend.
 .It Li 77
 Security violation caused by attempting an operation forbidden
 at current
@@ -1992,8 +2800,8 @@ The following example demonstrates arrays, conditionals, and
 .Ql @{...} :
 .Bd -literal -offset indent
 @#              Use default region if available
-@if env(AWS_DEFAULT_REGION)
-@define region @getenv AWS_DEFAULT_REGION@
+@if defined(ENV::AWS_DEFAULT_REGION)
+@define region @ENV::AWS_DEFAULT_REGION@
 @endif
 @#              If you want your own default region, uncomment
 @default region us\-west\-2
@@ -2219,7 +3027,7 @@ the substitution prefix character ($ by default).
 .It M5
 Dr. Richard Daystrom designed and built a multitronic computer
 designated M\-5, ca. 2268.
-.Qq Not entirely successful.
+.Dq Not entirely successful.
 .It M6
 Andrew D. Hall \- M6,
 .Bd -ragged -offset indent -compact
@@ -2316,27 +3124,32 @@ This is especially noticeable if
 is used in complex ways.
 .Sh SECURITY CONSIDERATIONS
 The symbol
-.Ql __SECURE__
+.Va __SECURE__
 contains an integer storing the security level, which controls how
 .Nm
 may invoke subprocesses.
 The default is 0 which signifies no restrictions.
 In particular, this allows the
-.Ql @shell ,
-.Ql @syscmd ,
+.Ic @shell ,
+.Ic @syscmd ,
 and
-.Ql @esyscmd
+.Ic @esyscmd
 commands to attempt execution of any program the user specifies.
 Additionally, certain commands may create user-specified external
 files, for example by using
-.Ql @undivert
+.Ic @undivert
 or storing a path into symbol
 .Va __DEBUGFILE__ .
 .Pp
-At secure level 1, those commands are disabled entirely.
+Secure level 1 does not exist beyond program startup; it changes to
+level 0 for regular users or level 2 for root.
+.Pp
+At secure level 2, those commands are disabled entirely.
 It also prevents creation of additional files, so
 undiverting a stream to an output file is prohibited,
-as is specifying a file to receive @dump output.
+as is specifying a file to receive
+.Ic @dump
+output.
 However, programs required for
 .Nm Ap s
 operation (as defined in the
@@ -2344,7 +3157,7 @@ operation (as defined in the
 array) are still permitted, since the user cannot modify them and they
 are presumably safe to invoke.
 .Pp
-At level 2, all external programs are prohibited, including those
+At level 3, all external programs are prohibited, including those
 normally considered safe, such as
 .Xr date 1
 or
@@ -2352,6 +3165,6 @@ or
 This level will have a detrimental effect on
 .Nm Ap s
 capabilities, such as disabling
-.Ql @time@
+.Ic @time@
 et al.
 The user may raise the security level, but it cannot be lowered.

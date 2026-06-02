@@ -1,0 +1,4 @@
+inctest: 1 - Namespace is foo (should be foo)
+inc1: 1 - Namespace is m2 (should be m2)
+inc1: 2 - Namespace is inc1 (should be inc1)
+inctest: 2 - Namespace is foo (should be foo)

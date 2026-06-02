@@ -1,6 +1,6 @@
 @define NonEmpty
 @define NiceTry ""
-@null Empty
+@set Empty
 @dump
 Length(Empty) = @len Empty@
 Length(NonEmpty) = @len NonEmpty@

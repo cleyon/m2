@@ -1,3 +1,3 @@
-FOO is '@getenv FOO@'
-SBAR is '@sgetenv SBAR@'
-BAR is '@getenv BAR@'
+FOO is '@ENV::FOO@'
+SBAR is '@ifdef{ENV::SBAR}{ENV::SBAR}@'
+BAR is '@ENV::BAR@'

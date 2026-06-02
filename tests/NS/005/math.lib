@@ -1,0 +1,2 @@
+@namespace math
+@define sin Opposite / Hypoteneuse

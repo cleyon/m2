@@ -1,0 +1,4 @@
+nsinctest: 1 - Namespace is foo (should be foo)
+inc2: 1 - Namespace is foo (should be foo)
+inc2: 2 - Namespace is inc2 (should be inc2)
+nsinctest: 2 - Namespace is foo (should be foo)

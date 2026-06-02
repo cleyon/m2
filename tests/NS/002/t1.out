@@ -1,0 +1,8 @@
+In t1.m2
+Start m2::test1
+Running m2::test1
+root:UR0WNED:0:0:System Administrator:/var/root:/bin/sh
+www:*:80:80:World Wide Web Owner:/var/www:/usr/sbin/nologin
+m2:Secret:2849:2849:M2:/home/m2:/bin/sh
+nobody:*:65534:65534:Unprivileged User:/var/empty:/usr/bin/false
+Done with m2::test1

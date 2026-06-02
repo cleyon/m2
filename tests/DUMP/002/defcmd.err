@@ -5,5 +5,5 @@
 @endlongdef
 @endcmd
 @newcmd single
-@define foo 111
+@__m2__::define foo 111
 @endcmd

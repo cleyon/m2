@@ -1,2 +1,2 @@
-m2trace:toff.m2:5: [Expand] @foo@ => 'bar'
-m2trace:toff.m2:7: [Expand] @foo@ => 'bar'
+M2Trace:toff.m2:5: [Expand] @m2::foo@ => 'bar'
+M2Trace:toff.m2:7: [Expand] @m2::foo@ => 'bar'

@@ -1,4 +1,4 @@
-m2trace:chgsrc.m2:4: [File Update] Input file now 'incl1'
-m2trace:incl1:1: [File Update] Input file now 'chgsrc.m2'
-m2trace:chgsrc.m2:10: [File Update] Input file now 'incl1'
-m2trace:incl1:1: [File Update] Input file now 'chgsrc.m2'
+M2Trace:chgsrc.m2:4: [File Update] Input file now 'incl1'
+M2Trace:incl1:1: [File Update] Input file now 'chgsrc.m2'
+M2Trace:chgsrc.m2:10: [File Update] Input file now 'incl1'
+M2Trace:incl1:1: [File Update] Input file now 'chgsrc.m2'

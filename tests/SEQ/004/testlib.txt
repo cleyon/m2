@@ -1,0 +1,4 @@
+@sequence test::counter
+@namespace test
+@incr counter 5
+@++other::counter@

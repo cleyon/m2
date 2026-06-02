@@ -1,4 +1,5 @@
-.PHONY:	all man manview callgraph callgraph-full callgraph-sane callgraph-io vars funcs clean distclean lint tags \
+.PHONY:	all man manview callgraph callgraph-full callgraph-sane callgraph-io clean distclean lint tags \
+	funcs vars \
 	debug check test \
 	check-quiet   test-quiet   quiet-check   quiet-test \
 	check-verbose test-verbose verbose-check verbose-test \
@@ -36,7 +37,7 @@ debug:
 	$(GAWK) -D -f m2
 
 m2.cat1: m2.1
-	nroff -mdoc m2.1 > $@
+	nroff -mdoc $^ > $@
 
 m2.ps: m2.1
 	groff -Tps -mdoc $^ > $@
@@ -44,28 +45,28 @@ m2.ps: m2.1
 m2.pdf: m2.ps
 	pstopdf $^ -o $@
 
-gm2:
+gm2: m2
 	sed '1s,$(AWK),$(GAWK),' m2 > $@
 	chmod +x $@
 
-mm2:
+mm2: m2
 	sed '1s,$(AWK),$(MAWK),' m2 > $@
 	chmod +x $@
 
-nm2:
+nm2: m2
 	sed '1s,$(AWK),$(NAWK),' m2 > $@
 	chmod +x $@
 
-funcs:
+funcs awkfuncs.out: m2
 	@rm -f awkfuncs.out
 	grep '^function' m2 | sed 's/(.*//' | awk '{print $$2}' | sort >awkfuncs.out
 
-vars:
+vars awkvars.out: m2
 	@rm -f awkvars.out
 	$(GAWK) -d -f m2 /dev/null >/dev/null
 
 clean:
-	rm -f  m2.cat1  test.log.*  tests/*/*/*.run_*
+	rm -f  m2.cat1  test.log.*  tests/*/*/*.run_*  tests/*/*/*.expected_*
 
 distclean: clean
 	rm -f *~ awkvars.out awkfuncs.out
@@ -82,7 +83,6 @@ check-verbose test-verbose verbose-check verbose-test:
 	@date
 
 check test check-quiet test-quiet quiet-check quiet-test:
-#	@date
 	@/usr/bin/time ./check.sh </dev/null 2>&1 | grep -v 'PASS \*\*\*$$'
 	@date
 
@@ -92,6 +92,5 @@ testlog-verbose:
 	@date
 
 testlog testlog-quiet:
-#	@date
 	@timeout 90 /usr/bin/time nice ./check.sh </dev/null | grep -v 'PASS \*\*\*$$' >test.log.`ts` 2>&1
 	@date

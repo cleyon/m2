@@ -68,19 +68,19 @@
 #
 # TEST OUTPUT
 # ===========
-# Framework control messages begin with "!!!", followed by a KEYWORD and info:
-#       !!! START - Starting test runs
+# Framework control messages begin with "!!!", followed by a KEYWORD and info.
 # Complete list of control messages:
-#       !!! BEGIN - <date>
-#       !!! END - <date>
-#       !!! ERROR - Failure in testing framework
-#       !!! REPORT - <N> tests
-#       !!! START - Starting test runs
-#       !!! STATUS - { SUCCESS, FAILURE, INTERRUPTED, DISASTER }
-#       !!! STOP - Stopping test runs
+#       !!! ABEND: <error message>
+#       !!! ELAPSED TIME: <N> s
+#       !!! JOB BEGIN: <date>
+#       !!! JOB END: <date>
+#       !!! RESULTS SUMMARY:  <N> tests
+#       !!! TEST RUN STATUS: { SUCCESS, FAILURE, INTERRUPTED, DISASTER }
+#       !!! TEST RUN: START
+#       !!! TEST RUN: STOP
 #
 # Test ids and results are shown on lines beginning and ending with "***":
-#       *** RUN - NEWCMD/004/simple.m2 ... PASS ***
+#       *** TEST: NEWCMD/004/simple.m2 ... PASS ***
 # Exit status codes and data streams are shown in sections whose titles appear
 #       >>> LIKE THIS <<<
 #
@@ -101,6 +101,7 @@
 # ==========================
 # These two variables are user-settable:
 debug="false"		# set to "true" for extra messages
+diff_opt="-u"           # options for diff(1)
 busybox_awk="false"	# set to "true" to invoke m2 as "busybox awk -f ..."
 gawk_trad="false"       # set to "true" to invoke m2 as "gawk --traditional"
 mawk_trad="false"       # set to "true" to invoke m2 as "mawk -W traditional"
@@ -120,9 +121,9 @@ nfail=0
 framework_error()
 {
     if [ $# -eq 0 ]; then
-        echo "!!! ERROR - Failure in testing framework"
+        echo "!!! ABEND: Failure in testing framework"
     else
-        echo "!!! ERROR - Failure in testing framework: $*"
+        echo "!!! ABEND: $*"
     fi
     exit 1
 }
@@ -132,33 +133,41 @@ cat_or_nodata()
 {
     local file
     file="$1"
-    [ ! -f "$file" ] && framework_error "Expected file '$file' does not exist"
+    [ ! -f "$file" ] && framework_error "File '$file' does not exist"
     [ -s "$file" ] && cat "$file" || echo "[NO_DATA]"
+}
+
+
+lines()
+{
+    local nline
+    local plural
+    nline="`wc -l "$@" 2>/dev/null | awk '{ print $1 }'`"
+    if [ -z "$nline" ]; then
+        echo "lines: Problem with '$@'"  1>&2
+        nline="0"
+    fi
+    [ "$nline" -ne 1 ] && plural="s" || plural=""
+    echo "${nline} line${plural}"
 }
 
 
 summarize_tests()
 {
-    local pass_pct
-    local skip_pct
-    local fail_pct
-    local intr_pct
-    local intr
-    local chk
-    local plural
-    pass_pct=0.0
-    skip_pct=0.0
-    fail_pct=0.0
-    intr_pct=0.0
-    intr="false"
-    chk=$(expr $npass + $nskip + $nfail - $ntest)
-    if [ $chk -eq -1 ]; then
+    local pass_pct; pass_pct=0.0
+    local skip_pct; skip_pct=0.0
+    local fail_pct; fail_pct=0.0
+    local intr_pct; intr_pct=0.0
+    local intr;     intr="false"
+    local chk;      chk=`expr "${npass:=0}" + "${nskip:=0}" + "${nfail:=0}" - "${ntest:=0}"`
+
+    if [ "$chk" -eq -1 ]; then
         intr="true"
-    elif [ $chk -ne 0 ]; then
-        framework_error "npass+nskip+nfail-ntest = ${chk}"
+    elif [ "$chk" -ne 0 ]; then
+        framework_error "Bad counting: npass+nskip+nfail-ntest = ${chk} != 0"
     fi
 
-    if [ $ntest -ne 0 ]; then
+    if [ "$ntest" -ne 0 ]; then
         pass_pct=`echo "scale=5; $npass*100/$ntest" | bc`
         skip_pct=`echo "scale=5; $nskip*100/$ntest" | bc`
         fail_pct=`echo "scale=5; $nfail*100/$ntest" | bc`
@@ -167,12 +176,13 @@ summarize_tests()
         fi
     fi
 
-    [ $ntest -ne 1 ] && plural="s" || plural=""
-    printf "!!! REPORT - %d test%s:\n" $ntest $plural
-    [ $npass -gt 0 ]   && printf "!!!     %3d passed (%.2f%%)\n"  $npass $pass_pct
-    [ $nfail -gt 0 ]   && printf "!!!     %3d failed (%.2f%%)\n"  $nfail $fail_pct
-    [ $nskip -gt 0 ]   && printf "!!!     %3d skipped (%.2f%%)\n" $nskip $skip_pct
-    [ $intr = "true" ] && printf "!!!     %3d interrupted (%.2f%%)\n"  1 $intr_pct
+    local plural
+    [ "$ntest" -ne 1 ] && plural="s" || plural=""
+    printf "!!! RESULTS SUMMARY: %d test%s:\n" "$ntest" "$plural"
+    [ $npass -gt 0 ]   && printf "!!!     %3d passed (%.2f%%)\n"  "$npass" "$pass_pct"
+    [ $nfail -gt 0 ]   && printf "!!!     %3d failed (%.2f%%)\n"  "$nfail" "$fail_pct"
+    [ $nskip -gt 0 ]   && printf "!!!     %3d skipped (%.2f%%)\n" "$nskip" "$skip_pct"
+    [ $intr = "true" ] && printf "!!!     %3d interrupted (%.2f%%)\n"   1  "$intr_pct"
 }
 
 
@@ -213,7 +223,7 @@ test_category()
 {
     local CATEGORY
     CATEGORY="$1"
-    [ -d $CATEGORY ] || framework_error "$CATEGORY is not a directory"
+    [ -d $CATEGORY ] || framework_error "$CATEGORY is not a category"
     cd "$CATEGORY"
     for SERIES in ???; do
         [ "$SERIES" = "???" ] && continue # if no numbered subdirectories
@@ -231,11 +241,11 @@ test_series()
     CATEGORY="$1"
     SERIES="$2"
 
-    [ -d $SERIES ] || framework_error "$SERIES is not a directory"
+    [ -d $SERIES ] || framework_error "$CATEGORY/$SERIES is not a series"
     cd $SERIES
     test_id=`echo $CATEGORY/$SERIES | sed "s,${testdir}/,,"`
     if [ -f test.disabled ]; then
-        echo "*** Skipping: $test_id ... Series disabled ***"
+        echo "*** Skipping: $test_id - Series disabled ***"
         cd ..
         return
     fi
@@ -255,51 +265,54 @@ run_test()
     local M2_FILE
     local fail
     local test_id
-    local diderr
+    local saw_errors
     local TESTNAME
+    local hanging
 
     CATEGORY="$1"
     SERIES="$2"
     M2_FILE="$3"
     fail=0
     test_id=`echo $CATEGORY/$SERIES | sed "s,${testdir}/,,"`
-    diderr=0
+    saw_errors=0
+    hanging=0
 
     if [ ! -f $M2_FILE ]; then
         M2_FILE="${M2_FILE}.m2"
         if [ ! -f $M2_FILE ]; then
-            echo "*** RUN - $test_id ... SKIP - No test files ***"
+            echo "*** TEST: $test_id ... SKIP: No test files ***"
             return
         fi
     fi
 
     TESTNAME=`echo "$M2_FILE" | sed 's,^.*/,,;s,\.m2$,,'`   # remove CATEGORY and ext
     [ $debug = "true" ] && echo "TESTNAME is $TESTNAME"
-    printf "*** RUN - %s/%s.m2 ... " $test_id $TESTNAME
+    printf "*** TEST: %s/%s.m2 ... " $test_id $TESTNAME
+    hanging=1
     ntest=$(expr $ntest + 1)
 
     if [ ! -s "$M2_FILE" ]; then
-        echo "SKIP - Empty test file ***"
+        echo "SKIP: Empty test file ***"
         nskip=$(expr $nskip + 1)
         return
     fi
     if [ -f ${TESTNAME}.disabled ]; then
-        echo "SKIP - Test disabled ***"
+        echo "SKIP: Test disabled ***"
         nskip=$(expr $nskip + 1)
         return
     fi
 
     rm -f ${TESTNAME}.expected_* ${TESTNAME}.run_*
-    trap 'echo; echo "!!! STOP - Stopping test runs"; echo "!!! STATUS - INTERRUPTED: Some tests did not run"; rm -f ${TESTNAME}.expected_* ${TESTNAME}.run_*; summarize_tests; echo "!!! END - `date`"; exit 1' 1 2 3 15
+    trap '[ $hanging -eq 1 ] && echo; echo; echo "!!! TEST RUN: STOP"; echo "!!! TEST RUN STATUS: INTERRUPTED - Test run incomplete"; rm -f ${TESTNAME}.expected_* ${TESTNAME}.run_*; summarize_tests; echo "!!! JOB END: `date`"; time_end="`date +%s`"; elapsed=`echo "${time_end}-${time_begin}" | bc`; echo "!!! ELAPSED TIME: $elapsed s"; exit 1' 1 2 3 15
 
     if [ ! -r "$M2_FILE" ]; then
-        echo "FAIL - Unreadable test file ***"
+        echo "FAIL: Unreadable test file ***"
         nfail=$(expr $nfail + 1)
         rc=127
         return
     fi
     if [ ! -f ${TESTNAME}.out ]; then
-        echo "FAIL - ${TESTNAME}.out does not exist ***"
+        echo "FAIL: ${TESTNAME}.out does not exist ***"
         nfail=$(expr $nfail + 1)
         rc=127
         return
@@ -339,57 +352,73 @@ run_test()
     echo $? >${TESTNAME}.run_exit
 
     #
-    ##  Check error messages
-    #
-    if ! cmp -s ${TESTNAME}.run_err ${TESTNAME}.expected_err; then
-        echo "FAIL - Unexpected error messages ***"
-        fail=$(expr $fail + 1)
-        echo ">>> EXPECTED ERRORS <<<"
-        cat_or_nodata ${TESTNAME}.expected_err
-        echo ">>> ACTUAL ERRORS <<<"
-        cat_or_nodata ${TESTNAME}.run_err
-        diderr=1
-        rc=127
-    fi
-    #
     ##  Check exit code
     #
     if ! cmp -s ${TESTNAME}.run_exit ${TESTNAME}.expected_exit; then
-        echo "FAIL - Unexpected exit code ***"
+        if [ $hanging -eq 1 ]; then
+            echo "FAIL ***"
+            hanging=0
+        fi
+        printf ">>> %s.m2: DEFECT - Expected exit code (%s) != Actual axit code (%s) <<<\n" \
+               $TESTNAME \
+               "`cat_or_nodata ${TESTNAME}.expected_exit`" \
+               "`cat_or_nodata ${TESTNAME}.run_exit`"
         fail=$(expr $fail + 1)
-        echo ">>> EXPECTED EXIT CODE <<<"
-        cat_or_nodata ${TESTNAME}.expected_exit
-        echo ">>> ACTUAL EXIT CODE <<<"
-        cat_or_nodata ${TESTNAME}.run_exit
         rc=127
     fi
+
+    #
+    ##  Check error messages
+    #
+    if ! cmp -s ${TESTNAME}.run_err ${TESTNAME}.expected_err; then
+        if [ $hanging -eq 1 ]; then
+            echo "FAIL ***"
+            hanging=0
+        fi
+        printf ">>> %s.m2: DEFECT - Expected errors != Actual errors <<<\n" \
+               $TESTNAME
+        fail=$(expr $fail + 1)
+        echo "--- EXPECTED ERRORS (`lines ${TESTNAME}.expected_err`) ---"
+        cat_or_nodata ${TESTNAME}.expected_err
+        echo "--- ACTUAL ERRORS (`lines ${TESTNAME}.run_err`) ---"
+        cat_or_nodata ${TESTNAME}.run_err
+        saw_errors=1
+        rc=127
+    fi
+
     #
     ##  Check actual output
     #
     if ! cmp -s ${TESTNAME}.run_out ${TESTNAME}.expected_out; then
-        echo "FAIL - Unexpected output ***"
+        if [ $hanging -eq 1 ]; then
+            echo "FAIL ***"
+            hanging=0
+        fi
+        printf ">>> %s.m2: DEFECT - Expected output != Actual output <<<\n" \
+               $TESTNAME
         fail=$(expr $fail + 1)
         # Always create diff file
-        diff -c ${TESTNAME}.expected_out ${TESTNAME}.run_out > ${TESTNAME}.run_diff
+        diff ${diff_opt} ${TESTNAME}.expected_out ${TESTNAME}.run_out > ${TESTNAME}.run_diff
 
         if [ -f ${TESTNAME}.showdiff ]; then
-            echo ">>> DIFF EXPECTED/ACTUAL OUTPUT TEXT <<<"
-            echo diff -c ${TESTNAME}.expected_out ${TESTNAME}.run_out
+            echo "--- DIFF: EXPECTED OUTPUT vs ACTUAL OUTPUT ---"
             cat_or_nodata ${TESTNAME}.run_diff
         else
-            echo ">>> EXPECTED OUTPUT TEXT <<<"
+            echo "--- EXPECTED OUTPUT (`lines ${TESTNAME}.expected_out`) ---"
             cat_or_nodata ${TESTNAME}.expected_out
-            echo ">>> ACTUAL OUTPUT TEXT <<<"
+            echo "--- ACTUAL OUTPUT (`lines ${TESTNAME}.run_out`) ---"
             cat_or_nodata ${TESTNAME}.run_out
         fi
-        if [ $diderr -eq 0 -a -s ${TESTNAME}.run_err ]; then
-            echo ">>> ERRORS <<<"
+        if [ $saw_errors -eq 0 -a -s ${TESTNAME}.run_err ]; then
+            echo "--- ACTUAL (EXPECTED) ERRORS (`lines ${TESTNAME}.run_err`) ---"
             cat_or_nodata ${TESTNAME}.run_err
         fi
         rc=127
     fi
+
     if [ $fail -eq 0 ]; then
         echo "PASS ***"
+        hanging=0
         npass=$(expr $npass + 1)
         rm -f ${TESTNAME}.run_*
     else
@@ -422,12 +451,14 @@ test_something()
            ;;
         1) category=`echo $testwhat | awk -F/ '{ print $1 }'`
            series=`echo $testwhat | awk -F/ '{ print $2 }'`
+           [ -d "$testdir/$category" ] || framework_error "$category is not a category"
            cd "$testdir/$category"
            test_series $category $series
            cd ../..
            ;;
         2) category=`echo $testwhat | awk -F/ '{ print $1 }'`
            series=`echo $testwhat | awk -F/ '{ print $2 }'`
+           [ -d "$testdir/$category/$series" ] || framework_error "$category/$series is not a series"
            cd "$testdir/$category/$series"
            file=`echo $testwhat | awk -F/ '{ print $3 }'`
            run_test $category $series $file
@@ -442,24 +473,45 @@ if [ $debug = "true" ]; then
     echo "cwd     is `pwd`"
     echo "I see $# arguments"
 fi
-echo "!!! BEGIN - `date`"
+echo "!!! JOB BEGIN: `date`"
+time_begin=`date +%s`
 case $# in
-    0) echo "!!! START - Starting test runs"
+    0) echo "!!! TEST RUN: START"
        test_all_categories ;;
-    1) echo "!!! START - Starting test runs"
+    1) echo "!!! TEST RUN: START"
        test_something $1 ;;
     *) framework_error "Invocation error: Bad # parameters" ;;
 esac
-echo "!!! STOP - Stopping test runs"
 
+echo "!!! TEST RUN: STOP"
 if [ ${rc} -eq 0 ] ; then
-    echo "!!! STATUS - SUCCESS: All tests completed successfully"
+    echo "!!! TEST RUN STATUS: SUCCESS - All tests completed successfully"
+    [ "`expr "$npass" + "$nskip"`" -ne $ntest ] &&
+        framework_error "Bad counting: npass ${npass} = nskip ${nskip} != ntest ${ntest}"
 elif [ $nfail -eq $ntest ]; then
-    echo "!!! STATUS - DISASTER: All tests failed"
+    echo "!!! TEST RUN STATUS: DISASTER - All tests failed"
 else
-    echo "!!! STATUS - FAILURE: Some tests failed"
+    [ "$nfail" -ne 1 ] && plural="s" || plural=""
+    fail_pct=`echo "scale=0; $nfail*100/$ntest" | bc`
+    #echo $fail_pct
+    if   [ "$nfail" -eq 1 ];     then descr="One"
+    elif [ "$fail_pct" -lt  6 ]; then descr="A few"
+    elif [ "$fail_pct" -lt 16 ]; then descr="Some"
+    elif [ "$fail_pct" -lt 26 ]; then descr="Several"
+    elif [ "$fail_pct" -lt 36 ]; then descr="A number of"
+    elif [ "$fail_pct" -lt 46 ]; then descr="Multiple"
+    elif [ "$fail_pct" -lt 56 ]; then descr="Many"
+    elif [ "$fail_pct" -lt 66 ]; then descr="Numerous"
+    elif [ "$fail_pct" -lt 76 ]; then descr="A majority of"
+    elif [ "$fail_pct" -lt 86 ]; then descr="Myriad"
+    elif [ "$fail_pct" -lt 96 ]; then descr="Most"
+    else                              descr="Nearly all"; fi
+    echo "!!! TEST RUN STATUS: FAILURE - ${descr} test${plural} failed"
 fi
 
 summarize_tests
-echo "!!! END - `date`"
+echo "!!! JOB END: `date`"
+time_end=`date +%s`
+elapsed=`echo "${time_end}-${time_begin}" | bc`
+echo "!!! ELAPSED TIME: $elapsed s"
 exit ${rc}

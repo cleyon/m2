@@ -1,5 +1,5 @@
 @newcmd one
-@define FOO 1
+@__m2__::define FOO 1
 Begin
 @case FOO
 Preamble

@@ -1,0 +1,62 @@
+@divert -1
+Normal text is supressed - We can have blank lines now.
+But, you have to use @echo to print stuff
+
+@namespace passwd
+
+@list pwdata
+@array Byname
+@array Byuid
+@list Bycount
+@sequence Total
+@sequence Count
+
+
+@newcmd Init
+@local i
+@list fields
+@@
+@if Inited
+@return
+@endif
+@filedata pwdata passwd.data
+@@
+@foreach i pwdata
+@#      @pwdata[@{i}]@
+@split pwdata[@{i}] fields :
+@define  Byname[@{fields[1]}]    @pwdata[@{i}]@
+@define   Byuid[@{fields[3]}]    @pwdata[@{i}]@
+@define Bycount[@{++Total}]      @pwdata[@{i}]@
+@next i
+@@
+@sequence Count  restart
+@define   Inited 1
+@endcmd
+
+
+@newcmd m2::getpwnam{name}
+@Init
+@Byname[@{name}]@
+@endcmd
+
+@newcmd m2::getpwuid{uid}
+@Init
+@Byuid[@{uid}]@
+@endcmd
+
+@newcmd m2::getpwent
+@Init
+@local ret
+@if @Count@ < @Total@
+@define ret @Bycount[@{++Count}]@
+@else
+@set ret
+@fi
+@return @ret@
+@endcmd
+
+@newcmd m2::endpwent
+@sequence Count restart
+@endcmd
+
+@divert

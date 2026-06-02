@@ -1,1 +1,1 @@
-m2:j3bad.m2:2:@join FOO@: Name 'FOO' has type Symbol, not Indexable
+m2:j3bad.m2:2:@__m2__::join FOO@: Name 'FOO' has type Symbol, not Indexable

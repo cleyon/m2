@@ -1,4 +1,4 @@
-@null DATA
+@set DATA
 @list  ARR
 DATA='@DATA@'
 @split DATA ARR

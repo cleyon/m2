@@ -1,1 +1,1 @@
-m2:foo.m2:1:@foo@: Name 'foo' not defined
+m2:foo.m2:1:@m2::foo@: Name 'm2::foo' not defined

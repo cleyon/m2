@@ -1,0 +1,3 @@
+inc2: 1 - Namespace is @ns@ (should be foo)
+@namespace inc2
+inc2: 2 - Namespace is @ns@ (should be inc2)

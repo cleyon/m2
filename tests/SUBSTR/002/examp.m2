@@ -1,4 +1,5 @@
-@define myBegPos1 3            @srem For simplicity, ignore any argument@
-@define mySym ABCDEFGHIJKLM
-@define myLen 5
-This is @mid mySym @{myBegPos1 Field1} @{myLen}@.
+@define Symbol ABCDEFGHIJKLM
+@@             123456789....
+@define Pos1 3            @srem For simplicity, ignore any argument@
+@define Length 5
+@substr Symbol @{Pos1 Field1} @{Length}@

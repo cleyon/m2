@@ -1,0 +1,28 @@
+|   | ID                     |   | ID                   |   | ID                      |
+|---+------------------------+---+----------------------+---+-------------------------|
+| A | TYPE_"ARRAY"           | a | BLK_"AGG"            | 0 | <reserved>              |
+| B | FLAG_"BOOLEAN"         | b | MODE_"XEQ_BREAK"     | 1 | OP_"CREATE"             |
+| C | TYPE_"COMMAND"         | c | "OBJ_CMD"            | 2 | OP_"READ"               |
+| D | FLAG_"DEFERRED"        | d | BLK_"LONGDEF"        | 3 | OP_"UPDATE"             |
+| E | PTYPE_"ENV_VAR"        | e | BLK_"CASE"           | 4 | OP_"DELETE"             |
+| F | TYPE_"FUNCTION"        | f | BLK_"FILE"           | 5 | OP_"PRINT"              |
+| G |                        | g |                      | 6 |                         |
+| H |                        | h | MODE_"HOOKS_ENABLED" | 7 |                         |
+| I | FLAG_"INTEGER"         | i | BLK_"IF"             | 8 |                         |
+| J | PTYPE_"IDXABLE"        | j | "OBJ_USER"           | 9 |                         |
+| K | "OBJ_BLKNUM"           | k | PTYPE_"KEY"          | ! | FLAG_"IMMEDIATE"        |
+| L | TYPE_"LIST"            | l | PTYPE_"SCALAR"       | @ | MODE_"AT_PROCESS"       |
+| M | PTYPE_"NAME"           | m | FLAG_"NUMERIC"       | _ | TYPE_"INTERNAL"         |
+| N | PTYPE_NS "NAMESPACE"   | n | PTYPE_"NUMBER"       | ? | PTYPE_"UNDEF"           |
+| O | BLK_"FOR"              | o | MODE_"XEQ_CONTINUE"  | * | PTYPE_"ANY"             |
+| P | PTYPE_"PARAM"          | p | MODE_"TEXT_PRINT"    | > | MODE_"STREAMS_SHIP_OUT" |
+| Q | TYPE_"SEQUENCE"        | q | BLK_"STRING"         | ' | MODE_"AT_LITERAL"       |
+| R | FLAG_"READONLY"        | r | MODE_"XEQ_RETURN"    |   |                         |
+| S | TYPE_"SYMBOL"          | s | MODE_"TEXT_STRING"   |   |                         |
+| T | BLK_"TERMINAL"         | t | "OBJ_TEXT"           |   |                         |
+| U | TYPE_"USER"            | u | BLK_"USER"           |   |                         |
+| V |                        | v | MODE_"IO_CAPTURE"    |   |                         |
+| W | FLAG_"WRITABLE"        | w | "BLK_WHILE"          |   |                         |
+| X | MODE_"STREAMS_DISCARD" | x | MODE_"XEQ_NORMAL"    |   |                         |
+| Y | FLAG_"SYSTEM"          | y | FLAG_"KEY_YES"       |   |                         |
+| Z | FLAG_"KEY_NO"          | z | MODE_"IO_SILENT"     |   |                         |

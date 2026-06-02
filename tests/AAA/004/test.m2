@@ -1,6 +1,6 @@
 @#              Use default region if available
-@if env(AWS_DEFAULT_REGION)
-@define region @getenv AWS_DEFAULT_REGION@
+@if defined(ENV::AWS_DEFAULT_REGION)
+@define region @ENV::AWS_DEFAULT_REGION@
 @endif
 @#              If you want your own default region, uncomment
 @default region us-west-2

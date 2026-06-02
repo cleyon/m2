@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-03-14 09:39:27 cleyon>
+#  Time-stamp:  <2026-06-02 18:11:48 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -43,7 +43,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "5.4.1"
+    M2_VERSION = "6.0.0-beta1"
 
     # Specify a shell for m2 to use for running utility programs.
     # It is expected to be compatible with Bourne shell syntax.
@@ -85,12 +85,16 @@ BEGIN {
     SEC_STANDARD     = 0 # Default secure level allows m2 to run normal
                          # programs for the user; this allows the @shell
                          # command to function and @undivert to a file.
-    SEC_SECURE       = 1 # Secure level 1 prevents this, but does allow
-                         # m2 to utilise the (presumably secure)
+    SEC_SQUASHROOT   = 1 # Secure level 1 is not a real level.  Rather,
+                         # for the root user (uid==0), secure level 2 is
+                         # chosen.  For all other users/uids level 0
+                         # (standard) security is selected.
+    SEC_SECURE       = 2 # Secure level 2 prevents this, but does allow
+                         # m2 to utilize the (presumably secure)
                          # utilities specified in the PROG array.
-    SEC_PARANOID     = 2 # Secure level 2 prevents invoking any programs,
+    SEC_PARANOID     = 3 # Secure level 3 prevents invoking any programs,
                          # and will terminate if any attempt is made.
-                         # At level 2, m2 does not know the current time
+                         # At level 3, m2 does not know the current time
                          # or date, host or user name, etc.
     __secure_level   = SEC_STANDARD
 }
@@ -98,12 +102,13 @@ BEGIN {
 # DO NOT CHANGE anything below this line
 
 BEGIN {
-    TRUE  = OKAY     =  1;              NULL   = "/dev/null"
-    FALSE = EOF      =  0;              STDIN  = "/dev/stdin"
-    ERROR = VOID     = -1;              STDOUT = "/dev/stdout"
-    EMPTY            = "";              STDERR = "/dev/stderr"
-    ROOT_LEVEL       =  0;              TTY    = "/dev/tty"
-
+    TRUE  = OKAY     =  1;              NULL     = "/dev/null"
+    FALSE = EOF      =  0;              STDIN    = "/dev/stdin"
+    ERROR = VOID     = -1;              STDOUT   = "/dev/stdout"
+    EMPTY = NOKEY    = "";              STDERR   = "/dev/stderr"
+    ROOT_LEVEL       =  0;              TTY      = "/dev/tty"
+    M2_NS            = "m2";            M2_SYSNS = "__m2__"
+                                        M2_ENVNS = "ENV"
     # Exit codes
     EX_OK            =  0
     EX_M2_ERROR      =  1
@@ -112,36 +117,50 @@ BEGIN {
     EX_SOFTWARE      = 70       # panic()
     EX_NOPERM        = 77       # security violation
 
-    # Flags, Types, and Pseudo-Types
-    FLAG_BOOLEAN   = "B"
-    FLAG_DEFERRED  = "D"
-    FLAG_IMMEDIATE = "!"
-    FLAG_INTEGER   = "I"
-    FLAG_KEY_NO    = "N"        # Key element (and brackets) must not be present
-    FLAG_KEY_YES   = "K"        # Key element to index Array or List is required
-    FLAG_NUMERIC   = "M"
-    FLAG_READONLY  = "R"
-    FLAG_SYSTEM    = "Y"
-    FLAG_TRACING   = "T"
-    FLAG_WRITABLE  = "W"
+    # Master char list
+    #    Present means AVAILABLE:
+    #          GH             V
+    #          g
+    #          6789
+    #
+    #    Present means TAKEN:
+    #    ! @ _ * > '
+    #
+    # See also doc/char-list.org
+    FLAG_BOOLEAN     = "B"; __label[FLAG_BOOLEAN]   = "Boolean"
+    FLAG_DEFERRED    = "D"; __label[FLAG_DEFERRED]  = "Deferred"
+    FLAG_IMMEDIATE   = "!"; __label[FLAG_IMMEDIATE] = "Immediate"
+    FLAG_INTEGER     = "I"; __label[FLAG_INTEGER]   = "Integer"
+    FLAG_KEY_NO      = "Z"; __label[FLAG_KEY_NO]    = "Key_No"  # Key element (and brackets) must not be present
+    FLAG_KEY_YES     = "y"; __label[FLAG_KEY_YES]   = "Key_Yes" # Key element to index Array or List is required
+    FLAG_NUMERIC     = "m"; __label[FLAG_NUMERIC]   = "Numeric"
+    FLAG_READONLY    = "R"; __label[FLAG_READONLY]  = "Read_Only"
+    FLAG_SYSTEM      = "Y"; __label[FLAG_SYSTEM]    = "System"
+    FLAG_WRITABLE    = "W"; __label[FLAG_WRITABLE]  = "Writable"
 
-    TYPE_ARRAY       = "A";             __base_type[TYPE_ARRAY   ] = TYPE_ARRAY
-    TYPE_COMMAND     = "C";             __base_type[TYPE_COMMAND ] = TYPE_COMMAND
-    TYPE_FUNCTION    = "F";             __base_type[TYPE_FUNCTION] = TYPE_FUNCTION
-    TYPE_INTERNAL    = "_";             __base_type[TYPE_INTERNAL] = TYPE_INTERNAL
-    TYPE_LIST        = "L";             __base_type[TYPE_LIST    ] = TYPE_LIST
-    TYPE_SEQUENCE    = "Q";             __base_type[TYPE_SEQUENCE] = TYPE_SEQUENCE
-    TYPE_SYMBOL      = "S";             __base_type[TYPE_SYMBOL  ] = TYPE_SYMBOL
-    TYPE_USER        = "U";             __base_type[TYPE_USER    ] = TYPE_USER
+    # Real types
+    TYPE_ARRAY       = "A"; __label[TYPE_ARRAY]     = "Array";     __base_type[TYPE_ARRAY   ] = TYPE_ARRAY
+    TYPE_COMMAND     = "C"; __label[TYPE_COMMAND]   = "Command";   __base_type[TYPE_COMMAND ] = TYPE_COMMAND
+    TYPE_FUNCTION    = "F"; __label[TYPE_FUNCTION]  = "Function";  __base_type[TYPE_FUNCTION] = TYPE_FUNCTION
+    TYPE_INTERNAL    = "_"; __label[TYPE_INTERNAL]  = "Internal";  __base_type[TYPE_INTERNAL] = TYPE_INTERNAL
+    TYPE_LIST        = "L"; __label[TYPE_LIST]      = "List";      __base_type[TYPE_LIST    ] = TYPE_LIST
+    TYPE_SEQUENCE    = "Q"; __label[TYPE_SEQUENCE]  = "Sequence";  __base_type[TYPE_SEQUENCE] = TYPE_SEQUENCE
+    TYPE_SYMBOL      = "S"; __label[TYPE_SYMBOL]    = "Symbol";    __base_type[TYPE_SYMBOL  ] = TYPE_SYMBOL
+    TYPE_USER        = "U"; __label[TYPE_USER]      = "User";      __base_type[TYPE_USER    ] = TYPE_USER
     #
     VALID_TYPES      = TYPE_ARRAY  TYPE_COMMAND   TYPE_FUNCTION  TYPE_INTERNAL \
                        TYPE_LIST   TYPE_SEQUENCE  TYPE_SYMBOL    TYPE_USER
-    #
-    PTYPE_ANY        = "*";             __base_type[PTYPE_ANY    ] = VALID_TYPES
-    PTYPE_IDXABLE    = "i";             __base_type[PTYPE_IDXABLE] =              TYPE_ARRAY  TYPE_LIST
-    PTYPE_NUMBER     = "n";             __base_type[PTYPE_NUMBER ] = TYPE_SYMBOL  TYPE_ARRAY  TYPE_LIST  FLAG_KEY_YES  TYPE_SEQUENCE
-    PTYPE_SCALAR     = "s";             __base_type[PTYPE_SCALAR ] = TYPE_SYMBOL  TYPE_ARRAY  TYPE_LIST  FLAG_KEY_YES
-    PTYPE_UNDEF      = "?";             __base_type[PTYPE_UNDEF  ] = EMPTY # Undef ::= type of a not-found namtab lookup
+    # Pseudo-types
+    PTYPE_ANY        = "*"; __label[PTYPE_ANY]      = "Any";       __base_type[PTYPE_ANY    ] = VALID_TYPES
+    PTYPE_ENV_VAR    = "E"; __label[PTYPE_ENV_VAR]  = "Env_Var";   __base_type[PTYPE_ENV_VAR] = EMPTY
+    PTYPE_IDXABLE    = "J"; __label[PTYPE_IDXABLE]  = "Indexable"; __base_type[PTYPE_IDXABLE] = TYPE_ARRAY  TYPE_LIST
+    PTYPE_KEY        = "k"; __label[PTYPE_KEY]      = "Key";       __base_type[PTYPE_KEY    ] = EMPTY
+    PTYPE_NAME       = "M"; __label[PTYPE_NAME]     = "Name";      __base_type[PTYPE_NAME   ] = EMPTY
+    PTYPE_NS         = "N"; __label[PTYPE_NS]       = "Namespace"; __base_type[PTYPE_NS     ] = EMPTY
+    PTYPE_NUMBER     = "n"; __label[PTYPE_NUMBER]   = "Number";    __base_type[PTYPE_NUMBER ] = TYPE_SYMBOL  TYPE_ARRAY  TYPE_LIST  FLAG_KEY_YES  TYPE_SEQUENCE
+    PTYPE_PARAM      = "P"; __label[PTYPE_PARAM]    = "Param";     __base_type[PTYPE_PARAM  ] = EMPTY
+    PTYPE_SCALAR     = "l"; __label[PTYPE_SCALAR]   = "Scalar";    __base_type[PTYPE_SCALAR ] = TYPE_SYMBOL  TYPE_ARRAY  TYPE_LIST  FLAG_KEY_YES
+    PTYPE_UNDEF      = "?"; __label[PTYPE_UNDEF]    = "Undef";     __base_type[PTYPE_UNDEF  ] = EMPTY # Undef ::= type of a not-found namtab lookup
     #
     PTYPE_READONLY_SYMBOL  = TYPE_SYMBOL FLAG_SYSTEM FLAG_READONLY
     PTYPE_READONLY_INTEGER = TYPE_SYMBOL FLAG_SYSTEM FLAG_READONLY FLAG_INTEGER
@@ -151,16 +170,21 @@ BEGIN {
     PTYPE_WRITABLE_INTEGER = TYPE_SYMBOL FLAG_SYSTEM FLAG_WRITABLE FLAG_INTEGER
     PTYPE_WRITABLE_BOOLEAN = TYPE_SYMBOL FLAG_SYSTEM FLAG_WRITABLE FLAG_BOOLEAN
 
-    # For __TRACEMODE__  [search: MATCHFLAGS]
+    # TRACE_* letters are user-visible, and advertised in the manual.
+    # Not part of master char list!
+    # For __TRACEMODE__   see also: xeq_cmd__tracemode()
     TRACE_ARGUMENTS             = "a" # show actual arguments in each call
     TRACE_BLOCKS                = "b" # show block create/destroy
    #TRACE_MULTI_LINE            = "c" # show multiple trace lines for each call
     TRACE_EXPANSION             = "e" # show macro expansion
+    TRACE_ENV_VAR               = "E" # show ENV::var read/write
     TRACE_INPUT_FILE_CHG        = "i" # trace when input file changes
     TRACE_SHOW_FILE_NAME        = "f" # show file name
     TRACE_SHOW_LINE_NUM         = "l" # show line number
     TRACE_COMMAND               = "m" # trace when a command is executed
     TRACE_PATH_SEARCH           = "p" # trace when search path search succeeds
+    TRACE_QUALIFICATION         = "q" # trace ns qualification during parse()
+    TRACE_READLINE              = "r" # trace readline() text
     TRACE_SYMBOL_READ_WRITE     = "s" # trace symbol low-level read & write
     TRACE_ALL                   = "t" # trace internal macros too
     TRACE_SET_ON                = "T" # Set __TRACE__ to true
@@ -171,26 +195,57 @@ BEGIN {
                                   TRACE_SHOW_FILE_NAME  TRACE_SHOW_LINE_NUM
     TRACE_VALID_EVENTS          = TRACE_COMMAND         TRACE_EXPANSION         \
                                   TRACE_INPUT_FILE_CHG  TRACE_PATH_SEARCH       \
-                                  TRACE_BLOCKS          TRACE_SYMBOL_READ_WRITE
+                                  TRACE_BLOCKS          TRACE_SYMBOL_READ_WRITE \
+                                  TRACE_QUALIFICATION   TRACE_READLINE          \
+                                  TRACE_ENV_VAR
     TRACE_ALL_SET               = TRACE_ARGUMENTS       TRACE_EXPANSION         \
                                   TRACE_INPUT_FILE_CHG  TRACE_SHOW_FILE_NAME    \
                                   TRACE_SHOW_LINE_NUM   TRACE_COMMAND           \
                                   TRACE_PATH_SEARCH     TRACE_SYMBOL_READ_WRITE \
                                   TRACE_SET_ON          TRACE_ALL               \
-                                  TRACE_BLOCKS
+                                  TRACE_BLOCKS          TRACE_QUALIFICATION     \
+                                  TRACE_READLINE        TRACE_ENV_VAR
+
+    # Fields
+    CFN_COUNT = BFN_BNUM = NFN_NS    = SFN_NS    = 1
+    CFN_NS    = BFN_SLOT = NFN_NAME  = SFN_NAME  = 2
+    CFN_NAME  = BFN_TAG  = NFN_LEVEL = SFN_KEY   = 3
+                                       SFN_LEVEL = 4
+                                       SFN_TAG   = 5
+
+    # Check for and resolve SEC_SQUASHROOT.  Must get uid manually,
+    # since __PROG__ and much else is not defined yet.
+    if (__secure_level == SEC_SQUASHROOT) {
+        #print_stderr("(BEGIN) squashroot: Checking uid")
+        __secure_level = SEC_SECURE     # default secure
+
+        if ("id" in PROG) {
+            _output = 0
+            # Get effective uid via "id -u"
+            _uid_cmdline = sprintf("%s %s", PROG["id"], "-u")
+            _uid_cmdline | getline _output
+            close(_uid_cmdline)
+            # Only non-zero will get standard
+            if (0 + _output != 0)
+                __secure_level = SEC_STANDARD
+            # May as well define it now that we know it
+            namtab[M2_SYSNS, "__UID__", ROOT_LEVEL] = PTYPE_READONLY_INTEGER
+            symtab[M2_SYSNS, "__UID__", NOKEY, ROOT_LEVEL, "symval"] = 0 + _output
+        }
+    }
 
     # Set up critical symbols early
-    namtab["__DEBUG__",     ROOT_LEVEL] = PTYPE_WRITABLE_BOOLEAN
-    namtab["__EXIT__",      ROOT_LEVEL] = PTYPE_READONLY_INTEGER
-    namtab["__SECURE__",    ROOT_LEVEL] = PTYPE_WRITABLE_INTEGER
-    namtab["__TRACE__",     ROOT_LEVEL] = PTYPE_WRITABLE_BOOLEAN
-    namtab["__TRACEMODE__", ROOT_LEVEL] = PTYPE_READONLY_SYMBOL
+    namtab[M2_SYSNS, "__DEBUG__",     ROOT_LEVEL] = PTYPE_WRITABLE_BOOLEAN
+    namtab[M2_SYSNS, "__EXIT__",      ROOT_LEVEL] = PTYPE_READONLY_INTEGER
+    namtab[M2_SYSNS, "__SECURE__",    ROOT_LEVEL] = PTYPE_WRITABLE_INTEGER
+    namtab[M2_SYSNS, "__TRACE__",     ROOT_LEVEL] = PTYPE_WRITABLE_BOOLEAN
+    namtab[M2_SYSNS, "__TRACEMODE__", ROOT_LEVEL] = PTYPE_READONLY_SYMBOL
     #
-    symtab["__DEBUG__",     "", ROOT_LEVEL, "symval"] = FALSE
-    symtab["__EXIT__",      "", ROOT_LEVEL, "symval"] = EX_OK
-    symtab["__SECURE__",    "", ROOT_LEVEL, "symval"] = __secure_level
-    symtab["__TRACE__",     "", ROOT_LEVEL, "symval"] = FALSE
-    symtab["__TRACEMODE__", "", ROOT_LEVEL, "symval"] = TRACE_DEFAULT_SET
+    symtab[M2_SYSNS, "__DEBUG__",     NOKEY, ROOT_LEVEL, "symval"] = FALSE
+    symtab[M2_SYSNS, "__EXIT__",      NOKEY, ROOT_LEVEL, "symval"] = EX_OK
+    symtab[M2_SYSNS, "__SECURE__",    NOKEY, ROOT_LEVEL, "symval"] = __secure_level
+    symtab[M2_SYSNS, "__TRACE__",     NOKEY, ROOT_LEVEL, "symval"] = FALSE
+    symtab[M2_SYSNS, "__TRACEMODE__", NOKEY, ROOT_LEVEL, "symval"] = TRACE_DEFAULT_SET
 }
 
 
@@ -206,7 +261,7 @@ BEGIN {
 # Predicate - empty string?
 function emptyp(s)
 {
-    return length(s) == 0
+    return s == ""      # length(s) == 0
 }
 
 
@@ -597,7 +652,8 @@ function split_subsep(s, item_arr,
 function extract_cmd_name(text,
                           name)
 {
-    if (!match(text, "^@[a-zA-Z0-9_]+"))
+    # Add ":" here because cmd name might be qualified
+    if (!match(text, "^@[a-zA-Z0-9_:]+"))
         error("(extract_cmd_name) Could not understand command '" text "'")
     name = substr(text, 2, RLENGTH-1)
     dbg__print("xeq", 7, "(extract_cmd_name) '" text "' => '" name "'")
@@ -611,27 +667,9 @@ function extract_cmd_name(text,
 # this naming pattern.  (Well, there *were*, but not currently.)
 function double_underscores_p(text)
 {
-    return text ~ /^__.*__$/
-}
-
-
-# Environment variable names must match the following regexp:
-#       /^[A-Za-z_][A-Za-z_0-9]*$/
-function env_var_name_valid_p(var)
-{
-    return var ~ /^[A-Za-z_][A-Za-z_0-9]*$/
-}
-
-
-# Throw an error if the environment variable name is not valid
-function assert_valid_env_var_name(var, caller)
-{
-    if (caller == EMPTY)
-        panic("(assert_valid_env_var_name) Empty caller!")
-    if (env_var_name_valid_p(var))
-        return
-    error(sprintf("%s: Env var name '%s' not valid",
-                  caller, var))
+    if (first(text) != "_")
+        return FALSE
+    return text ~ /^__.*__(\[.*\])?$/
 }
 
 
@@ -914,19 +952,23 @@ function vincenty_distance(lat1, lon1, lat2, lon2,
 
 function secure_level()
 {
-    return sym_ll_read("__SECURE__", "", ROOT_LEVEL)
+    return sys_read("__SECURE__")
 }
 
+function VERBOSE()
+{
+    return sys_read("__VERBOSE__") + 0
+}
 
 function LINE()
 {
-    return sym_ll_read("__LINE__", "", ROOT_LEVEL) + 0
+    return sys_read("__LINE__") + 0
 }
 
 
 function FILE()
 {
-    return sym_ll_read("__FILE__", "", ROOT_LEVEL)
+    return sys_read("__FILE__")
 }
 
 
@@ -934,18 +976,19 @@ function strictp(ssys)
 {
     if (ssys == EMPTY)
         panic("(strictp) ssys cannot be empty!")
+    if (ssys == "name") return TRUE             # XXX
     # Use low-level function here, not sym_true_p(), to prevent infinite loop
-    return sym_ll_read("__STRICT__", ssys, ROOT_LEVEL) != FALSE
+    return sym_ll_read_ns(M2_SYSNS, "__STRICT__", ssys, ROOT_LEVEL) != FALSE
 }
 
 
 function build_prog_cmdline(prog, arg, mode)
 {
-    if (! sym_ll_in("__PROG__", prog, ROOT_LEVEL))
+    if (! sym_ll_in_ns(M2_SYSNS, "__PROG__", prog, ROOT_LEVEL))
         # This should be same as assert_[n]sym_defined()
-        panic(sprintf("build_prog_cmdline: __PROG__[%s] not defined", prog))
+        panic(sprintf("(build_prog_cmdline) __PROG__[%s] not defined", prog))
     return sprintf("%s %s%s", \
-                   sym_ll_read("__PROG__", prog, ROOT_LEVEL),  \
+                   sym_ll_read_ns(M2_SYSNS, "__PROG__", prog, ROOT_LEVEL),  \
                    arg, \
                    ((mode == MODE_IO_SILENT) ? sprintf(" >%s 2>%s", NULL, NULL) : EMPTY))
 }
@@ -956,7 +999,7 @@ function exec_prog_cmdline(prog, arg,    sym)
     if (secure_level() >= SEC_PARANOID)
         security_violation("(exec_prog_cmdline) Forbidden")
 
-    if (! sym_ll_in("__PROG__", prog, ROOT_LEVEL))
+    if (! sym_ll_in_ns(M2_SYSNS, "__PROG__", prog, ROOT_LEVEL))
         # This should be same as assert_[n]sym_defined()
         panic(sprintf("(exec_prog_cmdline) __PROG__[%s] not defined", prog))
     return system(build_prog_cmdline(prog, arg, MODE_IO_SILENT)) # always silent
@@ -972,7 +1015,7 @@ function tmpdir(    t)
     else if ("TMPDIR" in ENVIRON)
         t = ENVIRON["TMPDIR"]
     else
-        t = sym_ll_read("__TMPDIR__", "", ROOT_LEVEL)
+        t = sys_read("__TMPDIR__")
     while (last(t) == TOK_NEWLINE)
         t = chop(t)
     return with_trailing_slash(t)
@@ -991,7 +1034,7 @@ function user_shell()
 function safe_shell()
 {
     if ("sh" in PROG)
-        return sym_ll_read("__PROG__", "sh", ROOT_LEVEL)
+        return sym_ll_read_ns(M2_SYSNS, "__PROG__", "sh", ROOT_LEVEL)
     panic("(safe_shell) No shell program found")
 }
 
@@ -1029,11 +1072,23 @@ function curr_dstblk(    top_block)
 }
 
 
-function ppf__mode(mode)
+function ppf__label(code)
 {
-    if (! (mode in __mode_label))
-        panic("(ppf__mode) Unknown mode '" mode "'")
-    return __mode_label[mode]
+    if (code == EMPTY)
+        panic("(ppf__label) code is empty")
+    code = first(code)
+    dbg__print("xeq", 7, "(ppf__label) code = " code)
+    if (! (code in __label)) {
+        panic("(ppf__label) Invalid type '" code "'")
+    }
+    return __label[code]
+
+}
+
+
+function curr_level()
+{
+    return __curr_level
 }
 
 
@@ -1051,7 +1106,7 @@ function lower_level()
         panic("(lower_level) Cannot be called from root level")
     sym_purge(__curr_level)
     #print_stderr("NAM_PURGE " __curr_level)
-    nam_purge(__curr_level)
+    nam_purge(curr_ns(), __curr_level)
     __curr_level--
     dbg__print("level", 4, "(lower_level) Level now " __curr_level)
     return __curr_level
@@ -1075,7 +1130,7 @@ function check__parse_stack(expected_block_type,
     btop = stk_top(__parse_stack)
     if (blk_type(btop) != expected_block_type) {
         __m2_msg = sprintf("Missing parser; wanted %s but found %s",
-                           ppf__block_type(expected_block_type), ppf__block_type(blk_type(btop)))
+                           ppf__label(expected_block_type), ppf__label(blk_type(btop)))
         return ERR_PARSE_MISMATCH
     }
 
@@ -1093,25 +1148,33 @@ function check__parse_stack(expected_block_type,
 
 
 function run_hook(hook_event,
-                  hook_func, user_block)
+                  hook_func, user_block, info)
 {
-    if (! __init_files_loaded) {
-        dbg__print("hook", 7, "(run_hook) Hooks are not enabled yet")
+
+    if (! (__init_files_loaded &&
+           flag_1true_p(__m2_config_fs, MODE_HOOKS_ENABLED))) {
+        dbg__print("hook", 7, "(run_hook) Hooks are disabled")
         return
     }
-    if (hook_event != "m2_begin"     && hook_event != "m2_end"     &&
+
+    if (hook_event != "m2_begin" &&
         hook_event != "file_open"    && hook_event != "file_close" &&
-        hook_event != "file_suspend" && hook_event != "file_resume")
-        panic("(run_hook) Invalid hook '" hook_event "'")
+        hook_event != "file_suspend" && hook_event != "file_resume" &&
+        hook_event != "m2_end"       && hook_event != "m2_exit")
+          panic("(run_hook) Invalid hook '" hook_event "'")
 
     hook_func = "__" hook_event "_hook"
-    if ((user_block = cmd_defined_p(hook_func)) <= 0) {
+    info__create_from_text(hook_func, info)
+    if (info__get(info, "type") != TYPE_USER ||
+        info__get(info, "defined") == FALSE  ||
+        (user_block = info__get(info, "user_block") <= 0))
+    {
         dbg__print("hook", 5, "(run_hook) Hook " hook_func " does not exist")
         return
     }
 
     dbg__print("hook", 3, "(run_hook) CALLING " hook_func ", user_block=" user_block)
-    execute__user(2 SUBSEP hook_func SUBSEP)
+    execute__user(3 SUBSEP M2_NS SUBSEP hook_func SUBSEP)
     dbg__print("hook", 3, "(run_hook) RETURNED FROM " hook_func)
 }
 
@@ -1167,8 +1230,9 @@ function expand_braces(s,
         if (!emptyp(mtext)) {
             macro_expand(macro)
             if (!macro["okay"] && strictp("def"))
-                error(sprintf("@%s@: Name '%s' not defined",
-                              macro["urtext"], macro["fn"]))
+                error(sprintf("@%s@: Name '%s' not defined%s",
+                              macro["urtext"], macro["fn"],
+                              VERBOSE() ? " [(expand_braces) macro_expand() failed && __STRICT__[def] AAA]" : ""))
             if (dbg__sys_level_p("braces", 6))
                 print_debugfile("m2debug:   expand_braces: expand='" macro["expansion"] "'")
         }
@@ -1227,12 +1291,13 @@ function find_closing_brace(s, start, tok_opt,
 
     # At this point, we've verified that we're looking at the starting token,
     # so there are at least toklen characters in the string.  Moving along...
-    # Look at the character (c) immediately following token, and also the
-    # next character (nc) after that.  One or both might be empty string.
+    # Look at the character (c) in s immediately following tok_opt, and also
+    # the next character (nc) after that.  One or both might be empty string.
     offset = toklen
     c  = substr(s, start+offset,   1)
     nc = substr(s, start+offset+1, 1)
 
+    # Don't let offset proceed beyond the end (length) of s
     while (start+offset <= slen) {
         dbg__print("braces", 7, ("   find_closing_brace: offset=" offset ", c=" c ", nc=" nc))
         if (c == "") {          # end of string/error
@@ -1240,7 +1305,7 @@ function find_closing_brace(s, start, tok_opt,
         } else if (c == TOK_RBRACE) {
             dbg__print("braces", 3, ("<< find_closing_brace: => " start+offset))
             return start+offset
-        } else if (c == "\\" && nc == TOK_RBRACE) {
+        } else if (c == TOK_BACKSLASH && nc == TOK_RBRACE) {
             # "\}" in expansion text will result in a single close brace
             # without ending the expansion text parser.  Skip over }
             # and do not return yet.  "\}" is fixed in calling routine.
@@ -1284,7 +1349,8 @@ function find_closing_brace(s, start, tok_opt,
 #*****************************************************************************
 
 #  "m2:"  FILE  ":"  LINE  ":"  TEXT
-function format_message(text, file, line,    s)
+function format_message(text, file, line,
+                        s)
 {
     file = file ""
     if (file == EMPTY)
@@ -1309,7 +1375,7 @@ function format_message(text, file, line,    s)
 
 function flush_stdout(flushlev)
 {
-    if (flushlev <= sym_ll_read("__SYNC__", "", ROOT_LEVEL)) {
+    if (flushlev <= sys_read("__SYNC__")) {
         # One of these is bound to work, right?
         fflush(STDOUT)
         # Reputed to be more portable:
@@ -1333,6 +1399,12 @@ function flush_stdout(flushlev)
 
 function print_stderr(text)
 {
+    # "All modern systems have a /dev/stderr special file to which error
+    # messages may be sent directly.  gawk, mawk and Brian Kernighan's
+    # awk all have "/dev/stderr" built in for I/O redirections, so even
+    # on systems without a real /dev/stderr special file, you can still
+    # send error messages to standard error."
+    #     https://www.skeeve.com/awk-sys-prog.html    June 2024
     printf "%s\n", text > STDERR
     # Definitely more portable:
     #    print text | "cat 1>&2"
@@ -1351,8 +1423,10 @@ function warn(text, file, line)
 function error(text, file, line)
 {
     warn(text, file, line)
-    sym_ll_write("__EXIT__", "", ROOT_LEVEL, EX_M2_ERROR)
-    if (! sym_ll_read("__LENIENT__", "", ROOT_LEVEL))
+    sys_write("__EXIT__", EX_M2_ERROR)
+    if (sys_read("__LENIENT__") < 0)
+        abend("FATAL", EX_M2_ERROR)
+    if (sys_read("__LENIENT__") == 0)
         end_program(MODE_STREAMS_DISCARD)
 }
 
@@ -1446,8 +1520,8 @@ function readline(    retval, i, s, done, topsrc, trim_ws)
             dbg__print("io", 7, "(readline) retval=" retval)
             if (retval == OKAY) {
                 s = s (trim_ws ? ltrim($0) : $0); trim_ws = FALSE
-                sym_ll_incr("__LINE__", "", ROOT_LEVEL, 1)
-                sym_ll_incr("__NLINE__", "", ROOT_LEVEL, 1)
+                sys_incr("__LINE__", 1)
+                sys_incr("__NLINE__", 1)
             } else {
                 done = TRUE
                 if (retval == ERROR)
@@ -1529,9 +1603,9 @@ function read_lines_until(regexp, dstblk,
 BEGIN {
     TOK_SPACE = " "
 
-    namtab["__DBG__", ROOT_LEVEL] = TYPE_ARRAY FLAG_SYSTEM
+    namtab[M2_SYSNS, "__DBG__", ROOT_LEVEL] = TYPE_ARRAY FLAG_SYSTEM
     split("args block bool braces case cmd del divert dosubs dump expr for " \
-          "gate hook if io level nam parse read seq ship_out stk sym trace " \
+          "gate hook if io level nam ns parse qual read seq ship_out stk sym trace " \
           "while xeq",  _dbg_sys_array, TOK_SPACE)
     for (_dsys in _dbg_sys_array) {
         __dbg_sysnames[_dbg_sys_array[_dsys]] = TRUE
@@ -1539,7 +1613,7 @@ BEGIN {
 }
 
 
-# This function is called automagically (it's baked into sym_ll_write())
+# This function is called automagically (it's baked into sym_ll_write_ns())
 # every time __DEBUG__ transitions from zero to a non-zero value.
 function dbg__all_lev_standard()
 {
@@ -1551,7 +1625,7 @@ function dbg__all_lev_standard()
     dbg__set_level("cmd",        6)
     dbg__set_level("del",        5)
     dbg__set_level("divert",     7)
-    dbg__set_level("dosubs",     7)
+    dbg__set_level("dosubs",     6)
     dbg__set_level("dump",       5)
     dbg__set_level("expr",       3)
     dbg__set_level("for",        5)
@@ -1562,6 +1636,7 @@ function dbg__all_lev_standard()
     dbg__set_level("level",      5)
     dbg__set_level("nam",        3)
     dbg__set_level("parse",      7)
+    dbg__set_level("qual",       7)
     dbg__set_level("read",       0)
     dbg__set_level("seq",        3)
     dbg__set_level("ship_out",   5)
@@ -1576,7 +1651,7 @@ function dbg__all_lev_standard()
 function dbg__all_lev_zero(    dsys)
 {
     for (dsys in __dbg_sysnames)
-        sym_ll_write("__DBG__", dsys, ROOT_LEVEL, 0)
+        sym_ll_write_ns(M2_SYSNS, "__DBG__", dsys, ROOT_LEVEL, 0)
 }
 
 
@@ -1584,13 +1659,13 @@ function dbg__all_lev_zero(    dsys)
 # use sym_ll_write(), and does not trigger special __DEBUG__ handling.
 function enable_debugging()
 {
-    symtab["__DEBUG__", "",  ROOT_LEVEL, "symval"] = TRUE
+    symtab[M2_SYSNS, "__DEBUG__", NOKEY,  ROOT_LEVEL, "symval"] = TRUE
 }
 
 
 function debugging_enabled_p()
 {
-    return sym_ll_read("__DEBUG__", "", ROOT_LEVEL)+0 > 0
+    return sys_read("__DEBUG__")+0 > 0
 }
 
 
@@ -1608,7 +1683,7 @@ function dbg__sys_level_p(dsys, lev)
     if (!debugging_enabled_p()) return FALSE
     if (lev == 0)               return TRUE # Don't combine with .-2; this allows negative levels to print regardless of __DEBUG__
     if (lev > MAX_DBG_LEVEL)    lev = MAX_DBG_LEVEL
-    if (!sym_ll_in("__DBG__", dsys, ROOT_LEVEL))
+    if (!sym_ll_in_ns(M2_SYSNS, "__DBG__", dsys, ROOT_LEVEL))
         return FALSE
     return dbg__get_level(dsys) >= lev
 }
@@ -1625,11 +1700,11 @@ function dbg__get_level(dsys)
 {
     if (dsys == EMPTY) panic("(dbg__get_level) dsys cannot be empty")
     if (! (dsys in __dbg_sysnames)) panic("(dbg__get_level) Unknown dsys name '" dsys "'")
-    if (!sym_ll_in("__DBG__", dsys, ROOT_LEVEL)) {
+    if (!sym_ll_in_ns(M2_SYSNS, "__DBG__", dsys, ROOT_LEVEL)) {
         warn("(dbg__get_level(" dsys "} not defined, returning 0")
         return 0
     }
-    return (sym_ll_read("__DBG__", dsys, ROOT_LEVEL)+0) \
+    return (sym_ll_read_ns(M2_SYSNS, "__DBG__", dsys, ROOT_LEVEL)+0) \
          * (debugging_enabled_p() ? 1 : -1)
 }
 
@@ -1653,7 +1728,7 @@ function dbg__set_level(dsys, lev)
     # idiom was never supported before anyway.
     if (lev < 0)                lev = abs(lev)
     if (lev > MAX_DBG_LEVEL)    lev = MAX_DBG_LEVEL
-    sym_ll_write("__DBG__", dsys, ROOT_LEVEL, lev+0)
+    sym_ll_write_ns(M2_SYSNS, "__DBG__", dsys, ROOT_LEVEL, lev+0)
 }
 
 
@@ -1661,7 +1736,7 @@ function print_debugfile(text,
                          debugfile)
 {
     debugfile = secure_level() == SEC_STANDARD \
-        ? sym_ll_read("__DEBUGFILE__", "", ROOT_LEVEL) \
+        ? sys_read("__DEBUGFILE__") \
         : STDERR
     printf "%s\n", text > debugfile
 }
@@ -1686,7 +1761,7 @@ function dbg__print_block(dsys, lev, blknum, description,
         panic("(dbg__print_block) No 'type' field for block " blknum)
     block_type = blk_type(blknum)
     # print_debugfile("m2debug:(dbg__print_block) block_type = " block_type)
-    blk_label = ppf__block_type(block_type)
+    blk_label = ppf__label(block_type)
 
     print_debugfile(sprintf("m2debug:Block # %d, Type=%s: %s", blknum, blk_label, description))
     print_debugfile(ppf__BLK(blknum))
@@ -1710,8 +1785,8 @@ function dbg__print_block(dsys, lev, blknum, description,
 function trace_prefix(    prefix,
                           trace_mode)
 {
-    prefix = "m2trace:"
-    trace_mode = sym_ll_read("__TRACEMODE__", "", ROOT_LEVEL)
+    prefix = "M2Trace:"
+    trace_mode = sys_read("__TRACEMODE__")
     if (flag_1true_p(trace_mode, TRACE_SHOW_FILE_NAME))
         prefix = prefix (FILE() ? FILE() : __dofile_name) ":"
     if (flag_1true_p(trace_mode, TRACE_SHOW_LINE_NUM))
@@ -1720,18 +1795,35 @@ function trace_prefix(    prefix,
 }
 
 
-function tracing_symbol_p(sym,
-                          info)
+function trace_ll_on(sym,
+                     q)
 {
-    dbg__print("trace", 5, sprintf("(tracing_symbol_p) START; sym='%s'", sym))
+    if (! nam__valid_p(sym, TYPE_SYMBOL, TRUE))
+        error("(trace_ll_on) Invalid name '" sym "'")
+    q = nam__qualify(sym)
+    #print_stderr("(trace_ll_on) '" sym "' => '" q "'")
+    tracetab[q] = OKAY
+}
 
-    if (nam__scan(sym, info) == ERROR)
-        error("(tracing_symbol_p) Scan error, '" sym "'")
-    if (nam__lookup(info) == NAME_NOT_FOUND) {
-        dbg__print("trace", 7, sprintf("(tracing_symbol_p) nam__lookup() failed: " sym))
+function trace_ll_off(sym,
+                      q)
+{
+    if (! nam__valid_p(sym, TYPE_SYMBOL, TRUE))
+        error("(trace_ll_off) Invalid name '" sym "'")
+    q = nam__qualify(sym)
+    #print_stderr("(trace_ll_off) '" sym "' => '" q "'")
+    delete tracetab[q]
+}
+
+function tracing_symbol_p(sym,
+                          q)
+{
+    if (! nam__valid_p(sym, TYPE_SYMBOL, TRUE)) {
+        #error("(tracing_symbol_p) Invalid name '" sym "'")
         return FALSE
     }
-    return info__get(info, "tracing")
+    q = qualify(sym)
+    return q in tracetab
 }
 
 
@@ -1740,7 +1832,7 @@ function tracing_event_p(event,
 {
     if (index(TRACE_VALID_EVENTS, event) == NOT_FOUND)
         panic("(tracing_event_p) Unrecognized trace event '" event "'")
-    trace_mode = sym_ll_read("__TRACEMODE__", "", ROOT_LEVEL)
+    trace_mode = sys_read("__TRACEMODE__")
     return flag_anytrue_p(trace_mode, event TRACE_ALL)
 }
 
@@ -1748,7 +1840,7 @@ function tracing_event_p(event,
 function trace(event, sym, message,
                trace_mode)
 {
-    if (sym_ll_read("__TRACE__", "", ROOT_LEVEL) == FALSE ||
+    if (sys_read("__TRACE__") == FALSE ||
         !tracing_event_p(event))
         return
     if (event == TRACE_COMMAND || event == TRACE_EXPANSION || event == TRACE_SYMBOL_READ_WRITE) {
@@ -1774,6 +1866,7 @@ function trace(event, sym, message,
 function info__gate(opcode,      # OP_xxx operation
                     optype,      # OBJ_TYPE, might be repeated
                     info,        # info[] array from info__create_from_text()
+                    opns,        # String containing proposed namespace
                     oplevel,     # Integer containing proposed level
                                  # (might differ from info["level"], often called ilevel)
                     caller,      # caller tag shown in errors
@@ -1782,36 +1875,40 @@ function info__gate(opcode,      # OP_xxx operation
 {                                        # If False, meekly return boolean.
     if (caller == EMPTY)
         panic("(info__gate) Empty caller")
+    if (opns == EMPTY)
+        panic(sprintf("(info__gate) Empty ns; name='%s', opcode=%s, optype=%s",
+                      info__get(info, "name"), ppf__label(opcode), ppf__label(optype)))
     if (info__get(info, "errorp"))
         # If it starts out being bad, we're not going to touch it and leave
         # the error message alone.  It's probably a scan error.
         return info__gate_resolve(FALSE, caller, info, assert_true_or_exit, EMPTY)
 
-    if (info__get(info, "valid") == FALSE)
+    if (info__get(info, "lexvalid") != TRUE)
         return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
-                                  sprintf("Name '%s' not valid",
-                                          info__get(info, "urtext")))
+                                  sprintf("Name '%s' not valid [%d]",
+                                          info__get(info, "urtext"),
+                                          info__get(info, "lexvalid")))
 
     if (optype == PTYPE_ANY || optype == PTYPE_UNDEF)
         return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
                                   sprintf("Type '%s' is not allowed here",
-                                          ppf__flag_type(optype)))
+                                          ppf__label(optype)))
 
-    retval = info["nparts"] == 1 ? info__gate_1part(opcode, optype, info, oplevel, caller, assert_true_or_exit) \
-                                 : info__gate_2parts(opcode, optype, info, oplevel, caller, assert_true_or_exit)
-    dbg__print("gate", 3, sprintf("(info__gate) (opcode=%s, optype=%s, text='%s', oplevel=%d, caller='%s' asrtTrue=%s) => %s",
-                         __op_label[opcode], ppf__flag_type(optype), info__get(info, "urtext"),
-                         oplevel, caller, ppf__bool(assert_true_or_exit), ppf__bool(retval)))
+    retval = info["nparts"] == 1 ? info__gate_1part(opcode, optype, info, opns, oplevel, caller, assert_true_or_exit) \
+                                 : info__gate_2parts(opcode, optype, info, opns, oplevel, caller, assert_true_or_exit)
+    dbg__print("gate", 3, sprintf("(info__gate) (opcode=%s, optype=%s, text='%s', opns=%s, oplevel=%d, caller='%s' asrtTrue=%s) => %s",
+                                  ppf__label(opcode), ppf__label(optype), info__get(info, "urtext"),
+                                  opns, oplevel, caller, ppf__bool(assert_true_or_exit), ppf__bool(retval)))
     return retval
 }
 
 
-function info__gate_1part(opcode, optype, info, oplevel, caller, assert_true_or_exit,
-                          retval, itype, iname, icode, ilevel)
+function info__gate_1part(opcode, optype, info, opns, oplevel, caller, assert_true_or_exit,
+                          retval, itype, iname, icode, ilevel, ins)
 {
     iname = info__get(info, "name")
     dbg__print("gate", 3, sprintf("(info__gate_1part) opcode=%s, optype=%s, name='%s', oplevel=%d",
-                         ppf__flag_type(optype), __op_label[opcode], iname, oplevel))
+                                  ppf__label(opcode), ppf__label(optype), iname, oplevel))
     if (optype == PTYPE_SCALAR)
         optype = TYPE_SYMBOL
 
@@ -1819,63 +1916,81 @@ function info__gate_1part(opcode, optype, info, oplevel, caller, assert_true_or_
     icode  = info__get(info, "code")
     ilevel = info__get(info, "level")
     itype  = info__get(info, "type")
+    ins    = info__get(info, "ns")
 
     do {
         #print_stderr("start 1part")
         #print_stderr("opcode=" opcode)
         if (opcode == OP_CREATE) {
             if (optype == TYPE_SEQUENCE) {
-                if (! seq_valid_p(iname))
+                if (! nam__valid_p(iname, optype, FALSE))
                     return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
                                               sprintf("Invalid name '%s'",
                                                       iname))
                 if (ilevel != NAME_NOT_FOUND)
                     return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
                                               sprintf("Name '%s' already defined as a %s",
-                                                      iname, ppf__flag_type(itype)))
+                                                      iname, ppf__label(itype)))
                 # It's not found, so info[] won't be very helpful...
                 if (double_underscores_p(iname))
                     return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
-                                              sprintf("Name '%s' is protected", iname))
+                                              sprintf("Name '%s' is protected%s",
+                                                      iname, VERBOSE() ? " [info__gate_1part:A]" : ""))
                 retval = TRUE; break
 
-            } else if (optype == TYPE_COMMAND) {
+          # } else if (optype == TYPE_COMMAND) {
+            } else if (optype == TYPE_USER) {
                 # If name starts with "__", it must be a valid hook name.
                 # Double underscores are right out.
                 #    name !~ /__(m2_begin|m2_end|file_open|file_close|file_suspend|file_resume)_hook/)
-                if (!cmd_valid_p(iname) ||
-                    double_underscores_p(iname) ||
+                if (!nam__valid_p(iname, optype, TRUE) ||
                     (substr(iname, 1, 2) == "__" &&
-                     iname !~ /__((m2_(begin|end))|(file_(open|close|suspend|resume)))_hook/))
+                     iname !~ /__((m2_(begin|end|exit))|(file_(open|close|suspend|resume)))_hook/))
                     return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
                                               sprintf("Command name '%s' not valid", iname))
                 # FIXME This is not quite sufficient (I think).  I probably need
                 # to do a full nam__scan() / nam__lookup() because I don't want
                 # to shadow a system symbol.  At least I need to be more careful
                 # than "it's not in the current level, looks good!!"
-                if (nam_ll_in(iname, __curr_level) ||
-                    nam_ll_in(iname, ROOT_LEVEL))
+                if (nam_ll_in_ns(ins, iname, curr_level()) ||
+                    nam_ll_in_ns(ins, iname, ROOT_LEVEL))
                     return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
                                               sprintf("Command name '%s' not available", iname))
                 retval = TRUE; break
 
             } else if (optype == TYPE_SYMBOL ||
-                       optype == TYPE_LIST   || optype == TYPE_ARRAY) {
+                       optype == TYPE_LIST   ||
+                       optype == TYPE_ARRAY) {
                 if (ilevel == NAME_NOT_FOUND) {
                     # It's a new, not-found symbol
                     if (double_underscores_p(iname))
                         return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
-                                                  sprintf("Name '%s' is protected", iname))
+                                                  sprintf("Name '%s' is protected%s",
+                                                          iname, VERBOSE() ? " [info__gate_1part:B]" : ""))
                     #print_stderr("should be true")
                     retval = TRUE; break
                 } else {
                     # It was found
                     #print_stderr("Found sym " name " at ilevel=" ilevel ", oplevel=" oplevel)
-                    # if (flag_1true_p(icode, FLAG_SYSTEM) ||
-                    #     double_underscores_p(iname))
                     if (info__get(info, "protected"))
                         return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
-                                                  sprintf("Name '%s' is protected", iname))
+                                                  sprintf("Name '%s' is protected%s",
+                                                          iname, VERBOSE() ? " [info__gate_1part:C]" : ""))
+
+                    # For arrays or lists, don't let them be redefined at the current level.
+                    #
+                    # LATER: This code detects duplicate arrays or lists
+                    # at @array or @list run-time.  But as part of
+                    # namespaces upgrade, I declare things (in namtab
+                    # only) at parse time, so I think this check should
+                    # have already been performed.  It's okay if there's
+                    # an entry in namtab.
+                    #
+                    # if ((optype == TYPE_ARRAY || optype == TYPE_LIST) &&
+                    #     ilevel == curr_level())    # if (nam_ll_in(name, curr_level()))
+                    #     return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
+                    #                               sprintf("%s '%s' already defined",
+                    #                                       ppf__label(icode), iname))
                     retval = TRUE; break
                 }
             }
@@ -1885,7 +2000,8 @@ function info__gate_1part(opcode, optype, info, oplevel, caller, assert_true_or_
             # Name must always be found for a read to be successful
             if (ilevel == NAME_NOT_FOUND)
                 return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
-                                          sprintf("Name '%s' not defined", iname))
+                                          sprintf("Name '%s' not defined%s", iname,
+                                                  VERBOSE() ? " [(info__gate_1part) OP_READ]" : ""))
 
             # # SCALAR must be checked before IDXABLE because the latter
             # # is a subset of the former
@@ -1894,7 +2010,7 @@ function info__gate_1part(opcode, optype, info, oplevel, caller, assert_true_or_
             #     if (itype != TYPE_SYMBOL && itype != TYPE_ARRAY && itype != TYPE_LIST)
             #         return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
             #                                   sprintf("A Name '%s' has type %s, not Scalar",
-            #                                           iname, ppf__flag_type(itype)))
+            #                                           iname, ppf__label(itype)))
             #     retval = TRUE; break
             #
             # # } else if (flag_alltrue_p(optype, PTYPE_IDXABLE)) {
@@ -1902,34 +2018,35 @@ function info__gate_1part(opcode, optype, info, oplevel, caller, assert_true_or_
             #     if (itype != TYPE_ARRAY && itype != TYPE_LIST)
             #         return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
             #                                   sprintf("B Name '%s' has type %s, not Array or List",
-            #                                           iname, ppf__flag_type(itype)))
+            #                                           iname, ppf__label(itype)))
             #     retval = TRUE; break
             #
             # } else if (optype == TYPE_ARRAY) {
             #     if (itype != optype)
             #         return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
             #                                   sprintf("C Name '%s' has type %s, not %s",
-            #                                           iname, ppf__flag_type(itype), ppf__flag_type(optype)))
+            #                                           iname, ppf__label(itype), ppf__label(optype)))
             #     retval = TRUE; break
             # }
             if (! info__satisfies_type(info, optype))
                 return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
                                           sprintf("Name '%s' has type %s, not %s",
-                                                  iname, ppf__flag_type(itype), ppf__flag_type(optype)))
+                                                  iname, ppf__label(itype), ppf__label(optype)))
             retval = TRUE; break
 
         } else if (opcode == OP_UPDATE) {
             #print_stderr("op_update, optype=" optype)
             if (ilevel == NAME_NOT_FOUND)
                 return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
-                                          sprintf("Name '%s' not defined", iname))
+                                          sprintf("Name '%s' not defined%s", iname,
+                                                  VERBOSE() ? " [(info__gate_1part) OP_UPDATE]" : ""))
 
             if (optype == TYPE_SYMBOL || optype == TYPE_LIST || optype == TYPE_ARRAY || optype == PTYPE_NUMBER) {
                 # if (itype != optype)
                 if (! info__satisfies_type(info, optype))
                     return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
                                               sprintf("Name '%s' has type %s, not %s",
-                                                      iname, ppf__flag_type(itype), ppf__flag_type(optype)))
+                                                      iname, ppf__label(itype), ppf__label(optype)))
                 # So it *was found, on some level...  Can it be updated?
                 # Good old dynamic scoping
                 if (flag_1true_p(icode, FLAG_WRITABLE))
@@ -1937,7 +2054,8 @@ function info__gate_1part(opcode, optype, info, oplevel, caller, assert_true_or_
                 if (flag_anytrue_p(icode, FLAG_READONLY FLAG_SYSTEM) ||
                     double_underscores_p(iname))
                     return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
-                                              sprintf("Name '%s' is protected", iname))
+                                              sprintf("Name '%s' is protected%s",
+                                                      iname, VERBOSE() ? " [info__gate_1part:D]" : ""))
                 #print_stderr("should be true")
                 retval = TRUE; break
             }
@@ -1945,17 +2063,19 @@ function info__gate_1part(opcode, optype, info, oplevel, caller, assert_true_or_
             #print_stderr("OP_DELETE, optype=" optype)
             if (ilevel == NAME_NOT_FOUND)
                 return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
-                                          sprintf("Name '%s' not defined", iname))
+                                          sprintf("Name '%s' not defined%s", iname,
+                                                  VERBOSE() ? " [(info__gate_1part) OP_DELETE]" : ""))
 
             if (optype == TYPE_USER || optype == TYPE_SYMBOL) {
                 if (info__get(info, "protected"))
                     return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
-                                              sprintf("Name '%s' is protected", iname))
+                                              sprintf("Name '%s' is protected%s",
+                                                      iname, VERBOSE() ? " [info__gate_1part:E]" : ""))
                 retval = TRUE; break
             }
         }
         panic(sprintf("(info__gate_1part) UNHANDLED (opcode=%s, optype=%s, name='%s', oplevel=%d, caller='%s' assert=%s) => %s",
-                      __op_label[opcode], ppf__flag_type(optype), iname,
+                      ppf__label(opcode), ppf__label(optype), iname,
                       oplevel, caller, ppf__bool(assert_true_or_exit), ppf__bool(retval)))
     } while (FALSE)
 
@@ -1963,13 +2083,13 @@ function info__gate_1part(opcode, optype, info, oplevel, caller, assert_true_or_
 }
 
 
-function info__gate_2parts(opcode, optype, info, oplevel, caller, assert_true_or_exit,
+function info__gate_2parts(opcode, optype, info, opns, oplevel, caller, assert_true_or_exit,
                            retval, itype, iname, ikey, icode, ilevel)
 {
     iname = info__get(info, "name")
     ikey  = info__get(info, "key")
     dbg__print("gate", 3, sprintf("(info__gate_2parts) opcode=%s, optype=%s, name='%s', key='%s', oplevel=%d",
-                         ppf__flag_type(optype), __op_label[opcode], iname, ikey, oplevel))
+                                  ppf__label(opcode), ppf__label(optype), iname, ikey, oplevel))
     ilevel = info__get(info, "level")
     if (optype == PTYPE_SCALAR) {
         # Because Arrays and Lists must be declared before use, PTYPE_SCALAR
@@ -1986,7 +2106,7 @@ function info__gate_2parts(opcode, optype, info, oplevel, caller, assert_true_or
         if (! info__satisfies_type(info, optype))
             return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
                                       sprintf("Type Array or List is required, not %s '%s'",
-                                              ppf__flag_type(itype), iname))
+                                              ppf__label(itype), iname))
         # Pretend it was either Array or List we needed all along...
         optype = itype
     }
@@ -2001,12 +2121,12 @@ function info__gate_2parts(opcode, optype, info, oplevel, caller, assert_true_or
             # if (optype == TYPE_ARRAY) {
             #     if (info__get(info, "protected"))
             #         return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
-            #                                   sprintf("Name '%s' is protected", iname))
-            #     if (sym_ll_in(iname, ikey, oplevel))
+            #                                   sprintf("Name '%s' is protected [F]", iname))
+            #     if (sym_ll_in_ns(M2_NS, iname, ikey, oplevel))
             #         return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
             #                                   sprintf("Key '%s' already found in Array '%s' at level %d", ikey, iname, oplevel))
             #     # It's not found at this level, but maybe it's at a higher level
-            #     # print_stderr("Want to create " iname "[" ikey "] at level " oplevel)
+            #     # print_stderr("Want to create " iname TOK_LBRACKET ikey TOK_RBRACKET " at level " oplevel)
             #     # print_stderr("  info[code]=" icode "   info_level=" info__get(info, "level"))
             #     if (ilevel != oplevel)
             #         return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
@@ -2016,17 +2136,20 @@ function info__gate_2parts(opcode, optype, info, oplevel, caller, assert_true_or
             if (info__satisfies_type(info, PTYPE_IDXABLE)) {
                 if (info__get(info, "protected"))
                     return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
-                                              sprintf("Name '%s' is protected", iname))
+                                              sprintf("Name '%s' is protected%s",
+                                                      iname, VERBOSE() ? " [info__gate_2parts:G]" : ""))
                 if (idx__key_exists_p(info, ikey))
                     return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
                                               sprintf("Key '%s' already found in %s '%s'",
-                                                      ikey, ppf__flag_type(itype), iname))
+                                                      ikey, ppf__label(itype), iname))
                 # It's not found at this level, but maybe it's at a higher level
-                # print_stderr("Want to create " iname "[" ikey "] at level " oplevel)
+                # print_stderr("Want to create " iname TOK_LBRACKET ikey TOK_RBRACKET " at level " oplevel)
                 # print_stderr("  info[code]=" icode "   info_level=" info__get(info, "level"))
-                if (ilevel != oplevel)
-                    return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
-                                              sprintf("Name '%s' is at a different level", iname))
+                #
+                # LATER - I think this is okay, to allow updates to different levels.
+                # if (ilevel != oplevel)
+                #     return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
+                #                               sprintf("Name '%s' is at a different level", iname))
                 retval = TRUE; break
             }
         } else if (opcode == OP_UPDATE) {
@@ -2035,10 +2158,11 @@ function info__gate_2parts(opcode, optype, info, oplevel, caller, assert_true_or
             if (! info__satisfies_type(info, optype))
                 return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
                                           sprintf("Name '%s' has type %s, not %s",
-                                                  iname, ppf__flag_type(itype), ppf__flag_type(optype)))
+                                                  iname, ppf__label(itype), ppf__label(optype)))
             if (info__get(info, "protected"))
                 return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
-                                          sprintf("Name '%s' is protected", iname))
+                                          sprintf("Name '%s' is protected%s",
+                                                  iname, VERBOSE() ? " [info__gate_2parts:H]" : ""))
 
             # We actually don't handle 2part PTYPE_NUMBER quite yet...
             # if (optype == PTYPE_NUMBER) {
@@ -2047,7 +2171,7 @@ function info__gate_2parts(opcode, optype, info, oplevel, caller, assert_true_or
             #     # if (! info__satisfies_type(info, optype))
             #     #     # return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
             #     #     #                           sprintf("Name '%s' has type %s, not %s",
-            #     #     #                                   iname, ppf__flag_type(itype), ppf__flag_type(optype)))
+            #     #     #                                   iname, ppf__label(itype), ppf__label(optype)))
             #     #     print_stderr("Type NOT satisfied")
             #     # else
             #     #     print_stderr("Type IS satisfied")
@@ -2067,13 +2191,13 @@ function info__gate_2parts(opcode, optype, info, oplevel, caller, assert_true_or
                 if (! idx__key_exists_p(info, ikey))
                     return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
                                               sprintf("Key '%s' not found in %s '%s'",
-                                                      ikey, ppf__flag_type(itype), iname))
+                                                      ikey, ppf__label(itype), iname))
                 retval = TRUE; break
             }
         }
 
         panic(sprintf("(info__gate_2parts) UNHANDLED (opcode=%s, optype=%s, name='%s', key='%s', oplevel=%d, caller='%s' assert=%s) => %s",
-                      __op_label[opcode], ppf__flag_type(optype), iname, ikey,
+                      ppf__label(opcode), ppf__label(optype), iname, ikey,
                       oplevel, caller, ppf__bool(assert_true_or_exit), ppf__bool(retval)))
     } while (FALSE)
 
@@ -2136,6 +2260,7 @@ function info__gate_resolve(retval, caller, info, assert_true_or_exit, errtext)
 #       A R R A Y   A P I
 #
 #*****************************************************************************
+# TODO This needs to get folded into an info[] attribute
 function arrayp(arr,
                 info) # nparts, level, info, code)
 {
@@ -2159,7 +2284,7 @@ function arrayp(arr,
 # NEW
     info__create_from_text(arr, info)
     if (info["errorp"] == TRUE)
-        return FALSE # error("(arrayp) " info["errtext"])
+        return FALSE
     if (info__get(info, "type") != TYPE_ARRAY)
         return FALSE
     if (info["nparts"] == 2)
@@ -2185,16 +2310,17 @@ function array_deref_info(info, caller)
 
 
 function arr_fetch_info(info,
-                        type, iname, ikey, ilevel, val, code)
+                        type, iname, ikey, ilevel, ins, val, code)
 {
     if ((type = info__get(info, "type")) != TYPE_ARRAY)
         panic("(arr_fetch_info) Info not an Array")
     iname = info__get(info, "name")
     ikey = info__get(info, "key")
     ilevel = info__get(info, "level")
-    if (! sym_ll_in(iname, ikey, ilevel))
+    ins = info__get(info, "ns")
+    if (! sym_ll_in_ns(ins, iname, ikey, ilevel))
         error("(arr_fetch_info) Not in symtab: NAME='" iname "', KEY='" ikey "'")
-    val = sym_ll_read(iname, ikey, ilevel)
+    val = sym_ll_read_ns(ins, iname, ikey, ilevel)
     code = info__get(info, "code")
     dbg__print("sym", 2, sprintf("(arr_fetch_info) END sym='%s', level=%d => %s", iname, ilevel, ppf__bool(TRUE)))
     if (flag_1true_p(code, FLAG_INTEGER))
@@ -2202,13 +2328,13 @@ function arr_fetch_info(info,
     else if (flag_1true_p(code, FLAG_NUMERIC))
         return 0.0 + val
     else if (flag_1true_p(code, FLAG_BOOLEAN))
-        return sym_ll_read("__FMT__", to_bool(val)) # !! (0 + val))
+        return sym_ll_read_ns(M2_SYSNS, "__FMT__", to_bool(val)) # !! (0 + val))
     else
         return val
 }
 
 function lis_fetch_info(info, caller,
-                        type, iname, ikey, ilevel, agg_block, count, val)
+                        type, ins, iname, ikey, ilevel, agg_block, count, val)
 {
     if (caller == EMPTY)
         panic("(lis_fetch_info) Empty caller!")
@@ -2216,12 +2342,13 @@ function lis_fetch_info(info, caller,
         panic("(lis_fetch_info) Info not a List")
     if (! integerp(ikey = info__get(info, "key")))
         error(sprintf("%s: Invalid List index '%s'", caller, ikey))
-    if (! ((iname = info__get(info, "name"), "", ilevel = info__get(info, "level"), "agg_block") in symtab))
-        panic(sprintf("(lis_fetch_info) Could not find ['%s','%s',%d,'agg_block'] in symtab",
-                      iname, "", ilevel))
-    agg_block = symtab[iname, "", ilevel, "agg_block"]
+    ins = info__get(info, "ns")
+    if (! ((ins, iname = info__get(info, "name"), NOKEY, ilevel = info__get(info, "level"), "agg_block") in symtab))
+        panic(sprintf("(lis_fetch_info) Could not find [%s, '%s','%s',%d,'agg_block'] in symtab",
+                      ins, iname, NOKEY, ilevel))
+    agg_block = symtab[ins, iname, NOKEY, ilevel, "agg_block"]
     count = blktab[agg_block, 0, "count"]+0
-    if (ikey < 1 || ikey > count)
+    if (ikey+0 < 1 || ikey+0 > count)
         if (strictp("key"))
             error(sprintf("%s: Index '%s' out of bounds", caller, ikey))
         else
@@ -2235,14 +2362,14 @@ function lis_fetch_info(info, caller,
 }
 
 
-function lis_clear(lis, level,
+function lis_clear(ns, lis, level,
                    agg_block, count, i)
 {
     # Clear List
-    if (! ((lis, "", level, "agg_block") in symtab))
-        panic(sprintf("(lis_clear) Could not find ['%s','%s',%d,'agg_block'] in symtab",
-                      lis, "", level))
-    agg_block = symtab[lis, "", level, "agg_block"]
+    if (! ((ns, lis, NOKEY, level, "agg_block") in symtab))
+        panic(sprintf("(lis_clear) Could not find [%s, '%s','%s',%d,'agg_block'] in symtab",
+                      ns, lis, NOKEY, level))
+    agg_block = symtab[ns, lis, NOKEY, level, "agg_block"]
     count = blktab[agg_block, 0, "count"]+0
     if (count > 0) {
         for (i = 1; i <= count; i++) {
@@ -2254,17 +2381,18 @@ function lis_clear(lis, level,
 }
 
 function idx__key_exists_p(info, key,
-                           itype, iname, ilevel)
+                           itype, iname, ins, ilevel)
 {
     itype  = info__get(info, "type")
     iname  = info__get(info, "name")
     ilevel = info__get(info, "level")
+    ins    = info__get(info, "ns")
     if (itype == TYPE_ARRAY)
-        return sym_ll_in(iname, key, ilevel)
+        return sym_ll_in_ns(ins, iname, key, ilevel)
     else if (itype == TYPE_LIST)
-        return lis__key_exists_p(iname, key, ilevel)
+        return lis__key_exists_p(ins, iname, key, ilevel)
     else
-        panic("(idx__key_exists_p) Cannot handle type " itype)
+        panic("(idx__key_exists_p) Cannot handle type " ppf__label(itype))
 }
 
 
@@ -2275,10 +2403,10 @@ function idx__key_exists_p(info, key,
 #         panic("(arr_clear) Missing code!")
 #     if (flag_1true_p(code, FLAG_BLKARRAY)) {
 #         # # Clear block array
-#         # if (! ((arr, "", level, "agg_block") in symtab))
-#         #     panic(sprintf("(arr_clear) Could not find ['%s','%s',%d,'agg_block'] in symtab",
-#         #                   arr, "", level))
-#         # agg_block = symtab[arr, "", level, "agg_block"]
+#         # if (! ((M2_NS, arr, NOKEY, level, "agg_block") in symtab))
+#         #     panic(sprintf("(arr_clear) Could not find [%s, '%s','%s',%d,'agg_block'] in symtab",
+#         #                   M2_NS, arr, NOKEY, level))
+#         # agg_block = symtab[M2_NS, arr, NOKEY, level, "agg_block"]
 #         # count = blktab[agg_block, 0, "count"]+0
 #         # if (count > 0) {
 #         #     for (i = 1; i <= count; i++) {
@@ -2291,37 +2419,37 @@ function idx__key_exists_p(info, key,
 #         # Clear regular array
 #         for (k in symtab) {
 #             split(k, x, SUBSEP)
-#             if (x[1] == arr && x[3]+0 == level)
-#                 del_list[x[1], x[2], x[3], x[4]] = TRUE
+#             if (x[2] == arr && x[4]+0 == level)
+#                 del_list[x[1], x[2], x[3], x[4], x[5]] = TRUE
 #         }
 #         for (k in del_list) {
 #             split(k, x, SUBSEP)
-#             dbg__print("sym", 3, sprintf("(arr_clear) Delete symtab['%s', '%s', %d, %s]",
-#                                         x[1], x[2], x[3], x[4]))
-#             delete symtab[x[1], x[2], x[3], x[4]]
+#             dbg__print("sym", 3, sprintf("(arr_clear) Delete symtab[%s, '%s', '%s', %d, %s]",
+#                                         x[1], x[2], x[3], x[4], x[5]))
+#             delete symtab[x[1], x[2], x[3], x[4], x[5]]
 #         }
 #     }
 # }
 
 
-function lis__size(lis, level,
+function lis__size(ns, lis, level,
                    agg_block)
 {
     # Size block array
-    if (! ((lis, "", level, "agg_block") in symtab))
-        panic(sprintf("(lis__size) Could not find ['%s','%s',%d,'agg_block'] in symtab",
-                      lis, "", level))
-    agg_block = symtab[lis, "", level, "agg_block"]
+    if (! ((ns, lis, NOKEY, level, "agg_block") in symtab))
+        panic(sprintf("(lis__size) Could not find [%s, '%s','%s',%d,'agg_block'] in symtab",
+                      ns, lis, NOKEY, level))
+    agg_block = symtab[ns, lis, NOKEY, level, "agg_block"]
     return blktab[agg_block, 0, "count"] + 0
 }
 
-function lis__key_exists_p(lis, key, level)
+function lis__key_exists_p(ns, lis, key, level)
 {
     key = 0 + key
-    return key > 0 && key <= lis__size(lis, level)
+    return key > 0 && key <= lis__size(ns, lis, level)
 }
 
-function lis__assign(name, key, level, new_val,
+function lis__assign(ns, name, key, level, new_val,
                      agg_block, count)
 {
     # print_stderr(sprintf("List: %s[%s] = %s",
@@ -2330,10 +2458,10 @@ function lis__assign(name, key, level, new_val,
         error(sprintf("(lis__assign) Invalid List index '%s'", key))
     if (key < 1)
         error(sprintf("(lis_assign) Index '%s' out of bounds", key))
-    if (! ((name, "", level, "agg_block") in symtab))
-        panic(sprintf("(lis__assign) Could not find ['%s','%s',%d,'agg_block'] in symtab",
-                      name, "", level))
-    agg_block = symtab[name, "", level, "agg_block"]
+    if (! ((ns, name, NOKEY, level, "agg_block") in symtab))
+        panic(sprintf("(lis__assign) Could not find [%s, '%s','%s',%d,'agg_block'] in symtab",
+                      ns, name, NOKEY, level))
+    agg_block = symtab[ns, name, NOKEY, level, "agg_block"]
     count = blktab[agg_block, 0, "count"]+0
     if (key > count+1)
         error(sprintf("(lis_assign) Index '%s' out of bounds", key))
@@ -2345,43 +2473,50 @@ function lis__assign(name, key, level, new_val,
         blk_ll_write(agg_block, key, OBJ_TEXT, new_val)
 }
 
-function arr__size(arr, level,
-                   k, x, count)
+function arr__size(ns, arr, level,
+                   s, f, count)
 {
     count = 0
-    for (k in symtab) {
-        split(k, x, SUBSEP)
-        if (x[1] == arr && x[3]+0 == level)
+    for (s in symtab) {
+        split(s, f, SUBSEP)
+        if (f[SFN_NS] == ns &&
+            f[SFN_NAME] == arr &&
+            f[SFN_LEVEL]+0 == level)
             count++
     }
     return count
 }
 
-function idx__size(arr, level, code,
-                    agg_block, count, k, x)
+function idx__size(info, # arr, level, code,
+                   icode, ilevel, iname, ins, agg_block, count, k, x)
 {
-    if (code == EMPTY)
+    if ((ins = info__get(info, "ns")) == EMPTY)
+        panic("(idx__size) Missing ns!")
+    if ((icode = info__get(info, "code")) == EMPTY)
         panic("(idx__size) Missing code!")
+
+    iname  = info__get(info, "name")
+    ilevel = info__get(info, "level")
     count = 0
-    if (flag_1true_p(code, TYPE_LIST)) {
+    if (flag_1true_p(icode, TYPE_LIST)) {
         # # Size block array
-        # if (! ((arr, "", level, "agg_block") in symtab))
-        #     panic(sprintf("(idx__size) Could not find ['%s','%s',%d,'agg_block'] in symtab",
-        #                   arr, "", level))
-        # agg_block = symtab[arr, "", level, "agg_block"]
+        # if (! ((M2_NS, arr, NOKEY, level, "agg_block") in symtab))
+        #     panic(sprintf("(idx__size) Could not find [%s, '%s','%s',%d,'agg_block'] in symtab",
+        #                   M2_NS, arr, NOKEY, level))
+        # agg_block = symtab[M2_NS, arr, NOKEY, level, "agg_block"]
         # count = blktab[agg_block, 0, "count"]+0
-        count = lis__size(arr, level)
+        count = lis__size(ins, iname, ilevel)
     } else {
         # Size regular array
         # for (k in symtab) {
         #     split(k, x, SUBSEP)
-        #     if (x[1] == arr && x[3]+0 == level)
+        #     if (x[SFN_NAME] == arr && x[SFN_LEVEL]+0 == level)
         #         count++
         # }
-        count = arr__size(arr, level)
+        count = arr__size(ins, iname, ilevel)
     }
     dbg__print("sym", 7, sprintf("(idx__size) arr='%s', level=%d, RETURNING %d",
-                                arr, level, count))
+                                iname, ilevel, count))
     return count
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
@@ -2411,8 +2546,9 @@ function blk_new(block_type,
 
     if (block_type == BLK_AGG) {
         blktab[new_blknum, 0, "count"] = 0
+        blktab[new_blknum, 0, "line"]  = LINE()
     } else if (block_type == BLK_CASE) {
-        blktab[new_blknum, 0, "terminator"] = "^@(endcase|esac)"
+        blktab[new_blknum, 0, "terminator"] = "^@__m2__::(endcase|esac)"
     } else if (block_type == BLK_FILE) {
         blktab[new_blknum, 0, "open"] = FALSE
         blktab[new_blknum, 0, "ever_opened"] = FALSE
@@ -2420,6 +2556,7 @@ function blk_new(block_type,
         blktab[new_blknum, 0, "oob_terminator"] = "EOF"
     } else if (block_type == BLK_FOR) {
         # [0, "array_type"]     *       either @for or @foreach
+        # [0, "blkvalid"]       *
         # [0, "body_block"]     *
         # [0, "dstblk"]         *
         # [0, "level"]          @foreach
@@ -2429,12 +2566,11 @@ function blk_new(block_type,
         # [0, "loop_start"]     @for
         # [0, "loop_type"]      *       @for, @foreach, @sforeach
         # [0, "loop_var"]       *
-        blktab[new_blknum, 0, "terminator"] = "^@next"
-        # [0, "valid"]          *
+        blktab[new_blknum, 0, "terminator"] = "^@__m2__::next"
     } else if (block_type == BLK_IF) {
-        blktab[new_blknum, 0, "terminator"] = "^@(endif|fi)"
+        blktab[new_blknum, 0, "terminator"] = "^@__m2__::(endif|fi)"
     } else if (block_type == BLK_LONGDEF) {
-        blktab[new_blknum, 0, "terminator"] = "^@endlong(def)?"
+        blktab[new_blknum, 0, "terminator"] = "^@__m2__::endlong(def)?"
     } else if (block_type == BLK_STRING) {
         blktab[new_blknum, 0, "terminator"] = ""
         blktab[new_blknum, 0, "oob_terminator"] = "EOS"
@@ -2442,20 +2578,20 @@ function blk_new(block_type,
         blktab[new_blknum, 0, "dstblk"] = TERMINAL
         blktab[new_blknum, 0, "terminator"] = ""
     } else if (block_type == BLK_USER) {
+        # [0, "blkvalid"]
         # [0, "body_block"]
         # [0, "dstblk"]
         # [0, "name"]
         # [0, "nparam"]
         # [N, "param_name"]
-        blktab[new_blknum, 0, "terminator"] = "^@endcmd"
-        # [0, "valid"]
+        blktab[new_blknum, 0, "terminator"] = "^@__m2__::endcmd"
     } else if (block_type == BLK_WHILE) {
-        blktab[new_blknum, 0, "terminator"] = "^@(endwhile|wend)"
+        blktab[new_blknum, 0, "terminator"] = "^@__m2__::(endwhile|wend)"
     } else
         panic("(blk_new) Uncaught block_type '" block_type "'")
 
     msg = sprintf("[Block Create] %s => %d",
-                  ppf__block_type(block_type), new_blknum)
+                  ppf__label(block_type), new_blknum)
     #print_stderr(msg)
     trace(TRACE_BLOCKS, EMPTY, msg)
     dbg__print("ship_out", 2, "(block_new) " msg)
@@ -2485,7 +2621,7 @@ function blk_walk_delete(blknum, seen,
                       block_type, blknum))
 
     msg = sprintf("[Block Delete] %d %s",
-                  blknum, ppf__block_type(block_type))
+                  blknum, ppf__label(block_type))
     trace(TRACE_BLOCKS, EMPTY, msg)
     dbg__print("ship_out", 2, "(blk_walk_delete) " msg)
 
@@ -2516,21 +2652,21 @@ function blk_master_delete(blknum,
     blk_walk_delete(blknum, seen)
 }
 function blk_lint(blknum,
-                  k, x, blk, val, foundp)
+                  b, f, blk, val, foundp)
 {
     foundp = FALSE
-    for (k in blktab) {
-        split(k, x, SUBSEP)
-        blk = x[1] + 0
+    for (b in blktab) {
+        split(b, f, SUBSEP)
+        blk = f[1] + 0
         if (blk == blknum) {
             if (!foundp)        # first hit?
                 # This is clumsy because I don't want to print a message
                 # in the (hopefully) normal case of no hits.
                 print_stderr(">>> BEGIN LINT blknum=" blknum)
             foundp = TRUE
-            val = blktab[blk, x[2], x[3]]
+            val = blktab[blk, f[BFN_SLOT], f[BFN_TAG]]
             warn(sprintf("(blk_lint) Found blktab[%d, %s, '%s'] with Val '%s'",
-                         blk, x[2], x[3], val))
+                         blk, f[BFN_SLOT], f[BFN_TAG], val))
         }
     }
     if (foundp)
@@ -2542,15 +2678,16 @@ function blk_type(blknum,
                   bt)
 {
     if (! ((blknum, 0, "type") in blktab)) {
-        if (! sym_ll_read("__LENIENT__", "", ROOT_LEVEL))
+        if (sys_read("__LENIENT__") <= 0)
             panic("(blk_type) Block # " blknum " has no type!")
-        warn("(blk_type) Block # " blknum " has no type -> UNDEF")
+        warn("(blk_type) Block # " blknum " has no type => UNDEF")
         return PTYPE_UNDEF
     }
     bt = blktab[blknum, 0, "type"]
-    if (! (bt in __blk_label))
+    #print_stderr(sprintf("BLK_TYPE:bt=%s, label=%s", bt, ppf__label(bt)))
+    if (index(VALID_BLOCK_TYPES, bt) == NOT_FOUND)
         panic("(blk_type) Block # " blknum " has invalid block type '" bt "'")
-   return bt
+    return bt
 }
 
 
@@ -2587,25 +2724,25 @@ function blk_append(blknum, slot_type, value,
         panic(sprintf("(blk_append) Block '%s' is not an integer", blknum))
     if (blk_type(blknum) != BLK_AGG)
         panic(sprintf("(blk_append) Block %d has type %s, not AGG",
-                      blknum, ppf__block_type(blk_type(blknum))))
+                      blknum, ppf__label(blk_type(blknum))))
 
     if (slot_type != OBJ_CMD  && slot_type != OBJ_BLKNUM &&
         slot_type != OBJ_TEXT && slot_type != OBJ_USER)
-        panic(sprintf("(blk_append) Argument has bad type %s; should be OBJ_{CMD,BLKNUM,TEXT,USER}", ppf__block_type(slot_type)))
+        panic(sprintf("(blk_append) Argument has bad type %s; should be OBJ_{CMD,BLKNUM,TEXT,USER}", ppf__label(slot_type)))
 
     slot = ++blktab[blknum, 0, "count"]
     dbg__print("ship_out", 3,
               sprintf("(blk_append) blknum=%d, slot=%d, slot_type=%s, value='%s'",
-                      blknum, slot, ppf__block_type(slot_type), value))
+                      blknum, slot, ppf__label(slot_type), value))
     blk_ll_write(blknum, slot, slot_type, value)
 }
 
 
-function blk_dump_blktab(    x, k, blknum, seen, type)
+function blk_dump_blktab(    f, b, blknum, seen, type)
 {
-    for (k in blktab) {
-        split(k, x, SUBSEP)
-        blknum = x[1] + 0
+    for (b in blktab) {
+        split(b, f, SUBSEP)
+        blknum = f[BFN_BNUM] + 0
         if (! (blknum in seen)) {
             type = blk_type(blknum+0)
             dbg__print("xeq", 5, "(blk_dump_blktab) type=" type)
@@ -2684,6 +2821,7 @@ function blk_walk_AGG(opcode, blknum, seen, indent,
         }
     if (opcode == OP_DELETE) {
         delete blktab[blknum, 0, "count"]
+        delete blktab[blknum, 0, "line"]
         if ((blknum, 0, "dstblk") in blktab)
             delete blktab[blknum, 0, "dstblk"]
     }
@@ -2694,7 +2832,7 @@ function blk_nicer_print__obj(blknum, slot, seen, indent,
 {
     if (blk_type(blknum) != BLK_AGG)
         panic(sprintf("(blk_nicer_print__obj) Block %d has type %s, not AGG",
-                      blknum, ppf__block_type(blk_type(blknum))))
+                      blknum, ppf__label(blk_type(blknum))))
     slot_type = blk_ll_slot_type(blknum, slot)
     value = blk_ll_slot_value(blknum, slot)
     print_stderr(sprintf("(blk_nicer_print__obj) block %d slot %d type %s => %s",
@@ -2717,7 +2855,7 @@ function blk_nicer_print__obj(blknum, slot, seen, indent,
                       blknum, slot, slot_type))
 }
 function blk_walk_CASE(opcode, blknum, seen, indent,
-                       k, x, del_list)
+                       b, d, f, del_list)
 {
     if (opcode == OP_DELETE) {
         #print_stderr("OP_DELETE CASE begin:")
@@ -2725,17 +2863,17 @@ function blk_walk_CASE(opcode, blknum, seen, indent,
         blk_walk_delete(blktab[blknum, 0, "preamble_block"], seen)
 
         # Delete the OF cases
-        for (k in blktab) {
-            split(k, x, SUBSEP)
-            if (x[1] == blknum && x[3] == "of_block") {
-                del_list[x[1], x[2]] = TRUE
+        for (b in blktab) {
+            split(b, f, SUBSEP)
+            if (f[BFN_BNUM] == blknum && f[BFN_TAG] == "of_block") {
+                del_list[f[BFN_BNUM], f[BFN_SLOT]] = TRUE
             }
         }
-        for (k in del_list) {
-            split(k, x, SUBSEP)
-            #print_stderr("Deleting OF '" x[2] "' block " blktab[x[1], x[2], "of_block"])
-            blk_walk_delete(blktab[x[1], x[2], "of_block"], seen)
-            delete blktab[x[1], x[2], "of_block"]
+        for (d in del_list) {
+            split(d, f, SUBSEP)
+            #print_stderr("Deleting OF '" f[BFN_SLOT] "' block " blktab[f[BFN_BNUM], f[BFN_SLOT], "of_block"])
+            blk_walk_delete(blktab[f[BFN_BNUM], f[BFN_SLOT], "of_block"], seen)
+            delete blktab[f[BFN_BNUM], f[BFN_SLOT], "of_block"]
         }
         if (blktab[blknum, 0, "seen_otherwise"]) {
             #print_stderr("Deleting OTHERWISE block " blktab[blknum, 0, "otherwise_block"])
@@ -2747,7 +2885,7 @@ function blk_walk_CASE(opcode, blknum, seen, indent,
         delete blktab[blknum, 0, "otherwise_block"]
         delete blktab[blknum, 0, "preamble_block"]
         delete blktab[blknum, 0, "seen_otherwise"]
-        delete blktab[blknum, 0, "valid"]
+        delete blktab[blknum, 0, "blkvalid"]
         #print_stderr("OP_DELETE CASE end : Deleted CASE block " blknum)
     }
     seen[0 + blknum] = 1
@@ -2765,6 +2903,7 @@ function blk_walk_FILE(opcode, blknum, seen, indent)
             delete blktab[blknum, 0, "old.file"]
             delete blktab[blknum, 0, "old.file_uuid"]
             delete blktab[blknum, 0, "old.line"]
+            delete blktab[blknum, 0, "old.ns"]
         }
         delete blktab[blknum, 0, "atmode"]
         delete blktab[blknum, 0, "ever_opened"]
@@ -2777,17 +2916,16 @@ function blk_walk_FILE(opcode, blknum, seen, indent)
 
 function blk_walk_FOR(opcode, blknum, seen, indent)
 {
-    #print_debugfile("BLK_FOR")
     if (opcode == OP_DELETE) {
         #print_stderr("walk_FOR: type=" blktab[blknum, 0, "loop_type"])
         blk_walk_delete(blktab[blknum, 0, "body_block"], seen)
 
-        if (blktab[blknum, 0, "loop_type"] == "@for") {
+        if (blktab[blknum, 0, "loop_type"] == "@__m2__::for") {
             delete blktab[blknum, 0, "loop_end"]
             delete blktab[blknum, 0, "loop_incr"]
             delete blktab[blknum, 0, "loop_start"]
 
-        } else if (blktab[blknum, 0, "loop_type"] == "@foreach") {
+        } else if (blktab[blknum, 0, "loop_type"] == "@__m2__::foreach") {
             delete blktab[blknum, 0, "level"]
             delete blktab[blknum, 0, "loop_array_name"]
         }
@@ -2797,7 +2935,7 @@ function blk_walk_FOR(opcode, blknum, seen, indent)
         delete blktab[blknum, 0, "loop_type"]
         delete blktab[blknum, 0, "loop_type"]
         delete blktab[blknum, 0, "loop_var"]
-        delete blktab[blknum, 0, "valid"]
+        delete blktab[blknum, 0, "blkvalid"]
     }
     seen[0 + blknum] = 1
 }
@@ -2832,7 +2970,7 @@ function blk_walk_IF(opcode, blknum, seen, indent)
         delete blktab[blknum, 0, "init_negate"]
         delete blktab[blknum, 0, "seen_else"]
         delete blktab[blknum, 0, "true_block"]
-        delete blktab[blknum, 0, "valid"]
+        delete blktab[blknum, 0, "blkvalid"]
     }
     seen[0 + blknum] = 1
 }
@@ -2843,7 +2981,8 @@ function blk_walk_LONGDEF(opcode, blknum, seen, indent)
         delete blktab[blknum, 0, "body_block"]
         delete blktab[blknum, 0, "dstblk"]
         delete blktab[blknum, 0, "name"]
-        delete blktab[blknum, 0, "valid"]
+        delete blktab[blknum, 0, "ns"]
+        delete blktab[blknum, 0, "blkvalid"]
     }
     seen[0 + blknum] = 1
 }
@@ -2877,8 +3016,9 @@ function blk_walk_USER(opcode, blknum, seen, indent,
         delete blktab[blknum, 0, "body_block"]
         delete blktab[blknum, 0, "dstblk"]
         delete blktab[blknum, 0, "name"]
+        delete blktab[blknum, 0, "ns"]
         delete blktab[blknum, 0, "nparam"]
-        delete blktab[blknum, 0, "valid"]
+        delete blktab[blknum, 0, "blkvalid"]
         #print_stderr("(blk_walk_USER) DONE Deleted USER " blknum)
     }
     seen[0 + blknum] = 1
@@ -2893,7 +3033,7 @@ function blk_walk_WHILE(opcode, blknum, seen, indent)
         delete blktab[blknum, 0, "condition"]
         delete blktab[blknum, 0, "dstblk"]
         delete blktab[blknum, 0, "init_negate"]
-        delete blktab[blknum, 0, "valid"]
+        delete blktab[blknum, 0, "blkvalid"]
     }
     seen[0 + blknum] = 1
 }
@@ -2901,22 +3041,24 @@ function blk_walk_WHILE(opcode, blknum, seen, indent)
 
 
 function blk_dump_block_raw(blknum,
-                            x, k, blk, type, slot_type_str)
+                            f, b, blk, type, slot_type_str)
 {
     type = blk_type(blknum)
     dbg__print("xeq", 5, "(blk_dump_block_raw) type=" type)
     dbg__print_block("xeq", -1, blknum, "(blk_dump_block_raw)")
 
-    for (k in blktab) {
-        split(k, x, SUBSEP)
-        blk = x[1] + 0
+    for (b in blktab) {
+        split(b, f, SUBSEP)
+        blk = f[BFN_BNUM] + 0
         if (blk == blknum) {
-            dbg__print("xeq", 9, "(blk_dump_block_raw) k=" k)
+            dbg__print("xeq", 9, "(blk_dump_block_raw) b=" b)
             slot_type_str = ""
-            if (x[3] == "slot_type")
-                slot_type_str = " (" ppf__block_type(blktab[x[1], x[2], x[3]]) ")"
-            print_debugfile("m2debug:blknum=" x[1] ", slot=" x[2] ", tag=" x[3] \
-                            " => '" blktab[x[1], x[2], x[3]] "'" slot_type_str)
+            if (f[BFN_TAG] == "slot_type")
+                slot_type_str = " (" ppf__label(blktab[f[1], f[2], f[3]]) ")"
+            print_debugfile("m2debug:blknum=" f[BFN_BNUM] \
+                            ", slot=" f[BFN_SLOT] \
+                            ", tag=" f[BFN_TAG] \
+                            " => '" blktab[f[1], f[2], f[3]] "'" slot_type_str)
         }
     }
 }
@@ -2946,24 +3088,12 @@ function blk_to_string(blknum,
 }
 
 
-function ppf__block_type(block_type)
-{
-    if (block_type == EMPTY)
-        panic("(ppf__block_type) block_type is empty")
-    dbg__print("xeq", 7, "(ppf__block_type) block_type = " block_type)
-    if (! (block_type in __blk_label)) {
-        panic("(ppf__block_type) Invalid block type '" block_type "'")
-    }
-    return __blk_label[block_type]
-}
-
-
 function ppf__block(blknum,
                     block_type, buf)
 {
     block_type = blk_type(blknum)
     dbg__print("xeq", 3, sprintf("(ppf__block) START blknum=%d, type=%s",
-                                blknum, ppf__block_type(block_type)))
+                                blknum, ppf__label(block_type)))
 
     if      (block_type == BLK_AGG)       buf = ppf__agg(blknum)
     else if (block_type == BLK_CASE)      buf = ppf__case(blknum)
@@ -2977,7 +3107,7 @@ function ppf__block(blknum,
     else if (block_type == BLK_WHILE)     buf = ppf__while(blknum)
     else
         panic(sprintf("(ppf__block) Block # %d: type %s (%s) not handled",
-                      blknum, block_type, ppf__block_type(block_type)))
+                      blknum, block_type, ppf__label(block_type)))
     return buf
 }
 
@@ -2987,7 +3117,7 @@ function ppf__BLK(blknum,
 {
     block_type = blk_type(blknum)
     dbg__print("xeq", 3, sprintf("(ppf__BLK) START blknum=%d, type=%s",
-                                blknum, ppf__block_type(block_type)))
+                                blknum, ppf__label(block_type)))
 
     if      (block_type == BLK_AGG)      text = ppf__BLK_AGG(blknum)
     else if (block_type == BLK_CASE)     text = ppf__BLK_CASE(blknum)
@@ -3012,13 +3142,13 @@ function execute__block(blknum,
 {
     block_type = blk_type(blknum)
     dbg__print("xeq", 1, sprintf("(execute__block) START blknum=%d, type=%s",
-                                blknum, ppf__block_type(block_type)))
+                                blknum, ppf__label(block_type)))
     if (flag_1false_p(__m2_config_fs, MODE_XEQ_NORMAL)) {
         dbg__print("xeq", 3, "(execute__block) NOP !MODE_XEQ_NORMAL")
         return
     }
 
-    old_level = __curr_level
+    old_level = curr_level()
     if      (block_type == BLK_AGG)       xeq__BLK_AGG(blknum)
     else if (block_type == BLK_CASE)      xeq__BLK_CASE(blknum)
     # BLK_FILE
@@ -3031,34 +3161,52 @@ function execute__block(blknum,
     else if (block_type == BLK_WHILE)     xeq__BLK_WHILE(blknum)
     else
         panic(sprintf("(execute__block) Block # %d: type %s (%s) not handled",
-                      blknum, block_type, ppf__block_type(block_type)))
+                      blknum, block_type, ppf__label(block_type)))
 
-    if (__curr_level != old_level)
-        panic(sprintf("(execute__block) blknum=%d, type=%s: %s; old_level=%d, __curr_level=%d",
-                      blknum, ppf__block_type(block_type), "Level mismatch", old_level, __curr_level))
+    if (curr_level() != old_level)
+        panic(sprintf("(execute__block) blknum=%d, type=%s: %s; old_level=%d, curr_level()=%d",
+                      blknum, ppf__label(block_type), "Level mismatch", old_level, curr_level()))
     dbg__print("xeq", 1, "(execute__block) END")
 }
 
 
 function xeq__BLK_AGG(agg_block,
-                      i, lim, slot_type, value, block_type, name)
+                      i, lim, slot_type, value, block_type, name,
+                      hack_line, line, old_line)
 {
+    hack_line = FALSE
     block_type = blk_type(agg_block)
     dbg__print("xeq", 3, sprintf("(xeq__BLK_AGG) START dstblk=%d, agg_block=%d, type=%s",
-                                curr_dstblk(), agg_block, ppf__block_type(block_type)))
-
+                                curr_dstblk(), agg_block, ppf__label(block_type)))
     dbg__print_block("xeq", 7, agg_block, "(xeq__BLK_AGG) agg_block")
+
     lim = blktab[agg_block, 0, "count"]
+
+    # Hack __LINE__
+    if ((agg_block, 0, "line") in blktab) {
+        line = blktab[agg_block, 0, "line"]
+        #print_stderr(sprintf("(xeq__BLK_AGG) Block %d had 'line' = %d", agg_block, line))
+        hack_line = TRUE
+        old_line = LINE()
+        sys_write("__LINE__", line)
+    }
+
     for (i = 1; i <= lim; i++) {
         slot_type = blk_ll_slot_type(agg_block, i)
         value = blk_ll_slot_value(agg_block, i)
-        dbg__print("xeq", 3, sprintf("(xeq__BLK_AGG) LOOP; dstblk=%d, agg_block=%d, slot=%d, slot_type=%s, value='%s'",
-                                    curr_dstblk(), agg_block, i, ppf__block_type(slot_type), value))
+        dbg__print("xeq", 7, sprintf("(xeq__BLK_AGG) LOOP; dstblk=%d, agg_block=%d, slot=%d, slot_type=%s, value='%s'",
+                                    curr_dstblk(), agg_block, i, ppf__label(slot_type), value))
+        dbg__print("xeq", 3, sprintf("(xeq__BLK_AGG) TOP OF LOOP: ________ BLOCK %d  SLOT %d ________",
+                                     agg_block, i))
 
-        dbg__print("xeq", 3, sprintf("(xeq__BLK_AGG) CALLING ship_out(%s, '%s')", slot_type, value))
+        if (hack_line)
+            sys_incr("__LINE__", 1)
+        dbg__print("xeq", 3, sprintf("(xeq__BLK_AGG) CALLING ship_out(%s, '%s')", ppf__label(slot_type), value))
         ship_out(slot_type, value)
         dbg__print("xeq", 3, "(xeq__BLK_AGG) RETURNED FROM ship_out()")
     }
+    if (hack_line)
+        sys_write("__LINE__", old_line)
 }
 
 
@@ -3098,7 +3246,7 @@ function ppf__BLK_AGG(blknum,
         for (x = 1; x <= count; x++)
             slotinfo = slotinfo sprintf("  [%d]=%s: %s\n",
                                         x,
-                                        ppf__block_type(blk_ll_slot_type(blknum, x)),
+                                        ppf__label(blk_ll_slot_type(blknum, x)),
                                         blk_ll_slot_value(blknum, x))
     }
     return sprintf("  count   : %d\n" \
@@ -3118,94 +3266,63 @@ function ppf__BLK_AGG(blknum,
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
 #*****************************************************************************
-function cmd_defined_p(text,
-                       nparts, info, iname, ilevel, i, user_block)
-{
-    dbg__print("cmd", 5, sprintf("(cmd_defined_p) text='%s' START", text))
-    if (!cmd_valid_p(text))
-        return FALSE
-
-    # Scan text => name, key
-    if ((nparts = nam__scan(text, info)) == ERROR) {
-        dbg__print("cmd", 2, sprintf("(cmd_defined_p) END nam__scan('%s') failed => %s", text, ppf__bool(FALSE)))
-        __m2_msg = "Scan error, " __m2_msg
-        return FALSE
-    }
-    iname = info["name"]
-
-    # Now call nam__lookup(info)
-    ilevel = nam__lookup(info)
-    if (ilevel == NAME_NOT_FOUND) {
-        dbg__print("cmd", 2, sprintf("(cmd_defined_p) END nam__lookup('%s') failed, maybe ok? => %s", text, ppf__bool(FALSE)))
-        return FALSE
-    }
-
-    # We've found some matching name on some level, but not sure if it's a Command or not.
-    # This step is necessary to make sure it's actually a Command.
-    for (i = nam_system_p(iname) ? ROOT_LEVEL : __curr_level; i >= ROOT_LEVEL; i--) {
-        if (info_defined_lev_p(info, i, TYPE_COMMAND)) {
-            dbg__print("cmd", 2, sprintf("(cmd_defined_p) END text='%s', level=%d => %s", text, i, ppf__bool(TRUE)))
-            user_block = cmd_ll_read(iname, ilevel)
-            return user_block
-        }
-    }
-
-    dbg__print("cmd", 2, sprintf("(cmd_defined_p) END No command named '%s' on any level => %s", text, ppf__bool(FALSE)))
-    return FALSE
-}
-
-
 function cmd_definition_ppf(name,
-                            info, level, user_block)
+                            info, ns, level, user_block)
 {
     if (nam__scan(name, info) == ERROR)
-        error("Scan error, " __m2_msg)
+        error(sprintf("Scan error: %s%s", __m2_msg, VERBOSE() ? " [cmd_definition_ppf]" : ""))
     if ((level = nam__lookup(info)) == NAME_NOT_FOUND)
         error("(cmd_definition_ppf) nam__lookup failed")
+    if ((ns = info__get(info, "ns")) == EMPTY)
+        error("(cmd_definition_ppf) Empty ns")
     # See if it's a user command
-    if (flag_1false_p(nam_ll_read(name, level), TYPE_USER))
+    if (flag_1false_p(nam_ll_read_ns(ns, name, level), TYPE_USER))
         panic("(cmd_definition_ppf) " name " is no longer a user command")
 
-    user_block = cmd_ll_read(name, level)
+    user_block = cmd_ll_read_ns(ns, name, level)
     return ppf__user(user_block)
 }
 
 
-# s is the encoded version (2) of the invocation:
-#       <nitem> SUBSEP <name> SUBSEP [ { <arg-N> SUBSEP } ... ]
-# nitem includes itself, so for a minimal case of calling a command
-# with no arguments, nitem would be 2: one for itself, and one for <name>.
-# Note this is also the number of SUBSEPs expected.  When arguments
-# are supplied, nitem = # args + 2.
-#       4 SUBSEP <name> SUBSEP <arg1> SUBSEP <arg2> SUBSEP
-# In version 2, SUBSEP is a field terminator; previously it was a separator.
+# s is the encoded version (3) of the invocation:
+#       <nitem> SUBSEP <ns> SUBSEP <name> SUBSEP [ { <arg-N> SUBSEP } ... ]
+# nitem includes itself, so for a minimal case of calling a command with
+# no arguments, nitem would be 3: one for itself, one for <ns>, and one
+# for <name>.  Note this is also the number of SUBSEPs expected.
+# When arguments are supplied, nitem = # args + 3.
+#       5 SUBSEP <ns> SUBSEP <name> SUBSEP <arg1> SUBSEP <arg2> SUBSEP
+# Note: SUBSEP is a field *terminator*; previously it was a separator.
 function ppf__user_call(s,
                         nitem, citem, arg, retval)
 {
     # print_stderr(ppf__sepstr(s))
     nitem = split_subsep(s, citem)
 
-    retval = TOK_AT citem[2]
-    for (arg = 1; arg <= nitem-2; arg++)
-        retval = retval TOK_LBRACE citem[2+arg] TOK_RBRACE
+    retval = TOK_AT
+    if (citem[CFN_NS] != curr_ns())
+        retval = retval citem[CFN_NS] TOK_NS_QUAL
+    retval = retval citem[CFN_NAME]
+    for (arg = 1; arg <= nitem-3; arg++)
+        retval = retval TOK_LBRACE citem[3+arg] TOK_RBRACE
     return retval
 }
 
 
 function ppf__user(user_block,
-                   name, params, i)
+                   name, ns, params, i)
 {
     if ((blk_type(user_block) != BLK_USER) ||
-        (blktab[user_block, 0, "valid"] != TRUE))
+        (blktab[user_block, 0, "blkvalid"] != TRUE))
         panic("(ppf__user) Bad user_block config")
 
     name = blktab[user_block, 0, "name"]
+    ns   = blktab[user_block, 0, "ns"]
     params = ""
     for (i = 1; i <= blktab[user_block, 0, "nparam"]; i++)
         params = params TOK_LBRACE blktab[user_block, i, "param_name"] TOK_RBRACE
     dbg__print("cmd", 5, "params='" params "'") # probably 7 or 8
 
-    return "@newcmd " name params                           TOK_NEWLINE \
+    return "@newcmd " (ns != curr_ns() ? ns TOK_NS_QUAL : "") name params TOK_NEWLINE \
               ppf__agg(blktab[user_block, 0, "body_block"]) TOK_NEWLINE \
            "@endcmd"
 }
@@ -3218,29 +3335,24 @@ function cmd_destroy(info,
     if (flag_1false_p(info__get(info, "code"), TYPE_USER))
         panic("(cmd_destroy) " info__get(info, "name") " is no longer a user command")
 
-    user_block = cmd_ll_read(info__get(info, "name"), info__get(info, "level"))
+    user_block = cmd_ll_read_ns(info__get(info, "ns"),
+                                info__get(info, "name"),
+                                info__get(info, "level"))
     blk_master_delete(user_block)
-    # delete namtab[id, ROOT_LEVEL]
-    # delete symtab[name, "", level, "user_block"]
+    # delete namtab[M2_NS, id, ROOT_LEVEL]
+    # delete symtab[M2_NS, name, NOKEY, level, "user_block"]
 }
 
 
-function cmd_valid_p(text)
+function cmd_ll_read_ns(ns, name, level)
 {
-    return nam_valid_strict_regexp_p(text) &&
-           !double_underscores_p(text)
+    return symtab[ns, name, NOKEY, level, "user_block"]
 }
 
 
-function cmd_ll_read(name, level)
+function cmd_ll_write_ns(ns, name, level, user_block)
 {
-    return symtab[name, "", level, "user_block"]
-}
-
-
-function cmd_ll_write(name, level, user_block)
-{
-    return symtab[name, "", level, "user_block"] = user_block
+    return symtab[ns, name, NOKEY, level, "user_block"] = user_block
 }
 
 
@@ -3254,8 +3366,12 @@ function execute__command(name, cmdline,
         return
     }
 
+    if (substr(name, 1, 8) != M2_SYSNS TOK_NS_QUAL)     # __m2__::<cmd>
+        panic(sprintf("(execute__command) Namespace !M2_SYSNS in '%s'", name))
+    name = substr(name, 9)
+
     trace(TRACE_COMMAND, name, sprintf("[Execute] @%s %s", name, cmdline))
-    old_level = __curr_level
+    old_level = curr_level()
 
     # DISPATCH
     # Also need an array entry to initialize command name.  [search: CMDS]
@@ -3285,7 +3401,8 @@ function execute__command(name, cmdline,
     else if (name ~ /s?filedata/)       xeq_cmd__filedata(name, cmdline)
     else if (name ~ /s?filedef(ine)?/)  xeq_cmd__filedefine(name, cmdline)
     else if (name ==  "ignore")         xeq_cmd__ignore(name, cmdline)
-    else if (name ~ /s?include/)        xeq_cmd__include(name, cmdline)
+    else if (name ~ /s?import/)         xeq_cmd__include(name, cmdline)
+    else if (name ~ /s?(ns)?include/)   xeq_cmd__include(name, cmdline)
     else if (name ==  "incr")           xeq_cmd__incr(name, cmdline)
     else if (name ==  "initialize")     xeq_cmd__define(name, cmdline)
     else if (name ==  "input")          xeq_cmd__input(name, cmdline)
@@ -3293,12 +3410,13 @@ function execute__command(name, cmdline,
     else if (name ==  "literal")        xeq_cmd__literal(name, cmdline)
     else if (name ==  "local")          xeq_cmd__local(name, cmdline)
     else if (name ==  "m2ctl")          xeq_cmd__m2ctl(name, cmdline)
+    else if (name ==  "namespace")      xeq_cmd__namespace(name, cmdline)
     else if (name ==  "nextfile")       xeq_cmd__nextfile(name, cmdline)
-    else if (name ==  "null")           xeq_cmd__null(name, cmdline)
     else if (name ~ /s?paste/)          xeq_cmd__include(name, cmdline)
     else if (name ==  "readonly")       xeq_cmd__readonly(name, cmdline)
     else if (name ==  "return")         xeq_cmd__return(name, cmdline)
     else if (name ==  "sequence")       xeq_cmd__sequence(name, cmdline)
+    else if (name ==  "set")            xeq_cmd__define(name, cmdline)
     else if (name ==  "shell")          xeq_cmd__shell(name, cmdline)
     else if (name ==  "split")          xeq_cmd__split(name, cmdline)
     else if (name ==  "syscmd")         xeq_cmd__syscmd(name, cmdline)
@@ -3313,9 +3431,9 @@ function execute__command(name, cmdline,
     else
         panic("(execute__command) Unrecognized command '" name "' in '" cmdline "'")
 
-    if (__curr_level != old_level)
-        panic(sprintf("(execute__command) [@%s] Level mismatch; old_level=%d, __curr_level=%d",
-                      name, old_level, __curr_level))
+    if (curr_level() != old_level)
+        panic(sprintf("(execute__command) [@%s] Level mismatch; old_level=%d, curr_level()=%d",
+                      name, old_level, curr_level()))
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -3337,7 +3455,7 @@ function dump_parse_stack(    level, block, block_type)
         for (level = stk_depth(__parse_stack); level > 0; level--) {
             block = __parse_stack[level]
             block_type = blk_type(block)
-            print_debugfile("m2debug:(dump_pars_stack) Level " level ", block # " block ", type=" block_type )
+            print_debugfile("m2debug:(dump_parse_stack) Level " level ", block # " block ", type=" block_type )
             dbg__print_block("xeq", -1, block)
         }
     print_debugfile("m2debug:(dump_parse_stack) END")
@@ -3377,7 +3495,7 @@ function dofile(filename,
     stk_push(__parse_stack, __terminal)
 
     dbg__print("parse", 5, "(dofile) CALLING parse__file()")
-    retval = parse__file()
+    retval = parse__file(M2_NS)
     # parse_file() pops the source stack and deletes the BLK_FILE block
     dbg__print("parse", 5, "(dofile) RETURNED FROM parse__file()")
 
@@ -3401,73 +3519,77 @@ function dofile(filename,
 # Read this function carefully--there are some nice tricks here.
 #
 # Caller is responsible for removing potential quotes from filename.
-function parse__file(    filename, file_block1, file_block2, pstat, d)
+function parse__file(default_ns,
+                     filename, file_block, pstat, d)
 {
     if (stk_empty_p(__source_stack))
         panic("(parse__file) Source stack empty")
-    file_block1 = stk_top(__source_stack)
+    file_block = stk_top(__source_stack)
 
-    filename = blktab[file_block1, 0, "filename"]
+    filename = blktab[file_block, 0, "filename"]
     dbg__print("parse", 2, sprintf("(parse__file) filename='%s', dstblk=%d, mode=%s",
                                   filename, curr_dstblk(),
-                                  ppf__mode(blktab[file_block1, 0, "atmode"])))
+                                  ppf__label(blktab[file_block, 0, "atmode"])))
     if (!path_exists_p(filename)) {
         dbg__print("parse", 2, sprintf("(parse__file) END File '%s' does not exist => %s",
                                      filename, ppf__bool(FALSE)))
         stk_pop(__source_stack) # Remove BLK_FILE for non-existent file
-        blk_master_delete(file_block1)
+        blk_master_delete(file_block)
         return FALSE
     }
     if (filename in __active_files)
         error("Cannot recursively read '" filename "':" $0)
 
-    if (sym_ll_read("__DEPTH__", "", ROOT_LEVEL) > 0)
+    if (sys_read("__DEPTH__") > 0)
         run_hook("file_suspend")
 
-    __active_files[filename] = file_block1
-    sym_ll_incr("__NFILE__", "", ROOT_LEVEL, 1); __rnf++
-    blktab[file_block1, 0, "open"]          = TRUE
-    blktab[file_block1, 0, "ever_opened"]   = TRUE
-    blktab[file_block1, 0, "old.buffer"]    = __buffer
-    blktab[file_block1, 0, "old.file"]      = FILE()
-    blktab[file_block1, 0, "old.file_uuid"] = sym_ll_read("__FILE_UUID__", "", ROOT_LEVEL)
-    blktab[file_block1, 0, "old.line"]      = LINE()
-    dbg__print_block("ship_out", 7, file_block1, "(parse__file) file_block1")
+    __active_files[filename] = file_block
+    sys_incr("__NFILE__", 1); __rnf++
+    blktab[file_block, 0, "open"]          = TRUE
+    blktab[file_block, 0, "ever_opened"]   = TRUE
+    blktab[file_block, 0, "old.buffer"]    = __buffer
+    blktab[file_block, 0, "old.file"]      = FILE()
+    blktab[file_block, 0, "old.file_uuid"] = sys_read("__FILE_UUID__")
+    blktab[file_block, 0, "old.line"]      = LINE()
+    blktab[file_block, 0, "old.ns"]        = curr_ns()
+    dbg__print_block("ship_out", 7, file_block, "(parse__file) file_block")
 
-    # # Set up new file context
+    # Set up new file context
     __buffer = EMPTY
-    sym_ll_incr( "__DEPTH__",     "", ROOT_LEVEL, 1);
-    sym_ll_write("__FILE__",      "", ROOT_LEVEL, filename)
-    sym_ll_write("__FILE_UUID__", "", ROOT_LEVEL, uuid())
-    sym_ll_write("__LINE__",      "", ROOT_LEVEL, 0)
+    sys_incr( "__DEPTH__",     1)
+    sys_write("__FILE__",      filename)
+    sys_write("__FILE_UUID__", uuid())
+    sys_write("__LINE__",      0)
 
     # Read the file and process each line
     run_hook("file_open")
+
+    stk_replace_top(__ns_stack, default_ns)
     dbg__print("parse", 5, "(parse__file) CALLING parse()")
     pstat = parse()
     dbg__print("parse", 5, "(parse__file) RETURNED FROM parse() => " ppf__bool(pstat))
-    run_hook("file_close")
+    stk_replace_top(__ns_stack, blktab[file_block, 0, "old.ns"])
 
     # Reached end of file
     flush_stdout(SYNC_FILE)
+    run_hook("file_close")
 
     # Avoid I/O errors (on BSD at least) on attempt to close stdin
     if (filename != STDIN)
         close(filename)
-    blktab[file_block1, 0, "open"] = FALSE
+    blktab[file_block, 0, "open"] = FALSE
     delete __active_files[filename]
 
-    file_block2 = stk_pop(__source_stack)
-    if (file_block1 != file_block2)
+    if (stk_pop(__source_stack) != file_block)
         panic("(parse__file) File block mismatch")
-    __buffer = blktab[file_block2, 0, "old.buffer"]
-    sym_ll_incr( "__DEPTH__",     "", ROOT_LEVEL, -1);
-    sym_ll_write("__FILE__",      "", ROOT_LEVEL, blktab[file_block2, 0, "old.file"])
-    sym_ll_write("__FILE_UUID__", "", ROOT_LEVEL, blktab[file_block2, 0, "old.file_uuid"])
-    sym_ll_write("__LINE__",      "", ROOT_LEVEL, blktab[file_block2, 0, "old.line"])
-    blk_master_delete(file_block2)
+    __buffer = blktab[file_block, 0, "old.buffer"]
+    sys_incr( "__DEPTH__",     -1);
+    sys_write("__FILE__",      blktab[file_block, 0, "old.file"])
+    sys_write("__FILE_UUID__", blktab[file_block, 0, "old.file_uuid"])
+    sys_write("__LINE__",      blktab[file_block, 0, "old.line"])
+    blk_master_delete(file_block)
 
-    if (sym_ll_read("__DEPTH__", "", ROOT_LEVEL) > 0)
+    if (sys_read("__DEPTH__") > 0)
         run_hook("file_resume")
 
     dbg__print("parse", 2, sprintf("(parse__file) END '%s' => %s",
@@ -3477,11 +3599,12 @@ function parse__file(    filename, file_block1, file_block2, pstat, d)
 
 
 # PARSE
-function parse(    code, terminator, rstat, name, retval, new_block, fc,
-                   info, level, parser, parser_type, parser_label, i, scnt, found,
-                   new_cmd_name, clevel, call_details, src_block, l2, _)
+function parse(    code, terminator, rstat, cmd, retval, new_block, fc,
+                   info, level, parser, parser_type, parser_label, i, scnt, found, s,
+                   new_cmd_name, call_details, src_block, l2, _, ns, uname, nparts,
+                   orig, info2, type2, code2, level2, new_type, name, qname, new_level, new_scan_name)
 {
-    dbg__print("parse", 3, "(parse) START dstblk=" curr_dstblk() ", mode=" ppf__mode(curr_atmode()))
+    dbg__print("parse", 3, "(parse) START dstblk=" curr_dstblk() ", mode=" ppf__label(curr_atmode()))
 
     # The "parser" is the topmost element of the __parse_stack
     # which we wish to access a few times
@@ -3489,7 +3612,7 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
         panic("Parse error, Empty parse stack")
     parser = stk_top(__parse_stack)
     parser_type = blk_type(parser)
-    parser_label = ppf__block_type(parser_type)
+    parser_label = ppf__label(parser_type)
 
     if (stk_empty_p(__source_stack))
         panic("Parse error, Empty source stack")
@@ -3501,7 +3624,7 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
     retval = FALSE
 
     while (TRUE) {
-        dbg__print("parse", 4, sprintf("(parse) [%s] TOP OF LOOP: ____ %s  LINE %d ________________________________",
+        dbg__print("parse", 4, sprintf("(parse) [%s] TOP OF LOOP: ________ %s  LINE %d ________",
                                      parser_label, FILE(), LINE()+1)) # LINE will be +1 after upcoming readline()
 
         rstat = readline()   # OKAY, EOF, ERROR
@@ -3509,28 +3632,41 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
         if (rstat == ERROR) {
             # Whatever just happened, the parse didn't finish properly
             dbg__print("parse", 5, "(parse) [" parser_label "] readline()=>ERROR")
+            trace(TRACE_READLINE, EMPTY, "[Readline] ERROR")
             break          # out of entire parsing loop, to then return
         }
         if (rstat == EOF) {
             # End of file BLK_FILE is fine, just return a TRUE to say so.
             # EOF on any other block type means the parse didn't find
             # a terminator, so return FALSE.
-            dbg__print("parse", 5, sprintf("(parse) [%s] readline() detected EOF on '%s'",
-                                         parser_label, blktab[src_block, 0, "filename"]))
+            dbg__print("parse", 5, sprintf("(parse) [%s] readline() detected EOF on '%s' FILENAME '%s'",
+                                           parser_label, blktab[src_block, 0, "filename"], FILENAME))
             if ((src_block, 0, "oob_terminator") in blktab &&
                 blktab[src_block, 0, "oob_terminator"] == "EOF")
                 retval = TRUE
+            trace(TRACE_READLINE, EMPTY, "[Readline] EOF")
             break          # out of entire parsing loop, to then return
         }
         dbg__print("parse", 5, "(parse) [" parser_label "] readline() okay; $0='" $0 "'")
+        trace(TRACE_READLINE, EMPTY, "[Readline] OK Line " LINE() "='" $0 "'")
+        orig = $0
 
         # Maybe short-circuit and ship line out now
         if (curr_atmode() == MODE_AT_LITERAL ||
             index($0, TOK_AT) == NOT_FOUND ||
             first($0) != TOK_AT) {
-            dbg__print("parse", 3, sprintf("(parse) [%s, short circuit] CALLING ship_out(OBJ_TEXT, '%s')",
-                                         parser_label, $0))
-            ship_out(OBJ_TEXT, $0)
+            s = $0
+            if (!emptyp($0)) {
+                dbg__print("parse", 3, sprintf("(parse) [%s, short circuit] CALLING qualify('%s')",
+                                               parser_label, $0))
+                # Don't worry about qualify modifying lines in LITERAL mode - it won't
+                s = qualify($0)
+                dbg__print("qual", 3, sprintf("(parse) [%s, short circuit] qualify('%s')=>'%s'",
+                                              parser_label, $0, s))
+            }
+            dbg__print("parse", 3, sprintf("(parse) [%s, short circuit] CALLING ship_out(TEXT, '%s')",
+                                         parser_label, s))
+            ship_out(OBJ_TEXT, s)
             dbg__print("parse", 3, "(parse) [" parser_label ", short circuit] RETURNED FROM ship_out()")
             continue           # text shipped out, continue to next line
         }
@@ -3544,17 +3680,9 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
         if (l2 == "@;" || l2 == "@#")
             continue
 
-        # See if it's a command of some kind.  first == @ and last != @
-        # catches @foo...@ at BOL not being a command.  Of course we
-        # want first($1)==TOK_AT because we expect the at-sign in column
-        # one for a command.  Adding AND last($1)!=TOK_AT catches when
-        # we're looking at a line like @date@, which is invoking an
-        # inline "sym-function" to be resolved by dosubs().  It has a @
-        # in column one, but that's just a coincidence.
-        # WART:  Loses on  @somecommand A B @symbol@
-        if (first($1) == TOK_AT &&
-            last($1)  != TOK_AT &&
-            match($1, "^@[A-Za-z#_]")) {        # skip "@{"
+        # See if it's a command of some kind.
+        #print("$0='" $0 "'")
+        if (match($1, "^@[A-Za-z#_]")) {        # skip "@{"
             # Looks like it might be a command.
             # Winnow out the primary name.  Be sure to handle
             # "@myfn{aaa}{ccc ddd}".  (Naive old code name=$1 resulted
@@ -3562,22 +3690,38 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
             # However, we need to keep $1 intact in order for upcoming
             # match($1,terminator) checks to work.  This takes advantage
             # of the fact that all commands must have strict names.
-            for (i = 2; substr($0, i, 1) ~ /[A-Za-z#_0-9]/; i++)
+            # NB - strict names normally don't include : but I do here
+            # so I can read ns
+            for (i = 2; substr($0, i, 1) ~ /[A-Za-z#_0-9:]/; i++)
                 ;
-            name = substr($0, 2, i-2)
-            dbg__print("parse", 7, "(parse) [" parser_label "] name now '" name "'")
+            uname = substr($0, 2, i-2)
+            dbg__print("parse", 7, "(parse) [" parser_label "] uname='" uname "'")
+
+            if ((nparts = nam__scan(uname, info)) != 1)
+                panic("(parse) Scan error: " uname)
+            cmd = info__get(info, "name")
+            ns  = info__get(info, "ns") # May be empty!
 
             # See if it's a built-in command
-            if (nam_ll_in(name, ROOT_LEVEL) &&
-                flag_1true_p((code = nam_ll_read(name, ROOT_LEVEL)),
+            if (nam_ll_in_ns(M2_SYSNS, cmd, ROOT_LEVEL) &&
+                flag_1true_p((code = nam_ll_read_ns(M2_SYSNS, cmd, ROOT_LEVEL)),
                              TYPE_COMMAND)) {
+                if (ns == EMPTY) {
+                    ns = info["ns"] = M2_SYSNS
+                    sub(/^@/, TOK_AT M2_SYSNS TOK_NS_QUAL)
+                    trace(TRACE_QUALIFICATION, EMPTY,
+                          sprintf("[Qualify] '%s' => '%s'", orig, $0))
+                } else if (ns != M2_SYSNS)
+                    error(sprintf("%s: Parse error, Command name conflicts with built-in",
+                                          "@" cmd))
+
                 # See if it's immediate
                 if (flag_1true_p(code, FLAG_IMMEDIATE)) {
                     # This command is immediate, so we must run it right now.
                     # Some are known to create and return new blocks,
                     # which must be shipped out.
 
-                    if (name == "break" || name == "continue") {
+                    if (cmd == "break" || cmd == "continue") {
                         # @break and @continue are hybrid commands, with
                         # both immediate and regular components.  The
                         # parse_stack check for a FOR or WHILE must be
@@ -3597,25 +3741,25 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
                         }
                         if (! found)
                             error(sprintf("%s: Parse error, Missing parser; wanted FOR or WHILE but found %s",
-                                          "@" name, parser_label))
-                        dbg__print("parse", 3, sprintf("(parse) [%s] CALLING ship_out(OBJ_CMD, '%s')", parser_label, $0))
+                                          "@" cmd, parser_label))
+                        dbg__print("parse", 3, sprintf("(parse) [%s] CALLING ship_out(CMD, '%s')", parser_label, $0))
                         ship_out(OBJ_CMD, $0)
                         dbg__print("parse", 3, "(parse) [" parser_label "] RETURNED FROM ship_out()")
 
-                    } else if (name == "case") {
+                    } else if (cmd == "case") {
                         dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__case(dstblk=" curr_dstblk() ")"))
                         new_block = parse__case()
                         dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__case() : new_block => " new_block))
-                        dbg__print("parse", 5, sprintf("(parse) [" parser_label "] CALLING ship_out(OBJ_BLKNUM, %d)", new_block))
+                        dbg__print("parse", 5, sprintf("(parse) [" parser_label "] CALLING ship_out(BLKNUM, %d)", new_block))
                         ship_out(OBJ_BLKNUM, new_block)
                         dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM ship_out()"))
 
-                    } else if (name == "else") {
+                    } else if (cmd == "else") {
                         dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__else(dstblk=" curr_dstblk() ")"))
                         _ = parse__else()
                         dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__else() : dstblk => " curr_dstblk()))
 
-                    } else if (name == "endcase" || name == "esac") {
+                    } else if (cmd == "endcase" || cmd == "esac") {
                         dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__endcase(dstblk=" curr_dstblk() ")"))
                         _ = parse__endcase()
                         dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__endcase() : dstblk => " curr_dstblk()))
@@ -3624,9 +3768,9 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
                             return TRUE
                         }
                         error(sprintf("%s: Parse error, Missing terminator; wanted '%s' but found '@endcase'",
-                                      "@" name, terminator))
+                                      "@" cmd, terminator))
 
-                    } else if (name == "endcmd") {
+                    } else if (cmd == "endcmd") {
                         dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__endcmd(dstblk=" curr_dstblk() ")"))
                         new_block = parse__endcmd()
                         dbg__print_block("parse", 7, new_block, sprintf("newcmd block returned from parse__endcmd"))
@@ -3659,15 +3803,16 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
                             #   info__gate(OP_CREATE, TYPE_COMMAND, ..., TRUE)
                             # so presumably the name is safe to declare.
                             new_cmd_name = blktab[new_block, 0, "name"]
-                            dbg__print("parse", 3, sprintf("(parse) [" parser_label "] Declaring new user command '%s' at level %d",
-                                                           new_cmd_name, __curr_level))
-                            nam_ll_write(new_cmd_name, __curr_level, TYPE_USER)
+                            ns = blktab[new_block, 0, "ns"]
+                            dbg__print("parse", 3, sprintf("(parse) [" parser_label "] Declaring new user command '%s::%s' at level %d",
+                                                           ns, new_cmd_name, curr_level()))
+                            nam_ll_write_ns(ns, new_cmd_name, curr_level(), TYPE_USER)
                             return TRUE
                         }
                         error(sprintf("%s: Parse error; Missing terminator; wanted '%s' but found '@endcmd'",
-                                      "@" name, terminator))
+                                      "@" cmd, terminator))
 
-                    } else if (name == "endif" || name == "fi") {
+                    } else if (cmd == "endif" || cmd == "fi") {
                         dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__endif(dstblk=" curr_dstblk() ")"))
                         _ = parse__endif()
                         dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__endif() : dstblk => " curr_dstblk()))
@@ -3677,7 +3822,7 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
                         }
                         error("(parse) [" parser_label "] Found @endif but expecting '" terminator "'")
 
-                    } else if (name == "endlong" || name == "endlongdef") {
+                    } else if (cmd == "endlong" || cmd == "endlongdef") {
                         dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__endlongdef(dstblk=" curr_dstblk() ")"))
                         _ = parse__endlongdef()
                         dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__endlongdef() : dstblk => " curr_dstblk()))
@@ -3687,7 +3832,7 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
                         }
                         error("(parse) [" parser_label "] Found @endlongdef but expecting '" terminator "'")
 
-                    } else if (name == "endwhile" || name == "wend") {
+                    } else if (cmd == "endwhile" || cmd == "wend") {
                         dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__endwhile(dstblk=" curr_dstblk() ")"))
                         _ = parse__endwhile()
                         dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__endwhile() : dstblk => " curr_dstblk()))
@@ -3697,40 +3842,40 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
                         }
                         error("(parse) [" parser_label "] Found @endwhile but expecting '" terminator "'")
 
-                    } else if (name == "for" || name == "foreach") {
+                    } else if (cmd == "for" || cmd == "foreach") {
                         dbg__print("parse", 5, sprintf("(parse) [%s] curr_dstblk()=%d CALLING parse__for()",
                                                      parser_label, curr_dstblk()))
                         new_block = parse__for()
                         dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__for() : new_block is " new_block))
-                        dbg__print("parse", 5, sprintf("(parse) [" parser_label "] CALLING ship_out(OBJ_BLKNUM, %d)", new_block))
+                        dbg__print("parse", 5, sprintf("(parse) [" parser_label "] CALLING ship_out(BLKNUM, %d)", new_block))
                         ship_out(OBJ_BLKNUM, new_block)
                         dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM ship_out()"))
 
-                    } else if (name == "if" || name == "unless") {
+                    } else if (cmd == "if" || cmd == "unless") {
                         dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__if(dstblk=" curr_dstblk() ")"))
                         new_block = parse__if()
                         dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__if() : new_block => " new_block))
-                        dbg__print("parse", 5, sprintf("(parse) [" parser_label "] CALLING ship_out(OBJ_BLKNUM, %d)", new_block))
+                        dbg__print("parse", 5, sprintf("(parse) [" parser_label "] CALLING ship_out(BLKNUM, %d)", new_block))
                         ship_out(OBJ_BLKNUM, new_block)
                         dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM ship_out()"))
 
-                    } else if (name == "longdef") {
+                    } else if (cmd == "longdef") {
                         dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__longdef(dstblk=" curr_dstblk() ")"))
                         new_block = parse__longdef()
                         dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__longdef() : new_block => " new_block))
-                        dbg__print("parse", 5, sprintf("(parse) [" parser_label "] CALLING ship_out(OBJ_BLKNUM, %d)", new_block))
+                        dbg__print("parse", 5, sprintf("(parse) [" parser_label "] CALLING ship_out(BLKNUM, %d)", new_block))
                         ship_out(OBJ_BLKNUM, new_block)
                         dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM ship_out()"))
 
-                    } else if (name == "newcmd") {
+                    } else if (cmd == "newcmd") {
                         dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__newcmd(dstblk=" curr_dstblk() ")"))
                         new_block = parse__newcmd()
                         dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__newcmd() : new_block => " new_block))
-                        dbg__print("parse", 5, sprintf("(parse) [" parser_label "] CALLING ship_out(OBJ_BLKNUM, %d)", new_block))
+                        dbg__print("parse", 5, sprintf("(parse) [" parser_label "] CALLING ship_out(BLKNUM, %d)", new_block))
                         ship_out(OBJ_BLKNUM, new_block)
                         dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM ship_out()"))
 
-                    } else if (name == "next") {
+                    } else if (cmd == "next") {
                         dbg__print("parse", 5, sprintf("(parse) [%s] dstblk=%d; CALLING parse__next()",
                                                      parser_label, curr_dstblk()))
                         _ = parse__next()
@@ -3741,17 +3886,17 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
                         }
                         error("(parse) [" parser_label "] Found @next but expecting '" terminator "'")
 
-                    } else if (name == "of") {
+                    } else if (cmd == "of") {
                         dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__of(dstblk=" curr_dstblk() ")"))
                         _ = parse__of()
                         dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__of() : dstblk => " curr_dstblk()))
 
-                    } else if (name == "otherwise") {
+                    } else if (cmd == "otherwise") {
                         dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__otherwise(dstblk=" curr_dstblk() ")"))
                         _ = parse__otherwise()
                         dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__otherwise() : dstblk => " curr_dstblk()))
 
-                    } else if (name == "return") {
+                    } else if (cmd == "return") {
                         found = FALSE
                         for (i = stk_depth(__parse_stack); i > 0; i--) {
                             dbg__print("parse", 2, sprintf("i=%d, __parse_stack[i])=%d", i, __parse_stack[i]))
@@ -3764,55 +3909,170 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
                         }
                         if (! found)
                             error("@return: Not executing a user command")
-                        dbg__print("parse", 3, sprintf("(parse) [%s] CALLING ship_out(OBJ_CMD, '%s')", parser_label, $0))
+                        dbg__print("parse", 3, sprintf("(parse) [%s] CALLING ship_out(CMD, '%s')", parser_label, $0))
                         ship_out(OBJ_CMD, $0)
                         dbg__print("parse", 3, "(parse) [" parser_label "] RETURNED FROM ship_out()")
 
-                    } else if (name == "while" || name == "until") {
+                    } else if (cmd == "while" || cmd == "until") {
                         dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__while(dstblk=" curr_dstblk() ")"))
                         new_block = parse__while()
                         dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__while() : new_block => " new_block))
-                        dbg__print("parse", 5, sprintf("(parse) [" parser_label "] CALLING ship_out(OBJ_BLKNUM, %d)", new_block))
+                        dbg__print("parse", 5, sprintf("(parse) [" parser_label "] CALLING ship_out(BLKNUM, %d)", new_block))
                         ship_out(OBJ_BLKNUM, new_block)
                         dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM ship_out()"))
 
+                    } else if (cmd == "array" || cmd == "define" || cmd == "list" ||
+                               cmd == "local" || cmd == "set") {
+                        # print_stderr(sprintf("before, $0='%s'; $2='%s'", $0, $2))
+                        if (index($2, TOK_NS_QUAL) > 0)
+                            new_scan_name = $2
+                        else
+                            new_scan_name = (double_underscores_p($2) ? M2_SYSNS : curr_ns()) TOK_NS_QUAL $2
+                        qname = nam__qualify(new_scan_name)
+                        #print_stderr(sprintf("qname='%s'", qname))
+
+                        level2 = info__create_from_text(qname, info2)
+                        #print_stderr(sprintf("parse: qname='%s', code=%s", qname, info__get(info2, "code")))
+                        if (level2 == ERR_SCAN_INVALID_NAME)
+                            error($0 ": Invalid name '" qname "'")
+                        if (info__get(info2, "protected"))
+                            error(sprintf("@%s: Name '%s' is protected%s", cmd, qname, VERBOSE() ? " [parse:K]" : ""))
+
+                        if (cmd == "define" || cmd == "set") {
+                            # Define will auto-vivify Symbols, but not Arrays or Lists.
+                            # print_stderr(sprintf("Found @define: ns='%s', cmd='%s', code='%s'\n   $0='%s'",
+                            #                      info__get(info2, "ns"), info__get(info2, "name"), ppf__flags(info__get(info2, "code")), $0))
+                            if (! nam__valid_p($2, PTYPE_SCALAR, TRUE))
+                                error(sprintf("@%s: Name '%s' is not valid%s", cmd, $2, VERBOSE() ? " [parse:A]" : ""))
+
+                            code2 = info__get(info2, "code")
+                            # print_stderr("(parse) from qname '" qname "', code2=" ppf__label(code2))
+                            type2 = first(code2)
+                            if (type2 == PTYPE_UNDEF)
+                                if (info__get(info2, "has_bracket")) # undeclared Array or List
+                                    error(sprintf("@%s: Name '%s' has not been declared", cmd, info__get(info2, "name")))
+                                else
+                                    new_type = TYPE_SYMBOL
+                            else if (type2 == TYPE_SYMBOL)
+                                if (info__get(info2, "has_bracket")) # undeclared Array or List
+                                    error(sprintf("@%s: Cannot use brackets on %s '%s'",
+                                                  cmd, ppf__label(code2), $2))
+                                else
+                                    new_type = code2
+                            else if (type2 == TYPE_ARRAY || type2 == TYPE_LIST)
+                                if (! info__get(info2, "has_bracket")) # missing required bracket
+                                    error(sprintf("@%s: Must use brackets on %s '%s'",
+                                                  cmd, ppf__label(code2), $2))
+                                else
+                                    new_type = code2
+                            else
+                                panic(sprintf("(parse) Cannot handle '%s' of type %s",
+                                              $2, ppf__label(code2)))
+
+                            new_level = nam_system_p(info__get(info2, "name")) ? ROOT_LEVEL : curr_level()
+                            if (! nam_ll_in_ns(info__get(info2, "ns"),
+                                               info__get(info2, "name"),
+                                               new_level)) {
+                                if (dbg__sys_level_p("nam", 5) ||
+                                    dbg__sys_level_p("parse", 3))
+                                    print_debugfile(sprintf("m2debug:(parse) [%s] Declaring '%s'::'%s' (lev=%d) as type %s",
+                                                            parser_label,
+                                                            info__get(info2, "ns"), info__get(info2, "name"),
+                                                            new_level, ppf__label(new_type)))
+
+                                nam_ll_write_ns(info__get(info2, "ns"), info__get(info2, "name"),
+                                                new_level, new_type)
+                            }
+                        } else {
+                            if (index($2, TOK_NS_QUAL) > 0)
+                                error(sprintf("%s: Parameter '%s' must not be qualified%s", $0, $2, VERBOSE() ? " [parse:K]" : ""))
+
+                            # array, list, or local - These commands all
+                            # define local variables and cannot be qualified.
+                            if (! nam__valid_p($2, PTYPE_PARAM, TRUE))
+                                error(sprintf("@%s: Name '%s' is not valid%s", cmd, $2, VERBOSE() ? " - [parse:B]" : ""))
+
+                            if (level2 == ROOT_LEVEL && curr_level() != level2 &&
+                                flag_1true_p(info__get(info2, "code"), FLAG_SYSTEM))
+                                error($0 ": Cannot shadow '" $2 "'")
+
+                            # All these declare new names in namtab.
+                            # Regardless of type, names must be unique
+                            # at this (current) level, but it's okay if
+                            # same name is declared at a lower level.
+                            # if (curr_level() >= ROOT_LEVEL && curr_level() != level2)
+                            #     error($0 ": '" $2 "' already defined")
+
+                            if      (cmd == "array") new_type = TYPE_ARRAY
+                            else if (cmd == "list")  new_type = TYPE_LIST
+                            else if (cmd == "local") new_type = TYPE_SYMBOL
+
+                            if (dbg__sys_level_p("nam", 5) ||
+                                dbg__sys_level_p("parse", 3))
+                                print_debugfile(sprintf("m2debug:(parse) [%s] Declaring '%s'::'%s' (lev=%d) as type %s",
+                                                        parser_label,
+                                                        info__get(info2, "ns"), info__get(info2, "name"),
+                                                        curr_level(), ppf__label(new_type)))
+                            nam_ll_write_ns(info__get(info2, "ns"), info__get(info2, "name"),
+                                            curr_level(), new_type)
+                        }
+                        dbg__print("parse", 3, sprintf("(parse) [%s] CALLING ship_out(CMD, '%s')", parser_label, $0))
+                        ship_out(OBJ_CMD, $0)
+                        dbg__print("parse", 3, "(parse) [" parser_label "] RETURNED FROM ship_out()")
+
                     } else
-                        panic("(parse) [" parser_label "] Found immediate command " name " but no handler")
+                        panic("(parse) [" parser_label "] Found immediate command " cmd " but no handler")
 
                 } else {
                     # It's a non-immediate built-in command -- ship it
                     # out as a command to be executed later.
-                    dbg__print("parse", 3, sprintf("(parse) [%s] CALLING ship_out(OBJ_CMD, '%s')", parser_label, $0))
+                    dbg__print("parse", 3, sprintf("(parse) [%s] CALLING ship_out(CMD, '%s')", parser_label, $0))
                     ship_out(OBJ_CMD, $0)
                     dbg__print("parse", 3, "(parse) [" parser_label "] RETURNED FROM ship_out()")
                 }
                 continue
             } else {
                 # Look up user command
-                if (nam__scan(name, info) == ERROR)
-                    error("Scan error; " __m2_msg)
-                if ((level = nam__lookup(info)) != NAME_NOT_FOUND) {
-                    # A value of NAME_NOT_FOUND would mean a valid name wasn't
-                    # found, in which case name is definitely not a user
-                    # command, so we do nothing for the moment in that
-                    # case and let normal text ship out.  But since it's
-                    # *not* NAME_NOT_FOUND, something *was* found at "level".  See
-                    # if it's a user command and ship it out if so.
-                    if (flag_1true_p((code = nam_ll_read(name, level)), TYPE_USER)) {
-                        call_details = scan__usercmd_call($0)
-                        dbg__print("parse", 3, sprintf("(parse) [%s] CALLING ship_out(OBJ_USER, '%s')", parser_label, call_details))
-                        ship_out(OBJ_USER, call_details)
-                        dbg__print("parse", 3, "(parse) [" parser_label "] RETURNED FROM ship_out()")
-                        continue
+                #if (nam__scan(rest(cmd), info) != ERROR) {
+                    level = nam__lookup(info)
+                    #print_stderr("level = " level)
+                    if (level != NAME_NOT_FOUND) {
+                        # A value of NAME_NOT_FOUND would mean a valid name wasn't
+                        # found, in which case name is definitely not a user
+                        # command, so we do nothing for the moment in that
+                        # case and let normal text ship out.  But since it's
+                        # *not* NAME_NOT_FOUND, something *was* found at "level".  See
+                        # if it's a user command and ship it out if so.
+                        ns = info__get(info, "ns")
+                        name = info__get(info, "name")
+                        dbg__print("parse", 7, sprintf("(parse) Looking for user, using ns='%s', name='%s'",
+                                                       ns, name))
+                        code = nam_ll_read_ns(ns, name, level)
+                        if (flag_1true_p(code, TYPE_USER)) {
+                            call_details = scan__usercmd_call($0, info)
+                            dbg__print("parse", 3, sprintf("(parse) [%s] CALLING ship_out(USER, '%s')", parser_label, call_details))
+                            ship_out(OBJ_USER, call_details)
+                            dbg__print("parse", 3, "(parse) [" parser_label "] RETURNED FROM ship_out()")
+                            continue
+                        }
                     }
-                }
+                #}
             }
             # It's okay to reach here with no actions taken.  In this
             # case, just process the line as normal text.
         }
         # doesn't look like a command - ship it out as text
-        dbg__print("parse", 3, sprintf("(parse) [%s] CALLING ship_out(OBJ_TEXT, '%s')", parser_label, $0))
-        ship_out(OBJ_TEXT, $0)
+        s = $0
+        if (!emptyp($0)) {
+            dbg__print("parse", 3, sprintf("(parse) [%s] CALLING qualify('%s')",
+                                           parser_label, $0))
+            s = qualify($0)
+            dbg__print("qual", 3, sprintf("(parse) [%s] qualify('%s')=>'%s'",
+                                          parser_label, $0, s))
+        }
+        dbg__print("parse", 3, sprintf("(parse) [%s] CALLING ship_out(TEXT, '%s')",
+                                       parser_label, s))
+        ship_out(OBJ_TEXT, s)
         dbg__print("parse", 3, "(parse) [" parser_label "] RETURNED FROM ship_out()")
     } # continue loop again, reading next line
     dbg__print("parse", 5, "(parse) END => " ppf__bool(retval))
@@ -3821,12 +4081,12 @@ function parse(    code, terminator, rstat, name, retval, new_block, fc,
 
 
 # Returns an encoded version of the user command call:
-#     <narg> SUBSEP <name> SUBSEP [ { <argN> SUBSEP } ... ]
-# Note: narg always >= 2, and equal to # of SUBSEPs expected
+#     <narg> SUBSEP <ns> SUBSEP <name> SUBSEP [ { <argN> SUBSEP } ... ]
+# Note: narg always >= 3, and equal to # of SUBSEPs expected
 # When the call details are eventually decoded in execute__user(), the
 # OBJ_USER value is passed to split_subsep() to access individual items.
-function scan__usercmd_call(s,
-                            name, obj, i, oldi, c, nc, narg, nlbr,
+function scan__usercmd_call(s, info,
+                            uname, obj, i, oldi, c, nc, narg, nlbr,
                             readstat, arg, inarg, thisi, retval, j,
                             brpos, cb)
 {
@@ -3835,15 +4095,23 @@ function scan__usercmd_call(s,
         panic("(scan__usercmd_call) s cannot be empty!")
     if (first(s) != TOK_AT)
         error(sprintf("(scan__usercmd_call) Doesn't start with @: s='%s'", s))
+    if (info__get(info, "nparts") != 1)
+        panic("(scan__usercmd_call) Scan error: " s)
+    if (info__get(info, "ns") == EMPTY)
+        panic("(scan__usercmd_call) Empty ns!" s)
+
     if ((brpos = index(s, TOK_LBRACE)) == NOT_FOUND) {
-        name = substr(s, 2)
-        dbg__print("parse", 3, sprintf("(scan__usercmd_call) OUT: name='%s'", name))
-        return 2 SUBSEP name SUBSEP
+        #uname = substr(s, 2)
+        dbg__print("parse", 3, sprintf("(scan__usercmd_call) RETURNING ns='%s', name='%s'",
+                                       info__get(info, "ns"), info__get(info, "name")))
+        # if (info__get(info, "ns") == EMPTY)
+        #     info["ns"] = curr_ns()
+        return 3 SUBSEP info__get(info, "ns") SUBSEP info__get(info, "name") SUBSEP
     }
 
     # Read cmd name between @ and {
-    name = substr(s, 2, brpos - 2)
-    dbg__print("parse", 3, sprintf("(scan__usercmd_call) name='%s'", name))
+    # uname = substr(s, 2, brpos - 2)
+    # dbg__print("parse", 3, sprintf("(scan__usercmd_call) uname='%s'", uname))
 
     # Remove everything that came before.  We are now left with (hopefully)
     # a series of brace-enclosed arguments.
@@ -3855,7 +4123,7 @@ function scan__usercmd_call(s,
             error("(scan__usercmd_call) Could not find closing brace: " s)
         else {
             # Found a }
-            dbg__print("parse", 5, ("   (scan__usercmd_call) in loop, cb=" cb))
+            dbg__print("parse", 5, ("(scan__usercmd_call) in loop, cb=" cb))
             inarg = substr(s, 2, cb - 2)
             gsub(/\\}/, TOK_RBRACE, inarg) # Fix quoted brace
             arg[++narg] = inarg
@@ -3863,7 +4131,11 @@ function scan__usercmd_call(s,
         }
     }
     dbg__print("parse", 2, sprintf("(scan__usercmd_call) END 3: narg=%d, s='%s'", narg, s))
-    retval = narg+2 SUBSEP name SUBSEP
+    # if (info__get(info, "ns") == EMPTY)
+    #     info["ns"] = curr_ns()
+    dbg__print("parse", 3, sprintf("(scan__usercmd_call) RETURNING ns='%s', name='%s' with %d args",
+                                   info__get(info, "ns"), info__get(info, "name"), narg))
+    retval = narg+3 SUBSEP info__get(info, "ns") SUBSEP info__get(info, "name") SUBSEP
     for (j = 1; j <= narg; j++)
         retval = retval arg[j] SUBSEP
     return retval
@@ -3876,7 +4148,7 @@ function ppf__BLK_FILE(blknum)
                    "  atmode  : %s",
                    blktab[blknum, 0, "filename"],
                    blktab[blknum, 0, "open"] ? "OPEN" : "CLOSED",
-                   ppf__mode(blktab[blknum, 0, "atmode"]))
+                   ppf__label(blktab[blknum, 0, "atmode"]))
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -3894,10 +4166,11 @@ function ppf__BLK_FILE(blknum)
 #       The following flag characters are recognized:
 #
 #       Type is mutually exclusive; exactly one must be present:
-#           TYPE_ARRAY          A : Array refs must use subscripts
+#           TYPE_ARRAY          A : Awk array refs, must use subscripts
 #           TYPE_COMMAND        C : Built-in "@" command; root level
 #           TYPE_FUNCTION       F : Root level
 #           TYPE_INTERNAL       _ : Awk function tracing, not reachable by user
+#           TYPE_LIST           L : Agg block lists; integer keys
 #           TYPE_SEQUENCE       Q : Root level
 #           TYPE_SYMBOL         S
 #           TYPE_USER           U : User-defined command; current level
@@ -3994,7 +4267,7 @@ function flag_anyfalse_p(code, multi_fs)
 
 function valid_type_p(char)
 {
-    return index(char, VALID_TYPES) > 0
+    return index(VALID_TYPES, char) > 0
 }
 
 
@@ -4031,30 +4304,16 @@ function flag_set_clear(code, set_fs, clear_fs,
 }
 
 
-function ppf__flag_type(code,
-                        type)
-{
-    if (code == EMPTY)
-        panic("(ppf__flag_type) code is empty")
-    code = first(code)
-    dbg__print("xeq", 7, "(ppf__flag_type) code = " code)
-    if (! (code in __flag_label)) {
-        panic("(ppf__flag_type) Invalid type '" code "'")
-    }
-    return __flag_label[code]
-}
-
-
 function ppf__flags(code,
                     l, s, desc, x)
 {
     if ((l = length(code)) == 0)
         error("(ppf__flags) Did not specify code")
-    s = ppf__flag_type(code) # __flag_label[first(code)]
+    s = ppf__label(first(code))
     if (l > 1) {
         desc = ""
         for (x = 2; x <= l; x++)
-            desc = desc __flag_label[substr(code, x, 1)] ","
+            desc = desc ppf__label(substr(code, x, 1)) ","
         s = s "<" chop(desc) ">"
     }
     return s
@@ -4070,19 +4329,21 @@ function ppf__flags(code,
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
 #       Info[] is an array with following entries created in nam__scan():
-#             error       : TRUE if an error condition was encountered
+#             errorp      : TRUE if an error condition was encountered
 #             errtext     : Text relating to any error condition.
 #                           Errtext NEVER includes ``caller'' information:
 #                           that bit is added on when m2 errors & exits.
 #             has_bracket : TRUE if text matches CHARS[CHARS..]
 #                           It is normal for plain "NAME" to be FALSE here.
+#             has_qual    : TRUE if text has ns qualification glyph ::
 #             key         : Key, part[2] of NAME[KEY]; may be empty.
 #             key_valid   : TRUE if KEY is valid according to non-strict.
 #                           This restricts it to most printable characters.
 #             name        : Name, part[1] of NAME[KEY].
-#             name_valid  : TRUE if NAME is valid according to current __STRICT__[name]
+#             name_valid  : TRUE if NAME is valid
 #             nparts      : 1 or 2 depending if text is NAME or NAME[KEY]
-#             urtext      : original text string
+#             ns          : Namespace.  May be empty.  See also "has_qual".
+#             urtext      : Original text string
 #             valid       : TRUE if both name_valid && key_valid are TRUE
 #
 #       After a successful nam__lookup(), the following entries are added:
@@ -4093,16 +4354,51 @@ function ppf__flags(code,
 #                           Useful for PTYPE_IDXABLE and FLAG_KEY_YES.
 #             level       : Level number where this object was found.
 #                           0 => ROOT_LEVEL; NAME_NOT_FOUND => symbol not found
-#             tracing     : TRUE if this object/symbol is being traced
 #             type        : Char encoding obj type, also in code; one of TYPE_*
 #       If the entry is a TYPE_LIST:
 #             agg_block   : Block # of agg block
 #*****************************************************************************
+function nam__valid_p(text, type, allow_double_underscores)
+{
+    if (emptyp(text))
+        panic("(nam__valid_p) Empty text!  type=" ppf__label(type))
+    if (!allow_double_underscores &&
+        double_underscores_p(text))
+        return FALSE
+    if (type == TYPE_COMMAND || type == TYPE_FUNCTION || type == TYPE_INTERNAL)
+        return text ~ /^[a-z][a-z]*$/
+    else if (type == PTYPE_ENV_VAR || type == PTYPE_NS || type == PTYPE_PARAM)
+        return text ~ /^[A-Za-z_][A-Za-z_0-9]*$/
+    else if (type == TYPE_SYMBOL || type == TYPE_SEQUENCE || type == TYPE_USER ||
+             type == TYPE_ARRAY  || type == TYPE_LIST)
+        # Any of these types might be a fully qualified spec, so accept ":".
+        # cf PTYPE_NAME, which is merely the symbols name only
+        return text ~ /^[A-Za-z#_:][A-Za-z#_0-9:]*$/
+    else if (type == PTYPE_NAME)
+        return text ~ /^[A-Za-z#_][A-Za-z#_0-9]*$/
+    else if (type == PTYPE_KEY)
+        # For keys, any printable character
+        return text ~ /^[ !-~]+$/
+    else if (type == PTYPE_SCALAR)
+        return text ~ /^[A-Za-z#_:][A-Za-z#_0-9:]*(\[[ !-~]+\])?$/
+    else
+        panic("(nam__valid_p) Cannot handle type " ppf__label(type) "; text='" text "'")
+}
+
 
 #*****************************************************************************
 #
 # This code scans random string "text" into either NAME or NAME[KEY].
 # Rudimentary error checking is done.
+#
+# Unfortunately, nam__scan() can be given *arbitrary* text, not just
+# something that "ought to, hopefully" turn out to be a reasonably
+# well-formed symbol reference.  For example, during parsing, a perfectly
+# valid text might be
+#           Byname[@{fields[1]}]
+# but since it hasn't been @{expanded} yet, there are too many brackets
+# which is not legal.  So now we just look to see if there are single
+# brackets, and forget about splitting or counting.
 #
 # Return value:
 #    ERROR
@@ -4114,274 +4410,410 @@ function ppf__flags(code,
 #
 #*****************************************************************************
 function nam__scan(text, info,
-                   name, key, nparts, part, count, i)
+                   name, key, nparts, part, count, i,
+                   qual, ns, lbrk)
 {
     # dbg__print("nam", 5, sprintf("(nam__scan) START text='%s'", text))
-    name = key = info["name"] = info["key"] = info["errtext"] = EMPTY
     info["urtext"] = text
-    info["errorp"] = FALSE
-    info["_protected"] = VOID
+    name = key = info["name"] = info["key"] = EMPTY
+    info["ns"] = info["errtext"] = EMPTY
+    # NB - `text' may be syntactically correct, but info["valid"] remains
+    # FALSE until an item is found in namtab[] in info__lookup_found_p().
+    # At this point, info["valid"] takes on the value of info["lexvalid"].
+    # To see if `text' is syntactically correct, check info["lexvalid"] but
+    # be aware you may be referring to a non-existent symbol.
+    info["valid"] = info["errorp"] = FALSE
+    info["_key_valid"] = info["_lexvalid"] = info["declared"] = \
+       info["defined"] = info["_protected"] = VOID
+    info["has_qual"] = info["has_bracket"] = FALSE
 
-    # Simple test for CHARS or CHARS[CHARS]
-    #   CHARS ::= [-"-Z^-z~]+
-    # CHARS regexp excludes     ! [ \ ] { | }
-    # Anchored at front and back, match CHARS,
-    # optionally followed by bracket CHARS bracket
-    #   /^ CHARS ( \[ CHARS \] )? $/
-    if (text !~ /^["-Z^-z~]+(\[["-Z^-z~]+\])?$/) {
-        #warn("(nam__scan) Name '" text "' not valid")
+    # Simple test for
+    #           [ NS `::' ]  NAME  [ `[' KEY `]' ]
+    # Anchored at front and back.
+    # NS   ::= text ~ /^[A-Za-z_][A-Za-z_0-9]*$/
+    # NAME ::= text ~ /^[A-Za-z#_][A-Za-z#_0-9]*$/
+    # KEY  ::= text ~ /^[ !-~]+$/       # For keys, any printable character
+    if (text !~ /^([A-Za-z_][A-Za-z_0-9]*::)?[A-Za-z#_][A-Za-z#_0-9]*(\[[ !-~]+\])?$/) {
+    #             <NS (opt)-----------------><NAME------------------><KEY (opt)--->
         dbg__print("nam", 2, sprintf("(nam__scan) '%s' => %d", text, ERROR))
-        #__m2_msg = "Invalid name: '" text "'"
-        info["valid"] = FALSE
+        info["_lexvalid"] = FALSE
         info["errorp"] = TRUE
-        info["errtext"] = "Invalid name '" text "'"
+        info["errtext"] = __m2_msg = "Invalid name '" text "'"
         return ERROR            # interpret as ERR_SCAN_INVALID_NAME
     }
 
-    count = split(text, part, "(\\[|\\])")
-    if (dbg__sys_level_p("nam", 7)) {
-        print_debugfile("m2debug:split(" text ") ==> " count " fields:")
-        for (i = 1; i <= count; i++)
-            print_debugfile("m2debug:" i " = '" part[i] "'")
-    }
-    if (count < 1 || count > 3) # assert count in [1,2,3]
-        panic("(nam__scan) split() returned strange value: " count)
-    if (count == 3 && !emptyp(part[3]))
-        panic("(nam__scan) split() part[3] should be empty")
-    if (count >= 2) {
+    # We can take advantage of the fact that text has passed the regexp
+    # above, so if the last character is a right bracket then it must be
+    # a key.
+    lbrk = index(text, TOK_LBRACKET)
+    if (lbrk > 0 && last(text) == TOK_RBRACKET) {
         info["has_bracket"] = TRUE
-        info["key"] = key   = part[2]
+        info["nparts"] = nparts = 2
+
+        key = substr(text, lbrk+1, length(text)-lbrk-1)
         if (key == EMPTY)
-            panic("(nam__scan) key cannot be empty!")
-        info["key_valid"] = nam_valid_with_strict_as(key, FALSE)
-            # info["errtext"] = "Key '" key "' not valid"
-    }
-    if (count >= 1) {
-        info["name"] = name = part[1]
-        if (name == EMPTY)
-            panic("(nam__scan) name cannot be empty!")
-        info["name_valid"] = nam_valid_with_strict_as(name, strictp("name"))
-    }
-    if (count == 1)
-        info["has_bracket"] = FALSE
+            panic("(nam__scan) Key cannot be empty!")
+        #print_stderr("(nam__scan) new scan: key='" key "'")
+        info["key"] = key
 
+        # We can't check for validity yet because what we are looking at
+        # might still need to be @{expanded}.
+        # Get rid of key stuff
+        text = substr(text, 1, lbrk - 1)
+    } else                      # no [...] found
+        info["nparts"] = nparts = 1
 
-    # Since we passed the regexp in first if() statement, we can be
-    # assured that text is either ^CHARS$ or ^CHARS\[CHARS\]$.
-    info["nparts"] = nparts = (count == 1) ? 1 : 2
-    if (nparts == 1) {
-        if ((info["valid"] = info["name_valid"]) == FALSE)
-            info["errtext"] = "Name '" text "' not valid [nparts=1]"
-    } else {
-        # nparts == 2
-        if ((info["valid"] = (info["name_valid"] && info["key_valid"])) == FALSE)
-            info["errtext"] = sprintf("%s%s%s",
-                                      info["name_valid"] ? "" : "Name '" name "' not valid [nparts=2]",
-                                      info["name_valid"] == FALSE && info["key_valid"] == FALSE ? "; " : "",
-                                      info["key_valid"] ? "" : "Key '" key "' not valid")
+    # Check for namespace
+    qual = index(text, TOK_NS_QUAL)
+    if (qual > 0) {
+        info["has_qual"] = TRUE
+        ns = substr(text, 1, qual - 1)
+        if (emptyp(ns) ||
+            !nam__valid_p(ns, PTYPE_NS, TRUE) ||
+            ns == "awk") {
+            info["_lexvalid"] = FALSE
+            info["errorp"] = TRUE
+            info["errtext"] = __m2_msg = "Invalid namespace '" ns "'"
+            return ERROR            # interpret as ERR_SCAN_INVALID_NAME
+        }
+        info["ns"] = ns
+        text = substr(text, qual + 2)
     }
+    name = text
+    if (name == EMPTY) {
+        info["_lexvalid"] = FALSE
+        info["errorp"] = TRUE
+        info["errtext"] = __m2_msg = "Name cannot be empty!"
+        return ERROR            # interpret as ERR_SCAN_INVALID_NAME
+    }
+    if (index(name, TOK_NS_QUAL) > 0) {
+        info["_lexvalid"] = FALSE
+        info["errorp"] = TRUE
+        info["errtext"] = __m2_msg = "Invalid qualification '" name "'"
+        return ERROR            # interpret as ERR_SCAN_INVALID_NAME
+    }
+    info["name"] = name
+    info["name_valid"] = nam__valid_p(name, PTYPE_NAME, TRUE)
 
-    dbg__print("nam", 4, sprintf("(nam__scan) '%s' => %d", text, nparts))
+    dbg__print("nam", 4, sprintf("(nam__scan) '%s' => %d", info["urtext"], nparts))
     return nparts
 }
 
 
 #*****************************************************************************
-# This will examine namtab from __curr_level downto 0, seeing if name
+# This will examine namtab from curr_level() downto 0, seeing if name
 # exists at that level.  If so, it populates info[] with the code string
 # for the item from namtab, and also sets other values.  The return
 # value is the level number (0..N).
 #
-# If no matching name is found, return NAME_NOT_FOUND (-1).  It also sets
+# If no matching name is found, return NAME_NOT_FOUND.  It also sets
 # info["errorp"] to True and reports that the name was not found.
 # The caller may or may not consider this a real error, depending on
 # whether he expected the name to be found or not.
 # *****************************************************************************
 function nam__lookup(info,
-                     name, level, code, type)
+                     name, level, code, type, found, i, ns)
 {
     info["code"] = PTYPE_UNDEF
-    info["level"] = NAME_NOT_FOUND
+    info["level"] = level = NAME_NOT_FOUND
+    found = FALSE
+    name = info["name"]
 
-    if (info__get(info, "errorp") || info__get(info, "valid") == FALSE) {
-        dbg__print("nam", 2, "(nam__lookup) END Invalid info => NAME_NOT_FOUND")
+    if (info__get(info, "errorp") || info__get(info, "lexvalid") != TRUE) {
         info["errorp"] = TRUE
-        #info["errtext"] = "Invalid info"
+        info["errtext"] = __m2_msg =            \
+            sprintf("%s%s%s",
+                    info["name_valid"] ? "" : "Name '" name "' not valid",
+                    info["name_valid"] == FALSE && info__get(info, "key_valid") == FALSE ? "; " : "",
+                    info__get(info, "key_valid") ? "" : "Key '" info__get(info, "key") "' not valid")
         return ERR_SCAN_INVALID_NAME
     }
-    dbg__print("sym", 5, sprintf("(nam__lookup) name='%s' START", \
-    (name = info["name"])))
+    dbg__print("sym", 5, sprintf("(nam__lookup) name='%s' START", name))
 
-    for (level = __curr_level; level >= ROOT_LEVEL; level--)
-        if (nam_ll_in(name, level)) {
-            info["code"] = code = nam_ll_read(name, level)
-            type = first(code)
-            info["idxable"] = (type == TYPE_ARRAY || type == TYPE_LIST)
-            info["tracing"] = flag_1true_p(code, FLAG_TRACING)
-            info["level"] = level
-            dbg__print("nam", 2, sprintf("(nam__lookup) END name '%s', level=%d, code=%s=%s Found in namtab => %s",
-                                         name, level, code,
-                                         nam_ppf_name_level(name, level),
-                                         (level == 0 ? "ROOT_LEVEL" \
-                                             : sprintf("Level %d", level))))
-            if (info["has_bracket"] && !info["idxable"]) {
-                info["errorp"] = TRUE
-                info["errtext"] = sprintf("Cannot use brackets with %s '%s'", ppf__flag_type(type), name)
-                return ERR_SCAN_INVALID_NAME
-            }
-            if (type == TYPE_LIST)
-                info["agg_block"] = symtab[name, "", level, "agg_block"]
-            return level
+    ns = info__get(info, "ns")
+    if (ns == M2_ENVNS) {
+        if (info__get(info, "key") != EMPTY ||
+            ! nam__valid_p(name, PTYPE_ENV_VAR, FALSE)) {
+            info["errorp"] = TRUE
+            info["errtext"] = __msg_msg = \
+                sprintf("Name '%s' not valid as %s", name, ppf__label(PTYPE_ENV_VAR))
+            return ERR_SCAN_INVALID_NAME
         }
-    dbg__print("nam", 2, sprintf("(nam__lookup) END Could not find name '%s' on any level in namtab => NAME_NOT_FOUND", name))
-    # Set the text when the name isn't found, but not the error flag itself.
-    info["errtext"] = "Name not found: '" name "'"
-    return NAME_NOT_FOUND
+        found = sym_ll_in_ns(ns, name, NOKEY, ROOT_LEVEL)
+        if (! found) {
+            # Set the text when the name isn't found, but not the error flag itself.
+            info["errtext"] = sprintf("%s '%s' not found",
+                                      ppf__label(info__get(info, "type")), name)
+            return NAME_NOT_FOUND
+        }
+        info["declared"] = info["defined"] = TRUE
+        info["code"] = PTYPE_ENV_VAR
+        info["idxable"] = FALSE
+        info["level"] = ROOT_LEVEL
+        info["valid"] = TRUE
+        return ROOT_LEVEL
+    }
+
+    if (emptyp(ns) && double_underscores_p(name)) {
+        #print_stderr("(nam__lookup) ns=" ns ", name='" name "'")
+        info["ns"] = ns = M2_SYSNS
+    }
+    # In code below, if the name is actually found in the namespace:
+    # 1. found == TRUE
+    # 2. level is correct
+    # 3. info__lookup_found_p() has the side effect, if found, of setting
+    #    info[]: code, idxable, level, agg_block (List)
+
+    # Name resolution / cases:
+    # - User specified a namespace ("ns::foo"):
+    #   Lookup succeeds if namespace actually contains foo at some
+    #   level.  Search this namespace from current level to ROOT_LEVEL.
+    if (! emptyp(ns)) {
+        for (level = curr_level(); level >= ROOT_LEVEL; level--)
+            if ((found = info__lookup_found_p(info, ns, name, level)))
+                break
+    } else {
+        # - Plain name ("foo"):
+        #   Look through each __ns_stack element from current level down to ROOT_LEVEL.
+        for (i = stk_depth(__ns_stack); i > 0; i--) {
+            ns = __ns_stack[i]
+            dbg__print("nam", 7, sprintf("(nam__lookup) Checking ns '%s' from %d to 0",
+                                         ns, curr_level()))
+            for (level = curr_level(); level >= ROOT_LEVEL; level--) {
+                if ((found = info__lookup_found_p(info, ns, name, level))) {
+                    info["ns"] = ns
+                    break
+                }
+            }
+            if (found) break
+        }
+    }
+    if (! found) {
+        dbg__print("nam", 2, sprintf("(nam__lookup) END Could not find name '%s' on any level in namtab => NAME_NOT_FOUND", name))
+        # Set the text when the name isn't found, but not the error flag itself.
+        info["errtext"] = "Name not found: '" name "'"
+        return NAME_NOT_FOUND
+    }
+
+    if (info["has_bracket"] && !info["idxable"]) {
+        info["errorp"] = TRUE
+        info["errtext"] = sprintf("Cannot use brackets with %s '%s'",
+                                  ppf__label(info__get(info, "type")), name)
+        return ERR_SCAN_INVALID_NAME
+    }
+    return level
+}
+
+
+function info__lookup_found_p(info, ns, name, level,
+                              code, type)
+{
+    # print_stderr(sprintf("(info__lookup_found_p) ns=%s, name='%s', level=%d", ns, name, level))
+    if (! nam_ll_in_ns(ns, name, level))
+        return FALSE
+
+    # name IS in namtab here, so read it
+    info["declared"] = TRUE
+    info["code"] = code = nam_ll_read_ns(ns, name, level)
+    type = first(code)
+    info["idxable"] = (type == TYPE_ARRAY || type == TYPE_LIST)
+    info["level"] = level
+    info["valid"] = info__get(info, "lexvalid")
+
+    if (type == TYPE_ARRAY) {
+        info["defined"] = (info["valid"] &&
+                           ((ns, name, info__get(info, "key"), level, "symval") in symtab))
+
+    } else if (type == TYPE_COMMAND  ||
+               type == TYPE_FUNCTION ||
+               type == TYPE_INTERNAL) {
+        info["defined"] = (info["valid"] &&
+                           ((M2_SYSNS, name, ROOT_LEVEL) in namtab))
+
+    } else if (type == TYPE_LIST) {
+        info["defined"] = (info["valid"] &&
+                           ((ns, name, NOKEY, level, "agg_block") in symtab))
+        if (info["defined"])
+            info["agg_block"] = symtab[ns, name, NOKEY, level, "agg_block"]
+
+    } else if (type == TYPE_SEQUENCE) {
+        info["defined"] = (info["valid"] &&
+                           ((ns, name, NOKEY, ROOT_LEVEL, "seqval") in symtab))
+
+    } else if (type == TYPE_SYMBOL) {
+        info["defined"] = (info["valid"] &&
+                            ((ns, name, NOKEY, level, "symval") in symtab))
+
+    } else if (type == TYPE_USER) {
+        info["defined"] = (info["valid"] &&
+                           ((ns, name, NOKEY, level, "user_block") in symtab))
+        if (info["defined"])
+            info["user_block"] = cmd_ll_read_ns(ns, name, level)
+
+    } else
+        panic("(info__lookup_found_p) Unhandled type: " ppf__label(type))
+
+    dbg__print("nam", 2, sprintf("(info__lookup_found_p) Found name '%s', level=%d, code=%s=%s Found in namtab => %s",
+                                 name, level, code,
+                                 nam_ppf_name_level(ns, name, level),
+                                 (level == 0 ? "ROOT_LEVEL" \
+                                  : sprintf("Level %d", level))))
+    return TRUE
 }
 
 
 function info__create_from_text(text, info,
-                      nparts)
+                                nparts, level)
 {
+    split("", info)
+    info["urtext"] = text
     nparts = nam__scan(text, info)
     if (nparts == ERROR)
         return ERR_SCAN_INVALID_NAME
-    return nam__lookup(info)    # level (>= 0) or NAME_NOT_FOUND
+    level = nam__lookup(info)    # level (>= 0) or NAME_NOT_FOUND
+    return level
 }
 
 
 # Remove any name at level "level" or greater
-function nam_purge(level,
-                   x, k, del_list, code, type, agg_block)
+function nam_purge(ns, level,
+                   f, n, d, del_list, code, type, agg_block,
+                   pns, pname, plevel)
 {
     dbg__print("nam", 7, "(nam_purge) BEGIN")
 
-    for (k in namtab) {
-        split(k, x, SUBSEP)
-        if (x[2]+0 >= level)
-            del_list[x[1], x[2]] = TRUE
+    for (n in namtab) {
+        split(n, f, SUBSEP)
+        if (f[NFN_NS] == ns && f[NFN_LEVEL]+0 >= level)
+            del_list[f[1], f[2], f[3]] = TRUE
     }
 
-    for (k in del_list) {
-        split(k, x, SUBSEP)
-        dbg__print("nam", 3, sprintf("(nam_purge) Delete namtab['%s', %d]",
-                                     x[1], x[2]))
-        code = nam_ll_read(x[1], x[2])
+    for (d in del_list) {
+        split(d, f, SUBSEP)
+        pns    = f[NFN_NS]
+        pname  = f[NFN_NAME]
+        plevel = f[NFN_LEVEL]
+        dbg__print("nam", 3, sprintf("(nam_purge) Delete namtab[%s, '%s', %d]",
+                                     pns, pname, plevel))
+        code = nam_ll_read_ns(pns, pname, plevel)
         type = first(code)
-        if (double_underscores_p(x[1]) ||
+        if (double_underscores_p(pname) ||
             type == TYPE_FUNCTION || type == TYPE_COMMAND || type == TYPE_INTERNAL)
             continue
-        #print_stderr(sprintf("(nam_purge) '%s' type %s", x[1], ppf__flag_type(type)))
+        #print_stderr(sprintf("(nam_purge) '%s' type %s", pname, ppf__label(type)))
         if (type == TYPE_LIST) {
-            agg_block = symtab[x[1], "", x[2], "agg_block"]
-            lis_clear(x[1], x[2])
+            agg_block = symtab[pns, pname, NOKEY, plevel, "agg_block"]
+            lis_clear(pns, pname, plevel)
             if (integerp(agg_block)) {
                 #print_stderr("(nam_purge) Deleting agg_block " agg_block)
                 blk_master_delete(agg_block)
             }
             delete blktab[agg_block, 0, "count"]
-            delete symtab[x[1], "", x[2], "agg_block"]
+            delete blktab[agg_block, 0, "line"]
+            delete symtab[pns, pname, NOKEY, plevel, "agg_block"]
         }
-        trace(TRACE_SYMBOL_READ_WRITE, x[1],
-              sprintf("[Name Delete] \"%s\" (lev:%d)", x[1], x[2]))
-        delete namtab[x[1], x[2]]
+        trace(TRACE_SYMBOL_READ_WRITE, pname,
+              sprintf("[Name Delete] %s (lev=%d)", pname, plevel))
+        delete namtab[pns, pname, plevel]
     }
     dbg__print("nam", 7, "(nam_purge) END")
 }
 
 
 function nam_dump_namtab(filter_fs, include_sys,
-                         x, k, code, s, desc, name, level, f_arr, l,
+                         f, n, ns, code, s, desc, name, level, l,
                          include_system)
 {
     include_system = flag_1true_p(filter_fs, FLAG_SYSTEM)
     print_debugfile(sprintf("Begin namtab (%s%s):", filter_fs,
                             include_system ? "+System" : ""))
 
-    for (k in namtab) {
-        split(k, x, SUBSEP)
-        name  = x[1]
-        level = x[2] + 0
-        code = nam_ll_read(name, level)
+    for (n in namtab) {
+        split(n, f, SUBSEP)
+        ns    = f[NFN_NS]
+        name  = f[NFN_NAME]
+        level = f[NFN_LEVEL] + 0
+        code = nam_ll_read_ns(ns, name, level)
 
         if (! flag_alltrue_p(code, filter_fs)) {
-            #print_debugfile(sprintf("m2debug:code=%s, filter=%s, flag filter failed", code, filter_fs))
+            #print_debugfile(sprintf("m2debug:(nam_dump_namtab) code=%s, filter=%s, flag filter failed", code, filter_fs))
             continue
         }
         if (flag_1true_p(code, FLAG_SYSTEM) && !include_system) {
-            #print_debugfile("m2debug:system filter failed")
+            #print_debugfile("m2debug:(nam_dump_namtab) system filter failed")
             continue
         }
-        print_debugfile("m2debug:(nam_dump_namtab) " nam_ppf_name_level(name, level))
+        print_debugfile("m2debug:(nam_dump_namtab) " nam_ppf_name_level(ns, name, level))
     }
     print_debugfile("m2debug:(nam_dump_namtab) End namtab")
 }
 
 
-function nam_valid_strict_regexp_p(text)
-{
-    return text ~ /^[A-Za-z#_][A-Za-z#_0-9]*$/
-}
-
-
-function nam_valid_with_strict_as(text, tmp_strict)
-{
-    if (emptyp(text))
-        return FALSE
-    if (tmp_strict)
-        # In strict mode, only letters, #, and _ (and then digits)
-        return nam_valid_strict_regexp_p(text) # text ~ /^[A-Za-z#_][A-Za-z#_0-9]*$/
-    else
-        # In non-strict mode, printable characters except ! [ \ ] { | }
-        return text ~ /^["-Z^-z~]+$/
-}
-
-
-function nam_ll_read(name, level)
-{
-    if (level == EMPTY) level = ROOT_LEVEL
-    return namtab[name, level] # returns code
-}
-
-
-function nam_ll_in(name, level)
+function nam_ll_read_ns(ns, name, level)
 {
     if (level == EMPTY)
-        panic("(nam_ll_in) LEVEL missing")
-    if (name != "__LINE__" && name != "__NLINE__" && name != "__DBG__")
-        dbg__print("sym", 5, sprintf("(nam_ll_in) Looking for '%s' at level %s", name, level))
-    return (name, level) in namtab
+        panic("(nam_ll_read_ns) LEVEL missing")
+    if (ns == EMPTY)
+        panic("(nam_ll_read_ns) NS missing")
+    return namtab[ns, name, level] # returns code
 }
 
 
-function nam_ll_write(name, level, code,
-                      retval)
+function nam_ll_in_ns(ns, name, level)
 {
     if (level == EMPTY)
-        panic("(nam_ll_write) LEVEL missing")
+        panic("(nam_ll_in_ns) LEVEL missing")
+    if (ns == EMPTY)
+        panic("(nam_ll_in_ns) NS missing")
+    #if (name != "__LINE__" && name != "__NLINE__" && name != "__DBG__")
+        #dbg__print("sym", 5, sprintf("(nam_ll_in) Looking for '%s' at level %s", name, level))
+    if (double_underscores_p(name))
+        ns = M2_SYSNS
+    # else
+    #     print_stderr(sprintf("(nam_ll_in_ns) Looking for '%s' at level %s", name, level))
+    return (ns, name, level) in namtab
+}
+
+
+function nam_ll_write_ns(ns, name, level, code,
+                         retval, msg)
+{
+    if (level == EMPTY)
+        panic("(nam_ll_write_ns) LEVEL missing")
+    if (ns == EMPTY)
+        panic("(nam_ll_write_ns) NS missing")
+    if (! nam__valid_p(ns, PTYPE_NS, TRUE) ||
+        ns == "awk")
+        panic("(nam_ll_write_ns) Bad ns '" ns "'")
+    if (! nam__valid_p(name, PTYPE_NAME, TRUE))
+        panic("(nam_ll_write_ns) Bad name '" name "'")
+
     # It's important to use low-level functions here, and not invoke
     # dbg__* functions in this procedure, otherwise nasty loops ensue.
-    if (sym_ll_in("__DBG__", "nam", ROOT_LEVEL) &&
-        sym_ll_read("__DBG__", "nam", ROOT_LEVEL) >= 5)
-        print_debugfile(sprintf("m2debug:(nam_ll_write) namtab[\"%s\", %d] = %s", name, level, code))
+    if (sym_ll_in_ns(M2_SYSNS, "__DBG__", "nam", ROOT_LEVEL) &&
+        sym_ll_read_ns(M2_SYSNS, "__DBG__", "nam", ROOT_LEVEL) >= 5)
+        print_debugfile(sprintf("m2debug:(nam_ll_write_ns) namtab[%s, \"%s\", %d] = %s",
+                                ns, name, level, code))
 
-    trace(TRACE_SYMBOL_READ_WRITE, name,
-          sprintf("[Name Update] \"%s\" (lev:%d) := Code '%s'",
-                  name, level, code))
-    return namtab[name, level] = code
+    msg = sprintf("[Name Update] '%s'::'%s' (lev=%d) := Code '%s'",
+                  ns, name, level, code)
+    # if (ns != M2_SYSNS)
+    #     print_stderr("TEMP: " msg)
+    trace(TRACE_SYMBOL_READ_WRITE, name, msg)
+    return namtab[ns, name, level] = code
 }
 
 
-function nam_ppf_name_level(name, level,
+function nam_ppf_name_level(ns, name, level,
                             s, code, desc, l, x)
 {
-    code = nam_ll_read(name, level)
-    s = __flag_label[first(code)] "'" name "'{" level "}"
+    code = nam_ll_read_ns(ns, name, level)
+    s = ppf__label(first(code)) "'" name "'" TOK_LBRACE level TOK_RBRACE
     code = rest(code)
     desc = ""
     if ((l = length(code)) > 0)
         for (x = 1; x <= l; x++)
-            desc = desc __flag_label[substr(code, x, 1)] ","
+            desc = desc ppf__label(substr(code, x, 1)) ","
     s = s "<" chop(desc) ">"
     return s
 }
@@ -4403,16 +4835,32 @@ function info__dump(info,
 }
 
 
-function info__get(info, elem)
+function info__get(info, elem,
+                   type)
 {
-    if (elem == "protected") {
+    type = first(info["code"])
+    if (elem == "key_valid") {
+        if (info["_key_valid"] == VOID)
+            return info["_key_valid"] = \
+                nam__valid_p(info__get(info, "key"), PTYPE_KEY, TRUE)
+        else
+            return info["_key_valid"]
+    } else if (elem == "lexvalid") {
+        if (info["_lexvalid"] == VOID)
+            return info["_lexvalid"] = \
+                info__get(info, "name_valid") &&
+                (info__get(info, "nparts") == 1 ? TRUE \
+                 : info__get(info, "key_valid"))
+        else
+            return info["_lexvalid"]
+    } else if (elem == "protected") {
         if (info["_protected"] == VOID)
             return info["_protected"] = \
                 sym_ll_protected(info["name"], info["code"])
         else
             return info["_protected"]
     } else if (elem == "type")
-        return first(info["code"])
+        return type
     else if (! (elem in info))
         panic("(info__get) Info does not contain element '" elem "'")
     else
@@ -4424,96 +4872,78 @@ function info__get(info, elem)
 
 #*****************************************************************************
 #
+#       N A M E S P A C E   A P I
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#       TK
+#
+#*****************************************************************************
+function curr_ns()
+{
+    if (stk_empty_p(__ns_stack))
+        panic("(curr_ns) Empty __ns_stack")
+    return stk_top(__ns_stack)
+}
+
+# Sequence names must always match strict symbol name syntax:
+#       /^[A-Za-z#_][A-Za-z#_0-9]*$/
+#
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
 #       S E Q U E N C E   A P I
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
 #*****************************************************************************
-# Sequence names must always match strict symbol name syntax:
-#       /^[A-Za-z#_][A-Za-z#_0-9]*$/
-function seq_valid_p(text)
-{
-    return nam_valid_strict_regexp_p(text) &&
-           !double_underscores_p(text)
-}
-function seqinfo_valid_p(seqinfo,
-                         name)
-{
-    name = info__get(seqinfo, "name")
-    return nam_valid_strict_regexp_p(name) &&
-           !double_underscores_p(name)
-}
-
-
-# A Sequence is defined if its name exists in namtab with the correct type
-# and if it's Defined.
-function seq_defined_p(name,
-                        code)
-{
-    if (!seq_valid_p(name))
-        return FALSE
-    if (! nam_ll_in(name, ROOT_LEVEL))
-        return FALSE
-    code = nam_ll_read(name, ROOT_LEVEL)
-    return flag_1true_p(code, TYPE_SEQUENCE)
-}
-function seqinfo_defined_p(seqinfo,
-                           name, code)
-{
-    if (!seqinfo_valid_p(seqinfo))
-        return FALSE
-    name = info__get(seqinfo, "name")
-    if (! nam_ll_in(name, ROOT_LEVEL))
-        return FALSE
-    code = nam_ll_read(name, ROOT_LEVEL)
-    return flag_1true_p(code, TYPE_SEQUENCE)
-}
-
-
-function seq_definition_ppf(name,
+function seq_definition_ppf_ns(ns, name,
                             buf, AT_SEQUENCE)
 {
     AT_SEQUENCE = "@sequence "
     buf =         AT_SEQUENCE name TOK_TAB "create" TOK_NEWLINE
-    if (seq_ll_read(name) != SEQ_DEFAULT_INIT)
-        buf = buf AT_SEQUENCE name TOK_TAB "setval " seq_ll_read(name) TOK_NEWLINE
-    if (symtab[name, EMPTY, ROOT_LEVEL, "init"] != SEQ_DEFAULT_INIT)
-        buf = buf AT_SEQUENCE name TOK_TAB "setinit " symtab[name, EMPTY, ROOT_LEVEL, "init"] TOK_NEWLINE
-    if (symtab[name, EMPTY, ROOT_LEVEL, "incr"] != SEQ_DEFAULT_INCR)
-        buf = buf AT_SEQUENCE name TOK_TAB "setincr " symtab[name, EMPTY, ROOT_LEVEL, "incr"] TOK_NEWLINE
-    if (symtab[name, EMPTY, ROOT_LEVEL, "fmt"] != sym_ll_read("__FMT__", "seq"))
-        buf = buf AT_SEQUENCE name TOK_TAB "format " symtab[name, EMPTY, ROOT_LEVEL, "fmt"] TOK_NEWLINE
+    if (seq_ll_read_ns(ns, name) != SEQ_DEFAULT_INIT)
+        buf = buf AT_SEQUENCE name TOK_TAB "setval " seq_ll_read_ns(ns, name) TOK_NEWLINE
+    if (symtab[ns, name, EMPTY, ROOT_LEVEL, "init"] != SEQ_DEFAULT_INIT)
+        buf = buf AT_SEQUENCE name TOK_TAB "setinit " symtab[ns, name, EMPTY, ROOT_LEVEL, "init"] TOK_NEWLINE
+    if (symtab[ns, name, EMPTY, ROOT_LEVEL, "incr"] != SEQ_DEFAULT_INCR)
+        buf = buf AT_SEQUENCE name TOK_TAB "setincr " symtab[ns, name, EMPTY, ROOT_LEVEL, "incr"] TOK_NEWLINE
+    if (symtab[ns, name, EMPTY, ROOT_LEVEL, "fmt"] != sym_ll_read_ns(M2_SYSNS, "__FMT__", "seq"))
+        buf = buf AT_SEQUENCE name TOK_TAB "format " symtab[ns, name, EMPTY, ROOT_LEVEL, "fmt"] TOK_NEWLINE
     return chop(buf)
 }
 
 
-function seq_destroy(name)
+function seq_destroy_ns(ns, name)
 {
-    delete namtab[name, ROOT_LEVEL]
-    delete symtab[name, EMPTY, ROOT_LEVEL, "incr"]
-    delete symtab[name, EMPTY, ROOT_LEVEL, "init"]
-    delete symtab[name, EMPTY, ROOT_LEVEL, "fmt"]
-    delete symtab[name, EMPTY, ROOT_LEVEL, "seqval"]
+    delete namtab[ns, name, ROOT_LEVEL]
+    delete symtab[ns, name, EMPTY, ROOT_LEVEL, "incr"]
+    delete symtab[ns, name, EMPTY, ROOT_LEVEL, "init"]
+    delete symtab[ns, name, EMPTY, ROOT_LEVEL, "fmt"]
+    delete symtab[ns, name, EMPTY, ROOT_LEVEL, "seqval"]
 }
 
 
-function seq_ll_read(name)
+function seq_ll_read_ns(ns, name)
 {
-    return symtab[name, EMPTY, ROOT_LEVEL, "seqval"]
+    return symtab[ns, name, EMPTY, ROOT_LEVEL, "seqval"]
 }
 
 
-function seq_ll_write(name, new_val)
+function seq_ll_write_ns(ns, name, new_val)
 {
-    return symtab[name, EMPTY, ROOT_LEVEL, "seqval"] = new_val
+    return symtab[ns, name, EMPTY, ROOT_LEVEL, "seqval"] = new_val
 }
 
 
-function seq_ll_incr(name, incr)
+function seq_ll_incr_ns(ns, name, incr)
 {
     if (incr == EMPTY)
-        incr = symtab[name, EMPTY, ROOT_LEVEL, "incr"]
-    symtab[name, EMPTY, ROOT_LEVEL, "seqval"] += incr
+        incr = symtab[ns, name, EMPTY, ROOT_LEVEL, "incr"]
+    symtab[ns, name, EMPTY, ROOT_LEVEL, "seqval"] += incr
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -4539,7 +4969,7 @@ function stk_push(stack, new_elem,
         trace(TRACE_INPUT_FILE_CHG, EMPTY,
               sprintf("[File Update] Input file now '%s'", blktab[new_elem, 0, "filename"]))
     else if (stack["name"] == "stream_stack") {
-        sym_ll_write("__DIVNUM__", "", ROOT_LEVEL, new_elem)
+        sys_write("__DIVNUM__", new_elem)
         dbg__print("divert", 2, sprintf("(stk_push) __DIVNUM__ now %d", new_elem))
     }
 
@@ -4566,6 +4996,24 @@ function stk_top(stack)
 }
 
 
+function stk_replace_top(stack, new_elem)
+{
+    if (stk_empty_p(stack))
+        panic("(stk_replace_top) " stack["name"] ": Empty stack")
+    if (stack["name"] == "source_stack")
+        trace(TRACE_INPUT_FILE_CHG, EMPTY,
+              sprintf("[File Update] Input file now '%s'", blktab[new_elem, 0, "filename"]))
+    else if (stack["name"] == "stream_stack") {
+        sys_write("__DIVNUM__", new_elem)
+        dbg__print("divert", 2, sprintf("(stk_replace_top) __DIVNUM__ now %d", new_elem))
+    }
+    if (dbg__sys_level_p("stk", 5))
+        print_debugfile(sprintf("m2debug:(stk_replace_top) %s[%d] := %s",
+                                stack["name"], stack[0], new_elem))
+    return stack[stack[0]] = new_elem
+}
+
+
 function stk_pop(stack,
                  old_top, new_top, siz, stkname)
 {
@@ -4582,15 +5030,27 @@ function stk_pop(stack,
               sprintf("[File Update] Input file now '%s'", blktab[new_top, 0, "filename"]))
     } else if (stkname == "stream_stack") {
         new_top = stk_empty_p(stack) ? -1 : stk_top(stack)
-        sym_ll_write("__DIVNUM__", "", ROOT_LEVEL, new_top)
+        sys_write("__DIVNUM__", new_top)
         dbg__print("divert", 2, sprintf("(stk_pop) __DIVNUM__ now %d", new_top))
     }
 
     if (dbg__sys_level_p("stk", 5)) {
-        print_debugfile(sprintf("m2debug:(stk_pop) %s[%d] -> %s",
+        print_debugfile(sprintf("m2debug:(stk_pop) %s[%d] => %s",
                                 stkname, siz, old_top))
     }
     return old_top
+}
+
+
+function stk_under(stack, elem,
+                   stkname, top)
+{
+    stkname = stack["name"]
+    if (stk_empty_p(stack))
+        panic("(stk_under) " stkname ": Empty stack")
+    top = stk_pop(stack)
+    stk_push(stack, elem)
+    stk_push(stack, top)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -4607,7 +5067,7 @@ function stk_pop(stack,
 #         = 0         Standard output (TERMINAL)
 #         > 0         Stream # N
 #
-#       The div2blk[] array maintains the mapping of stream number to
+#       The div2blktab[] array maintains the mapping of stream number to
 #       block number.  Accessing a new stream allocates a new agg_block,
 #       which is how m2 provides an unlimited number of streams.
 #
@@ -4616,7 +5076,7 @@ function stk_pop(stack,
 #*****************************************************************************
 function DIVNUM()
 {
-    return sym_ll_read("__DIVNUM__", "", ROOT_LEVEL) + 0
+    return sys_read("__DIVNUM__") + 0
 }
 
 
@@ -4627,7 +5087,7 @@ function stream_block_exists_p(stream)
         error("(stream_exists_p) Bad stream: " stream)
     if (stream <= TERMINAL)
         return FALSE
-    return (stream in div2blk)
+    return (stream in div2blktab)
 }
 
 # Given a stream, return its associated block number (a BLK_AGG).
@@ -4640,8 +5100,8 @@ function stream_block(stream)
         error("(stream_block) Bad stream: " stream)
     if (! stream_block_exists_p(stream))
         # Create/initialize empty agg block
-        div2blk[stream] = blk_new(BLK_AGG)
-    return div2blk[stream]
+        div2blktab[stream] = blk_new(BLK_AGG)
+    return div2blktab[stream]
 }
 
 
@@ -4669,7 +5129,7 @@ function undivert(stream,
     divblk = stream_block(stream)
     if (blk_type(divblk) != BLK_AGG)
         panic(sprintf("(undivert) Block %d has type %s, not AGG",
-                      divblk, ppf__block_type(blk_type(stream))))
+                      divblk, ppf__label(blk_type(stream))))
     if ((count = blktab[divblk, 0, "count"]) > 0) {
         # It is required to clear the stream immediately after undiverting.
         # This is to prevent
@@ -4691,7 +5151,7 @@ function undivert(stream,
 function undivert_all(    stream, keys, cnt, i)
 {
     cnt = 0
-    for (stream in div2blk)
+    for (stream in div2blktab)
         keys[++cnt] = stream
     nqsort(keys, 1, cnt)
 
@@ -4717,7 +5177,7 @@ function undivert_to_file(stream, file,
     divblk = stream_block(stream)
     if (blk_type(divblk) != BLK_AGG)
         panic(sprintf("(undivert_to_file) Block %d has type %s, not AGG",
-                      divblk, ppf__block_type(blk_type(divblk))))
+                      divblk, ppf__label(blk_type(divblk))))
     if ((count = blktab[divblk, 0, "count"]) > 0) {
         ship_out_to_file(divblk, file)
         cleardivert(stream)
@@ -4741,7 +5201,7 @@ function cleardivert(stream,
     divblk = stream_block(stream)
     if (blk_type(divblk) != BLK_AGG)
         panic(sprintf("(cleardivert) Block %d has type %s, not AGG",
-                      divblk, ppf__block_type(blk_type(divblk))))
+                      divblk, ppf__label(blk_type(divblk))))
     if ((count = blktab[divblk, 0, "count"]) > 0) {
         for (i = 1; i <= count; i++) {
             delete blktab[divblk, i, "slot_type"]
@@ -4755,7 +5215,7 @@ function cleardivert(stream,
 function cleardivert_all(    stream, keys, cnt, i)
 {
     cnt = 0
-    for (stream in div2blk)
+    for (stream in div2blktab)
         keys[++cnt] = stream
     nqsort(keys, 1, cnt)
 
@@ -4777,10 +5237,9 @@ function cleardivert_all(    stream, keys, cnt, i)
 #
 #*****************************************************************************
 
-# In strict [name] mode, a symbol must match the following regexp:
+# Symbol names must match the following regexp:
 #       /^[A-Za-z#_][A-Za-z#_0-9]*$/
-# see function nam_valid_strict_regexp_p()
-# In non-strict mode, any non-empty string is valid.  NOT TRUE
+# see nam__valid_p()
 function sym_valid_p(sym,
                       nparts, info, retval)
 {
@@ -4807,7 +5266,7 @@ function syminfo_valid_p(syminfo,
     dbg__print("sym", 5, sprintf("(syminfo_valid_p) sym='%s' START", name))
 
     retval = info__get(syminfo, "errorp") == FALSE &&
-             info__get(syminfo, "valid") == TRUE
+             info__get(syminfo, "lexvalid") == TRUE
 
     dbg__print("sym", 4, sprintf("(syminfo_valid_p) END sym='%s' => %s",
                                  name, ppf__bool(retval)))
@@ -4816,21 +5275,26 @@ function syminfo_valid_p(syminfo,
 
 
 # This is only for internal use, to easily create and define symbols at
-# program start.  code must be correctly formatted.  No error checking is done.
+# program start.  Code must be correctly formatted.  No error checking is done.
 # This function only creates symbols at the root level.
 function sym_ll_fiat(name, key, code, new_val,
                       level)
 {
     level = ROOT_LEVEL
 
-    # Create an entry in the name table
-    if (! nam_ll_in(name, level))
-        nam_ll_write(name, level, code)
+    # Create an entry in the m2 (only) namespace table.
+    if (! nam_ll_in_ns(M2_SYSNS, name, level))
+        nam_ll_write_ns(M2_SYSNS, name, level, code)
 
     # Set its value in the symbol table
-    sym_ll_write(name, key, level, new_val)
+    sym_ll_write_ns(M2_SYSNS, name, key, level, new_val)
 }
 
+# function sym_ll_vivify(ns, name, key, level, code, new_val)
+# {
+#     nam_ll_write_ns(ns, name, level, code)
+#     sym_ll_write_ns(ns, name, key, level, new_val)
+# }
 
 # Deferred symbols cannot have keys, so don't even pass anything
 function sym_deferred_symbol(name, code, deferred_prog, deferred_arg,
@@ -4838,19 +5302,20 @@ function sym_deferred_symbol(name, code, deferred_prog, deferred_arg,
 {
     level = ROOT_LEVEL
 
-    # Create an entry in the name table
-    if (nam_ll_in(name, level))
+    # Create an entry in the name table.  Deferred symbols can
+    # only be created by the system and are in the M2 namespace.
+    if (nam_ll_in_ns(M2_SYSNS, name, level))
         panic("Cannot create deferred symbol when it already exists")
 
-    nam_ll_write(name, level, code FLAG_DEFERRED)
+    nam_ll_write_ns(M2_SYSNS, name, level, code FLAG_DEFERRED)
     # It has no symbol value (yet), but we do store the two args in the
     # symbol table
-    symtab[name, "", level, "deferred_prog"] = deferred_prog
-    symtab[name, "", level, "deferred_arg"]  = deferred_arg
+    symtab[M2_SYSNS, name, NOKEY, level, "deferred_prog"] = deferred_prog
+    symtab[M2_SYSNS, name, NOKEY, level, "deferred_arg"]  = deferred_arg
 }
 
 
-function sym_destroy(name, key, level)
+function sym_destroy_ns(ns, name, key, level)
 {
     dbg__print("sym", 5, sprintf("(sym_destroy) START; name='%s', key='%s', level=%d",
                                  name, key, level))
@@ -4861,18 +5326,18 @@ function sym_destroy(name, key, level)
     # Error if nam_system_p(name)
     # A ::= Cond: name is array T/F
     # B ::= Cond: sym has name[key] syntax T/F
-    # if A & B          delete symtab[name, key, level, "symval"]
+    # if A & B          delete symtab[ns, name, key, level, "symval"]
     # if A & !B         delete every symtab entry for key; delete namtab entry
     # if !A & B         syntax error: NAME is not an array and cannot be deindexed
-    # if !A & !B        (normal symbol) delete symtab[name, "", level, "symval"];
-    #                                   delete namtab[name]
-    delete namtab[name, level]
+    # if !A & !B        (normal symbol) delete symtab[ns, name, NOKEY, level, "symval"];
+    #                                   delete namtab[ns, name]
+    delete namtab[ns, name, level]
     trace(TRACE_SYMBOL_READ_WRITE, name,
-          sprintf("[Symbol Delete] \"%s\" (lev:%d)", name, level))
-    delete symtab[name, key, level, "agg_block"]
-    delete symtab[name, key, level, "deferred_arg"]
-    delete symtab[name, key, level, "deferred_prog"]
-    delete symtab[name, key, level, "symval"]
+          sprintf("[Symbol Delete] %s::%s (lev=%d)", ns, name, level))
+    delete symtab[ns, name, key, level, "agg_block"]
+    delete symtab[ns, name, key, level, "deferred_arg"]
+    delete symtab[ns, name, key, level, "deferred_prog"]
+    delete symtab[ns, name, key, level, "symval"]
 }
 
 
@@ -4882,44 +5347,47 @@ function nam_system_p(name)
 {
     if (name == EMPTY)
         panic("nam_system_p: NAME missing")
-    return nam_ll_in(name, ROOT_LEVEL) &&
-           flag_1true_p(nam_ll_read(name, ROOT_LEVEL), FLAG_SYSTEM)
+    return nam_ll_in_ns(M2_SYSNS, name, ROOT_LEVEL) &&
+        flag_1true_p(nam_ll_read_ns(M2_SYSNS, name, ROOT_LEVEL), FLAG_SYSTEM)
 }
 
 
 # Remove any symbol at level "level" or greater
 function sym_purge(level,
-                   x, k, tag, sym_del_list, cmd_del_list)
+                   f, s, d, sym_del_list, cmd_del_list,
+                   pns, pname, pkey, plevel, ptag)
 {
     dbg__print("sym", 7, "(sym_purge) BEGIN")
-    for (k in symtab) {
-        split(k, x, SUBSEP)
-        if (x[3]+0 >= level) {
-            if (double_underscores_p(x[1]))
+    for (s in symtab) {
+        split(s, f, SUBSEP)
+        pns    = f[SFN_NS]
+        pname  = f[SFN_NAME]
+        pkey   = f[SFN_KEY]
+        plevel = f[SFN_LEVEL]+0
+        if (plevel >= level) {
+            if (double_underscores_p(pname))
                 continue
-            tag = x[4]
-            if (tag == "user_block") {
-                cmd_del_list[symtab[x[1], x[2], x[3], tag]] = TRUE
-                sym_del_list[x[1], x[2], x[3], tag] = TRUE
-            } else if (tag == "agg_block") {
-                blk_master_delete(symtab[x[1], x[2], x[3], tag])
-                sym_del_list[x[1], x[2], x[3], tag] = TRUE
-            } else if (tag == "symval" ||
-                       tag == "deferred_arg" || tag == "deferred_prog")
-                sym_del_list[x[1], x[2], x[3], tag] = TRUE
+            ptag = f[SFN_TAG]
+            if (ptag == "user_block") {
+                cmd_del_list[symtab[pns, pname, pkey, plevel, ptag]] = TRUE
+                sym_del_list[pns, pname, pkey, plevel, ptag] = TRUE
+            } else if (ptag == "agg_block") {
+                blk_master_delete(symtab[pns, pname, pkey, plevel, ptag])
+                sym_del_list[pns, pname, pkey, plevel, ptag] = TRUE
+            } else if (ptag == "symval" ||
+                       ptag == "deferred_arg" || ptag == "deferred_prog")
+                sym_del_list[pns, pname, pkey, plevel, ptag] = TRUE
             else
-                panic(sprintf("(sym_purge) Unsure: symtab['%s','%s',%d,'%s']",
-                              x[1], x[2], x[3], tag))
+                panic(sprintf("(sym_purge) Unsure: symtab[%s, '%s','%s',%d,'%s']",
+                              pns, pname, pkey, plevel, ptag))
         }
     }
 
-    # for (k in cmd_del_list)
-    #     blk_XXXdelete(k)
-    for (k in sym_del_list) {
-        split(k, x, SUBSEP)
-        dbg__print("sym", 3, sprintf("(sym_purge) Delete symtab['%s', '%s', %d, %s]",
-                                     x[1], x[2], x[3], x[4]))
-        delete symtab[x[1], x[2], x[3], x[4]]
+    for (d in sym_del_list) {
+        split(d, f, SUBSEP)
+        dbg__print("sym", 3, sprintf("(sym_purge) Delete symtab[%s, '%s', '%s', %d, %s]",
+                                     f[1], f[2], f[3], f[4], f[5]))
+        delete symtab[f[1], f[2], f[3], f[4], f[5]]
     }
     dbg__print("sym", 7, "(sym_purge) END")
 }
@@ -4932,27 +5400,28 @@ function sym_deferred_p(sym,
                         code, level)
 {
     level = ROOT_LEVEL
-    if (!nam_ll_in(sym, level))
+    if (!nam_ll_in_ns(M2_SYSNS, sym, level))
         return FALSE
-    code = nam_ll_read(sym, level)
+    code = nam_ll_read_ns(M2_SYSNS, sym, level)
     if (flag_anyfalse_p(code, TYPE_SYMBOL FLAG_DEFERRED))
         return FALSE
-    return ((sym, "", level, "deferred_prog") in symtab &&
-            (sym, "", level, "deferred_arg")  in symtab &&
-          !((sym, "", level, "symval")        in symtab))
+    # OK - deferred syms are always in M2 ns
+    return ((M2_SYSNS, sym, NOKEY, level, "deferred_prog") in symtab &&
+            (M2_SYSNS, sym, NOKEY, level, "deferred_arg")  in symtab &&
+          !((M2_SYSNS, sym, NOKEY, level, "symval")        in symtab))
 }
 
 
-function sym_define_all_deferred(    x, k, def_list, sym, code)
+function sym_define_all_deferred(    f, n, def_list, sym, code)
 {
     dbg__print("nam", 5, "(sym_define_all_deferred) BEGIN")
     if (secure_level() >= SEC_PARANOID)
         return
 
-    for (k in namtab) {
-        split(k, x, SUBSEP)     # [NAME, LEVEL]
-        sym = x[1]
-        code = nam_ll_read(sym, ROOT_LEVEL)
+    for (n in namtab) {
+        split(n, f, SUBSEP)     # [NAME, LEVEL]
+        sym = f[NFN_NAME]
+        code = nam_ll_read_ns(M2_SYSNS, sym, ROOT_LEVEL)
         if (flag_1true_p(code, FLAG_DEFERRED)) {
             dbg__print("nam", 7, "(sym_define_all_deferred) Defining deferred " sym)
             def_list[sym] = TRUE
@@ -4974,9 +5443,9 @@ function sym_deferred_define_now(sym,
     if (secure_level() >= SEC_PARANOID)
         security_violation("(sym_deferred_define_now) Forbidden")
 
-    code = nam_ll_read(sym, ROOT_LEVEL)
-    deferred_prog = symtab[sym, "", ROOT_LEVEL, "deferred_prog"]
-    deferred_arg  = symtab[sym, "", ROOT_LEVEL, "deferred_arg"]
+    code = nam_ll_read_ns(M2_SYSNS, sym, ROOT_LEVEL)
+    deferred_prog = symtab[M2_SYSNS, sym, NOKEY, ROOT_LEVEL, "deferred_prog"]
+    deferred_arg  = symtab[M2_SYSNS, sym, NOKEY, ROOT_LEVEL, "deferred_arg"]
 
     # Build the command to generate the output value, then store it in the symbol table
     cmdline = build_prog_cmdline(deferred_prog, deferred_arg, MODE_IO_CAPTURE)
@@ -4985,23 +5454,23 @@ function sym_deferred_define_now(sym,
     # Kluge to add trailing slash to pwd(1) output
     if (sym == "__CWD__")
         output = with_trailing_slash(output)
-    sym_ll_write(sym, "", ROOT_LEVEL, output)
+    sym_ll_write_ns(M2_SYSNS, sym, NOKEY, ROOT_LEVEL, output)
 
     # Get rid of any trace of FLAG_DEFERRED
-    nam_ll_write(sym, ROOT_LEVEL, flag_set_clear(code, EMPTY, FLAG_DEFERRED))
-    delete symtab[sym, "", ROOT_LEVEL, "deferred_prog"]
-    delete symtab[sym, "", ROOT_LEVEL, "deferred_arg"]
+    nam_ll_write_ns(M2_SYSNS, sym, ROOT_LEVEL, flag_set_clear(code, EMPTY, FLAG_DEFERRED))
+    delete symtab[M2_SYSNS, sym, NOKEY, ROOT_LEVEL, "deferred_prog"]
+    delete symtab[M2_SYSNS, sym, NOKEY, ROOT_LEVEL, "deferred_arg"]
 }
 
 
-function sym_destroy_all_deferred(    x, k, def_list, sym, code)
+function sym_destroy_all_deferred(    f, n, def_list, sym, code)
 {
     dbg__print("nam", 5, "(sym_destroy_all_deferred) BEGIN")
 
-    for (k in namtab) {
-        split(k, x, SUBSEP)
-        sym = x[1]
-        code = nam_ll_read(sym, ROOT_LEVEL)
+    for (n in namtab) {
+        split(n, f, SUBSEP)
+        sym = f[NFN_NAME]
+        code = nam_ll_read_ns(M2_SYSNS, sym, ROOT_LEVEL)
         if (flag_1true_p(code, FLAG_DEFERRED)) {
             dbg__print("nam", 7, "(sym_destroy_all_deferred) Want to destroy deferred " sym)
             def_list[sym] = TRUE
@@ -5010,7 +5479,7 @@ function sym_destroy_all_deferred(    x, k, def_list, sym, code)
 
     for (sym in def_list) {
         dbg__print("nam", 5, "(sym_destroy_all_deferred) Destroying deferred " sym)
-        sym_destroy(sym, "", ROOT_LEVEL)
+        sym_destroy_ns(M2_SYSNS, sym, NOKEY, ROOT_LEVEL)
     }
     dbg__print("nam", 5, "(sym_destroy_all_deferred) END")
 }
@@ -5018,7 +5487,7 @@ function sym_destroy_all_deferred(    x, k, def_list, sym, code)
 
 function sym_defined_p(sym,
                        nparts, info, iname, ikey, code, ilevel, i,
-                       agg_block, count)
+                       agg_block, count, ins)
 {
     dbg__print("sym", 5, sprintf("(sym_defined_p) sym='%s' START", sym))
 
@@ -5034,13 +5503,17 @@ function sym_defined_p(sym,
     # Now call nam__lookup(info)
     ilevel = nam__lookup(info)
     if (ilevel == NAME_NOT_FOUND) {
+        #print_stderr("(sym_defined_p) nam__lookup(" info__get(info, "urtext") " => not found => FALSE")
         dbg__print("sym", 2, sprintf("(sym_defined_p) END nam__lookup('%s') failed, maybe ok? => %s", sym, ppf__bool(FALSE)))
         return FALSE
     }
+    ins = info__get(info, "ns")
+    if (ins == M2_ENVNS)
+        return sym_ll_in_ns(ins, iname, NOKEY, ROOT_LEVEL)
 
     # We've found some matching name on some level, but not sure if it's a Symbol or not.
     # This step is necessary to make sure it's actually a Symbol.
-    for (i = nam_system_p(iname) ? ROOT_LEVEL : __curr_level; i >= ROOT_LEVEL; i--) {
+    for (i = nam_system_p(iname) ? ROOT_LEVEL : curr_level(); i >= ROOT_LEVEL; i--) {
         if (info_defined_lev_p(info, i, TYPE_SYMBOL)) {
             dbg__print("sym", 2, sprintf("(sym_defined_p) END sym='%s', level=%d => %s", sym, i, ppf__bool(TRUE)))
             return TRUE
@@ -5058,11 +5531,11 @@ function sym_defined_p(sym,
             dbg__print("sym", 2, sprintf("(sym_defined_p) Block array indices must be integers"))
             return FALSE
         }
-        if (! ((iname, "", ilevel, "agg_block") in symtab))
-            panic(sprintf("(sym_defined_p) Could not find ['%s','%s',%d,'agg_block'] in symtab",
-                          iname, "", ilevel))
+        if (! ((ins, iname, NOKEY, ilevel, "agg_block") in symtab))
+            panic(sprintf("(sym_defined_p) Could not find [%s, '%s','%s',%d,'agg_block'] in symtab",
+                          ins, iname, NOKEY, ilevel))
 
-        agg_block = symtab[iname, "", ilevel, "agg_block"]
+        agg_block = symtab[ins, iname, NOKEY, ilevel, "agg_block"]
         count = blktab[agg_block, 0, "count"]+0
         if (ikey >= 1 && ikey <= count) {
             # Make sure slot holds text, which it pretty much has to
@@ -5078,7 +5551,7 @@ function sym_defined_p(sym,
 }
 
 function syminfo_defined_p(info,
-                           itype, ilevel)
+                           itype, ilevel, ins)
 {
     if (! info__get(info, "name_valid"))
         return FALSE
@@ -5090,10 +5563,14 @@ function syminfo_defined_p(info,
     else if (itype == TYPE_ARRAY || itype == TYPE_LIST)
         return idx__key_exists_p(info, info__get(info, "key"))
     else if (itype == TYPE_SEQUENCE)
-        return seq_defined_p(info__get(info, "name"))
+        #return seq_defined_p(info__get(info, "name"))
+        return info__get(info, "defined")
+    else if (itype == PTYPE_ENV_VAR)
+        return sym_ll_in_ns(info__get(info, "ns"), info__get(info, "name"),
+                            NOKEY, ROOT_LEVEL)
     else
         panic(sprintf("(syminfo_defined_p) Cannot handle '%s' type %s",
-                      info__get(info, "name"), ppf__flag_type(itype)))
+                      info__get(info, "name"), ppf__label(itype)))
 }
 
 
@@ -5104,20 +5581,21 @@ function syminfo_defined_p(info,
 # and overriding level to zero if appropriate.  This code does
 # not make any assumptions about name/levels.
 function info_defined_lev_p(info, level, type,
-                            name, key)
+                            iname, ikey, ins)
 {
-    name = info["name"]
-    key  = info["key"]
-    dbg__print("sym", 5, sprintf("(info_defined_lev_p) sym='%s' START", name))
+    iname = info["name"]
+    ikey  = info["key"]
+    ins   = info__get(info, "ns")
+    dbg__print("sym", 5, sprintf("(info_defined_lev_p) isn=%s, iname='%s' START", ins, iname))
 
-    if (type == TYPE_SYMBOL && (name, key, 0+level, "symval") in symtab) {
-        dbg__print("sym", 5, sprintf("(info_defined_lev_p) END [\"%s\",\"%s\",%d,\"symval\"] Found Symbol => TRUE", name, key, level))
+    if (type == TYPE_SYMBOL && (ins, iname, ikey, 0+level, "symval") in symtab) {
+        dbg__print("sym", 5, sprintf("(info_defined_lev_p) END [%s,\"%s\",\"%s\",%d,\"symval\"] Found Symbol => TRUE", ins, iname, ikey, level))
         return TRUE
-    } else if (type == TYPE_COMMAND && (name, key, 0+level, "user_block") in symtab) {
-        dbg__print("sym", 5, sprintf("(info_defined_lev_p) END [\"%s\",\"%s\",%d,\"symval\"] Found Command => TRUE", name, key, level))
+    } else if (type == TYPE_USER && (ins, iname, ikey, 0+level, "user_block") in symtab) {
+        dbg__print("sym", 5, sprintf("(info_defined_lev_p) END [%s, \"%s\",\"%s\",%d,\"symval\"] Found Command => TRUE", ins, iname, ikey, level))
         return TRUE
     } else {
-        dbg__print("sym", 5, sprintf("(info_defined_lev_p) END [\"%s\",\"%s\",%d,\"symval\"] Not found => FALSE", name, key, level))
+        dbg__print("sym", 5, sprintf("(info_defined_lev_p) END [%s,\"%s\",\"%s\",%d,\"symval\"] Not found => FALSE", ins, iname, ikey, level))
         return FALSE
     }
 }
@@ -5153,7 +5631,7 @@ function sym_store(sym, new_val,
 #*****************************************************************************
 function syminfo_store(info, new_val,
                        iname, ikey, ilevel, good, ihasbracket, itype, icode, dbg5,
-                       idxable)
+                       idxable, ins)
 {
     dbg5 = dbg__sys_level_p("sym", 5)
 
@@ -5170,7 +5648,7 @@ function syminfo_store(info, new_val,
     #   ilevel == NAME_NOT_FOUND             -> no matching name of any kind
     #   ilevel == ROOT_LEVEL -> found in global
     #   0 < ilevel < ns-1          -> find in other non-global frame
-    #   ilevel == __curr_level      -> found in current level
+    #   ilevel == curr_level()      -> found in current level
     # Just because we found a namtab entry doesn't
     # mean it's okay to just muck about with symtab.
 
@@ -5184,18 +5662,24 @@ function syminfo_store(info, new_val,
             # Do scalar store
             ilevel = info["level"] = ROOT_LEVEL
             itype = icode  = info["code"]  = TYPE_SYMBOL
-            nam_ll_write(iname, ilevel, icode)
+            if ((ins = info__get(info, "ns")) == EMPTY) {
+                warn("(syminfo_store) Empty ns, defaulting to " curr_ns())
+                ins = info["ns"] = curr_ns()
+            }
+            nam_ll_write_ns(ins, iname, ilevel, icode)
             good = TRUE
             break # - - - - - - - - - - - - - - - - - - - - - - - - - -
         }
 
+        if ((ins = info__get(info, "ns")) == EMPTY)
+            panic("(syminfo_store) Um, ns should not be empty")
 
         # At this point we know nam__lookup() found *something* because
         # ilevel != NAME_NOT_FOUND
         itype = info__get(info, "type")
         if (itype != TYPE_SYMBOL && itype != TYPE_LIST && itype != TYPE_ARRAY)
             error(sprintf("Name '%s' has type %s which is not valid here",
-                          iname, ppf__flag_type(itype)))
+                          iname, ppf__label(itype)))
 
         icode = info__get(info, "code")
         idxable = info__satisfies_type(info, PTYPE_IDXABLE)
@@ -5227,14 +5711,14 @@ function syminfo_store(info, new_val,
             print_debugfile(sprintf("m2debug:(syminfo_store) LOOP BOTTOM: name='%s', key='%s', level=%d, code='%s', good=%s",
                                  iname, ikey, ilevel, icode, ppf__bool(good)))
             nam_dump_namtab(TYPE_SYMBOL, FALSE)
-            print_debugfile(dump__symtab(TYPE_SYMBOL, FALSE)) # print_debugfile() adds newline.  FALSE means omit system symbols
+            print_debugfile(dump__symtab(M2_NS, TYPE_SYMBOL, FALSE)) # print_debugfile() adds newline.  FALSE means omit system symbols
         }
     } while (FALSE)
 
-    # Add entry:        symtab[iname, ikey, ilevel, "symval"] = new_val
+    # Add entry:        symtab[NS, iname, ikey, ilevel, "symval"] = new_val
     if (good) {
-        dbg__print("sym", 2, sprintf("(syminfo_store) code=%s [\"%s\",\"%s\",%d,\"symval\"]=%s",
-                                     ppf__flags(itype), iname, ikey, ilevel, new_val))
+        dbg__print("sym", 2, sprintf("(syminfo_store) code=%s [%s, \"%s\",\"%s\",%d,\"symval\"]=%s",
+                                     ppf__flags(itype), ins, iname, ikey, ilevel, new_val))
         if (! ((itype == TYPE_SYMBOL && ikey == EMPTY) ||
                ((itype == TYPE_ARRAY || itype == TYPE_LIST) && ikey != EMPTY))) {
             info__dump(info)
@@ -5242,9 +5726,9 @@ function syminfo_store(info, new_val,
         }
 
         if (itype == TYPE_LIST)
-            lis__assign(iname, ikey, ilevel, new_val)
+            lis__assign(ins, iname, ikey, ilevel, new_val)
         else
-            sym_ll_write(iname, ikey, ilevel, new_val) # store into symtab[]
+            sym_ll_write_ns(ins, iname, ikey, ilevel, new_val) # store into symtab[]
     } else {
         warn(sprintf("(syminfo_store) !good sym='%s'", iname))
     }
@@ -5253,55 +5737,107 @@ function syminfo_store(info, new_val,
 }
 
 
-function sym_ll_read(name, key, level,
-                     retval)
+function sym_ll_read_ns(ns, name, key, level,
+                        retval, i)
 {
     if (level == EMPTY) level = ROOT_LEVEL
     # if key == EMPTY that's probaby just fine.
     # if name == EMPTY that's probably NOT fine.
     if (name == EMPTY)
-        panic("(sym_ll_read) Name cannot be empty!")
-    if (double_underscores_p(name))
-        return symtab[name, key, level, "symval"]
+        panic("(sym_ll_read_ns) Name cannot be empty!")
+    if (ns == EMPTY)
+        panic("(sym_ll_read_ns) NS cannot be empty!")
 
-    if (! sym_ll_in(name, key, level))
-        panic(sprintf("(sym_ll_read) symtab['%s','%s',%d,'symval'] does not exist",
-                      name, key, level))
-    retval = symtab[name, key, level, "symval"]
+    if (ns == M2_ENVNS) {
+        if (key != EMPTY)
+            error(sprintf("(sym_ll_read_ns) Env var '%s' cannot have key [%s]",
+                          name, key))
+        retval = ENVIRON[name]  # no error if non exists, TODO check __STRICT__
+        trace(TRACE_ENV_VAR, name,
+              sprintf("[Env Var Read] %s => '%s'", name, retval))
+        return retval
+    }
+
+    if (double_underscores_p(name)) {
+        if (name == "__NSPATH__") {
+            # __NSPATH__ is not a real variable -- its value is
+            # constructed on the fly by walking the namespace stack.
+            for (i = stk_depth(__ns_stack); i > 0; i--)
+                retval = retval  (!emptyp(retval) ? TOK_COLON : EMPTY)  __ns_stack[i] 
+            return retval
+        } else
+            return symtab[M2_SYSNS, name, key, level, "symval"]
+    }
+
+    if (! sym_ll_in_ns(ns, name, key, level))
+        panic(sprintf("(sym_ll_read_ns) symtab[%s, '%s','%s',%d,'symval'] does not exist",
+                      ns, name, key, level))
+    retval = symtab[ns, name, key, level, "symval"]
 
     #print_stderr("ll_read: name='" name "'")
     if (! double_underscores_p(name))
         trace(TRACE_SYMBOL_READ_WRITE, name,
-              sprintf("[Symbol Read] %s (lev:%d) => '%s'",
-                      sprintf("\"%s%s\"", name, (key ? "[" key "]" : "")),
+              sprintf("[Symbol Read] %s (lev=%d) => '%s'",
+                      sprintf("%s::%s%s", ns, name, (key ? TOK_LBRACKET key TOK_RBRACKET : "")),
                       level, retval))
     return retval
 }
 
 
-function sym_ll_in(name, key, level)
+# Note - this only works for Symbol and Array[Key] checks.
+# (It *is* low level after all.)  More esoteric look-ups
+# like "deferred_prog" or such will have to be done manually.
+function sym_ll_in_ns(ns, name, key, level,
+                      retval)
 {
     if (level == EMPTY)
-        panic("sym_ll_in: LEVEL missing")
-    return (name, key, level, "symval") in symtab
+        panic("(sym_ll_in_ns) LEVEL missing")
+    if (ns == EMPTY)
+        panic("(sym_ll_in_ns) NS missing")
+    if (ns == M2_ENVNS) {
+        if (key != EMPTY)
+            error(sprintf("(sym_ll_in_ns) Env var '%s' cannot have key [%s]",
+                          name, key))
+        retval = name in ENVIRON
+        trace(TRACE_ENV_VAR, name,
+              sprintf("[Env Var Exist?] %s => %s", name, ppf__bool(retval)))
+        return retval
+    }
+    return (ns, name, key, level, "symval") in symtab
 }
 
 
-function sym_ll_write(name, key, level, val)
+function sym_ll_write_ns(ns, name, key, level, val)
 {
     if (level == EMPTY)
-        panic("sym_ll_write: LEVEL missing")
+        panic("(sym_ll_write_ns) LEVEL missing")
+    if (ns == EMPTY)
+        panic("(sym_ll_write_ns) NS missing")
     # Can't call normal dbg__*() functions here, mutually recursive
-    if (sym_ll_in("__DBG__", "sym", ROOT_LEVEL) &&
-        sym_ll_read("__DBG__", "sym", ROOT_LEVEL) >= 5 &&
+    if (sym_ll_in_ns(M2_SYSNS, "__DBG__", "sym", ROOT_LEVEL) &&
+        sym_ll_read_ns(M2_SYSNS, "__DBG__", "sym", ROOT_LEVEL) >= 5 &&
         !nam_system_p(name))
-        print_debugfile(sprintf("m2debug:(sym_ll_write) symtab[\"%s\", \"%s\", %d, \"symval\"] = %s", name, key, level, val))
+         print_debugfile(sprintf("m2debug:(sym_ll_write_ns) symtab[%s, \"%s\", \"%s\", %d, \"symval\"] = %s",
+                                ns, name, key, level, val))
+
+    if (ns == M2_ENVNS) {
+        if (key != EMPTY)
+            error(sprintf("(sym_ll_write_ns) Env var '%s' cannot have key [%s]",
+                          name, key))
+        ENVIRON[name] = val
+        trace(TRACE_ENV_VAR, name,
+              sprintf("[Env Var Update] %s := Val '%s'", name, val))
+        return val
+    }
 
     # Run triggers for various special symbols
-    if (name == "__DEBUG__" &&
-        sym_ll_read("__DEBUG__", "", ROOT_LEVEL) == FALSE &&
-        val+0 > 1) {            # val != FALSE) {
-        dbg__all_lev_standard()
+    if (name == "__DEBUG__") {
+        if (val+0 >= 2) {
+            # Disable hooks when super-debugging
+            __m2_config_fs = flag_set_clear(__m2_config_fs, EMPTY, MODE_HOOKS_ENABLED)
+            if (sys_read("__DEBUG__") == FALSE)
+                dbg__all_lev_standard()
+        }
     } else if (name == "__SECURE__") {
         val = max(secure_level(), val) # Don't allow __SECURE__ to decrease
         if (val >= SEC_PARANOID)
@@ -5310,52 +5846,72 @@ function sym_ll_write(name, key, level, val)
                key == "number" &&
                level == ROOT_LEVEL) {
         # Maintain equivalence:  __FMT__[number] === CONVFMT
-        if (sym_ll_in("__DBG__", "sym", ROOT_LEVEL) &&
-            sym_ll_read("__DBG__", "sym", ROOT_LEVEL) >= 7)
-            print_debugfile(sprintf("m2debug:(sym_ll_write) Setting CONVFMT to %s", val))
+        if (sym_ll_in_ns(M2_SYSNS, "__DBG__", "sym", ROOT_LEVEL) &&
+            sym_ll_read_ns(M2_SYSNS, "__DBG__", "sym", ROOT_LEVEL) >= 7)
+            print_debugfile(sprintf("m2debug:(sym_ll_write_ns) Setting CONVFMT to %s", val))
         CONVFMT = val
     }
 
     trace(TRACE_SYMBOL_READ_WRITE, name,
-          sprintf("[Symbol Update] %s (lev:%d) := Val '%s'",
-                  sprintf("\"%s%s\"", name, !emptyp(key) ? "[" key "]" : ""),
+          sprintf("[Symbol Update] %s (lev=%d) := Val '%s'",
+                  sprintf("%s::%s%s", ns, name, !emptyp(key) ? TOK_LBRACKET key TOK_RBRACKET : EMPTY),
                   level, val))
-    return symtab[name, key, level, "symval"] = val
+    return symtab[ns, name, key, level, "symval"] = val
 }
 
 
-function sym_ll_incr(name, key, level, incr)
+function sym_ll_incr_ns(ns, name, key, level, incr)
 {
     if (incr == EMPTY) incr = 1
     if (level == EMPTY)
-        panic("(sym_ll_incr) LEVEL missing")
-    if (sym_ll_in("__DBG__", "sym", ROOT_LEVEL) &&
-        sym_ll_read("__DBG__", "sym", ROOT_LEVEL) >= 5 &&
+        panic("(sym_ll_incr_ns) LEVEL missing")
+    if (ns == EMPTY)
+        panic("(sym_ll_incr_ns) NS missing")
+    if (sym_ll_in_ns(M2_SYSNS, "__DBG__", "sym", ROOT_LEVEL) &&
+        sym_ll_read_ns(M2_SYSNS, "__DBG__", "sym", ROOT_LEVEL) >= 5 &&
         !nam_system_p(name))
-        print_debugfile(sprintf("m2debug:(sym_ll_incr) symtab[\"%s\", \"%s\", %d, \"symval\"] += %d",
-                             name, key, level, incr))
-    return symtab[name, key, level, "symval"] += incr
+        print_debugfile(sprintf("m2debug:(sym_ll_incr_ns) symtab[%s, \"%s\", \"%s\", %d, \"symval\"] += %d",
+                             ns, name, key, level, incr))
+    return symtab[ns, name, key, level, "symval"] += incr
 }
+
+
+function sys_read(name)
+{
+    return sym_ll_read_ns(M2_SYSNS, name, NOKEY, ROOT_LEVEL)
+}
+
+function sys_write(name, val)
+{
+    return sym_ll_write_ns(M2_SYSNS, name, NOKEY, ROOT_LEVEL, val)
+}
+
+function sys_incr(name, incr)
+{
+    return sym_ll_incr_ns(M2_SYSNS, name, NOKEY, ROOT_LEVEL, incr)
+}
+
 
 # NB - *Caller* is responsible for checking   integerp(idx) and
 #               1 <= idx <= lis count
-function lis__ll_incr(lis, idx, level, incr,
-                      agg_block, count, val)
+function lis__ll_incr_ns(ns, lis, idx, level, incr,
+                         agg_block, count, val)
 {
     if (incr == EMPTY) incr = 1
     if (level == EMPTY)
         panic("(lis__ll_incr) LEVEL missing")
 
-    if (sym_ll_in("__DBG__", "sym", ROOT_LEVEL) &&
-        sym_ll_read("__DBG__", "sym", ROOT_LEVEL) >= 5 &&
+    if (sym_ll_in_ns(M2_SYSNS, "__DBG__", "sym", ROOT_LEVEL) &&
+        sym_ll_read_ns(M2_SYSNS, "__DBG__", "sym", ROOT_LEVEL) >= 5 &&
         !nam_system_p(lis))
         print_debugfile(sprintf("m2debug:(lis__ll_incr) List %s[%s] (level %d) += %d",
                                 lis, idx, level, incr))
-    if (! ((lis, "", level, "agg_block") in symtab))
-        panic(sprintf("(lis__ll_incr) Could not find ['%s','%s',%d,'agg_block'] in symtab",
-                      lis, "", level))
 
-    agg_block = symtab[lis, "", level, "agg_block"]
+    if (! ((ns, lis, NOKEY, level, "agg_block") in symtab))
+        panic(sprintf("(lis__ll_incr) Could not find [%s, '%s','%s',%d,'agg_block'] in symtab",
+                      ns, lis, NOKEY, level))
+
+    agg_block = symtab[ns, lis, NOKEY, level, "agg_block"]
     count = blktab[agg_block, 0, "count"]+0
     if (idx < 1 || idx > count)
         error(sprintf("(lis__ll_incr) Index out of bounds"))
@@ -5388,7 +5944,7 @@ function sym_fetch(sym,
 
 function syminfo_fetch(syminfo,
                        sym, nparts, info, iname, ikey, icode, level, val, good,
-                       idxable, agg_block, count, has_bracket)
+                       idxable, agg_block, count, has_bracket, ins)
 {
     sym = info__get(syminfo, "name")
     dbg__print("sym", 5, sprintf("(syminfo_fetch) START; sym='%s'", sym))
@@ -5396,8 +5952,11 @@ function syminfo_fetch(syminfo,
     iname = info__get(syminfo, "name")
     ikey  = info__get(syminfo, "key")
     level = info__get(syminfo, "level")
+    ins   = info__get(syminfo, "ns")
     if (level == NAME_NOT_FOUND)
         error("(syminfo_fetch) nam__lookup(info) failed")
+    if (ins == EMPTY)
+        panic("(syminfo_fetch) NS empty (name='" iname "')")
 
     # Now we know it's a symbol, level & code.  Still need to look in
     # symtab because NAME[KEY] might not be defined.
@@ -5409,9 +5968,9 @@ function syminfo_fetch(syminfo,
 
     # 0. Sequences return their value
     if (info__get(syminfo, "type") == TYPE_SEQUENCE) {
-        val = seq_ll_read(iname)
+        val = seq_ll_read_ns(ins, iname)
         dbg__print("sym", 2, sprintf("(sym_fetch) END sym='%s', level=%d RETURNING %d",
-                                    sym, level, val))
+                                     sym, level, val))
         return val
     }
 
@@ -5419,7 +5978,8 @@ function syminfo_fetch(syminfo,
     idxable = info__get(syminfo, "idxable") # 'idxable' means Array or List.
     has_bracket = info__get(syminfo, "has_bracket")
     if (idxable == TRUE && has_bracket == FALSE) {
-        val = idx__size(iname, level, icode)
+        #val = idx__size(iname, level, icode)
+        val = idx__size(syminfo)
         dbg__print("sym", 2, sprintf("(syminfo_fetch) END sym='%s', level=%d RETURNING %d",
                                     sym, level, val))
         return val
@@ -5462,11 +6022,11 @@ function syminfo_fetch(syminfo,
         # Look up block
         if (!integerp(ikey))
             error(sprintf("(syminfo_fetch) Block array indices must be integers"))
-        if (! ((iname, "", level, "agg_block") in symtab))
-            panic(sprintf("(syminfo_fetch) Could not find ['%s','%s',%d,'agg_block'] in symtab",
-                          iname, "", level))
+        if (! ((ins, iname, NOKEY, level, "agg_block") in symtab))
+            panic(sprintf("(syminfo_fetch) Could not find [%s, '%s','%s',%d,'agg_block'] in symtab",
+                          ins, iname, NOKEY, level))
 
-        agg_block = symtab[iname, "", level, "agg_block"]
+        agg_block = symtab[ins, iname, NOKEY, level, "agg_block"]
         count = blktab[agg_block, 0, "count"]+0
         if (ikey >= 1 && ikey <= count) {
             # Make sure slot holds text, which it pretty much has to
@@ -5477,9 +6037,9 @@ function syminfo_fetch(syminfo,
             error(sprintf("(syminfo_fetch) Out of bounds"))
     } else {
         # It's a normal symbol
-        if (! sym_ll_in(iname, ikey, level))
+        if (! sym_ll_in_ns(ins, iname, ikey, level))
             error("(syminfo_fetch) Not in symtab: NAME='" iname "', KEY='" ikey "'")
-        val = sym_ll_read(iname, ikey, level)
+        val = sym_ll_read_ns(ins, iname, ikey, level)
     }
 
     dbg__print("sym", 2, sprintf("(syminfo_fetch) END sym='%s', level=%d => %s", sym, level, ppf__bool(TRUE)))
@@ -5488,22 +6048,27 @@ function syminfo_fetch(syminfo,
     else if (flag_1true_p(icode, FLAG_NUMERIC))
         return 0.0 + val
     else if (flag_1true_p(icode, FLAG_BOOLEAN))
-        return sym_ll_read("__FMT__", to_bool(val)) # !! (0 + val))
+        return sym_ll_read_ns(M2_SYSNS, "__FMT__", to_bool(val)) # !! (0 + val))
     else
         return val
 }
 
 
-function sym_value_or_literal(s)
+function sym_value_or_literal(s,
+                              info)
 {
-    return (sym_valid_p(s) && sym_defined_p(s)) \
-        ? sym_fetch(s) : s
+    # return (sym_valid_p(s) && sym_defined_p(s)) \
+    #     ? sym_fetch(s) : s
+    info__create_from_text(s, info)
+    return (info__get(info, "type") == TYPE_SYMBOL &&
+            info__get(info, "defined")) \
+        ? syminfo_fetch(info) : s
 }
 
 
 # XXX Bare bones, no checking yet
 function syminfo_increment(info, incr,
-                           iname, ikey, ilevel, itype)
+                           iname, ikey, ilevel, itype, ins)
 {
     # Scan sym => name, key
     # Compute level
@@ -5521,15 +6086,16 @@ function syminfo_increment(info, incr,
     ikey   = info__get(info, "key")
     ilevel = info__get(info, "level")
     itype  = info__get(info, "type")
+    ins    = info__get(info, "ns")
 
     if (itype == TYPE_LIST)
-        lis__ll_incr(iname, ikey, ilevel, incr)
+        lis__ll_incr_ns(ins, iname, ikey, ilevel, incr)
     else if (itype == TYPE_ARRAY || itype == TYPE_SYMBOL)
-        sym_ll_incr(iname, ikey, ilevel, incr)
+        sym_ll_incr_ns(ins, iname, ikey, ilevel, incr)
     else if (itype == TYPE_SEQUENCE)
-        seq_ll_incr(iname, incr)
+        seq_ll_incr_ns(ins, iname, incr)
     else
-        panic("(syminfo_increment) Cannot handle type " ppf__flag_type(itype))
+        panic("(syminfo_increment) Cannot handle type " ppf__label(itype))
 }
 
 
@@ -5555,7 +6121,7 @@ function sym_definition_ppf(sym,
 {
     definition = sym_fetch(sym)
     if (emptyp(definition))
-        return "@null "    sym
+        return "@set "     sym
     else if (index(definition, TOK_NEWLINE) == NOT_FOUND)
         return "@define "  sym TOK_TAB definition
     else
@@ -5580,15 +6146,15 @@ function assert_sym_defined(sym, caller,    s)
     if (caller == EMPTY)
         panic("(assert_sym_defined) Empty caller!")
     if (! sym_defined_p(sym))
-        error(sprintf("%s: Symbol '%s' not defined",
-                      caller, sym))
+        error(sprintf("%s: Symbol '%s' not defined%s",
+                      caller, sym, VERBOSE() ? " [(assert_sym_defined)]" : ""))
 }
 
 
 # function syminfo_okay_to_define_p(syminfo,
 #                                   name, code, type)
 # {
-#     #print_stderr("Looking at '" syminfo["name"] (!emptyp(syminfo["key"]) ? "[" syminfo["key"] "]" : "") "'")
+#     #print_stderr("Looking at '" syminfo["name"] (!emptyp(syminfo["key"]) ? TOK_LBRACKET syminfo["key"] TOK_RBRACKET : "") "'")
 #     # I believe this flag trumps all other computations
 #     code = info__get(syminfo, "code")
 #     if (flag_1true_p(code, FLAG_WRITABLE))
@@ -5597,7 +6163,7 @@ function assert_sym_defined(sym, caller,    s)
 #     name = info__get(syminfo, "name")
 #     type = info__get(syminfo, "type")
 #     if (type == TYPE_SYMBOL || type == TYPE_ARRAY || type == PTYPE_UNDEF || type == TYPE_SEQUENCE)
-#         return info__get(syminfo, "valid") &&
+#         return info__get(syminfo, "lexvalid") &&
 #                !double_underscores_p(name) &&
 #                flag_allfalse_p(code, FLAG_READONLY FLAG_SYSTEM)
 #     else {
@@ -5609,20 +6175,20 @@ function assert_sym_defined(sym, caller,    s)
 #     # assert_sym_valid_name(name)
 #     # assert_sym_unprotected(name)
 #
-#     # if (nam_ll_in(name, __curr_level) &&
-#     #     flag_alltrue_p((code = nam_ll_read(name, __curr_level)), TYPE_SYMBOL) &&
+#     # if (nam_ll_in!(name, curr_level()) &&
+#     #     flag_alltrue_p((code = nam_ll_read(name, curr_level())), TYPE_SYMBOL) &&
 #     #     flag_allfalse_p(code, FLAG_READONLY))
 #     #     return TRUE
-#     # if (nam_ll_in(name, __curr_level)) return FALSE
+#     # if (nam_ll_in!(name, curr_level())) return FALSE
 #
-#     # if (nam_ll_in(name, ROOT_LEVEL) &&
+#     # if (nam_ll_in!(name, ROOT_LEVEL) &&
 #     #     flag_alltrue_p((code = nam_ll_read(name, ROOT_LEVEL)), TYPE_SYMBOL) &&
 #     #     flag_allfalse_p(code, FLAG_READONLY))
 #     #     return TRUE
-#     # if (nam_ll_in(name, ROOT_LEVEL)) return FALSE
+#     # if (nam_ll_in!(name, ROOT_LEVEL)) return FALSE
 #
 #     # # Can't shadow a system symbol
-#     # if (nam_ll_in(name, ROOT_LEVEL) &&
+#     # if (nam_ll_in!(name, ROOT_LEVEL) &&
 #     #     flag_alltrue_p((code = nam_ll_read(name, ROOT_LEVEL)), TYPE_SYMBOL FLAG_SYSTEM))
 #     #     return FALSE
 #
@@ -5722,7 +6288,7 @@ function evaluate_boolean(text, negate,
 function bool__known_predicate_p(str,
                                  retval)
 {
-    return str ~ /^(canrun|defined|env|exists)\(/
+    return str ~ /^(canrun|defined|exists)\(/
 }
 
 
@@ -5921,7 +6487,7 @@ function bool__scan_factor(    e, r,         # ! factor | variable | ( expressio
     } else if (__btoken[__bf] == TOK_CANRUN_P) {
         name = __btoken[++__bf]
         if (emptyp(name)) return ERROR
-        if (secure_level() >= SEC_PARANOID)
+        if (secure_level() >= SEC_SECURE)
             security_violation("canrun(): Forbidden")
         # Check via "sh -c 'command -v ARG'"
         r = exec_prog_cmdline("sh", sprintf("-c 'command -v %s'", name)) == EX_OK
@@ -5937,15 +6503,6 @@ function bool__scan_factor(    e, r,         # ! factor | variable | ( expressio
             sym_deferred_define_now(name)
         r = sym_defined_p(name)
         dbg__print("bool", 5, "(bool__scan_factor) DEFINED; name='" name "', RETURNING " ppf__bool(r))
-        __bf++
-        return r
-
-    } else if (__btoken[__bf] == TOK_ENV_P) {
-        name = __btoken[++__bf]
-        if (emptyp(name)) return ERROR
-        assert_valid_env_var_name(name, "env()_B")
-        r = name in ENVIRON
-        dbg__print("bool", 5, "(bool__scan_factor) ENV; name='" name "', RETURNING " ppf__bool(r))
         __bf++
         return r
 
@@ -5990,21 +6547,18 @@ function bool__scan_factor(    e, r,         # ! factor | variable | ( expressio
 #*****************************************************************************
 # @array                NAME
 function xeq_cmd__array(cmd, cmdline,
-                        me, name, info)
+                        me, name, info, ins)
 {
-    # print_stderr(sprintf("(xeq_cmd__array) cmd='%s', cmdline='%s', $0='%s'",
-    #                      cmd, cmdline, $0))
     me = "@" cmd
     $0 = cmdline
     if (NF < 1)
         error("Bad parameters:" $0)
     name = $1
     info__create_from_text(name, info)
-    info__gate(OP_CREATE, TYPE_ARRAY, info, __curr_level, me, TRUE)
-    # if (nam_ll_in(name, __curr_level))
-    #     error(sprintf("%s: Array '%s' already defined",
-    #                   me, name))
-    nam_ll_write(name, __curr_level, TYPE_ARRAY)
+    if ((ins = info__get(info, "ns")) == EMPTY)
+        ins = info["ns"] = curr_ns()
+    info__gate(OP_CREATE, TYPE_ARRAY, info, ins, curr_level(), me, TRUE)
+    nam_ll_write_ns(ins, info__get(info, "name"), curr_level(), TYPE_ARRAY)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -6048,16 +6602,16 @@ function parse__case(                case_block, preamble_block, pstat)
 
     # Create a new block for case_block
     case_block = blk_new(BLK_CASE)
-    dbg__print("case", 5, "(parse__case) New block # " case_block " type " ppf__block_type(blk_type(case_block)))
+    dbg__print("case", 5, "(parse__case) New block # " case_block " type " ppf__label(blk_type(case_block)))
     preamble_block = blk_new(BLK_AGG)
-    dbg__print("case", 5, "(parse__case) New block # " case_block " type " ppf__block_type(blk_type(preamble_block)))
+    dbg__print("case", 5, "(parse__case) New block # " case_block " type " ppf__label(blk_type(preamble_block)))
 
     $1 = ""
     blktab[case_block, 0, "casevar"]        = $2
     blktab[case_block, 0, "preamble_block"] = preamble_block
     blktab[case_block, 0, "seen_otherwise"] = FALSE
     blktab[case_block, 0, "dstblk"]         = preamble_block
-    blktab[case_block, 0, "valid"]          = FALSE
+    blktab[case_block, 0, "blkvalid"]          = FALSE
     dbg__print_block("case", 7, case_block, "(parse__case) case_block")
     stk_push(__parse_stack, case_block) # Push it on to the parse_stack
 
@@ -6075,7 +6629,7 @@ function parse__case(                case_block, preamble_block, pstat)
 function parse__of(                case_block, of_block, of_val)
 {
     dbg__print("case", 3, sprintf("(parse__of) START dstblk=%d, mode=%s, $0='%s'",
-                                 curr_dstblk(), ppf__mode(curr_atmode()), $0))
+                                 curr_dstblk(), ppf__label(curr_atmode()), $0))
     if (check__parse_stack(BLK_CASE) != ERR_OKAY)
         error("[@of] Parse error; " __m2_msg)
     case_block = stk_top(__parse_stack)
@@ -6085,7 +6639,7 @@ function parse__of(                case_block, of_block, of_val)
 
     # Create a new block for the new Of branch and make it current
     of_block = blk_new(BLK_AGG)
-    sub(/^@of[ \t]+/, "")
+    sub(/^@__m2__::of[ \t]+/, "")
     of_val = $0
     if ((case_block, of_val, "of_block") in blktab)
         error("(parse__of) Duplicate '@of' values not allowed:@of " $0)
@@ -6099,7 +6653,7 @@ function parse__of(                case_block, of_block, of_val)
 function parse__otherwise(                case_block, otherwise_block)
 {
     dbg__print("case", 3, sprintf("(parse__otherwise) START dstblk=%d, mode=%s",
-                               curr_dstblk(), ppf__mode(curr_atmode())))
+                               curr_dstblk(), ppf__label(curr_atmode())))
     if (check__parse_stack(BLK_CASE) != ERR_OKAY)
         error("[@otherwise] Parse error; " __m2_msg)
     case_block = stk_top(__parse_stack)
@@ -6124,13 +6678,13 @@ function parse__otherwise(                case_block, otherwise_block)
 function parse__endcase(                case_block) # OK
 {
     dbg__print("case", 3, sprintf("(parse__endcase) START dstblk=%d, mode=%s",
-                               curr_dstblk(), ppf__mode(curr_atmode())))
+                               curr_dstblk(), ppf__label(curr_atmode())))
     if (check__parse_stack(BLK_CASE) != ERR_OKAY)
         error("[@endcase] Parse error; " __m2_msg)
 
     case_block = stk_pop(__parse_stack)
     dbg__print("parse", 7, "(parse__endcase) popped parse_stack => " case_block)
-    blktab[case_block, 0, "valid"] = TRUE
+    blktab[case_block, 0, "blkvalid"] = TRUE
     lower_level()
     return case_block
 }
@@ -6141,11 +6695,11 @@ function xeq__BLK_CASE(case_block,
 {
     block_type = blk_type(case_block)
     dbg__print("case", 3, sprintf("(xeq__BLK_CASE) START dstblk=%d, case_block=%d, type=%s",
-                                 curr_dstblk(), case_block, ppf__block_type(block_type)))
+                                 curr_dstblk(), case_block, ppf__label(block_type)))
 
     dbg__print_block("case", 7, case_block, "(xeq__BLK_CASE) case_block")
     if ((blk_type(case_block) != BLK_CASE) ||  \
-        (blktab[case_block, 0, "valid"] != TRUE))
+        (blktab[case_block, 0, "blkvalid"] != TRUE))
         panic("(xeq__BLK_CASE) Bad case_block config")
 
     # Check if the case variable value matches any @of values
@@ -6190,15 +6744,15 @@ function xeq__BLK_CASE(case_block,
 
 
 function ppf__case(case_block,
-                   buf, i, caseval, x, k)
+                   buf, i, caseval, f, b)
 {
     buf = "@case " blktab[case_block, 0, "casevar"] TOK_NEWLINE
     buf = buf ppf__block(blktab[case_block, 0, "preamble_block"]) TOK_NEWLINE
-    for (k in blktab) {
-        split(k, x, SUBSEP)
-        if (x[1] == case_block && x[3] == "of_block")
-            buf = buf "@of " x[2] TOK_NEWLINE \
-                ppf__block(blktab[case_block, x[2], "of_block"]) TOK_NEWLINE
+    for (b in blktab) {
+        split(b, f, SUBSEP)
+        if (f[BFN_BNUM] == case_block && f[BFN_TAG] == "of_block")
+            buf = buf "@of " f[BFN_SLOT] TOK_NEWLINE \
+                ppf__block(blktab[case_block, f[BFN_SLOT], "of_block"]) TOK_NEWLINE
     }
     if (blktab[case_block, 0, "seen_otherwise"])
         buf = buf "@otherwise" TOK_NEWLINE \
@@ -6281,11 +6835,11 @@ function xeq_cmd__continue(cmd, cmdline)
 # @data         LIS
 function xeq_cmd__data(cmd, cmdline,
                        me, save_line, save_lineno, agg_block, readstat,
-                       lis, info, key, level, code)
+                       lis, info, key, level, ins)
 {
     me = "@" cmd
     dbg__print("parse", 5, sprintf("(xeq_cmd__data) START dstblk=%d, mode=%s, $0='%s'",
-                                curr_dstblk(), ppf__mode(curr_atmode()), $0))
+                                curr_dstblk(), ppf__label(curr_atmode()), $0))
 
     $0 = cmdline
     if (NF == 0)
@@ -6296,15 +6850,15 @@ function xeq_cmd__data(cmd, cmdline,
     save_lineno = LINE()
 
     level = info__create_from_text(lis, info)
-    info__gate(OP_UPDATE, TYPE_LIST, info, __curr_level, me, TRUE)
-    lis_clear(lis, level)
+    ins   = info__get(info, "ns")
+    info__gate(OP_UPDATE, TYPE_LIST, info, ins, curr_level(), me, TRUE)
+    lis_clear(ins, lis, level)
 
     # create a new Agg block
     agg_block = blk_new(BLK_AGG)
-    key = ""
-    dbg__print("parse", 5, sprintf("(xeq_cmd__data) symtab['%s','%s',%d,'agg_block'] = %d",
-                                 lis, key, level, agg_block))
-    symtab[lis, key, level, "agg_block"] = agg_block
+    dbg__print("parse", 5, sprintf("(xeq_cmd__data) symtab[%s, '%s','%s',%d,'agg_block'] = %d",
+                                 ins, lis, NOKEY, level, agg_block))
+    symtab[ins, lis, NOKEY, level, "agg_block"] = agg_block
     blktab[agg_block, 0, "dstblk"] = agg_block
 
     dbg__print("parse", 5, "(xeq_cmd__data) CALLING read_lines_until()")
@@ -6330,9 +6884,10 @@ function xeq_cmd__data(cmd, cmdline,
 # @default
 # @define      NAME TEXT
 # @initialize
+# @set
 function xeq_cmd__define(cmd, cmdline,
                          me, name, append_flag, nop_if_defined, error_if_defined,
-                         info, info2, level, ok_update, ok_create, agg_block)
+                         info, info2, level, ok_update, ok_create, agg_block, ins)
 {
     me = "@" cmd
     $0 = cmdline
@@ -6373,14 +6928,16 @@ function xeq_cmd__define(cmd, cmdline,
 
 #SO FRESH:
     info__create_from_text(name, info)
-    ok_update = info__gate(OP_UPDATE, PTYPE_SCALAR, info, __curr_level, me, FALSE)
+    if ((ins = info__get(info, "ns")) == EMPTY)
+        ins = info["ns"] = curr_ns()
+    ok_update = info__gate(OP_UPDATE, PTYPE_SCALAR, info, ins, curr_level(), me, FALSE)
     if (ok_update) {
         dbg__print("gate", 5, "(@DEFINE) Symbol '" name "' update OK...")
     } else {
         dbg__print("gate", 7, "(xeq_cmd__define) gate(update) failed: " info__get(info, "errtext"))
 
         info__create_from_text(name, info2)
-        ok_create = info__gate(OP_CREATE, PTYPE_SCALAR, info2, __curr_level, me, FALSE)
+        ok_create = info__gate(OP_CREATE, PTYPE_SCALAR, info2, ins, curr_level(), me, FALSE)
         if (ok_create) {
             dbg__print("gate", 5, "(@DEFINE) Symbol '" name "' create OK...")
         } else {
@@ -6406,10 +6963,10 @@ function xeq_cmd__define(cmd, cmdline,
         info__get(info, "has_bracket") == FALSE) {
         if ($0 == EMPTY)
             error(sprintf("%s: Bad parameters", me))
-        agg_block = symtab[name, "", level, "agg_block"]
+        agg_block = symtab[ins, name, NOKEY, level, "agg_block"]
         blk_append(agg_block, OBJ_TEXT, $0)
     } else {
-        if ($0 == EMPTY)
+        if ($0 == EMPTY && cmd != "set")
             $0 = "1"
         syminfo_store(info, append_flag ? syminfo_fetch(info) $0 : $0)
     }
@@ -6442,8 +6999,9 @@ function xeq_cmd__divert(cmd, cmdline,
         return
 
     new_stream = int(new_stream)
-    stk_pop(__stream_stack)
-    stk_push(__stream_stack, new_stream) # automagically sets __DIVNUM__
+    # stk_pop(__stream_stack)
+    # stk_push(__stream_stack, new_stream) # automagically sets __DIVNUM__
+    stk_replace_top(__stream_stack, new_stream) # sets __DIVNUM__
     dbg__print("divert", 2, sprintf("(xeq_cmd__divert) END; __DIVNUM__ now %d", new_stream))
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
@@ -6532,10 +7090,10 @@ function xeq_cmd__dump(cmd, cmdline,
 
     if (what ~ /sym(bol)?s?/) {
         what_type = TYPE_SYMBOL
-        buf = dump__symtab(what_type, all_flag)
+        buf = dump__symtab(M2_NS, what_type, all_flag)
     } else if (what ~ /seq(uence)?s?/) {
         what_type = TYPE_SEQUENCE
-        buf = dump__sequences(what_type, all_flag)
+        buf = dump__sequences(M2_NS, what_type, all_flag)
     } else if (what ~ /(cmd|command)s?/) {
         what_type = TYPE_USER
         #buf = nam_dump_namtab(what_type, all_flag)
@@ -6552,7 +7110,7 @@ function xeq_cmd__dump(cmd, cmdline,
         if (! ((what, 0, "type") in blktab))
             panic("(xeq_cmd__dump) No 'type' field for block " what)
         block_type = blk_type(what)
-        blk_label = ppf__block_type(block_type)
+        blk_label = ppf__label(block_type)
         dbg__print("sym", 7, "(xeq_cmd__dump) block_type = " block_type)
         desc = ppf__BLK(what)
         buf = sprintf("Block # %d, Type=%s:\n", what, blk_label)
@@ -6663,31 +7221,33 @@ function nqsort(A, left, right,    i, lastpos)
 
 # Like ppf__XX functions, last line of multi-line buffer
 # *omits* newline.
-function dump__symtab(type, include_sys, # caller names this "all_flag"
-                      x, k, code, buf, cond_matched,
+function dump__symtab(xns, type, include_sys, # caller names this "all_flag"
+                      f, s, code, buf, cond_matched,
                       name, key, level, tag,
-                      keys, cnt, i, blk, count)
+                      ns, keys, cnt, i, blk, count)
 {
     dbg__print("sym", 4, "(dump__symtab) BEGIN")
-   if (first(type) != TYPE_SYMBOL)
+    if (first(type) != TYPE_SYMBOL)
         panic("(dump__symtab) Bad type " ppf__flags(first(type)))
     sym_define_all_deferred()
 
     # Build keys[] array, whose values are printable symbol names that
     # pass restrictive checks.
     cnt = 0
-    for (k in symtab) {
-        split(k, x, SUBSEP)
-        name  = x[1]            # ; print "name  =", name
-        key   = x[2]            # ; print "key   =", key
-        level = x[3]            # ; print "level =", level
-        tag   = x[4]            # ; print "tag   =", tag
+    for (s in symtab) {
+        split(s, f, SUBSEP)
+        ns    = f[SFN_NS   ]    # ; print "ns    =", ns
+        name  = f[SFN_NAME ]    # ; print "name  =", name
+        key   = f[SFN_KEY  ]    # ; print "key   =", key
+        level = f[SFN_LEVEL]    # ; print "level =", level
+        tag   = f[SFN_TAG  ]    # ; print "tag   =", tag
         dbg__print("sym", 8, sprintf("(dump__symbtab) ['%s','%s',%d,%s]",
                                     name, key, level, tag))
 
-        code = nam_ll_read(name, level) # name, level
+        code = nam_ll_read_ns(ns, name, level) # name, level
         dbg__print("sym", 7, sprintf("(dump__symtab) name='%s', key='%s', code=%s",
                                     name, key, code))
+        if (ns != xns)  continue
         if (!include_sys && flag_1true_p(code, FLAG_SYSTEM))
             continue
 
@@ -6695,13 +7255,13 @@ function dump__symtab(type, include_sys, # caller names this "all_flag"
             if (flag_1false_p(code, TYPE_LIST))
                 panic("(dump__symtab) Found type 'agg_block' but not a List")
             # It's a block array so insert all the keys.
-            blk = symtab[name, key, level, tag]
+            blk = symtab[ns, name, key, level, tag]
             count = blktab[blk, 0, "count"]
             #print_stderr("blk=" blk ", count=" count)
             if (count > 0)
                 for (i = 1; i <= count; i++) {
-                    #print_stderr("Adding keys[" cnt+1 "] = " name "[" i "]")
-                    keys[++cnt] = name "[" i "]"
+                    #print_stderr("Adding keys[" cnt+1 "] = " name TOK_LBRACKET i TOK_RBRACKET)
+                    keys[++cnt] = name TOK_LBRACKET i TOK_RBRACKET
                 }
             continue
 
@@ -6711,13 +7271,13 @@ function dump__symtab(type, include_sys, # caller names this "all_flag"
             continue
 
         } else if (tag != "symval")
-            panic(sprintf("(dump__symtab) Unexpected tag type: ['%s','%s',%d,%s]",
-                          name, key, level, tag))
+            panic(sprintf("(dump__symtab) Unexpected tag type: [%s, '%s','%s',%d,%s]",
+                          ns, name, key, level, tag))
 
         # It's a regular symbol so process it
         if ((flag_1true_p(code, TYPE_SYMBOL) && key == EMPTY) ||
             (flag_anytrue_p(code, TYPE_ARRAY TYPE_LIST)  && key != EMPTY))
-            keys[++cnt] = name (key != EMPTY ? "[" key "]" : "")
+            keys[++cnt] = name (key != EMPTY ? TOK_LBRACKET key TOK_RBRACKET : NOKEY)
         else
             panic(sprintf("(dump__symtab) Strange combo: ('%s','%s') code=%s",
                           name, key, code))
@@ -6734,9 +7294,9 @@ function dump__symtab(type, include_sys, # caller names this "all_flag"
 }
 
 
-function dump__sequences(type, include_sys,
-                      x, k, keys, cnt, code, buf, i,
-                      name)
+function dump__sequences(ns, type, include_sys,
+                         f, n, keys, cnt, code, buf, i,
+                         name)
 {
     dbg__print("seq", 4, "(dump__sequences) BEGIN")
     if (first(type) != TYPE_SEQUENCE)
@@ -6746,12 +7306,14 @@ function dump__sequences(type, include_sys,
     # pass restrictive checks.
     cnt = 0
     include_sys = TRUE
-    for (k in namtab) {
-        split(k, x, SUBSEP)
-        # print "name  =", x[1]
-        # print "level =", x[2]
-        if (0+x[2] == ROOT_LEVEL) {
-            code = nam_ll_read(name = x[1], ROOT_LEVEL)
+    for (n in namtab) {
+        split(n, f, SUBSEP)
+        # print "ns    =", f[NFN_NS]
+        # print "name  =", f[NFN_NAME]
+        # print "level =", f[NFN_LEVEL]
+        if (0+f[NFN_LEVEL] == ROOT_LEVEL) {
+            if (f[NFN_NS] != ns) continue
+            code = nam_ll_read_ns(ns, name = f[NFN_NAME], ROOT_LEVEL)
             dbg__print("seq", 7, sprintf("(dump__sequences) name='%s', code=%s",
                                          name, code))
 
@@ -6759,7 +7321,7 @@ function dump__sequences(type, include_sys,
                 # I don't think there are any system sequences yet...
                 if (!include_sys && flag_1true_p(code, FLAG_SYSTEM))
                     continue
-                keys[++cnt] = x[1]
+                keys[++cnt] = f[NFN_NAME]
             }
         }
     }
@@ -6769,14 +7331,14 @@ function dump__sequences(type, include_sys,
     # Construct output lines in buf
     buf = EMPTY
     for (i = 1; i <= cnt; i++)
-        buf = buf seq_definition_ppf(keys[i]) TOK_NEWLINE
+        buf = buf seq_definition_ppf_ns(ns, keys[i]) TOK_NEWLINE
     dbg__print("seq", 4, "(dump__sequences) END")
     return chomp(buf)
 }
 
 
 function dump__commands(type, include_sys,
-                      x, k, keys, cnt, code, buf, i)
+                      f, s, keys, cnt, code, buf, i)
 {
     dbg__print("cmd", 4, "(dump__commands) BEGIN")
     if (first(type) != TYPE_USER)
@@ -6785,23 +7347,24 @@ function dump__commands(type, include_sys,
     # Build keys[] array, whose values are printable symbol names that
     # pass restrictive checks.
     cnt = 0
-    for (k in symtab) {
-        split(k, x, SUBSEP)
-        # print_debugfile("m2debug:x[1]=" x[1])
-        # print_debugfile("m2debug:x[2]=" x[2])
-        # print_debugfile("m2debug:x[3]=" x[3])
-        # print_debugfile("m2debug:x[4]=" x[4])
-        # print_debugfile("m2debug:value => " symtab[x[1], x[2], x[3], x[4]])
+    for (s in symtab) {
+        split(s, f, SUBSEP)
+        # print_debugfile("m2debug:f[1]=" f[1])
+        # print_debugfile("m2debug:f[2]=" f[2])
+        # print_debugfile("m2debug:f[3]=" f[3])
+        # print_debugfile("m2debug:f[4]=" f[4])
+        # print_debugfile("m2debug:f[5]=" f[5])
+        # print_debugfile("m2debug:value => " symtab[f[1], f[2], f[3], f[4], f[5]a])
 
-        if (x[4] != "user_block") continue      # Q&D
-        code = nam_ll_read(x[1], x[3]) # name, level
+        if (f[SFN_TAG] != "user_block") continue      # Q&D
+        code = nam_ll_read_ns(f[SFN_NS], f[SFN_NAME], f[SFN_LEVEL])
         dbg__print("cmd", 5, sprintf("(dump__commands) name='%s', code=%s",
-                                    x[1], code))
+                                    f[SFN_NAME], code))
         if (flag_1true_p(code, TYPE_USER)) {
             # # I don't think there are any system sequences yet...
             # if (!include_sys && flag_1true_p(code, FLAG_SYSTEM))
             #     continue
-            keys[++cnt] = x[1]
+            keys[++cnt] = f[SFN_NAME]
         }
     }
 
@@ -6833,7 +7396,7 @@ function xeq_cmd__dumpdef(cmd, cmdline,
 {
     $0 = cmdline
     if (NF == 0) {
-        buf = dump__symtab(TYPE_SYMBOL, FALSE) # normal symbols only
+        buf = dump__symtab(M2_NS, TYPE_SYMBOL, FALSE) # normal symbols only
         if (emptyp(buf)) {
             warn("@dumpdef: Empty SYM table")
             return
@@ -6896,7 +7459,7 @@ function xeq_cmd__error(cmd, cmdline,
         else
             print_stderr(message) # adds newline
     if (m2_will_exit) {
-        sym_ll_write("__EXIT__", "", ROOT_LEVEL, EX_USER_REQUEST)
+        sys_write("__EXIT__", EX_USER_REQUEST)
         end_program(MODE_STREAMS_DISCARD)
     }
 }
@@ -6926,7 +7489,7 @@ function xeq_cmd__esyscmd(cmd, cmdline,
                        MODE_IO_CAPTURE)
     flush_stdout(SYNC_FORCE)
     rc = system(shell_cmdline)
-    sym_ll_write("__SYSVAL__", "", ROOT_LEVEL, rc)
+    sys_write("__SYSVAL__", rc)
     agg_block = blk_new(BLK_AGG)
 
     while (TRUE) {
@@ -6962,10 +7525,12 @@ function xeq_cmd__esyscmd(cmd, cmdline,
 # @eval                 [CODE]
 function xeq_cmd__eval(cmd, cmdline)
 {
-    $1 = ""
-    sub("^[ \t]*", "")
-    dbg__print("parse", 5, "(xeq_cmd__eval) '" $0 "'")
-    dostring($0)
+    # $1 = ""
+    # sub("^[ \t]*", "")
+    # dbg__print("parse", 5, "(xeq_cmd__eval) '" $0 "'")
+    # dostring($0)
+    dbg__print("parse", 5, "(xeq_cmd__eval) '" cmdline "'")
+    dostring(cmdline)
 }
 
 
@@ -6993,19 +7558,20 @@ function dostring(str,
 }
 
 
-function parse__string(    str, string_block1, string_block2, pstat, d)
+function parse__string(    str, string_block, pstat, d)
 {
     if (stk_empty_p(__source_stack))
         panic("(parse__string) Source stack empty")
-    string_block1 = stk_top(__source_stack)
-    str = blktab[string_block1, 0, "str"]
+    string_block = stk_top(__source_stack)
+    str = blktab[string_block, 0, "str"]
 
     dbg__print("parse", 2, sprintf("(parse__string) str='%s', dstblk=%d, mode=%s",
                                    str, curr_dstblk(),
-                                   ppf__mode(blktab[string_block1, 0, "atmode"])))
+                                   ppf__label(blktab[string_block, 0, "atmode"])))
 
-    blktab[string_block1, 0, "old.buffer"] = __buffer
-    dbg__print_block("ship_out", 7, string_block1, "(parse__string) string_block1")
+    blktab[string_block, 0, "old.buffer"] = __buffer
+    blktab[string_block, 0, "old.ns"]     = curr_ns()
+    dbg__print_block("ship_out", 7, string_block, "(parse__string) string_block")
 
     # Set up new file context
     __buffer = str
@@ -7015,10 +7581,10 @@ function parse__string(    str, string_block1, string_block2, pstat, d)
     pstat = parse()
     dbg__print("parse", 5, "(parse__string) RETURNED FROM parse() => " ppf__bool(pstat))
 
-    string_block2 = stk_pop(__source_stack)
-    if (string_block1 != string_block2)
+    if (stk_pop(__source_stack) != string_block)
         panic("(parse__string) String block mismatch")
-    __buffer = blktab[string_block2, 0, "old.buffer"]
+    __buffer = blktab[string_block, 0, "old.buffer"]
+    stk_replace_top(__ns_stack, blktab[string_block, 0, "old.ns"])
 
     dbg__print("parse", 2, sprintf("(parse__string) END '%s' => %s",
                                  str, ppf__bool(pstat)))
@@ -7031,7 +7597,7 @@ function ppf__BLK_STRING(blknum)
     return sprintf("  str     : '%s'\n"         \
                    "  atmode  : %s",
                    blktab[blknum, 0, "str"],
-                   ppf__mode(blktab[blknum, 0, "atmode"]))
+                   ppf__label(blktab[blknum, 0, "atmode"]))
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -7049,7 +7615,7 @@ function xeq_cmd__exit(cmd, cmdline,
                        silent, exit_code)
 {
     silent = first(cmd) == "s"
-    exit_code = sym_ll_read("__EXIT__", "", ROOT_LEVEL)
+    exit_code = sys_read("__EXIT__")
     if (! emptyp(cmdline))
         exit_code = integerp(cmdline) ? cmdline+0 : EX_M2_ERROR
 
@@ -7059,7 +7625,7 @@ function xeq_cmd__exit(cmd, cmdline,
     if (exit_code < 0 || exit_code > 126)
         exit_code = EX_M2_ERROR
 
-    sym_ll_write("__EXIT__", "", ROOT_LEVEL, exit_code)
+    sys_write("__EXIT__", exit_code)
     end_program(!silent ? MODE_STREAMS_SHIP_OUT : MODE_STREAMS_DISCARD)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
@@ -7085,7 +7651,7 @@ function xeq_cmd__filedata(cmd, cmdline,
                            lis, filename, line, getstat, line_cnt, silent, level,
                            nparts, info, code, key,
                            file_block, agg_block, rc, error_text, p,
-                           me)
+                           me, ins)
 {
     me = "@" cmd
     $0 = cmdline
@@ -7100,18 +7666,19 @@ function xeq_cmd__filedata(cmd, cmdline,
     filename = $2
 
     level = info__create_from_text(lis, info)
-    info__gate(OP_UPDATE, TYPE_LIST, info, __curr_level, me, TRUE)
-    lis_clear(lis, level)
+    ins   = info__get(info, "ns")
+    info__gate(OP_UPDATE, TYPE_LIST, info, ins, curr_level(), me, TRUE)
+    lis_clear(ins, lis, level)
 
     # create a new Agg block
     #agg_block = blk_new(BLK_AGG)
     # No!  I should use the agg block already allocated for lis.
-    agg_block = symtab[lis, "", level, "agg_block"]
+    agg_block = symtab[ins, lis, NOKEY, level, "agg_block"]
 
-    # key = ""
-    # dbg__print("parse", 5, sprintf("(xeq_cmd__filedata) symtab['%s','%s',%d,'agg_block'] = %d",
-    #                              lis, key, level, agg_block))
-    # not if this isn't new: symtab[lis, key, level, "agg_block"] = agg_block
+    # key = NOKEY
+    # dbg__print("parse", 5, sprintf("(xeq_cmd__filedata) symtab[%s, '%s','%s',%d,'agg_block'] = %d",
+    #                              M2_NS, lis, key, level, agg_block))
+    # not if this isn't new: symtab[M2_NS, lis, key, level, "agg_block"] = agg_block
     blktab[agg_block, 0, "dstblk"] = agg_block
 
     # create a new literal file parser
@@ -7125,7 +7692,7 @@ function xeq_cmd__filedata(cmd, cmdline,
     stk_push(__source_stack, file_block)
 
     dbg__print("parse", 5, "(xeq_cmd__filedata) CALLING parse__file()")
-    rc = parse__file()
+    rc = parse__file(curr_ns())
     dbg__print("parse", 5, "(xeq_cmd__filedata) RETURNED FROM parse__file()")
     # parse__file pops the source stack
     p = stk_pop(__parse_stack)
@@ -7155,7 +7722,7 @@ function xeq_cmd__filedata(cmd, cmdline,
 # @filedefine             NAME FILE
 function xeq_cmd__filedefine(cmd, cmdline,
                              name, filename, line, val, getstat, silent, info,
-                             me)
+                             me, ins)
 {
     # We could play games and use fancy file blocks and literal atmode, but we
     # really just want to read in a file and assign its contents to a symbol.
@@ -7167,7 +7734,9 @@ function xeq_cmd__filedefine(cmd, cmdline,
     silent = first(cmd) == "s"
     name  = $1
     info__create_from_text(name, info)
-    info__gate(OP_CREATE, PTYPE_SCALAR, info, __curr_level, me, TRUE)
+    if ((ins  = info__get(info, "ns")) == EMPTY)
+        ins = info["ns"] = curr_ns()
+    info__gate(OP_CREATE, PTYPE_SCALAR, info, ins, curr_level(), me, TRUE)
     # These contortions because a filename might have embedded spaces
     $1 = ""
     sub("^[ \t]*", "")
@@ -7185,7 +7754,8 @@ function xeq_cmd__filedefine(cmd, cmdline,
         val = val line TOK_NEWLINE
     }
     close(filename)
-    sym_store(name, chomp(val))
+    #sym_store(name, chomp(val))
+    syminfo_store(info, chomp(val))
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -7203,7 +7773,7 @@ function xeq_cmd__filedefine(cmd, cmdline,
 function parse__for(                  for_block, body_block, pstat, incr, info, nparts, level, cmd, me)
 {
     dbg__print("for", 5, sprintf("(parse__for) START dstblk=%d, mode=%s, $0='%s'",
-                                curr_dstblk(), ppf__mode(curr_atmode()), $0))
+                                curr_dstblk(), ppf__label(curr_atmode()), $0))
     cmd = $1
     if (NF < 3)
         error(sprintf("%s: Bad parameters:", cmd, $0))
@@ -7213,16 +7783,16 @@ function parse__for(                  for_block, body_block, pstat, incr, info, 
     # Create two new blocks: "for_block" for loop control (for_block),
     # and "body_block" for the loop code definition.
     for_block = blk_new(BLK_FOR)
-    dbg__print("for", 5, "(parse__for) for_block # " for_block " type " ppf__block_type(blk_type(for_block)))
+    dbg__print("for", 5, "(parse__for) for_block # " for_block " type " ppf__label(blk_type(for_block)))
     body_block = blk_new(BLK_AGG)
-    dbg__print("for", 5, "(parse__for) body_block # " body_block " type " ppf__block_type(blk_type(body_block)))
+    dbg__print("for", 5, "(parse__for) body_block # " body_block " type " ppf__label(blk_type(body_block)))
 
     blktab[for_block, 0, "body_block"] = body_block
     blktab[for_block, 0, "dstblk"] = body_block
-    blktab[for_block, 0, "valid"] = FALSE
+    blktab[for_block, 0, "blkvalid"] = FALSE
     blktab[for_block, 0, "loop_var"] = $2
 
-    if (cmd == "@for") {
+    if (cmd == "@__m2__::for") {
         dbg__print("for", 9, "(parse__for) Found FOR: " $0)
         blktab[for_block, 0, "loop_type"] = cmd
         blktab[for_block, 0, "loop_start"] = $3
@@ -7231,7 +7801,7 @@ function parse__for(                  for_block, body_block, pstat, incr, info, 
         if (incr == 0)
             error(cmd ": Increment value cannot be zero!")
 
-    } else if (cmd == "@foreach") {
+    } else if (cmd == "@__m2__::foreach") {
         dbg__print("for", 9, "(parse__for) Found FOREACH: " $0)
         if ((nparts = nam__scan($3, info)) != 1)
             error(cmd ": Scan error, " __m2_msg)
@@ -7244,6 +7814,7 @@ function parse__for(                  for_block, body_block, pstat, incr, info, 
         blktab[for_block, 0, "loop_type"] = cmd
         blktab[for_block, 0, "loop_array_name"] = $3
         blktab[for_block, 0, "array_type"] = info__get(info, "type")
+        blktab[for_block, 0, "ns"] = info__get(info, "ns")
         blktab[for_block, 0, "level"] = level
 
     } else
@@ -7267,7 +7838,7 @@ function parse__for(                  for_block, body_block, pstat, incr, info, 
 function parse__next(                   for_block)
 {
     dbg__print("for", 3, sprintf("(parse__next) START dstblk=%d, mode=%s, $0='%s'",
-                                curr_dstblk(), ppf__mode(curr_atmode()), $0))
+                                curr_dstblk(), ppf__label(curr_atmode()), $0))
     if (check__parse_stack(BLK_FOR) != ERR_OKAY)
         error("[@next] Parse error; " __m2_msg)
     for_block = stk_pop(__parse_stack)
@@ -7276,7 +7847,7 @@ function parse__next(                   for_block)
     if (blktab[for_block, 0, "loop_var"] != $2)
         error(sprintf("%s: Variable mismatch; '%s' specified, but '%s' was expected",
                       $1, $2, blktab[for_block, 0, "loop_var"]))
-    blktab[for_block, 0, "valid"] = TRUE
+    blktab[for_block, 0, "blkvalid"] = TRUE
 
     lower_level()
 
@@ -7290,13 +7861,13 @@ function xeq__BLK_FOR(for_block,
 {
     block_type = blk_type(for_block)
     dbg__print("for", 3, sprintf("(xeq__BLK_FOR) START dstblk=%d, for_block=%d, type=%s",
-                                curr_dstblk(), for_block, ppf__block_type(block_type)))
+                                curr_dstblk(), for_block, ppf__label(block_type)))
     dbg__print_block("for", 7, for_block, "(xeq__BLK_FOR) for_block")
     if ((block_type != BLK_FOR) || \
-        (blktab[for_block, 0, "valid"] != TRUE))
+        (blktab[for_block, 0, "blkvalid"] != TRUE))
         panic("(xeq__BLK_FOR) Bad for_block config")
 
-    if (blktab[for_block, 0, "loop_type"] == "@for" )
+    if (blktab[for_block, 0, "loop_type"] == "@__m2__::for" )
         execute__for(for_block)
     else
         execute__foreach(for_block)
@@ -7330,8 +7901,8 @@ function execute__for(for_block,
     # Run the loop
     while (!done) {
         new_level = raise_level()
-        nam_ll_write(loopvar, new_level, TYPE_SYMBOL FLAG_INTEGER FLAG_READONLY)
-        sym_ll_write(loopvar, "", new_level, counter)
+        nam_ll_write_ns(curr_ns(), loopvar, new_level, TYPE_SYMBOL FLAG_INTEGER FLAG_READONLY)
+        sym_ll_write_ns(curr_ns(), loopvar, NOKEY, new_level, counter)
         dbg__print("for", 5, sprintf("(execute__for) CALLING execute__block(%d)", body_block))
         execute__block(body_block)
         dbg__print("for", 5, sprintf("(execute__for) RETURNED FROM execute__block()"))
@@ -7367,27 +7938,32 @@ function execute__foreach(for_block,
 }
 
 function execute__foreach_array(for_block,
-                                loopvar, arrname, level, keys, x, k, body_block, new_level, want_break)
+                                loopvar, arrname, level, keys, s, f, k, body_block, new_level, want_break,
+                                ns)
 {
     loopvar = blktab[for_block, 0, "loop_var"]
     arrname = blktab[for_block, 0, "loop_array_name"]
     level = blktab[for_block, 0, "level"]
     body_block = blktab[for_block, 0, "body_block"]
+    ns = blktab[for_block, 0, "ns"]
     dbg__print("for", 4, sprintf("(execute__foreach_array) loopvar='%s', arrname='%s', level=%d, body_block=%d",
                                 loopvar, arrname, level, body_block))
     # Find the keys
-    for (k in symtab) {
-        split(k, x, SUBSEP)
-        dbg__print("for", 7, sprintf("symtab[%s,%s,%d,%s]", x[1], x[2], x[3], x[4]))
-        if (x[1] == arrname && x[3] == level && x[4] == "symval")
-            keys[x[2]] = 1
+    for (s in symtab) {
+        split(s, f, SUBSEP)
+        dbg__print("for", 7, sprintf("symtab[%s,%s,%s,%d,%s]", f[1], f[2], f[3], f[4], f[5]))
+        if (f[SFN_NS]    == ns &&
+            f[SFN_NAME]  == arrname &&
+            f[SFN_LEVEL] == level &&
+            f[SFN_TAG]   == "symval")
+            keys[f[SFN_KEY]] = 1
     }
 
     # Run the loop
     for (k in keys) {
         new_level = raise_level()
-        nam_ll_write(loopvar, new_level, TYPE_SYMBOL FLAG_READONLY)
-        sym_ll_write(loopvar, "", new_level, k)
+        nam_ll_write_ns(curr_ns(), loopvar, new_level, TYPE_SYMBOL FLAG_READONLY)
+        sym_ll_write_ns(curr_ns(), loopvar, NOKEY, new_level, k)
         dbg__print("for", 5, sprintf("(execute__foreach_array) CALLING execute__block(%d)", body_block))
         execute__block(body_block)
         dbg__print("for", 5, sprintf("(execute__foreach_array) RETURNED FROM execute__block()"))
@@ -7408,25 +7984,27 @@ function execute__foreach_array(for_block,
 
 function execute__foreach_list(for_block,
                                arrname, level, loopvar, start, count, done,
-                               counter, body_block, new_level, agg_block, want_break)
+                               counter, body_block, new_level, agg_block, want_break,
+                               ns)
 {
     loopvar = blktab[for_block, 0, "loop_var"]
     arrname = blktab[for_block, 0, "loop_array_name"]
     level = blktab[for_block, 0, "level"]
     body_block = blktab[for_block, 0, "body_block"]
+    ns = blktab[for_block, 0, "ns"]
     dbg__print("for", 4, sprintf("(execute__foreach_list) loopvar='%s', arrname='%s', level=%d, body_block=%d",
                                 loopvar, arrname, level, body_block))
 
     counter = 1
-    agg_block = symtab[arrname, "", level, "agg_block"]
+    agg_block = symtab[ns, arrname, NOKEY, level, "agg_block"]
     count = blktab[agg_block, 0, "count"]
 
     if (count > 0 ) {
         # Run the loop
         while (!done) {
             new_level = raise_level()
-            nam_ll_write(loopvar, new_level, TYPE_SYMBOL FLAG_INTEGER FLAG_READONLY)
-            sym_ll_write(loopvar, "", new_level, counter)
+            nam_ll_write_ns(curr_ns(), loopvar, new_level, TYPE_SYMBOL FLAG_INTEGER FLAG_READONLY)
+            sym_ll_write_ns(curr_ns(), loopvar, NOKEY, new_level, counter)
             dbg__print("for", 5, sprintf("(execute__for) CALLING execute__block(%d)", body_block))
             execute__block(body_block)
             dbg__print("for", 5, sprintf("(execute__for) RETURNED FROM execute__block()"))
@@ -7455,7 +8033,7 @@ function ppf__for(for_block,
     ltype = blktab[for_block, 0, "loop_type"]
     buf = ltype TOK_SPACE \
           blktab[for_block, 0, "loop_var"] TOK_SPACE
-    if (ltype == "@for")
+    if (ltype == "@__m2__::for")
         buf = buf blktab[for_block, 0, "loop_start"] TOK_SPACE \
                   blktab[for_block, 0, "loop_end"]   TOK_SPACE \
                   blktab[for_block, 0, "loop_incr"]  TOK_NEWLINE
@@ -7476,7 +8054,7 @@ function ppf__BLK_FOR(blknum)
                    "  end     : %s\n"       \
                    "  incr    : %s\n"       \
                    "  body    : %d",
-                   ppf__bool(blktab[blknum, 0, "valid"]),
+                   ppf__bool(blktab[blknum, 0, "blkvalid"]),
                    blktab[blknum, 0, "loop_type"],
                    blktab[blknum, 0, "loop_var"],
                    blktab[blknum, 0, "loop_start"],
@@ -7507,16 +8085,16 @@ function parse__if(                 name, if_block, true_block, pstat)
 
     # Create two new blocks: one for if_block, other for true branch
     if_block = blk_new(BLK_IF)
-    dbg__print("if", 5, "(parse__if) New block # " if_block " type " ppf__block_type(blk_type(if_block)))
+    dbg__print("if", 5, "(parse__if) New block # " if_block " type " ppf__label(blk_type(if_block)))
     true_block = blk_new(BLK_AGG)
-    dbg__print("if", 5, "(parse__if) New block # " true_block " type " ppf__block_type(blk_type(true_block)))
+    dbg__print("if", 5, "(parse__if) New block # " true_block " type " ppf__label(blk_type(true_block)))
 
     blktab[if_block, 0, "condition"]   = $0
-    blktab[if_block, 0, "init_negate"] = (name == "@unless")
+    blktab[if_block, 0, "init_negate"] = (name == "@__m2__::unless")
     blktab[if_block, 0, "seen_else"]   = FALSE
     blktab[if_block, 0, "true_block"]  = true_block
     blktab[if_block, 0, "dstblk"]      = true_block
-    blktab[if_block, 0, "valid"]       = FALSE
+    blktab[if_block, 0, "blkvalid"]       = FALSE
     dbg__print_block("if", 7, if_block, "(parse__if) if_block")
     stk_push(__parse_stack, if_block) # Push it on to the parse_stack
 
@@ -7535,7 +8113,7 @@ function parse__if(                 name, if_block, true_block, pstat)
 function parse__else(                   if_block, false_block)
 {
     dbg__print("if", 3, sprintf("(parse__else) START dstblk=%d, mode=%s",
-                               curr_dstblk(), ppf__mode(curr_atmode())))
+                               curr_dstblk(), ppf__label(curr_atmode())))
     if (check__parse_stack(BLK_IF) != ERR_OKAY)
         error("[@else] Parse error; " __m2_msg)
     if_block = stk_top(__parse_stack)
@@ -7560,13 +8138,13 @@ function parse__else(                   if_block, false_block)
 function parse__endif(                    if_block)
 {
     dbg__print("if", 3, sprintf("(parse__endif) START dstblk=%d, mode=%s",
-                               curr_dstblk(), ppf__mode(curr_atmode())))
+                               curr_dstblk(), ppf__label(curr_atmode())))
     if (check__parse_stack(BLK_IF) != ERR_OKAY)
         error("[@endif] Parse error; " __m2_msg)
 
     if_block = stk_pop(__parse_stack)
     dbg__print("parse", 7, "(parse__endif) popped parse_stack => " if_block)
-    blktab[if_block, 0, "valid"] = TRUE
+    blktab[if_block, 0, "blkvalid"] = TRUE
     lower_level()
     return if_block
 }
@@ -7577,11 +8155,11 @@ function xeq__BLK_IF(if_block,
 {
     block_type = blk_type(if_block)
     dbg__print("if", 3, sprintf("(xeq__BLK_IF) START dstblk=%d, if_block=%d, type=%s",
-                               curr_dstblk(), if_block, ppf__block_type(block_type)))
+                               curr_dstblk(), if_block, ppf__label(block_type)))
 
     dbg__print_block("if", 7, if_block, "(xeq__BLK_IF) if_block")
     if ((block_type != BLK_IF) || \
-        (blktab[if_block, 0, "valid"] != TRUE))
+        (blktab[if_block, 0, "blkvalid"] != TRUE))
         panic("(xeq__BLK_IF) Bad if_block config")
 
     # Evaluate condition, determine if TRUE/FALSE and also
@@ -7629,7 +8207,8 @@ function ppf__if(if_block,
 #           @if KEY in ARR
 function evaluate_condition(cond, negate,
                             retval, name, sp, op, expr,
-                            nparts, arr, key, info, level, lhs, rhs, lval, rval)
+                            nparts, arr, key, info, level, lhs, rhs, lval, rval,
+                            linfo, rinfo, ltype)
 {
     dbg__print("if", 7, sprintf("(evaluate_condition) START cond='%s'", cond))
     if (cond == EMPTY)
@@ -7691,21 +8270,33 @@ function evaluate_condition(cond, negate,
         op = substr(cond, RSTART, RLENGTH)
         rhs = substr(cond, RLENGTH+2)
 
-        if (sym_valid_p(lhs) && sym_deferred_p(lhs))
-            sym_deferred_define_now(lhs)
-        if (sym_valid_p(lhs) && sym_defined_p(lhs))
-            lval = sym_fetch(lhs)
-        else if (seq_defined_p(lhs))
-            lval = seq_ll_read(lhs)
+        info__create_from_text(lhs, linfo)
+        ltype = info__get(linfo, "type")
+        # if (sym_valid_p(lhs) && sym_deferred_p(lhs))
+        #     sym_deferred_define_now(lhs)
+        # if (sym_valid_p(lhs) && sym_defined_p(lhs))
+        # if (ltype == TYPE_SYMBOL && info__get(linfo, "defined"))
+        #     lval = sym_fetch(lhs)
+        #else if (seq_defined_p(lhs))
+        # else if (ltype == TYPE_SEQUENCE && info__get(linfo, "defined"))
+        #     lval = seq_ll_read_ns(info__get(info, "ns"), lhs)
+
+        # XXX What about Arrays and Lists?
+        if ((ltype == TYPE_SYMBOL || ltype == TYPE_SEQUENCE) &&
+            info__get(linfo, "defined") == TRUE)
+            lval = syminfo_fetch(linfo)
         else
             lval = lhs
 
+        info__create_from_text(rhs, rinfo)
         if (sym_valid_p(rhs) && sym_deferred_p(rhs))
             sym_deferred_define_now(rhs)
         if (sym_valid_p(rhs) && sym_defined_p(rhs))
             rval = sym_fetch(rhs)
-        else if (seq_defined_p(rhs))
-            rval = seq_ll_read(rhs)
+        #else if (seq_defined_p(rhs))
+        else if (info__get(rinfo, "type") == TYPE_SEQUENCE &&
+                 info__get(rinfo, "defined") == TRUE)
+            rval = seq_ll_read_ns(info__get(info, "ns"), rhs)
         else
             rval = rhs
 
@@ -7749,7 +8340,7 @@ function ppf__BLK_IF(blknum)
                    "  true_block  : %d\n" \
                    "  seen_else   : %s\n" \
                    "  false_block : %s",
-                   ppf__bool(blktab[blknum, 0, "valid"]),
+                   ppf__bool(blktab[blknum, 0, "blkvalid"]),
                    blktab[blknum, 0, "condition"],
                    blktab[blknum, 0, "true_block"],
                    ppf__bool(blktab[blknum, 0, "seen_else"]),
@@ -7774,7 +8365,7 @@ function xeq_cmd__ignore(cmd, cmdline,
                          readstat, save_line, save_lineno)
 {
     dbg__print("parse", 5, sprintf("(xeq_cmd__ignore) START dstblk=%d, mode=%s, $0='%s'",
-                                curr_dstblk(), ppf__mode(curr_atmode()), $0))
+                                curr_dstblk(), ppf__label(curr_atmode()), $0))
 
     $0 = cmdline
     if (NF == 0)
@@ -7805,7 +8396,7 @@ function xeq_cmd__ignore(cmd, cmdline,
 # @include, @paste      FILE
 function xeq_cmd__include(cmd, cmdline,
                           error_text, filename, silent, file_block, rc,
-                          me)
+                          me, sp, lib)
 {
     me = "@" cmd
     rc = FALSE
@@ -7814,7 +8405,17 @@ function xeq_cmd__include(cmd, cmdline,
     if (cmdline == EMPTY)
         error(me ": Bad parameters")
     # S variants mute file errors, even in strict mode
-    silent = (first(cmd) == "s")
+    if ((silent = (first(cmd) == "s")) == TRUE)
+        cmd = rest(cmd)
+
+    if (cmd == "import") {
+        # This was done rather slapdashedly and could use improving
+        if ((sp = index(cmdline, TOK_SPACE)) == NOT_FOUND)
+            error(me ": Bad parameters")
+        lib = substr(cmdline, 1, sp - 1)
+        cmdline = substr(cmdline, sp + 1)
+        stk_under(__ns_stack, lib)
+    }
 
     # error_text is set aggressively, but only is seen if rc is FALSE
     do {
@@ -7825,8 +8426,9 @@ function xeq_cmd__include(cmd, cmdline,
         file_block = prep_file(filename)
         trace(TRACE_BLOCKS, EMPTY, sprintf("[Block Update] %d %s, filename='%s'",
                                            file_block, "FILE", filename))
-        blktab[file_block, 0, "atmode"] = substr(cmd, length(cmd)-4) == "paste" \
-                                          ? MODE_AT_LITERAL : MODE_AT_PROCESS
+        blktab[file_block, 0, "atmode"] = \
+            cmd == "paste" ? MODE_AT_LITERAL : MODE_AT_PROCESS
+
         # prep_file doesn't push the BLK_FILE onto the __source_stack,
         # so we have to do that ourselves due to customization
         dbg__print("parse", 7, sprintf("(xeq_cmd__include) Pushing file block %d (%s) onto source_stack", file_block, filename))
@@ -7834,7 +8436,7 @@ function xeq_cmd__include(cmd, cmdline,
 
         error_text = me ": File '" filename "' not found"
         dbg__print("parse", 5, "(xeq_cmd__include) CALLING parse__file()")
-        rc = parse__file()
+        rc = parse__file(cmd == "nsinclude" ? curr_ns() : M2_NS)
         dbg__print("parse", 5, "(xeq_cmd__include) RETURNED FROM parse__file()")
     } while (FALSE)
 
@@ -7858,7 +8460,7 @@ function search_file(f,
     if (first(f) == TOK_SLASH)
         # If path is absolute, do not invoke path search mechanism
         return pe ? f : EMPTY
-    icount = split(sym_ll_read("__INCPATH__", "", ROOT_LEVEL),
+    icount = split(sys_read("__INCPATH__"),
                    paths, TOK_COLON)
     for (i = 1; i <= icount; i++) {
         p = with_trailing_slash(paths[i]) f
@@ -7875,13 +8477,13 @@ function rm_INCPATH(elem,
                     i, tmpip, icount, paths)
 {
     tmpip = EMPTY
-    icount = split(sym_ll_read("__INCPATH__", "", ROOT_LEVEL),
+    icount = split(sys_read("__INCPATH__"),
                    paths, TOK_COLON)
     for (i = 1; i <= icount; i++)
         if (paths[i] != elem)
             # Only retain items which don't match the element we want to remove
             tmpip = tmpip paths[i] TOK_COLON
-    sym_ll_write("__INCPATH__", "", ROOT_LEVEL, chop(tmpip))
+    sys_write("__INCPATH__", chop(tmpip))
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -7897,7 +8499,7 @@ function rm_INCPATH(elem,
 # @decr, @incr          NAME [N]
 function xeq_cmd__incr(cmd, cmdline,
                        name, incr,
-                       sym, info, me)
+                       sym, info, me, ins)
 {
     me = "@" cmd
     $0 = cmdline
@@ -7905,10 +8507,12 @@ function xeq_cmd__incr(cmd, cmdline,
         error(me ": Bad parameters")
     name = $1
     info__create_from_text(name, info)
-    info__gate(OP_UPDATE, PTYPE_NUMBER, info, __curr_level, me, TRUE)
+    if ((ins = info__get(info, "ns")) == EMPTY)
+        ins = info["ns"] = curr_ns()
+    info__gate(OP_UPDATE, PTYPE_NUMBER, info, ins, curr_level(), me, TRUE)
     # assert_sym_defined(name, me)
     # if (!sym_defined_p(name) && !seq_defined_p(name))
-    #     error(sprintf("%s: Name '%s' not defined",
+    #     error(sprintf("%s: Name '%s' not defined E",
     #                   me, name))
 
     if (NF >= 2 && ! integerp($2))
@@ -7918,11 +8522,12 @@ function xeq_cmd__incr(cmd, cmdline,
     incr = (cmd == "incr") ? incr : -incr
     if (syminfo_defined_p(info))
         syminfo_increment(info, incr)
-    else if (seqinfo_defined_p(info))
-        seq_ll_incr(info__get(info, "name"), incr)
+    else if (info__get(info, "type") == TYPE_SEQUENCE &&
+             info__get(info, "defined") == TRUE)
+        seq_ll_incr_ns(info__get(info, "ns"), info__get(info, "name"), incr)
     else
-        error(sprintf("%s: Name '%s' not defined",
-                      me, name))
+        error(sprintf("%s: Name '%s' not defined%s",
+                      me, name, VERBOSE() ? " [(xeq_cmd__incr)]" : ""))
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -7942,19 +8547,21 @@ function xeq_cmd__incr(cmd, cmdline,
 # data.  If no symbol is specified, __INPUT__ is used by default.
 function xeq_cmd__input(cmd, cmdline,
                         name, info, getstat, input,
-                        me)
+                        me, ins)
 {
     me = "@" cmd
     $0 = cmdline
     name = (NF == 0) ? "__INPUT__" : $1
     info__create_from_text(name, info)
-    info__gate(OP_CREATE, PTYPE_SCALAR, info, __curr_level, me, TRUE)
+    ins = info__get(info, "ns")
+    info__gate(OP_CREATE, PTYPE_SCALAR, info, ins, curr_level(), me, TRUE)
 
     input = EMPTY
     getstat = getline input < TTY
     if (getstat == ERROR)
         warn(me ": Error reading file '" TTY "' [input]:" $0)
-    sym_store(name, input)
+    #sym_store(name, input)
+    syminfo_store(info, input)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -7969,7 +8576,7 @@ function xeq_cmd__input(cmd, cmdline,
 #*****************************************************************************
 # @list                 NAME
 function xeq_cmd__list(cmd, cmdline,
-                       name, info, agg_block, me)
+                       name, info, agg_block, me, ins)
 {
     me = "@" cmd
     $0 = cmdline
@@ -7977,15 +8584,17 @@ function xeq_cmd__list(cmd, cmdline,
         error("Bad parameters:" $0)
     name = $1
     info__create_from_text(name, info)
-    info__gate(OP_CREATE, TYPE_LIST, info, __curr_level, me, TRUE)
-    # if (nam_ll_in(name, __curr_level))
+    if ((ins = info__get(info, "ns")) == EMPTY)
+        ins = info["ns"] = curr_ns()
+    info__gate(OP_CREATE, TYPE_LIST, info, ins, curr_level(), me, TRUE)
+    # if (nam_ll_in!(name, curr_level()))
     #     error(sprintf("%s: List '%s' already defined",
     #                   m3, name))
-    nam_ll_write(name, __curr_level, TYPE_LIST)
+    nam_ll_write_ns(ins, info__get(info, "name"), curr_level(), TYPE_LIST)
     agg_block = blk_new(BLK_AGG)
-    dbg__print("parse", 5, sprintf("(xeq_cmd__data) symtab['%s','',%d,'agg_block'] = %d",
-                                 name, __curr_level, agg_block))
-    symtab[name, "", __curr_level, "agg_block"] = agg_block
+    dbg__print("parse", 5, sprintf("(xeq_cmd__list) symtab[%s, '%s','',%d,'agg_block'] = %d",
+                                 ins, info__get(info, "name"), curr_level(), agg_block))
+    symtab[ins, info__get(info, "name"), NOKEY, curr_level(), "agg_block"] = agg_block
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -8003,7 +8612,7 @@ function xeq_cmd__literal(cmd, cmdline,
                           readstat, save_line, save_lineno, lit_block)
 {
     dbg__print("parse", 5, sprintf("(xeq_cmd__literal) START dstblk=%d, mode=%s, $0='%s'",
-                                curr_dstblk(), ppf__mode(curr_atmode()), $0))
+                                curr_dstblk(), ppf__label(curr_atmode()), $0))
 
     $0 = cmdline
     if (NF == 0)
@@ -8018,7 +8627,7 @@ function xeq_cmd__literal(cmd, cmdline,
     if (readstat != TRUE)
         error("[@literal] Pattern '" cmdline "' not found:" save_line, "", save_lineno)
 
-    dbg__print("parse", 5, sprintf("(xeq_cmd__literal) CALLING ship_out(%s, '%s')", OBJ_BLKNUM, lit_block))
+    dbg__print("parse", 5, sprintf("(xeq_cmd__literal) CALLING ship_out(BLKNUM, '%s')", lit_block))
     ship_out(OBJ_BLKNUM, lit_block)
     dbg__print("parse", 5, "(xeq_cmd__literal) RETURNED FROM ship_out()")
     dbg__print("parse", 5, "(xeq_cmd__literal) END")
@@ -8037,27 +8646,31 @@ function xeq_cmd__literal(cmd, cmdline,
 # @local                NAME
 # @local FOO adds to namtab (as a scalar) in the current level, does not define it
 function xeq_cmd__local(cmd, cmdline,
-                        name, info, me)
+                        name, info, me, ins)
 {
     me = "@" cmd
     $0 = cmdline
     if (NF < 1)
         error(me ": Bad parameters:" $0)
-    if (__curr_level == ROOT_LEVEL)
+    if (curr_level() == ROOT_LEVEL)
         error(me ": Not usable at root level")
     name = $1
     # check for valid name
-    if (!nam_valid_with_strict_as(name, strictp("name")))
+    if (!nam__valid_p(name, PTYPE_PARAM, TRUE))
         error(sprintf("%s: Invalid name '%s'", me, name))
     info__create_from_text(name, info)
-    info__gate(OP_CREATE, TYPE_SYMBOL, info, __curr_level, me, TRUE)
+    if ((ins = info__get(info, "ns")) == EMPTY)
+        ins = info["ns"] = curr_ns()
+    name = info__get(info, "name")
+    info__gate(OP_CREATE, TYPE_SYMBOL, info, ins, curr_level(), me, TRUE)
+    # XXX TODO These checks should be incorporated into the gate() code
     if (flag_1true_p(info__get(info, "code"), FLAG_SYSTEM))
-        error(sprintf("%s: Name '%s' is protected",
-                      me, name))
-    if (nam_ll_in(name, __curr_level))
+        error(sprintf("%s: Name '%s' is protected%s",
+                      me, name, VERBOSE() ? " [xeq_cmd__local:I]" : ""))
+    if (nam_ll_in_ns(ins, name, curr_level()))
         error(sprintf("%s: Name '%s' already defined as a %s",
-                      me, name, ppf__flag_type(info__get(info, "type"))))
-    nam_ll_write(name, __curr_level, TYPE_SYMBOL)
+                      me, name, ppf__label(info__get(info, "type"))))
+    nam_ll_write_ns(ins, name, curr_level(), TYPE_SYMBOL)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -8072,25 +8685,28 @@ function xeq_cmd__local(cmd, cmdline,
 #*****************************************************************************
 # @longdef              NAME
 function parse__longdef(    name, sym_block, body_block, pstat,
-                            info, me)
+                            info, me, ins)
 {
     me = "@longdef1"            # ?
-    dbg__print("sym", 5, "(parse__longdef) START dstblk=" curr_dstblk() ", mode=" ppf__mode(curr_atmode()) "; $0='" $0 "'")
+    dbg__print("sym", 5, "(parse__longdef) START dstblk=" curr_dstblk() ", mode=" ppf__label(curr_atmode()) "; $0='" $0 "'")
 
     # Create two new blocks: one for the "longdef" block, other for definition body
     sym_block = blk_new(BLK_LONGDEF)
-    dbg__print("sym", 5, "(parse__longdef) New block # " sym_block " type " ppf__block_type(blk_type(sym_block)))
+    dbg__print("sym", 5, "(parse__longdef) New block # " sym_block " type " ppf__label(blk_type(sym_block)))
     body_block = blk_new(BLK_AGG)
-    dbg__print("sym", 5, "(parse__longdef) New block # " body_block " type " ppf__block_type(blk_type(body_block)))
+    dbg__print("sym", 5, "(parse__longdef) New block # " body_block " type " ppf__label(blk_type(body_block)))
 
     $1 = ""
     name = $2
     info__create_from_text(name, info)
-    info__gate(OP_CREATE, PTYPE_SCALAR, info, __curr_level, me, TRUE)
-    blktab[sym_block, 0, "name"] = name
+    if ((ins = info__get(info, "ns")) == EMPTY)
+        ins = info["ns"] = curr_ns()
+    info__gate(OP_CREATE, PTYPE_SCALAR, info, ins, curr_level(), me, TRUE)
+    blktab[sym_block, 0, "name"] = info__get(info, "name")
+    blktab[sym_block, 0, "ns"] = info__get(info, "ns")
     blktab[sym_block, 0, "body_block"] = body_block
     blktab[sym_block, 0, "dstblk"] = body_block
-    blktab[sym_block, 0, "valid"] = FALSE
+    blktab[sym_block, 0, "blkvalid"] = FALSE
     dbg__print_block("sym", 7, sym_block, "(parse__longdef) sym_block")
     stk_push(__parse_stack, sym_block) # Push it on to the parse_stack
 
@@ -8108,12 +8724,12 @@ function parse__longdef(    name, sym_block, body_block, pstat,
 function parse__endlongdef(    sym_block)
 {
     dbg__print("sym", 3, sprintf("(parse__endlongdef) START dstblk=%d, mode=%s",
-                                 curr_dstblk(), ppf__mode(curr_atmode())))
+                                 curr_dstblk(), ppf__label(curr_atmode())))
     if (check__parse_stack(BLK_LONGDEF) != ERR_OKAY)
         error("[@endlongdef] Parse error; " __m2_msg)
     sym_block = stk_pop(__parse_stack)
     dbg__print("parse", 7, "(parse__endlongdef) popped parse_stack => " sym_block)
-    blktab[sym_block, 0, "valid"] = TRUE
+    blktab[sym_block, 0, "blkvalid"] = TRUE
     dbg__print("sym", 3, sprintf("(parse__endlongdef) END => %d", sym_block))
     return sym_block
 }
@@ -8121,24 +8737,27 @@ function parse__endlongdef(    sym_block)
 
 function xeq__BLK_LONGDEF(longdef_block,
                           block_type, name, info, body_block, opm,
-                          me)
+                          me, ins)
 {
     me = "@longdef2"            # ?
     block_type = blk_type(longdef_block)
     dbg__print("sym", 3, sprintf("(xeq__BLK_LONGDEF) START dstblk=%d, longdef_block=%d, type=%s",
-                                 curr_dstblk(), longdef_block, ppf__block_type(block_type)))
+                                 curr_dstblk(), longdef_block, ppf__label(block_type)))
     dbg__print_block("sym", 7, longdef_block, "(xeq__BLK_LONGDEF) longdef_block")
     if ((block_type != BLK_LONGDEF) ||
-        (blktab[longdef_block, 0, "valid"] != TRUE))
+        (blktab[longdef_block, 0, "blkvalid"] != TRUE))
         panic("(xeq__BLK_LONGDEF) Bad longdef_block config")
 
     name = blktab[longdef_block, 0, "name"]
     info__create_from_text(name, info)
-    info__gate(OP_CREATE, PTYPE_SCALAR, info, __curr_level, me, TRUE)
+    if ((ins = info__get(info, "ns")) == EMPTY)
+        ins = info["ns"] = curr_ns()
+    info__gate(OP_CREATE, PTYPE_SCALAR, info, ins, curr_level(), me, TRUE)
 
     body_block = blktab[longdef_block, 0, "body_block"]
     dbg__print_block("sym", 3, body_block, "(xeq__BLK_LONGDEF) body_block")
-    sym_store(name, blk_to_string(body_block))
+    #sym_store(name, blk_to_string(body_block))
+    syminfo_store(info, blk_to_string(body_block))
     dbg__print("sym", 2, "(xeq__BLK_LONGDEF) END")
 }
 
@@ -8158,7 +8777,7 @@ function ppf__BLK_LONGDEF(longdef_block)
                    "  valid       : %s\n" \
                    "  body_block  : %d",
                    blktab[longdef_block, 0, "name"],
-                   ppf__bool(blktab[longdef_block, 0, "valid"]),
+                   ppf__bool(blktab[longdef_block, 0, "blkvalid"]),
                    blktab[longdef_block, 0, "body_block"])
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
@@ -8176,13 +8795,16 @@ function ppf__BLK_LONGDEF(longdef_block)
 #       @m2ctl booltest                 Scan boolean expr from user
 #       @m2ctl dbg_max                  All 9s
 #       @m2ctl dbg_level                Debug levels
+#       @m2ctl dbg_nam_qual             Debug nam__qual and info_level search
 #       @m2ctl dbg_params               Debug function parameters
-#       @m2ctl dbg_standard             Reset all dbg levels to standard
+#       @m2ctl dbg_qual                 Debug namespace qualification
 #       @m2ctl dbg_ship_out
+#       @m2ctl dbg_standard             Reset all dbg levels to standard
 #       @m2ctl dbg_user                 Debug @newcmd, user_blocks
 #       @m2ctl dbg_zero                 Clear debugging
 #       @m2ctl dump_block BLOCK         Raw dump block #
 #       @m2ctl dump_namtab              Dump of name table (non-system)
+#       @m2ctl dump_ns_stack            Dump namespace stack
 #       @m2ctl dump_parse_stack         Dump parse stack
 #       @m2ctl set_dbg DSYS LEVEL       Set debug level directly
 #
@@ -8218,7 +8840,7 @@ function xeq_cmd__m2ctl(cmd, cmdline,
     } else if ($1 == "dbg_max") {
         enable_debugging()
         for (dsys in __dbg_sysnames)
-            sym_ll_write("__DBG__", dsys, ROOT_LEVEL, 9)
+            sym_ll_write_ns(M2_SYSNS, "__DBG__", dsys, ROOT_LEVEL, 9)
 
     } else if ($1 == "dbg_level") {
         enable_debugging()
@@ -8230,6 +8852,13 @@ function xeq_cmd__m2ctl(cmd, cmdline,
         dbg__set_level("nam",       3)
         dbg__set_level("sym",       5)
 
+    } else if ($1 == "dbg_nam_qual") {
+        enable_debugging()
+        dbg__all_lev_zero()
+        dbg__set_level("nam",     7)
+        dbg__set_level("parse",   7)
+        dbg__set_level("qual",    9)
+
     } else if ($1 == "dbg_params") {
         enable_debugging()
         # Debug function params: help scan @foo a b c@ and @foo{a}{b}{c}@
@@ -8239,6 +8868,11 @@ function xeq_cmd__m2ctl(cmd, cmdline,
         # dbg__set_level("cmd",       5)
         # dbg__set_level("nam",       3)
         dbg__set_level("sym",       5)
+
+    } else if ($1 == "dbg_qual") {
+        enable_debugging()
+        #dbg__all_lev_zero()
+        dbg__set_level("qual", 9)
 
     } else if ($1 == "dbg_ship_out") {
         enable_debugging()
@@ -8273,6 +8907,9 @@ function xeq_cmd__m2ctl(cmd, cmdline,
     } else if ($1 == "dump_namtab") {
         nam_dump_namtab(PTYPE_ANY, FALSE)
 
+    } else if ($1 == "dump_ns_stack") {
+        dump_ns_stack()
+
     } else if ($1 == "dump_parse_stack") {
         dump_parse_stack()
 
@@ -8284,6 +8921,19 @@ function xeq_cmd__m2ctl(cmd, cmdline,
 
     } else
         error("Unrecognized parameter " $1)
+}
+
+function dump_ns_stack(    n, i)
+{
+    if (stk_empty_p(__ns_stack)) {
+        print_stderr("ns_stack is empty")
+        return
+    }
+    n = stk_depth(__ns_stack)
+    print_stderr("ns_stack has " n " elements")
+    for (i = n; i > 0; i--) {
+        print_stderr(sprintf("ns[%d] = %s", i, __ns_stack[i]))
+    }
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -8297,19 +8947,17 @@ function xeq_cmd__m2ctl(cmd, cmdline,
 #
 #*****************************************************************************
 function parse__newcmd(    name, user_block, body_block, pstat, nparam, p, pname,
-                           me, info, eq, defval, started_opt)
+                           me, info, eq, defval, started_opt, ins, i, new_level)
 {
     me = "@newcmd"
     nparam = 0
-    dbg__print("cmd", 5, "(parse__newcmd) START dstblk=" curr_dstblk() ", mode=" ppf__mode(curr_atmode()) "; $0='" $0 "'")
-
-    raise_level()
+    dbg__print("cmd", 5, "(parse__newcmd) START dstblk=" curr_dstblk() ", mode=" ppf__label(curr_atmode()) "; $0='" $0 "'")
 
     # Create two new blocks: one for the "new command" block, other for command body
     user_block = blk_new(BLK_USER)
-    dbg__print("cmd", 5, "(parse__newcmd) New block # " user_block " type " ppf__block_type(blk_type(user_block)))
+    dbg__print("cmd", 5, "(parse__newcmd) New block # " user_block " type " ppf__label(blk_type(user_block)))
     body_block = blk_new(BLK_AGG)
-    dbg__print("cmd", 5, "(parse__newcmd) New block # " body_block " type " ppf__block_type(blk_type(body_block)))
+    dbg__print("cmd", 5, "(parse__newcmd) New block # " body_block " type " ppf__label(blk_type(body_block)))
 
     $1 = ""
     name = $2
@@ -8322,7 +8970,7 @@ function parse__newcmd(    name, user_block, body_block, pstat, nparam, p, pname
             pname = substr(pname, 1, eq-1)
         } else if (started_opt)
             error(me ": Required arguments must precede optional arguments: '" pname "'")
-        if (! nam_valid_with_strict_as(pname, TRUE))
+        if (! nam__valid_p(pname, PTYPE_PARAM, FALSE))
             error(me ": Invalid parameter name '" pname "'")
         dbg__print("cmd", 5, sprintf("(parse__newcmd) Parameter %d : %s",
                                      p, pname))
@@ -8333,19 +8981,31 @@ function parse__newcmd(    name, user_block, body_block, pstat, nparam, p, pname
         name = substr(name, 1, RSTART-1) substr(name, RSTART+RLENGTH)
     }
     info__create_from_text(name, info)
-    info__gate(OP_CREATE, TYPE_COMMAND, info, __curr_level, me, TRUE)
+    if ((ins = info__get(info, "ns")) == EMPTY)
+        ins = info["ns"] = curr_ns()
+    info__gate(OP_CREATE, TYPE_USER, info, ins, curr_level(), me, TRUE)
 
-    blktab[user_block, 0, "name"] = name
+    blktab[user_block, 0, "name"] = info__get(info, "name")
+    blktab[user_block, 0, "ns"]   = ins
     blktab[user_block, 0, "body_block"] = body_block
     blktab[user_block, 0, "dstblk"] = body_block
-    blktab[user_block, 0, "valid"] = FALSE
+    blktab[user_block, 0, "blkvalid"] = FALSE
     blktab[user_block, 0, "nparam"] = nparam
     dbg__print_block("cmd", 7, user_block, "(parse__newcmd) user_block")
     stk_push(__parse_stack, user_block) # Push it on to the parse_stack
 
+    new_level = raise_level()
+    # Instantiate parameters just in namtab[]
+    for (i = 1; i <= nparam; i++)
+        nam_ll_write_ns(ins, blktab[user_block, i, "param_name"],
+                        new_level, TYPE_SYMBOL)
+
+    stk_push(__ns_stack, ins)
     dbg__print("cmd", 5, "(parse__newcmd) CALLING parse()")
     pstat = parse() # parse() should return after it encounters @endcmd
     dbg__print("cmd", 5, "(parse__newcmd) RETURNED FROM parse() => " ppf__bool(pstat))
+    stk_pop(__ns_stack)
+
     if (!pstat)
         error(me ": Parse error")
 
@@ -8357,12 +9017,12 @@ function parse__newcmd(    name, user_block, body_block, pstat, nparam, p, pname
 function parse__endcmd(                     newcmd_block)
 {
     dbg__print("cmd", 3, sprintf("(parse__endcmd) START dstblk=%d, mode=%s",
-                                 curr_dstblk(), ppf__mode(curr_atmode())))
+                                 curr_dstblk(), ppf__label(curr_atmode())))
     if (check__parse_stack(BLK_USER) != ERR_OKAY)
         error("[@endcmd] Parse error; " __m2_msg)
     newcmd_block = stk_pop(__parse_stack)
     dbg__print("parse", 7, "(parse__endcmd) popped parse_stack => " newcmd_block)
-    blktab[newcmd_block, 0, "valid"] = TRUE
+    blktab[newcmd_block, 0, "blkvalid"] = TRUE
     lower_level()
 
     dbg__print("cmd", 3, sprintf("(parse__endcmd) END => %d", newcmd_block))
@@ -8372,32 +9032,33 @@ function parse__endcmd(                     newcmd_block)
 
 
 function xeq__BLK_USER(newcmd_block,
-                       block_type, name)
+                       block_type, name, ns)
 {
     block_type = blk_type(newcmd_block)
     dbg__print("cmd", 1, sprintf("(xeq__BLK_USER) START dstblk=%d, newcmd_block=%d, type=%s",
-                                 curr_dstblk(), newcmd_block, ppf__block_type(block_type)))
+                                 curr_dstblk(), newcmd_block, ppf__label(block_type)))
     dbg__print_block("cmd", 7, newcmd_block, "(xeq__BLK_USER) newcmd_block")
     if ((block_type != BLK_USER) ||
-        (blktab[newcmd_block, 0, "valid"] != TRUE))
+        (blktab[newcmd_block, 0, "blkvalid"] != TRUE))
         panic("(xeq__BLK_USER) Bad newcmd_block config")
 
     # Instantiate command, but do not run.  "@newcmd FOO" is just declaring FOO.
     # @FOO{...} actually ships it out (and is done under ship_out/xeq_user).
     name = blktab[newcmd_block, 0, "name"]
-    dbg__print("cmd", 3, sprintf("(xeq__BLK_USER) name='%s', level=%d: TYPE_USER, value=%d",
-                                 name, __curr_level, newcmd_block))
-    nam_ll_write(name, __curr_level, TYPE_USER)
-    cmd_ll_write(name, __curr_level, newcmd_block)
+    ns   = blktab[newcmd_block, 0, "ns"]
+    dbg__print("cmd", 3, sprintf("(xeq__BLK_USER) ns=%s, name='%s', level=%d: TYPE_USER, value=%d",
+                                 ns, name, curr_level(), newcmd_block))
+    nam_ll_write_ns(ns, name, curr_level(), TYPE_USER)
+    cmd_ll_write_ns(ns, name, curr_level(), newcmd_block)
 
     dbg__print("cmd", 1, "(xeq__BLK_USER) END")
 }
 
 
 function execute__user(user_invocation,
-                       level, info, code,
+                       level, info, code, ns,
                        old_level, user_block,
-                       nitem, citem, name,
+                       nitem, citem, name, ins,
                        args, arg, narg, argval)
 {
     dbg__print("xeq", 3, sprintf("(execute__user) START"))
@@ -8408,37 +9069,43 @@ function execute__user(user_invocation,
 
     # print_stderr(ppf__sepstr(user_invocation))
     nitem = split_subsep(user_invocation, citem)
-    name = citem[2]
+    ns   = citem[CFN_NS]
+    name = citem[CFN_NAME]
 
     # See if it's a user command
-    if (nam__scan(name, info) == ERROR)
+    if (nam__scan(ns TOK_NS_QUAL name, info) == ERROR)
         error("(execute__user) Scan error, " __m2_msg)
     if ((level = nam__lookup(info)) == NAME_NOT_FOUND)
-        error("(execute__user) nam__lookup failed")
-    if (flag_1false_p((code = nam_ll_read(name, level)), TYPE_USER))
+        error("(execute__user) nam__lookup('" info__get(info, "urtext") "') failed")
+    ins = info__get(info, "ns")
+    code = nam_ll_read_ns(ins, name, level)
+    #print("ins='" ins "', name='" name "', level=" level ", code='" code "'")
+
+    if (flag_1false_p((code = nam_ll_read_ns(ins, name, level)), TYPE_USER))
         panic("(execute__user) " name " seems to no longer be a command")
 
-    user_block = cmd_ll_read(name, level)
+    user_block = cmd_ll_read_ns(ins, name, level)
     dbg__print_block("xeq", 7, user_block, "(execute__user) user_block")
     dbg__print_block("xeq", 7, blktab[user_block, 0, "body_block"], "(execute__user) body_block")
 
-    old_level = __curr_level
+    old_level = curr_level()
     execute__user_body(user_block, citem)
-    if (__curr_level != old_level)
-        panic(sprintf("(execute__user) [@%s] user_block=%d: Level mismatch; old_level=%d, __curr_level=%d",
-                      name, user_block, old_level, __curr_level))
+    if (curr_level() != old_level)
+        panic(sprintf("(execute__user) [@%s] user_block=%d: Level mismatch; old_level=%d, curr_level()=%d",
+                      name, user_block, old_level, curr_level()))
 }
 
 
 function execute__user_body(user_block, args,
-                            block_type, new_level, i, j, p, body_block)
+                            block_type, new_level, i, j, p, body_block,
+                            ns, nparam)
 {
     block_type = blk_type(user_block)
     dbg__print("cmd", 3, sprintf("(execute__user_body) START dstblk=%d, user_block=%d, type=%s",
-                                 curr_dstblk(), user_block, ppf__block_type(block_type)))
+                                 curr_dstblk(), user_block, ppf__label(block_type)))
     dbg__print_block("cmd", 7, user_block, "(execute__user_body) user_block")
     if ((block_type != BLK_USER) ||
-        (blktab[user_block, 0, "valid"] != TRUE))
+        (blktab[user_block, 0, "blkvalid"] != TRUE))
         panic("(execute__user_body) Bad user_block config")
     body_block = blktab[user_block, 0, "body_block"]
     dbg__print_block("cmd", 7, body_block, "(execute__user_body) body_block")
@@ -8448,30 +9115,33 @@ function execute__user_body(user_block, args,
     # before), because invoking nam_ll_write() before sym_ll_write()
     # will LOSE if a parameter has the same name as a global variable
     # due to namtab[] mismatch.
-    for (i = 1; i <= args[1] - 2; i++)
-        # +2 to skip past first two entries (cmdname, nargs)
-        args[i + 2] = dosubs(args[i + 2])
+    for (i = 1; i <= args[1] - 3; i++)
+        # +3 to skip past first three entries (count, ns, cmd)
+        args[i + 3] = dosubs(args[i + 3])
 
     # Always raise level (even if nparam == 0) because
     # user code might run @local.
     new_level = raise_level()
 
-    # Instantiate parameters
-    for (i = 1; i <= args[1] - 2; i++) {
+    # Instantiate parameters in the namespace specified
+    ns = args[2]
+    nparam = blktab[user_block, 0, "nparam"]
+    for (i = 1; i <= args[1] - 3; i++) {
+        if (i > nparam) break
         p = blktab[user_block, i, "param_name"]
-        nam_ll_write(p, new_level, TYPE_SYMBOL)
-        sym_ll_write(p, "", new_level, args[i + 2])
-        dbg__print("cmd", 6, sprintf("(execute__user_body) Setting param %s to '%s'", p, args[i]))
+        nam_ll_write_ns(ns, p, new_level, TYPE_SYMBOL)
+        sym_ll_write_ns(ns, p, NOKEY, new_level, args[i + 3])
+        dbg__print("cmd", 6, sprintf("(execute__user_body) Setting param %s to '%s'", p, args[i+3]))
     }
     # If we haven't supplied all expected parameters, see if the missing
     # ones have default values
-    while (i <= blktab[user_block, 0, "nparam"]) {
+    while (i <= nparam) {
         if (! blktab[user_block, i, "optional"])
-            error("@" args[2] ": Insufficient parameters")
+            error("@" args[3] ": Insufficient parameters")
 
         p = blktab[user_block, i, "param_name"]
-        nam_ll_write(p, new_level, TYPE_SYMBOL)
-        sym_ll_write(p, "", new_level, blktab[user_block, i, "default_value"])
+        nam_ll_write_ns(ns, p, new_level, TYPE_SYMBOL)
+        sym_ll_write_ns(ns, p, NOKEY, new_level, blktab[user_block, i, "default_value"])
         dbg__print("cmd", 6, sprintf("(execute__user_body) Defaulting param %s to '%s'",
                                      p, blktab[user_block, i, "default_value"]))
         i++
@@ -8484,7 +9154,7 @@ function execute__user_body(user_block, args,
 
     # If we've been asked to return, well now we have
     if (flag_1true_p(__m2_config_fs, MODE_XEQ_RETURN)) {
-        #print_stderr("(execute__user_body) Found RETURN, value is " __return_value)
+        dbg__print("cmd", 7, "(execute__user_body) Found RETURN, value is '" __return_value "'")
         __m2_config_fs = flag_set_clear(__m2_config_fs,
                                         MODE_XEQ_NORMAL,
                                         MODE_XEQ_BREAK MODE_XEQ_CONTINUE MODE_XEQ_RETURN)
@@ -8508,16 +9178,47 @@ function ppf__BLK_USER(blknum,
             param_desc = param_desc sprintf("  [%d]=%s\n",
                                             x, blktab[blknum, x, "param_name"])
     }
-    return sprintf("  name       : %s\n" \
+    return sprintf("  name       : %s::%s\n" \
                    "  valid      : %s\n" \
                    "  body_block : %d\n" \
                    "  nparam     : %d\n" \
                    "%s",
-                   blktab[blknum, 0, "name"],
-                   ppf__bool(blktab[blknum, 0, "valid"]),
+                   blktab[blknum, 0, "ns"], blktab[blknum, 0, "name"],
+                   ppf__bool(blktab[blknum, 0, "blkvalid"]),
                    blktab[blknum, 0, "body_block"],
                    nparam,
                    chomp(param_desc))
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  N A M E S P A C E
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#*****************************************************************************
+# @namespace
+function xeq_cmd__namespace(cmd, cmdline,
+                            me, ns)
+{
+    dbg__print("ns", 5, sprintf("(xeq_cmd__namespace) START"))
+    me = "@" cmd
+    $0 = cmdline
+    if (NF != 1)
+        error(me ": Bad parameters")
+
+    ns = rm_quotes(dosubs($1))
+    if (! nam__valid_p(ns, PTYPE_NS, FALSE))
+        error(me ": Invalid namespace name '" ns "'")
+    if (ns == "awk")
+        error(me ": Namespace 'awk' protected")
+
+    stk_replace_top(__ns_stack, ns)
+    dbg__print("ns", 1, "(xeq_cmd__namespace) Namespace now " curr_ns())
+    dbg__print("ns", 5, "(xeq_cmd__namespace) END")
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -8535,7 +9236,7 @@ function xeq_cmd__nextfile(cmd, cmdline,
                            readstat, save_line, save_lineno)
 {
     dbg__print("parse", 5, sprintf("(xeq_cmd__nextfile) START dstblk=%d, mode=%s, $0='%s'",
-                                curr_dstblk(), ppf__mode(curr_atmode()), $0))
+                                curr_dstblk(), ppf__label(curr_atmode()), $0))
     save_line = $0
     save_lineno = LINE()
 
@@ -8545,35 +9246,6 @@ function xeq_cmd__nextfile(cmd, cmdline,
     if (readstat != TRUE)
         error("[@nextfile] Read error:" save_line, "", save_lineno)
     dbg__print("parse", 5, "(xeq_cmd__nextfile) END")
-}
-# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
-
-
-
-#*****************************************************************************
-#
-#       @  N U L L
-#
-#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-#
-#*****************************************************************************
-# @null         NAME
-function xeq_cmd__null(cmd, cmdline,
-                       name, info, me)
-{
-    me = "@" cmd
-    $0 = cmdline
-    dbg__print("xeq", 2, sprintf("(xeq_cmd__null) START cmdline='%s'",
-                                  cmdline))
-    if (NF == 0)
-        error("Bad parameters:" $0)
-
-    name = $1
-    info__create_from_text(name, info)
-    info__gate(OP_CREATE, PTYPE_SCALAR, info, __curr_level, me, TRUE)
-    # XXX No checking, dangerous!
-    sym_store(name, "")
-    dbg__print("xeq", 2, "(xeq_cmd__null) END")
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -8592,7 +9264,7 @@ function xeq_cmd__null(cmd, cmdline,
 #   @readonly cannot be performed on SYSTEM symbols or arrays
 function xeq_cmd__readonly(cmd, cmdline,
                            name, info, nparts, key, ilevel, icode,
-                           me)
+                           me, ins, iname)
 {
     me = "@" cmd
     dbg__print("xeq", 5, sprintf("(xeq_cmd__readonly) START; cmdline='%s'", cmdline))
@@ -8625,13 +9297,14 @@ function xeq_cmd__readonly(cmd, cmdline,
     #     error("@readonly: Name protected")
 #NEW:
     info__create_from_text(name, info)
-    #info__gate(OP_UPDATE, TYPE_ARRAY TYPE_LIST TYPE_SYMBOL, info, __curr_level, me, TRUE)
-    info__gate(OP_UPDATE, PTYPE_SCALAR, info, __curr_level, me, TRUE)
     ilevel = info__get(info, "level")
     if (ilevel == NAME_NOT_FOUND)
         panic("(xeq_cmd__readonly) gate(OP_UPDATE) passed but level was name_not_found")
+    ins = info__get(info, "ns")
+    iname = info__get(info, "name")
+    info__gate(OP_UPDATE, PTYPE_SCALAR, info, ins, curr_level(), me, TRUE)
     icode = info__get(info, "code")
-    nam_ll_write(name, ilevel, flag_set_clear(icode, FLAG_READONLY))
+    nam_ll_write_ns(ins, iname, ilevel, flag_set_clear(icode, FLAG_READONLY))
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -8651,13 +9324,12 @@ function xeq_cmd__return(cmd, cmdline)
     if (flag_1false_p(__m2_config_fs, MODE_XEQ_NORMAL))
         panic("(xeq_cmd__return) !MODE_XEQ_NORMAL")
 
-    # print_stderr("@return: cmdline='" cmdline "'")
     __return_found = TRUE
-    __return_noarg = emptyp(cmdline)
     __return_value = cmdline
     __m2_config_fs = flag_set_clear(__m2_config_fs,
                                     MODE_XEQ_RETURN,
                                     MODE_XEQ_NORMAL MODE_XEQ_BREAK MODE_XEQ_CONTINUE)
+    dbg__print("cmd", 5, "(xeq_cmd__return): RETURNING '" cmdline "'")
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -8673,7 +9345,7 @@ function xeq_cmd__return(cmd, cmdline)
 # @sequence             ID SUBCMD [ARG...]
 function xeq_cmd__sequence(cmd, cmdline,
                            id, level, info, action, arg, saveline,
-                           me)
+                           me, ns, name)
 {
     me = "@" cmd
     $0 = cmdline
@@ -8682,32 +9354,40 @@ function xeq_cmd__sequence(cmd, cmdline,
     if (NF == 0)
         error("Bad parameters: Missing sequence name:" $0)
     id = $1
-    if (! seq_valid_p(id))
-        error(me ": Name '" id "' is not valid")
     level = info__create_from_text(id, info)
+    if (info__get(info, "lexvalid") != TRUE)
+        error(me ": Name '" id "' is not valid")
+    name = info__get(info, "name")
+    ns = info__get(info, "ns")
 
     if (NF == 1)
         $2 = "create"
     action = $2
-    if (action != "create" && !seqinfo_defined_p(info))
+    # If action is anything other than "create", then the name
+    # must exist as a bound Sequence
+    if (action != "create" &&
+        ! (info__get(info, "type") == TYPE_SEQUENCE &&
+           info__get(info, "defined") == TRUE))
         error("Name '" id "' not defined [sequence]:" $0)
     if (NF == 2) {
         if (action == "create") {
-            info__gate(OP_CREATE, TYPE_SEQUENCE, info, ROOT_LEVEL, me, TRUE)
+            if (level == NAME_NOT_FOUND && ns == EMPTY)
+                info["ns"] = ns = curr_ns()
+            info__gate(OP_CREATE, TYPE_SEQUENCE, info, ns, ROOT_LEVEL, me, TRUE)
             #
-            nam_ll_write(id, ROOT_LEVEL, TYPE_SEQUENCE FLAG_INTEGER)
-            symtab[id, EMPTY, ROOT_LEVEL, "incr"] = SEQ_DEFAULT_INCR
-            symtab[id, EMPTY, ROOT_LEVEL, "init"] = SEQ_DEFAULT_INIT
-            symtab[id, EMPTY, ROOT_LEVEL, "fmt"]  = sym_ll_read("__FMT__", "seq", ROOT_LEVEL)
-            seq_ll_write(id, SEQ_DEFAULT_INIT)
+            nam_ll_write_ns(ns, name, ROOT_LEVEL, TYPE_SEQUENCE FLAG_INTEGER)
+            symtab[ns, name, EMPTY, ROOT_LEVEL, "incr"] = SEQ_DEFAULT_INCR
+            symtab[ns, name, EMPTY, ROOT_LEVEL, "init"] = SEQ_DEFAULT_INIT
+            symtab[ns, name, EMPTY, ROOT_LEVEL, "fmt"]  = sym_ll_read_ns(M2_SYSNS, "__FMT__", "seq", ROOT_LEVEL)
+            seq_ll_write_ns(ns, name, SEQ_DEFAULT_INIT)
         } else if (action == "delete") {
-            seq_destroy(id)
+            seq_destroy_ns(ns, name)
         } else if (action == "next") { # Increment counter only, no output
-            seq_ll_incr(id, symtab[id, EMPTY, ROOT_LEVEL, "incr"])
+            seq_ll_incr_ns(ns, name, symtab[ns, name, EMPTY, ROOT_LEVEL, "incr"])
         } else if (action == "prev") { # Decrement counter only, no output
-            seq_ll_incr(id, -symtab[id, EMPTY, ROOT_LEVEL, "incr"])
+            seq_ll_incr_ns(ns, name, -symtab[ns, name, EMPTY, ROOT_LEVEL, "incr"])
         } else if (action == "restart") { # Set current counter value to initial value
-            seq_ll_write(id, symtab[id, EMPTY, ROOT_LEVEL, "init"])
+            seq_ll_write_ns(ns, name, symtab[ns, name, EMPTY, ROOT_LEVEL, "init"])
         } else
             error("Bad parameters:" $0)
     } else {    # NF >= 4
@@ -8727,14 +9407,14 @@ function xeq_cmd__sequence(cmd, cmdline,
             # m2 can't police your format string and a bad value might
             # cause a crash if printf() fails.
             dbg__print("seq", 2, sprintf("(xeq_cmd__sequence) fmt now '%s'", arg))
-            symtab[id, EMPTY, ROOT_LEVEL, "fmt"] = arg
+            symtab[ns, name, EMPTY, ROOT_LEVEL, "fmt"] = arg
         } else if (action == "setincr") {
             # setincr N :: Set increment value to N.
             if (!integerp(arg))
                 error(sprintf("@sequence setincr: Value '%s' must be numeric", arg))
             if (arg+0 == 0)
                 error(sprintf("@sequence setincr: Bad parameters: %s", saveline))
-            symtab[id, EMPTY, ROOT_LEVEL, "incr"] = int(arg)
+            symtab[ns, name, EMPTY, ROOT_LEVEL, "incr"] = int(arg)
         } else if (action == "setinit") {
             # setinit N :: Set initial  value to N.  If current
             # value == old init value (i.e., never been used), then set
@@ -8742,14 +9422,14 @@ function xeq_cmd__sequence(cmd, cmdline,
             # current value remains unchanged.
             if (!integerp(arg))
                 error(sprintf("@sequence setinit: Value '%s' must be numeric", arg))
-            if (seq_ll_read(id) == symtab[id, EMPTY, ROOT_LEVEL, "init"])
-                seq_ll_write(id, int(arg))
-            symtab[id, EMPTY, ROOT_LEVEL, "init"] = int(arg)
+            if (seq_ll_read_ns(ns, name) == symtab[ns, name, EMPTY, ROOT_LEVEL, "init"])
+                seq_ll_write_ns(ns, name, int(arg))
+            symtab[ns, name, EMPTY, ROOT_LEVEL, "init"] = int(arg)
         } else if (action == "setval") {
             # setval N :: Set counter value directly to N.
             if (!integerp(arg))
                 error(sprintf("@sequence setval: Value '%s' must be numeric", arg))
-            seq_ll_write(id, int(arg))
+            seq_ll_write_ns(ns, name, int(arg))
         } else
             error("Bad parameters:" me TOK_SPACE saveline)
     }
@@ -8817,7 +9497,7 @@ function xeq_cmd__shell(cmd, cmdline,
     # here.  But it suffices to run /bin/sh, which is enough for now.
     shell_cmdline = sprintf("%s < %s > %s", sendto, input_file, output_file)
     flush_stdout(SYNC_FORCE)    # force flush stdout
-    sym_ll_write("__SYSVAL__", "", ROOT_LEVEL, system(shell_cmdline))
+    sys_write("__SYSVAL__", system(shell_cmdline))
     agg_block = blk_new(BLK_AGG)
 
     while (TRUE) {
@@ -8854,7 +9534,7 @@ function xeq_cmd__shell(cmd, cmdline,
 function xeq_cmd__split(cmd, cmdline,
                         sym, lis, count, info, code, level,
                         val, k, tmparr, agg_block,
-                        wantfs, tmpfs, me)
+                        wantfs, tmpfs, me, ins)
 {
     dbg__print("cmd", 3, sprintf("(xeq_cmd__split) START"))
     me = "@" cmd
@@ -8877,14 +9557,15 @@ function xeq_cmd__split(cmd, cmdline,
 
     # Check array LIS.
     level = info__create_from_text(lis, info)
-    info__gate(OP_UPDATE, TYPE_LIST, info, __curr_level, me, TRUE)
-    lis_clear(lis, level)
+    ins = info__get(info, "ns")
+    info__gate(OP_UPDATE, TYPE_LIST, info, ins, curr_level(), me, TRUE)
+    lis_clear(ins, lis, level)
 
     # Create a new Agg block
     agg_block = blk_new(BLK_AGG)
-    dbg__print("parse", 5, sprintf("(xeq_cmd__split) symtab['%s','%s',%d,'agg_block'] = %d",
-                                 lis, "", level, agg_block))
-    symtab[lis, "", level, "agg_block"] = agg_block
+    dbg__print("parse", 5, sprintf("(xeq_cmd__split) symtab[%s, '%s','%s',%d,'agg_block'] = %d",
+                                 ins, lis, NOKEY, level, agg_block))
+    symtab[ins, lis, NOKEY, level, "agg_block"] = agg_block
     blktab[agg_block, 0, "count"] = 0
 
     # Do split
@@ -8923,7 +9604,7 @@ function xeq_cmd__syscmd(cmd, cmdline,
 
     flush_stdout(SYNC_FORCE)
     rc = system(cmdline)
-    sym_ll_write("__SYSVAL__", "", ROOT_LEVEL, rc)
+    sys_write("__SYSVAL__", rc)
     dbg__print("cmd", 3, sprintf("(xeq_cmd__syscmd) END; rc=%d", rc))
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
@@ -8944,20 +9625,19 @@ function xeq_cmd__tracemode(cmd, cmdline,
     $0 = cmdline
     if (NF == 0) {
         # Reset flags to default
-        sym_ll_write("__TRACEMODE__", "", ROOT_LEVEL, TRACE_DEFAULT_SET)
+        sys_write("__TRACEMODE__", TRACE_DEFAULT_SET)
         return
     }
 
     letters = $1
-    # MATCHFLAGS
-    if (letters !~ /^[-+abeiflmpstTV][-+abeiflmpstTV]*$/)
+    if (!match(letters, "^[-+" TRACE_ALL_SET "][-+" TRACE_ALL_SET "]*$"))
         error("@tracemode: Bad parameters")
 
     add_rem = TRUE              # add_rem == TRUE  -> Adding flags
                                 # add_rem == FALSE -> Removing flags
     if (first(letters) != "+" && first(letters) != "-")
         # Not a + or -, so override old flags
-        sym_ll_write("__TRACEMODE__", "", ROOT_LEVEL, EMPTY)
+        sys_write("__TRACEMODE__", EMPTY)
     for (i = 1; i <= length(letters); i++) {
         flag = substr(letters, i, 1)
         if (flag == "+")
@@ -8966,16 +9646,15 @@ function xeq_cmd__tracemode(cmd, cmdline,
             add_rem = FALSE
         else {
             if (flag == TRACE_SET_ON)
-                sym_ll_write("__TRACE__", "", ROOT_LEVEL, add_rem)
+                sys_write("__TRACE__", add_rem)
             else if (flag == TRACE_WILDCARD_ALL_FLAGS) {
                 if (add_rem)
-                    sym_ll_write("__TRACE__", "", ROOT_LEVEL, add_rem)
-                sym_ll_write("__TRACEMODE__", "", ROOT_LEVEL, add_rem ? TRACE_ALL_SET : EMPTY)
+                    sys_write("__TRACE__", add_rem)
+                sys_write("__TRACEMODE__", add_rem ? TRACE_ALL_SET : EMPTY)
             } else
-                sym_ll_write("__TRACEMODE__", "", ROOT_LEVEL,
-                             flag_set_clear(sym_ll_read("__TRACEMODE__", "", ROOT_LEVEL),
-                                            add_rem ? flag : "",
-                                            add_rem ? ""   : flag))
+                sys_write("__TRACEMODE__", flag_set_clear(sys_read("__TRACEMODE__"),
+                                                          add_rem ? flag : "",
+                                                          add_rem ? ""   : flag))
         }
     }
 }
@@ -8992,29 +9671,21 @@ function xeq_cmd__tracemode(cmd, cmdline,
 #*****************************************************************************
 # @traceoff     [SYM...]
 function xeq_cmd__traceoff(cmd, cmdline,
-                           i, info, sym, level, code)
+                           i, info, sym, level, code, ins)
 {
     dbg__print("trace", 3, sprintf("(xeq_cmd__traceoff) START; cmdline='%s'", cmdline))
     $0 = cmdline
     if (NF == 0) {
         # Clear "t" trace flag
-        sym_ll_write("__TRACEMODE__", "", ROOT_LEVEL,
-                     flag_set_clear(sym_ll_read("__TRACEMODE__", "", ROOT_LEVEL),
-                                    EMPTY, TRACE_ALL))
+        sys_write("__TRACEMODE__", flag_set_clear(sys_read("__TRACEMODE__"),
+                                                  EMPTY, TRACE_ALL))
         # Set __TRACE__ to False
-        sym_ll_write("__TRACE__", "", ROOT_LEVEL, FALSE)
+        sys_write("__TRACE__", FALSE)
     } else {
-        # Clear FLAG_TRACING for every symbol mentioned
+        # Clear Tracing for every symbol mentioned
         i = 0
-        while (++i <= NF) {
-            sym = $i
-            if (nam__scan(sym, info) == ERROR)
-                error("(xeq_cmd__traceoff) Scan error; " __m2_msg)
-            if ((level = nam__lookup(info)) == NAME_NOT_FOUND)
-                error("(xeq_cmd__traceoff) nam__lookup(info) failed")
-            code = nam_ll_read(sym, level)
-            nam_ll_write(sym, level, flag_set_clear(code, EMPTY, FLAG_TRACING))
-        }
+        while (++i <= NF)
+            trace_ll_off($i)
     }
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
@@ -9030,29 +9701,21 @@ function xeq_cmd__traceoff(cmd, cmdline,
 #*****************************************************************************
 # @traceon      [SYM...]
 function xeq_cmd__traceon(cmd, cmdline,
-                          i, info, sym, level, code)
+                          i, info, sym, level, code, ins)
 {
     dbg__print("trace", 3, sprintf("(xeq_cmd__traceon) START; cmdline='%s'", cmdline))
     $0 = cmdline
     if (NF == 0) {
         # Set "t" trace flag
-        sym_ll_write("__TRACEMODE__", "", ROOT_LEVEL,
-                     flag_set_clear(sym_ll_read("__TRACEMODE__", "", ROOT_LEVEL),
-                                    TRACE_ALL))
+        sys_write("__TRACEMODE__", flag_set_clear(sys_read("__TRACEMODE__"),
+                                                  TRACE_ALL))
     } else {
-        # Set FLAG_TRACING for every symbol mentioned
+        # Set Tracing for every symbol mentioned
         i = 0
-        while (++i <= NF) {
-            sym = $i
-            if (nam__scan(sym, info) == ERROR)
-                error("(xeq_cmd__traceon) Scan error; " __m2_msg)
-            if ((level = nam__lookup(info)) == NAME_NOT_FOUND)
-                error("(xeq_cmd__traceon) nam__lookup(info) failed")
-            code = nam_ll_read(sym, level)
-            nam_ll_write(sym, level, flag_set_clear(code, FLAG_TRACING))
-        }
+        while (++i <= NF)
+            trace_ll_on($i)
     }
-    sym_ll_write("__TRACE__", "", ROOT_LEVEL, TRUE)
+    sys_write("__TRACE__", TRUE)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -9089,8 +9752,8 @@ function xeq_cmd__typeout(cmd, cmdline,
 # @undef[ine]           NAME
 function xeq_cmd__undefine(cmd, cmdline,
                            name, info, level, code, nparts, type,
-                           x, k, del_list,
-                           me)
+                           f, s, d, del_list,
+                           me, ins)
 {
     me = "@" cmd
     $0 = cmdline
@@ -9125,7 +9788,8 @@ function xeq_cmd__undefine(cmd, cmdline,
     # }
     level = info__create_from_text(name, info)
     type = info__get(info, "type")
-    info__gate(OP_DELETE, type, info, __curr_level, me, TRUE)
+    ins  = info__get(info, "ns")
+    info__gate(OP_DELETE, type, info, ins, curr_level(), me, TRUE)
 
     if (type == TYPE_SYMBOL) {
         name = info__get(info, "name")
@@ -9134,26 +9798,26 @@ function xeq_cmd__undefine(cmd, cmdline,
         # if (nam_system_p(name))
         #     error("Name '" name "' not available:" $0)
         if (info__get(info, "protected"))
-            error(me ": Name '" name "' is protected")
+            error(sprintf("%s: Name '%s' is protected%s", me, name, VERBOSE() ? " [xeq_cmd__undefine:J]" : ""))
 
-        dbg__print("sym", 3, ("About to sym_destroy('" name "')"))
-        sym_destroy(name, info["key"], info["level"])
+        dbg__print("sym", 3, ("About to sym_destroy_ns(" ins ", '" name "')"))
+        sym_destroy_ns(ins, name, info["key"], info["level"])
 
     } else if (type == TYPE_ARRAY) {
-        for (k in symtab) {
-            split(k, x, SUBSEP)
-            if (x[1] == name && x[3]+0 == info["level"])
-                del_list[x[1], x[2], x[3], x[4]] = TRUE
+        for (s in symtab) {
+            split(s, f, SUBSEP)
+            if (f[SFN_NS] == ins && f[SFN_NAME] == name && f[SFN_LEVEL]+0 == info["level"])
+                del_list[f[1], f[2], f[3], f[4], f[5]] = TRUE
         }
-        for (k in del_list) {
-            split(k, x, SUBSEP)
-            dbg__print("sym", 3, sprintf("(xeq_cmd__undefine) Delete symtab['%s', '%s', %d, %s]",
-                                         x[1], x[2], x[3], x[4]))
-            delete symtab[x[1], x[2], x[3], x[4]]
+        for (d in del_list) {
+            split(d, f, SUBSEP)
+            dbg__print("sym", 3, sprintf("(xeq_cmd__undefine) Delete symtab[%s, '%s', '%s', %d, %s]",
+                                         f[1], f[2], f[3], f[4], f[5]))
+            delete symtab[f[1], f[2], f[3], f[4], f[5]]
         }
 
     } else if (type == TYPE_SEQUENCE)
-        seq_destroy(name)
+        seq_destroy_ns(ins, name)
     else if (type == TYPE_USER)
         cmd_destroy(info)
     else
@@ -9230,15 +9894,15 @@ function parse__while(                 name, while_block, body_block, pstat)
 
     # Create two new blocks: one for while_block, other for true branch
     while_block = blk_new(BLK_WHILE)
-    dbg__print("while", 5, "(parse__while) New block # " while_block " type " ppf__block_type(blk_type(while_block)))
+    dbg__print("while", 5, "(parse__while) New block # " while_block " type " ppf__label(blk_type(while_block)))
     body_block = blk_new(BLK_AGG)
-    dbg__print("while", 5, "(parse__while) New block # " body_block " type " ppf__block_type(blk_type(body_block)))
+    dbg__print("while", 5, "(parse__while) New block # " body_block " type " ppf__label(blk_type(body_block)))
 
     blktab[while_block, 0, "condition"] = $0
-    blktab[while_block, 0, "init_negate"] = (name == "@until")
+    blktab[while_block, 0, "init_negate"] = (name == "@__m2__::until")
     blktab[while_block, 0, "body_block"] = body_block
     blktab[while_block, 0, "dstblk"] = body_block
-    blktab[while_block, 0, "valid"]      = FALSE
+    blktab[while_block, 0, "blkvalid"]      = FALSE
     dbg__print_block("while", 7, while_block, "(parse__while) while_block")
     stk_push(__parse_stack, while_block) # Push it on to the parse_stack
 
@@ -9257,12 +9921,12 @@ function parse__while(                 name, while_block, body_block, pstat)
 function parse__endwhile(                    while_block)
 {
     dbg__print("while", 3, sprintf("(parse__endwhile) START dstblk=%d, mode=%s",
-                               curr_dstblk(), ppf__mode(curr_atmode())))
+                               curr_dstblk(), ppf__label(curr_atmode())))
     if (check__parse_stack(BLK_WHILE) != ERR_OKAY)
         error("[@endwhile] Parse error; " __m2_msg)
     while_block = stk_pop(__parse_stack)
 
-    blktab[while_block, 0, "valid"] = TRUE
+    blktab[while_block, 0, "blkvalid"] = TRUE
     lower_level()
     return while_block
 }
@@ -9273,11 +9937,11 @@ function xeq__BLK_WHILE(while_block,
 {
     block_type = blk_type(while_block)
     dbg__print("while", 3, sprintf("(xeq__BLK_WHILE) START dstblk=%d, while_block=%d, type=%s",
-                               curr_dstblk(), while_block, ppf__block_type(block_type)))
+                               curr_dstblk(), while_block, ppf__label(block_type)))
 
     dbg__print_block("while", 7, while_block, "(xeq__BLK_WHILE) while_block")
     if ((block_type != BLK_WHILE) || \
-        (blktab[while_block, 0, "valid"] != TRUE))
+        (blktab[while_block, 0, "blkvalid"] != TRUE))
         panic("(xeq__BLK_WHILE) Bad while_block config")
 
     # Evaluate condition, determine if TRUE/FALSE and also
@@ -9333,7 +9997,7 @@ function ppf__BLK_WHILE(blknum)
     return sprintf("  valid       : %s\n"       \
                    "  condition   : '%s'\n"     \
                    "  body_block  : %d",
-                   ppf__bool(blktab[blknum, 0, "valid"]),
+                   ppf__bool(blktab[blknum, 0, "blkvalid"]),
                    blktab[blknum, 0, "condition"],
                    blktab[blknum, 0, "body_block"])
 }
@@ -9349,11 +10013,10 @@ function ppf__BLK_WHILE(blknum)
 #
 #*****************************************************************************
 # @wrap      TEXT
-function xeq_cmd__wrap(cmd, cmdline,
-                       rstat)
+function xeq_cmd__wrap(cmd, cmdline)
 {
     dbg__print("parse", 5, sprintf("(xeq_cmd__wrap) START dstblk=%d, mode=%s, $0='%s'",
-                                curr_dstblk(), ppf__mode(curr_atmode()), $0))
+                                curr_dstblk(), ppf__label(curr_atmode()), $0))
 
     $0 = cmdline
     if (NF == 0)
@@ -9376,7 +10039,7 @@ function ship_out(obj_type, obj,
 {
     dstblk = curr_dstblk()
     dbg__print("ship_out", 3, sprintf("(ship_out) START dstblk=%d, obj_type=%s, obj='%s'",
-                                     dstblk, __blk_label[obj_type], obj))
+                                      dstblk, ppf__label(obj_type), obj))
     if (dstblk < 0) {
         dbg__print("ship_out", 3, "(ship_out) END, because dstblk <0")
         return
@@ -9395,10 +10058,15 @@ function ship_out(obj_type, obj,
 
     } else if (obj_type == OBJ_CMD) {
         name = extract_cmd_name(obj)
+        #print_stderr("NAME=" name)
         sub(/^[ \t]*[^ \t]+[ \t]*/, "", obj)
+
+        # XXX By the time we are shipping out, everything should be qualfied
+        #obj = qualify(obj)
+
         # Unlike every other command, @wrap ships out its line literally here.
         # Function end_program(), which handles wrapped text, calls dosubs().
-        if (name != "wrap") {
+        if (name != "__m2__::wrap") {
             dbg__print("ship_out", 7, "(ship_out) [OBJ_CMD] Calling dosubs('" obj "')")
             obj = dosubs(obj)
         }
@@ -9435,14 +10103,14 @@ function ship_out_to_file(block, file,
                                      block, file))
     if (blk_type(block) != BLK_AGG)
         panic(sprintf("(ship_out_to_file) Block %d has type %s, not AGG",
-                      block, ppf__block_type(blk_type(block))))
+                      block, ppf__label(blk_type(block))))
 
     lim = blktab[block, 0, "count"]
     for (i = 1; i <= lim; i++) {
         slot_type = blk_ll_slot_type(block, i)
         if (slot_type != OBJ_TEXT)
             panic(sprintf("(ship_out_to_file) Block %d slot %d has type %s, not TEXT",
-                          block, i, ppf__block_type(slot_type)))
+                          block, i, ppf__label(slot_type)))
 
         value = blk_ll_slot_value(block, i)
         print value > file
@@ -9473,7 +10141,7 @@ function calc3_eval(s,
 
     # Bare @expr@ returns most recent result
     if (emptyp(_c3__Sexpr))
-        return sym_ll_read("__EXPR__", "", ROOT_LEVEL)
+        return sys_read("__EXPR__")
 
     _c3__f = 1
     e = _c3_expr()
@@ -9494,7 +10162,7 @@ function _c3_expr(    var, e, op1, op2, m2,
         var = _c3_advance()
         sub(/=.*$/, "", var)
         info__create_from_text(var, info)
-        info__gate(OP_UPDATE, TYPE_SYMBOL, info, __curr_level, "@expr", TRUE)
+        info__gate(OP_UPDATE, TYPE_SYMBOL, info, curr_ns(), curr_level(), "@expr", TRUE)
         # match() sets RLENGTH which includes the match character [^=].
         # But that's the start of the value -- I need to back up over it
         # to read the value properly.
@@ -9550,7 +10218,7 @@ function _c3_term(    e, op, f)
             e = e * f
         else {
             if (f == 0)         # Ugh
-                error("Division by zero:" $0)
+                error("Division by zero:@expr " _c3__Sexpr "@")
             e = (op == "/") ? e / f : e % f
         }
     }
@@ -9598,8 +10266,8 @@ function _c3_factor3(    e, fun, e2,
         fun = _c3_advance()
         if (fun ~ /^srand()/) return srand()
         if (fun ~ /^rand()/)  return rand()
-        error(sprintf("Unknown function '%s':%s",
-                      (last(fun) == "(") ? chop(fun) : fun, $0))
+        error(sprintf("Unknown function '%s':@expr %s@",
+                      (last(fun) == "(") ? chop(fun) : fun, _c3__Sexpr))
     }
 
     # (expr) | function(expr) | function(expr,expr)
@@ -9623,8 +10291,8 @@ function _c3_factor3(    e, fun, e2,
             e2 = _c3_expr()
             e = _c3_calculate_function2(fun, e, e2)
         } else
-            error(sprintf("Unknown function '%s':%s",
-                          (last(fun) == "(") ? chop(fun) : fun, $0))
+            error(sprintf("Unknown function '%s':@expr %s@",
+                          (last(fun) == "(") ? chop(fun) : fun, _c3__Sexpr))
 
         if (substr(_c3__Sexpr, _c3__f++, 1) != ")")
             error(sprintf("Missing ')' at '%s'", substr(_c3__Sexpr, _c3__f)))
@@ -9645,8 +10313,9 @@ function _c3_factor3(    e, fun, e2,
             e = sym_fetch(e2)
             dbg__print("expr", 7, sprintf("(_c3_factor3) Symbol '%s' => %s", e2, e))
             return e
-        } else if (seqinfo_valid_p(info, e2) && seqinfo_defined_p(info, e2)) {
-            e = seq_ll_read(e2)
+        } else if (info__get(info, "type") == TYPE_SEQUENCE &&
+                   info__get(info, "defined") == TRUE) {
+            e = seq_ll_read_ns(info__get(info, "ns"), e2)
             dbg__print("expr", 7, sprintf("(_c3_factor3) Sequence '%s' => %s", e2, e))
             return e
         }
@@ -9859,7 +10528,7 @@ function dosubs(s,
         macro_expand(macro)
         if (macro["okay"] == TRUE) {
             # Kluge for @srem ...@ to remove preceding whitespace
-            if (macro["fn"] == "srem")
+            if (macro["name"] == "srem") # was macro["fn"]
                 sub(/[ \t]+$/, "", L)
             trace(TRACE_EXPANSION, macro["fn"], sprintf("[Expand] @%s@ => '%s'",
                                                         macro["urtext"], macro["expansion"]))
@@ -9868,8 +10537,9 @@ function dosubs(s,
             # If undefined symbol, throw an error (if __STRICT__[def] is
             # True, the default) or pass through the urtext (M) unchanged.
             if (strictp("def"))
-                error(sprintf("@%s@: Name '%s' not defined",
-                              macro["urtext"], macro["fn"]))
+                error(sprintf("@%s@: Name '%s' not defined%s",
+                              macro["urtext"], macro["fn"],
+                              VERBOSE() ? " [(dosubs) macro_expand() failed && __STRICT__[def] BBB]" : ""))
             L = L TOK_AT M
             R =   TOK_AT R
         }
@@ -9881,9 +10551,13 @@ function dosubs(s,
 }
 
 
+# macro["brace"]     = TRUE if "{" seen in urtext
 # macro["expansion"] = macro expansion text
-# macro["fn"]        = function name, 1st param
+# macro["fn"]        = function name, 1st param, as in urtext, maybe qualified
 # macro["okay"]      = TRUE/FALSE
+# macro["name"]      = plain function name, any namespace removed
+# macro["ns"]        = namespace, or "" if plain name
+# macro["qual"]      = TRUE if "::" seen in fn
 # macro["urtext"]    = original M text
 #
 # macro_expand() does the real work of transforming specific macro-invoking
@@ -9896,20 +10570,30 @@ function dosubs(s,
 # need to track two return values: whether the expansion went "okay" and
 # what the "expansion" text actually is.
 function macro_initialize(macro, urtext,
-                          fn, param, br)
+                          fn, param, br, q)
 {
-    macro["urtext"]    = urtext
-    macro["okay"]      = FALSE
-    macro["brace"]     = (br = index(urtext, TOK_LBRACE)) > 0
+    macro["brace"]     = index(urtext, TOK_LBRACE) > 0
     macro["expansion"] = EMPTY
+    macro["okay"]      = FALSE
+    macro["urtext"]    = urtext
 
     split(urtext, param)
     fn = param[1]
     # Check for @foo{...} -- isolate fn to scan @foo{a}{b}{c}...@ better
-    if (macro["brace"])
+    if ((br = index(fn, TOK_LBRACE)) > 0)
+        # was macro["brace"]); but that seems quite bogus now
         fn = substr(fn, 1, br - 1)
+    if (macro["qual"] = (q = index(fn, TOK_NS_QUAL)) > 0) {
+        # ns::name
+        macro["ns"]   = substr(fn, 1, q-1)
+        macro["name"] = substr(fn, q+2)
+    } else {
+        # name
+        macro["ns"]   = EMPTY
+        macro["name"] = fn
+    }
     dbg__print("dosubs", 4, sprintf("(macro_initialize) fn='%s'", fn))
-    macro["fn"] = fn
+    macro["fn"] = fn            # orig; might be "func" or "ns::func"
 }
 
 
@@ -9949,7 +10633,7 @@ function macro_set_expansion(macro, expanded_text)
 function macro_expand(macro,
                       i, j, l, M, nparam, p, pval, param, r, fn,
                       x, inc_dec, pre_post, subcmd, lfn, incr, wrkM,
-                      fninfo, level, args, orf, orn, orv)
+                      fninfo, fntype, fnname, fnns, level, args, orf, orn, orv)
 {
     M = macro["urtext"]
     nparam = split(M, param)
@@ -9959,7 +10643,7 @@ function macro_expand(macro,
     # not split() on whitespace
     if (macro["brace"]) {
         split("", param)       # Start by deleting all entries
-        param[nparam = 0] = fn # 1st element is function name
+        param[nparam = 0] = nam__unqualify(fn) # 1st element is function name
         wrkM = substr(M, length(fn) + 1)
         dbg__print("dosubs", 6, sprintf("(macro_expand) Before loop, wrkM='%s'", wrkM))
         while (match(wrkM, "^{[^}]*}")) {
@@ -9985,7 +10669,7 @@ function macro_expand(macro,
         for (j = 1; j <= nparam; j++)
             param[j] = param[j+1]
         delete param[nparam + 1]
-        param[0] = fn
+        param[0] = nam__unqualify(fn)
         if (dbg__sys_level_p("dosubs", 7)) {
             for (x in param)
                 print_debugfile(sprintf("m2debug:(macro_expand) param[%d] = '%s'", x, param[x]))
@@ -10018,124 +10702,145 @@ function macro_expand(macro,
 
     # Check if it's a known function (formerly SYMFUNC)
     level = info__create_from_text(fn, fninfo)
-    dbg__print("dosubs", 5, "(macro_expand) fninfo[" info__get(fninfo, "name") "] => " info__get(fninfo, "type"))
+    fntype = info__get(fninfo, "type")
+    fnname = info__get(fninfo, "name")
+    fnns   = info__get(fninfo, "ns")
+    dbg__print("dosubs", 5, "(macro_expand) fninfo[" fnns TOK_NS_QUAL fnname "] => " fntype)
 
-    if (nam_ll_in(fn, ROOT_LEVEL) &&
-        flag_1true_p((nam_ll_read(fn, ROOT_LEVEL)), TYPE_FUNCTION)) {
-        # Quick check to make sure fninfo is okay
-        if (info__get(fninfo, "type") != TYPE_FUNCTION)
-            panic("(macro_expand) not TYPE_FUNCTION?")
-        if (fn == "basename")
-            macro_set_expansion(macro, xeq_fn__basename(fn, M, nparam, param))
-        else if (fn == "boolval")
-            macro_set_expansion(macro, xeq_fn__boolval(fn, M, nparam, param))
-        else if (fn == "chr")
-            macro_set_expansion(macro, xeq_fn__chr(fn, M, nparam, param))
-        else if (fn == "comma" || fn == "scomma")
-            macro_set_expansion(macro, xeq_fn__comma(fn, M, nparam, param))
-        else if (fn == "date"     || fn == "epoch" ||
-                 fn == "strftime" || fn == "time"  ||
-                 fn == "tz"       || fn == "utc")
-            macro_set_expansion(macro, xeq_fn__date(fn, M, nparam, param))
-        else if (fn == "dirname")
-            macro_set_expansion(macro, xeq_fn__dirname(fn, M, nparam, param))
-        else if (fn == "divnl")
-            macro_set_expansion(macro, xeq_fn__divnl(fn, M, nparam, param))
-        else if (fn == "dow")
-            macro_set_expansion(macro, xeq_fn__dow(fn, M, nparam, param))
-        else if (fn == "execpath" || fn == "sexecpath")
-            macro_set_expansion(macro, xeq_fn__execpath(fn, M, nparam, param))
-        else if (fn == "expr" || fn == "sexpr")
-            macro_set_expansion(macro, xeq_fn__expr(fn, M, nparam, param))
-        else if (fn == "format" || fn == "sprintf")
-            macro_set_expansion(macro, xeq_fn__format(fn, M, nparam, param))
-        else if (fn == "geodist")
-            macro_set_expansion(macro, xeq_fn__geodist(fn, M, nparam, param))
-        else if (fn == "getenv" || fn == "sgetenv")
-            macro_set_expansion(macro, xeq_fn__getenv(fn, M, nparam, param))
-        else if (fn == "gregdate")
-            macro_set_expansion(macro, xeq_fn__gregdate(fn, M, nparam, param))
-        else if (fn == "hex")
-            macro_set_expansion(macro, xeq_fn__hex(fn, M, nparam, param))
-        else if (fn == "hms")
-            macro_set_expansion(macro, xeq_fn__hms(fn, M, nparam, param))
-        else if (fn == "hr")
-            macro_set_expansion(macro, xeq_fn__hr(fn, M, nparam, param))
-        else if (fn == "ifdef" || fn == "ifndef")
-            macro_set_expansion(macro, xeq_fn__ifdef(fn, M, nparam, param))
-        else if (fn == "ifelse")
-            macro_set_expansion(macro, xeq_fn__ifelse(fn, M, nparam, param))
-        else if (fn == "ifx")
-            macro_set_expansion(macro, xeq_fn__ifx(fn, M, nparam, param))
-        else if (fn == "index")
-            macro_set_expansion(macro, xeq_fn__index(fn, M, nparam, param))
-        else if (fn == "join" || fn == "sjoin")
-            macro_set_expansion(macro, xeq_fn__join(fn, M, nparam, param))
-        else if (fn == "left")
-            macro_set_expansion(macro, xeq_fn__left(fn, M, nparam, param))
-        else if (fn == "ljust"  || fn == "rjust"  || fn == "center" || \
-                 fn == "sljust" || fn == "srjust" || fn == "scenter")
-            macro_set_expansion(macro, xeq_fn__lrc(fn, M, nparam, param))
-        else if (fn == "mid" || fn == "substr")
-            macro_set_expansion(macro, xeq_fn__mid(fn, M, nparam, param))
-        else if (fn == "mjd")
-            macro_set_expansion(macro, xeq_fn__mjd(fn, M, nparam, param))
-        else if (fn == "mktemp")
-            macro_set_expansion(macro, xeq_fn__mktemp(fn, M, nparam, param))
-        else if (fn == "ord")
-            macro_set_expansion(macro, xeq_fn__ord(fn, M, nparam, param))
-        else if (fn == "rem" || fn == "srem")
+    if (fnns == M2_ENVNS) {
+        if (syminfo_defined_p(fninfo)) {
+            #print_stderr("(macro_expand) " info__get(fninfo, "name") " is defined: " sym_ll_read_ns(fnns, fnname, NOKEY, ROOT_LEVEL))
+            macro_set_expansion(macro, sym_ll_read_ns(fnns, fnname, NOKEY, ROOT_LEVEL))
+        } else if (strictp("env")) {
+            error(sprintf("%s '%s' not defined%s",
+                          ppf__label(PTYPE_ENV_VAR),
+                          fnname, VERBOSE() ? " [(macro_expand) && __STRICT__[env]]" : EMPTY))
+        } else {
+            trace(TRACE_ENV_VAR, fnname,
+                  sprintf("[Env Var Read] %s : Not Found => ''", fnname))
             macro_set_expansion(macro, EMPTY)
-        else if (fn == "right")
-            macro_set_expansion(macro, xeq_fn__right(fn, M, nparam, param))
-        else if (fn == "rot13")
-            macro_set_expansion(macro, xeq_fn__rot13(fn, M, nparam, param))
-        else if (fn == "space" || fn == "spaces" ||
-                 fn == "tab"   || fn == "tabs")
-            macro_set_expansion(macro, xeq_fn__spaces(fn, M, nparam, param))
-        else if (fn == "lc" || fn == "len" || fn == "uc")
-            macro_set_expansion(macro, xeq_fn__str_fn(fn, M, nparam, param))
-        else if (fn == "trim" || fn == "ltrim" || fn == "rtrim")
-            macro_set_expansion(macro, xeq_fn__trim(fn, M, nparam, param))
-        else if (fn == "uuid")
+        }
+    } else if (nam_ll_in_ns(M2_SYSNS, fnname, ROOT_LEVEL) &&
+        flag_1true_p((nam_ll_read_ns(M2_SYSNS, fnname, ROOT_LEVEL)), TYPE_FUNCTION)) {
+        # Quick check to make sure fninfo is okay
+        if (fntype != TYPE_FUNCTION)
+            panic("(macro_expand) not TYPE_FUNCTION?")
+
+        if (fnname == "basename")
+            macro_set_expansion(macro, xeq_fn__basename(fnname, M, nparam, param))
+        else if (fnname =="boolval")
+            macro_set_expansion(macro, xeq_fn__boolval(fnname, M, nparam, param))
+        else if (fnname =="chr")
+            macro_set_expansion(macro, xeq_fn__chr(fnname, M, nparam, param))
+        else if (fnname =="comma" || fnname == "scomma")
+            macro_set_expansion(macro, xeq_fn__comma(fnname, M, nparam, param))
+        else if (fnname =="date"     || fnname == "epoch" ||
+                 fnname == "strftime" || fnname == "time"  ||
+                 fnname == "tz"       || fnname == "utc")
+            macro_set_expansion(macro, xeq_fn__date(fnname, M, nparam, param))
+        else if (fnname =="dirname")
+            macro_set_expansion(macro, xeq_fn__dirname(fnname, M, nparam, param))
+        else if (fnname =="divnl")
+            macro_set_expansion(macro, xeq_fn__divnl(fnname, M, nparam, param))
+        else if (fnname =="dow")
+            macro_set_expansion(macro, xeq_fn__dow(fnname, M, nparam, param))
+        else if (fnname == "empty")
+            macro_set_expansion(macro, xeq_fn__empty(fnname, M, nparam, param))
+        else if (fnname =="execpath" || fnname == "sexecpath")
+            macro_set_expansion(macro, xeq_fn__execpath(fnname, M, nparam, param))
+        else if (fnname =="expr" || fnname == "sexpr")
+            macro_set_expansion(macro, xeq_fn__expr(fnname, M, nparam, param))
+        else if (fnname =="format" || fnname == "sprintf")
+            macro_set_expansion(macro, xeq_fn__format(fnname, M, nparam, param))
+        else if (fnname =="geodist")
+            macro_set_expansion(macro, xeq_fn__geodist(fnname, M, nparam, param))
+        else if (fnname =="gregdate")
+            macro_set_expansion(macro, xeq_fn__gregdate(fnname, M, nparam, param))
+        else if (fnname =="hex")
+            macro_set_expansion(macro, xeq_fn__hex(fnname, M, nparam, param))
+        else if (fnname =="hms")
+            macro_set_expansion(macro, xeq_fn__hms(fnname, M, nparam, param))
+        else if (fnname =="hr")
+            macro_set_expansion(macro, xeq_fn__hr(fnname, M, nparam, param))
+        else if (fnname =="ifdef" || fnname == "ifndef")
+            macro_set_expansion(macro, xeq_fn__ifdef(fnname, M, nparam, param))
+        else if (fnname =="ifelse")
+            macro_set_expansion(macro, xeq_fn__ifelse(fnname, M, nparam, param))
+        else if (fnname =="ifx")
+            macro_set_expansion(macro, xeq_fn__ifx(fnname, M, nparam, param))
+        else if (fnname =="index")
+            macro_set_expansion(macro, xeq_fn__index(fnname, M, nparam, param))
+        else if (fnname =="join" || fnname == "sjoin")
+            macro_set_expansion(macro, xeq_fn__join(fnname, M, nparam, param))
+        else if (fnname =="left")
+            macro_set_expansion(macro, xeq_fn__left(fnname, M, nparam, param))
+        else if (fnname =="ljust"  || fnname == "rjust"  || fnname == "center" || \
+                 fnname == "sljust" || fnname == "srjust" || fnname == "scenter")
+            macro_set_expansion(macro, xeq_fn__lrc(fnname, M, nparam, param))
+        else if (fnname =="mid" || fnname == "substr")
+            macro_set_expansion(macro, xeq_fn__mid(fnname, M, nparam, param))
+        else if (fnname =="mjd")
+            macro_set_expansion(macro, xeq_fn__mjd(fnname, M, nparam, param))
+        else if (fnname =="mktemp")
+            macro_set_expansion(macro, xeq_fn__mktemp(fnname, M, nparam, param))
+        else if (fnname =="ns")
+            macro_set_expansion(macro, curr_ns())
+        else if (fnname =="ord")
+            macro_set_expansion(macro, xeq_fn__ord(fnname, M, nparam, param))
+        else if (fnname =="rem" || fnname == "srem")
+            macro_set_expansion(macro, EMPTY)
+        else if (fnname =="right")
+            macro_set_expansion(macro, xeq_fn__right(fnname, M, nparam, param))
+        else if (fnname =="rot13")
+            macro_set_expansion(macro, xeq_fn__rot13(fnname, M, nparam, param))
+        else if (fnname =="space" || fnname == "spaces" ||
+                 fnname == "tab"   || fnname == "tabs")
+            macro_set_expansion(macro, xeq_fn__spaces(fnname, M, nparam, param))
+        else if (fnname =="lc" || fnname == "len" || fnname == "uc")
+            macro_set_expansion(macro, xeq_fn__str_fn(fnname, M, nparam, param))
+        else if (fnname =="trim" || fnname == "ltrim" || fnname == "rtrim")
+            macro_set_expansion(macro, xeq_fn__trim(fnname, M, nparam, param))
+        else if (fnname =="uuid")
             macro_set_expansion(macro, uuid())
-        else if (fn == "xbasename" || fn == "xdirname")
-            macro_set_expansion(macro, xeq_fn__xname(fn, M, nparam, param))
+        else if (fnname =="xbasename" || fnname == "xdirname")
+            macro_set_expansion(macro, xeq_fn__xname(fnname, M, nparam, param))
         else
             panic("(macro_expand) Function '" fn "' not handled")
 
     # Check if it's an array
-    } else if (sym_valid_p(fn) && arrayp(fn)) {
+    #} else if (sym_valid_p(fn) && arrayp(fn)) {
+    } else if (info__get(fninfo, "valid") && arrayp(fn)) {
         macro_set_expansion(macro, sym_fetch(fn))
 
-    # Check if it's a Command
-    } else if (cmd_valid_p(fn) && cmd_defined_p(fn)) {
+        # Check if it's a User Command
+    } else if (fntype == TYPE_USER &&
+               info__get(fninfo, "defined") == TRUE) {
         # print_stderr("(dosubs) " fn " is a user command")
         # print_stderr("(dosubs) Args: '" M "'")
-        args = scan__usercmd_call(TOK_AT M)
+        args = scan__usercmd_call(TOK_AT M, fninfo)
         # print_stderr("(dosubs) args:" ppf__sepstr(args))
 
         # Save & restore @return values, so that nested User calls
         # don't clobber values
-        orf = __return_found
-        orn = __return_noarg
-        orv = __return_value
-        __return_found = FALSE
-        __return_value = EMPTY
+        orf = __return_found; __return_found = FALSE
+        orv = __return_value; __return_value = EMPTY
         execute__user(args)
-        if ((!__return_found || __return_noarg) && strictp("def"))
+        if (!__return_found && strictp("def"))
             error(TOK_AT fn ": Command did not return a value")
+
         macro_set_expansion(macro, __return_value)
         __return_found = orf
-        __return_noarg = orn
         __return_value = orv
 
     # <SOMETHING ELSE> : Call a user-defined macro, handles arguments
-    } else if (sym_valid_p(fn) && (sym_defined_p(fn) || sym_deferred_p(fn))) {
-        macro_set_expansion(macro, substitute_params(sym_fetch(fn), nparam, param))
+    # } else if (sym_valid_p(fn) && (sym_defined_p(fn) || sym_deferred_p(fn))) {
+    } else if (info__get(fninfo, "type") == TYPE_SYMBOL &&
+               info__get(fninfo, "defined") == TRUE) {
+        macro_set_expansion(macro, substitute_params(syminfo_fetch(fninfo), nparam, param))
 
     # Check if it's a sequence
-    } else if (seq_valid_p(fn) && seq_defined_p(fn)) {
+    } else if (info__get(fninfo, "type") == TYPE_SEQUENCE &&
+               info__get(fninfo, "defined") == TRUE) {
         dbg__print("dosubs", 3, "(macro_expand) It's a sequence")
         # Check for pre/post increment/decrement.
         # This is only performed on a bare reference.
@@ -10147,15 +10852,16 @@ function macro_expand(macro,
             #   | ++foo    |       -1 |      +1 |
             #   | foo--    |       +1 |      -1 |
             #   | foo++    |       +1 |      +1 |
-            incr = symtab[fn, EMPTY, ROOT_LEVEL, "incr"]
+            incr = symtab[fnns, fnname, EMPTY, ROOT_LEVEL, "incr"]
             # Handle prefix increment/decrement
             if (pre_post == -1)
-                seq_ll_incr(fn, incr * inc_dec)
+                seq_ll_incr_ns(fnns, fnname, incr * inc_dec)
             # Insert current value with desired formatting
-            macro_set_expansion(macro, m2_sprintf(symtab[fn, EMPTY, ROOT_LEVEL, "fmt"], seq_ll_read(fn)))
+            macro_set_expansion(macro, m2_sprintf(symtab[fnns, fnname, EMPTY, ROOT_LEVEL, "fmt"],
+                                                  seq_ll_read_ns(fnns, fnname)))
             # Handle postfix increment/decrement
             if (pre_post == +1)
-                seq_ll_incr(fn, incr * inc_dec)
+                seq_ll_incr_ns(fnns, fnname, incr * inc_dec)
         } else {
             if (pre_post != 0)
                 error("Bad parameters in '" M "':" $0)
@@ -10172,12 +10878,12 @@ function macro_expand(macro,
                     # version of m2 which did not have full sequence
                     # value formatting.  Instead, you had two strings
                     # which printed before and after the value.)
-                    macro_set_expansion(macro, seq_ll_read(fn))
+                    macro_set_expansion(macro, seq_ll_read_ns(fnns, fnname))
                 } else if (subcmd == "nextval") {
                     # - nextval :: Increment and return new value of
                     # counter.  No prefix/suffix.
-                    seq_ll_incr(fn, symtab[fn, EMPTY, ROOT_LEVEL, "incr"])
-                    macro_set_expansion(macro, seq_ll_read(fn))
+                    seq_ll_incr_ns(fnns, fnname, symtab[fnns, fnname, EMPTY, ROOT_LEVEL, "incr"])
+                    macro_set_expansion(macro, seq_ll_read_ns(fnns, fnname))
                 } else
                     error("Bad parameters in '" M "':" $0)
             } else {
@@ -10188,8 +10894,8 @@ function macro_expand(macro,
 
     # Check fninfo for ARRAY[] or LIST[]
     } else if ( \
-        info__get(fninfo, "valid") == TRUE &&
-        (info__get(fninfo, "type") == TYPE_ARRAY || info__get(fninfo, "type") == TYPE_LIST) &&
+        info__get(fninfo, "lexvalid") == TRUE &&
+        (fntype == TYPE_ARRAY || fntype == TYPE_LIST) &&
         info__get(fninfo, "nparts") == 2 &&
         length(info__get(fninfo, "key")) > 0 &&
         info__get(fninfo, "level") != NAME_NOT_FOUND) {
@@ -10198,13 +10904,14 @@ function macro_expand(macro,
 
     # Check fninfo for ARRAY or LIST
     } else if ( \
-        info__get(fninfo, "valid") == TRUE &&
-        (info__get(fninfo, "type") == TYPE_ARRAY || info__get(fninfo, "type") == TYPE_LIST) &&
+        info__get(fninfo, "lexvalid") == TRUE &&
+        (fntype == TYPE_ARRAY || fntype == TYPE_LIST) &&
         info__get(fninfo, "nparts") == 1 &&
         length(info__get(fninfo, "key")) == 0 &&
         info__get(fninfo, "level") != NAME_NOT_FOUND) {
 
-        macro_set_expansion(macro, idx__size(info__get(fninfo, "name"), level, info__get(fninfo, "code")))
+        #macro_set_expansion(macro, idx__size(fnname, level, info__get(fninfo, "code")))
+        macro_set_expansion(macro, idx__size(fninfo))
     }
 }
 
@@ -10240,6 +10947,165 @@ function substitute_params(str, nparam, param,
 
     return str
 }
+
+
+# qualify() can be given random text that it will look through.
+# dosubs() and qualify_braces() expect the first arg to be an actual name.
+# qualify() is NOP when curr_atmode() == MODE_AT_LITERAL
+function qualify(s,
+                 orig, r)
+{
+    dbg__print("qual", 3, sprintf("(qualify) START; s='%s'", s))
+    if (curr_atmode() == MODE_AT_LITERAL) {
+        trace(TRACE_QUALIFICATION, EMPTY,
+              sprintf("[Qualify] NOP/LITERAL => '%s'", s))
+        dbg__print("qual", 1, sprintf("(qualify) NOP/LITERAL; RETURNING '%s'", s))
+        return s
+    }
+
+    orig = s
+    if (index(s, TOK_AT_BRACE) > 0) {
+        s = qualify_braces(s)
+        dbg__print("qual", 7, "(qualify) qualify_braces, s='" s "'")
+    }
+
+    r = index(s, TOK_AT) > 0 ? qualify_normal(s) : s
+    trace(TRACE_QUALIFICATION, EMPTY,
+          sprintf("[Qualify] '%s' => '%s'", orig, r))
+    dbg__print("qual", 1, sprintf("(qualify) END; RETURNING '%s'", r))
+    return r
+}
+
+function qualify_braces(s,
+                        r, atbr, ltext, rtext, sym, info, ns, name, key)
+{
+    dbg__print("qual", 3, "(qualify_braces) s='" s "'")
+    r = ""
+    while ((atbr = index(s, TOK_AT_BRACE)) > 0) {
+        ltext = substr(s, 1,      atbr+1) # includes @{"
+        rtext = substr(s, atbr+2)
+        dbg__print("qual", 5, "(qualify_braces) ltext='" ltext "', rtext='" rtext "'")
+        r = r ltext
+
+        # look up rtext - scan.  Include "-" and "+"
+        # to allow for ++ and -- on sequences.
+        if (! match(rtext, /^[-+A-Za-z#_:][-+A-Za-z#_0-9:]*/))
+            panic("(qualify_braces) not matched")
+
+        sym = substr(rtext, RSTART, RLENGTH)
+        dbg__print("qual", 7, sprintf("(qualify_braces) RSTART=%d, RLENGTH=%d, sym='%s'",
+                                      RSTART, RLENGTH, sym))
+
+        s = nam__qualify(sym) substr(rtext, RLENGTH+1)
+        dbg__print("qual", 6, "(qualify_braces) s now='" s "'")
+    }
+    dbg__print("qual", 2, "(qualify_braces) RETURNING '" r s "'")
+    return r s
+}
+
+function qualify_normal(s,
+                        r, t, x, ltext, at,
+                        sym, info, ns, name, l2, r2, pre, post)
+{
+    dbg__print("qual", 3, "(qualify_normal) s init='" s "'")
+    r = ""
+    while (match(s, /(^|[^\\])@[^ {]/)) {
+        dbg__print("qual", 7, "(qualify_normal) s match RSTART=" RSTART ", RLENGTH=" RLENGTH)
+        if (substr(s, RSTART, 1) == TOK_AT)
+            ltext = TOK_AT
+        else
+            ltext = substr(s, 1, RSTART + 1)
+        dbg__print("qual", 5, "(qualify_normal) ltext='" ltext "'")
+        r = r ltext
+        #
+        t = substr(s, RSTART + RLENGTH - 1)
+        dbg__print("qual", 6, "(qualify_normal) t='" t "'")
+        if (index(t, TOK_AT) == NOT_FOUND)
+            # No @, not something for us
+            return r t
+
+        if (match(t, /[^\\]@($|[^{])/)) {
+            dbg__print("qual", 7, "(qualify_normal) t match RSTART=" RSTART ", RLENGTH=" RLENGTH)
+            x = substr(t, 1, RSTART)
+            dbg__print("qual", 4, "(qualify_normal) Winner? x='" x "'")
+
+            # Look up x.  For purposes of regexp scanning, include
+            # `-' and `+' as permissible characters, for sequence autoincrement
+            if (! match(x, /^[-+A-Za-z#_:][-+A-Za-z#_0-9:]*/)) {
+                __m2_msg = "Invalid name: '" x "'"
+                error(sprintf("Scan error: %s%s", __m2_msg, VERBOSE() ? " [qualify_normal]" : ""))
+            }
+
+            # Isolate symbol name, and strip off any leading sequence ++ or --
+            sym = substr(x, RSTART, RLENGTH)
+            dbg__print("qual", 7, sprintf("(qualify_normal) RSTART=%d, RLENGTH=%d, sym='%s'",
+                                          RSTART, RLENGTH, sym))
+            r = r nam__qualify(sym)
+            s = substr(t, RLENGTH + 1)
+            dbg__print("qual", 6, "(qualify_normal) s now='" s "'")
+
+            at = index(s, TOK_AT)
+            if (at == NOT_FOUND)
+                error("Closing '@' not found: '" s "'")
+            r = r substr(s, 1, at - 1) TOK_AT
+            s =   substr(s, at + 1)
+        }
+    }
+    dbg__print("qual", 2, "(qualify_normal) RETURNING '" r s "'")
+    return r s
+}
+
+
+
+function nam__qualify(text,
+                      orig, info, l2, pre, r2, post, ns, name, key,
+                      retval)
+{
+    orig = text
+    l2 = substr(text, 1, 2)
+    if (l2 == "++" || l2 == "--") {
+        pre = l2
+        text = substr(text, 3)
+    }
+    r2 = substr(text, length(text) - 1, 2)
+    if (r2 == "++" || r2 == "--") {
+        post = r2
+        text = substr(text, 1, length(text) - 2)
+    }
+
+    if (nam__scan(text, info) == ERROR)
+        error(sprintf("Scan error: '%s', %s%s", info__get(info, "urtext"),
+                      __m2_msg, VERBOSE() ? " [nam__qualify]" : ""))
+    nam__lookup(info)
+    name = info__get(info, "name")
+    ns   = info__get(info, "ns")
+    if (ns == EMPTY)
+        ns = info["ns"] = curr_ns()
+    key = info__get(info, "has_bracket") ? TOK_LBRACKET info__get(info, "key") TOK_RBRACKET : EMPTY
+    dbg__print("qual", 4, sprintf("(nam__qualify) text='%s' => %s ns='%s', name='%s' %s",
+                                  orig, pre, ns, name, post))
+    retval = pre ns TOK_NS_QUAL name key post
+    return retval
+}
+
+
+function nam__unqualify(text,
+                        q)
+{
+    if ((q = index(text, TOK_NS_QUAL)) > 0 &&
+        match(text, "^[A-Za-z#_][A-Za-z#_0-9]*" TOK_NS_QUAL "."))
+        text = substr(text, q+2)
+    return text
+}
+
+# function nam__quick_find_ns(ns, name,
+#                             level)
+# {
+#     for (level = curr_level(); level >= ROOT_LEVEL; level--)
+#         if (nam_ll_in_ns(ns, name, level))
+#             return nam_ll_read_ns(ns, name, level) # code
+#     return EMPTY
+# }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
 
@@ -10292,32 +11158,32 @@ function xeq_fn__basename(fn, M, nparam, param,
 #*****************************************************************************
 # @boolval SYM@
 function xeq_fn__boolval(fn, M, nparam, param,
-                         p, result)
+                         p, result, info)
 {
     if (nparam == 0)
         # In an effort to spread a bit more entropy in the universe,
         # if you don't give an argument to boolval then you get
         # True 50% of the time and False the other 50%.
-        result = sym_ll_read("__FMT__", rand() < 0.50)
+        result = sym_ll_read_ns(M2_SYSNS, "__FMT__", rand() < 0.50)
     else {
         p = param[1]
         # Always accept your current representation of True or False
         # to actually be true or false without further evaluation.
-        if (p == sym_ll_read("__FMT__", TRUE) ||
-            p == sym_ll_read("__FMT__", FALSE))
+        if (p == sym_ll_read_ns(M2_SYSNS, "__FMT__", TRUE) ||
+            p == sym_ll_read_ns(M2_SYSNS, "__FMT__", FALSE))
             result = p
         else if (sym_valid_p(p)) {
             # It's a valid name -- now see if it's defined or not.
             # If not, check if we're in strict mode (error) or not.
             if (sym_defined_p(p))
-                result = sym_ll_read("__FMT__", sym_true_p(p))
+                result = sym_ll_read_ns(M2_SYSNS, "__FMT__", sym_true_p(p))
             else if (strictp("bool"))
                 error("Name '" p "' not defined (__STRICT__[bool] is True):" $0)
             else
-                result = sym_ll_read("__FMT__", FALSE)
+                result = sym_ll_read_ns(M2_SYSNS, "__FMT__", FALSE)
         } else
             # It's not a symbol, so use its value interpreted as a boolean
-            result = sym_ll_read("__FMT__", to_bool(p))  # !!p)
+            result = sym_ll_read_ns(M2_SYSNS, "__FMT__", to_bool(p))  # !!p)
     }
 
     return result
@@ -10419,7 +11285,7 @@ function rmcomma(x)
 #*****************************************************************************
 # @date@
 function xeq_fn__date(fn, M, nparam, param,
-                      y, cmdline, result)
+                      y, cmdline, output)
 {
     if (secure_level() >= SEC_PARANOID)
         security_violation(sprintf("@%s@: Forbidden", fn))
@@ -10428,14 +11294,14 @@ function xeq_fn__date(fn, M, nparam, param,
     if (fn == "strftime" && nparam == 0)
         error("Bad parameters in '" M "':" $0)
     y = fn == "strftime" ? substr(M, length(fn)+2) \
-        : sym_ll_read("__FMT__", fn)
+        : sym_ll_read_ns(M2_SYSNS, "__FMT__", fn)
     gsub(/"/, "\\\"", y)
     cmdline = build_prog_cmdline("date", "+" TOK_QUOTE y TOK_QUOTE, MODE_IO_CAPTURE)
     if (fn == "utc")
         cmdline = "TZ=UTC " cmdline
-    cmdline | getline result
+    cmdline | getline output
     close(cmdline)
-    return result
+    return output
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -10534,6 +11400,31 @@ function xeq_fn__dow(fn, M, nparam, param,
 
 #*****************************************************************************
 #
+#       @  E M P T Y  @
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#       empty : True if parameter symbol's value is empty string
+#
+#*****************************************************************************
+# @empty SYM@
+function xeq_fn__empty(fn, M, nparam, param,
+                       p, silent, cmdline, output)
+{
+    if (nparam != 1)
+        error("Bad parameters in '" M "':" $0)
+    p = param[1]
+    assert_sym_valid_name(p, "@" M "@")
+    assert_sym_defined(p, "@" M "@")
+
+    return to_bool(sym_fetch(p) == EMPTY)
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
 #       @  E X E C P A T H  @
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -10543,9 +11434,9 @@ function xeq_fn__dow(fn, M, nparam, param,
 #*****************************************************************************
 # @execpath PROG@
 function xeq_fn__execpath(fn, M, nparam, param,
-                          p, silent, cmdline, result)
+                          p, silent, cmdline, output)
 {
-    if (secure_level() >= SEC_PARANOID)
+    if (secure_level() >= SEC_SECURE)
         security_violation(sprintf("@%s@: Forbidden", fn))
     # S variant won't warn about not being found
     silent = first(fn) == "s"
@@ -10554,11 +11445,11 @@ function xeq_fn__execpath(fn, M, nparam, param,
     p = param[1]
 
     cmdline = build_prog_cmdline("sh", sprintf("-c 'command -v %s' 2>%s", p, NULL))
-    cmdline | getline result
+    cmdline | getline output
     close(cmdline)
-    if (result == EMPTY && !silent)
+    if (output == EMPTY && !silent)
         warn(sprintf("@%s %s@: Command not found", fn, p))
-    return result
+    return output
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -10579,10 +11470,10 @@ function xeq_fn__expr(fn, M, nparam, param,
 {
     # S variant won't automatically print result
     silent = first(fn) == "s"
-    sub(/^s?expr[ \t]*/, "", M) # clean up expression to evaluate
+    sub(/^(__m2__::)?s?expr[ \t]*/, "", M) # clean up expression to evaluate
     result = calc3_eval(M)
     dbg__print("expr", 3, sprintf("(xeq_fn__expr) expr{%s} = %s", M, result))
-    sym_ll_write("__EXPR__", "", ROOT_LEVEL, result+0)
+    sys_write("__EXPR__", result+0)
     return silent ? "" : result
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
@@ -10643,38 +11534,6 @@ function xeq_fn__geodist(fn, M, nparam, param,
     return trim(s)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
-
-
-
-#*****************************************************************************
-#
-#       @  G E T E N V  @
-#
-#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-#
-#       getenv: Get environment variable
-#       sgetenv
-#         @getenv HOME@ => /home/user
-#
-#       "silent" getenv returns empty string for non-existent variable,
-#       regardless of strict setting.
-#
-#*****************************************************************************
-# @getenv ENV@
-function xeq_fn__getenv(fn, M, nparam, param,
-                        p, silent)
-{
-    silent = first(fn) == "s"
-    if (nparam != 1)
-        error("Bad parameters in '" M "':" $0)
-    p = param[1]
-    assert_valid_env_var_name(p, "@" M "@")
-    if (p in ENVIRON)
-        return ENVIRON[p]
-    if (strictp("env") && !silent)
-        error("Environment variable '" p "' not defined (__STRICT__[env] is True):" $0)
-    return ""
-}
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
 
@@ -10830,6 +11689,7 @@ function xeq_fn__hr(fn, M, nparam, param,
 function xeq_fn__ifdef(fn, M, nparam, param,
                        x, ifcond, init_negate, true_text, false_text, result)
 {
+    M = nam__unqualify(M)
     if (   match(M, "^ifdef{[^}][^}]*}{[^}]*}{[^}]*}$") \
         || match(M, "^ifndef{[^}][^}]*}{[^}]*}{[^}]*}$"))
         ;          # Three-brace expr is well-formed
@@ -10897,7 +11757,7 @@ function xeq_fn__ifdef(fn, M, nparam, param,
 function xeq_fn__ifelse(fn, M, nparam, param,
                         arg, j, result)
 {
-    M = substr(M, 7)    # strip away "ifelse"
+    M = substr(nam__unqualify(M), 7)    # strip away "ifelse"
     arg[1] = arg[2] = arg[3] = ""
     while (TRUE) {
         dbg__print("dosubs", 5, "(ifelse) TOP; M=" M)
@@ -10972,6 +11832,7 @@ function xeq_fn__ifelse(fn, M, nparam, param,
 function xeq_fn__ifx(fn, M, nparam, param,
                      ifcond, init_negate, true_text, false_text, result)
 {
+    M = nam__unqualify(M)
     if (!match(M, "^ifx{[^}][^}]*}{[^}]*}{[^}]*}$"))   # Busybox Awk does not support +
         error("(ifx) Bad ifx in '" M "':" $0)
     M = substr(M, index(M, TOK_LBRACE)) # strip fn name
@@ -11044,8 +11905,8 @@ function xeq_fn__index(fn, M, nparam, param,
 #*****************************************************************************
 # @join     LIS [FS]
 function xeq_fn__join(fn, M, nparam, param,
-                      info, nparts, level, s, lis, fs, fslen, silent,
-                      code, size, k, x, keys, i, agg_block, me)
+                      info, nparts, level, retval, lis, fs, fslen, silent,
+                      code, size, s, f, k, keys, i, agg_block, me, ins)
 {
     me = "@" M "@"
     # S variant appends a final separator as a terminator
@@ -11055,7 +11916,8 @@ function xeq_fn__join(fn, M, nparam, param,
     lis = param[1]
 
     level = info__create_from_text(lis, info)
-    info__gate(OP_READ, PTYPE_IDXABLE, info, level, me, TRUE)
+    ins = info__get(info, "ns")
+    info__gate(OP_READ, PTYPE_IDXABLE, info, ins, level, me, TRUE)
 
     # # TODO Need real checks here!
     # assert_sym_valid_name(lis, me)
@@ -11071,7 +11933,7 @@ function xeq_fn__join(fn, M, nparam, param,
 
     # Check namtab
     # level = info__create_from_text(lis, info)
-
+    # XXX - isn't this part just a duplication of info__create_from_text() above???
     if ((nparts = nam__scan(lis, info)) == ERROR)
         error("(xeq_fn__join) Scan error, " __m2_msg)
     if (nparts == 2)
@@ -11085,45 +11947,50 @@ function xeq_fn__join(fn, M, nparam, param,
     if (info__get(info, "idxable") == FALSE)
         error(sprintf("%s: Name '%s' has type %s, not Array or List", "@" M "@", lis, info__get(info, "type")))
     code = info["code"]
-    size = idx__size(lis, level, code)
+    ins  = info__get(info, "ns")
+    size = idx__size(info)
 
-    s = ""
+    retval = ""
     if (size > 0) {
         # Build return string
         if (info__get(info, "type") == TYPE_LIST) {
             # It's a block array - Get its agg_block
-            if (! ((lis, "", level, "agg_block") in symtab))
-                panic(sprintf("(xeq_fn__join) Could not find ['%s','%s',%d,'agg_block'] in symtab",
-                              lis, "", level))
-            agg_block = symtab[lis, "", level, "agg_block"]
+            if (! ((ins, lis, NOKEY, level, "agg_block") in symtab))
+                panic(sprintf("(xeq_fn__join) Could not find [%s, '%s','%s',%d,'agg_block'] in symtab",
+                              ins, lis, NOKEY, level))
+            agg_block = symtab[ins, lis, NOKEY, level, "agg_block"]
             # Inject the values
             for (i = 1; i <= size; i++) {
                 # Make sure slot holds text, which it pretty much has to
                 if (blk_ll_slot_type(agg_block, i) != OBJ_TEXT)
                     panic(sprintf("(xeq_fn__join) Block # %d slot %d is not OBJ_TEXT", agg_block, i))
-                s = s  blk_ll_slot_value(agg_block, i)  fs
+                retval = retval  blk_ll_slot_value(agg_block, i)  fs
             }
         } else {
             # It's a normal array - Find the keys
-            for (k in symtab) {
-                split(k, x, SUBSEP)
-                if (x[1] == lis && x[3] == level && x[4] == "symval") {
-                    #print x[2]
-                    keys[x[2]] = 1
+            for (s in symtab) {
+                split(s, f, SUBSEP)
+                # NS ?
+                if (f[SFN_NS] == ins &&
+                    f[SFN_NAME] == lis &&
+                    f[SFN_LEVEL] == level &&
+                    f[SFN_TAG] == "symval") {
+                    #print f[SFN_KEY]
+                    keys[f[SFN_KEY]] = 1
                 }
             }
             # Inject the values
             for (k in keys) {
-                # print_stderr("JOIN: arr[" k "] = " sym_ll_read(lis, k, level))
-                s = s sym_ll_read(lis, k, level) fs
+                # print_stderr("JOIN: arr[" k "] = " sym_ll_read_ns(ins, lis, k, level))
+                retval = retval sym_ll_read_ns(ins, lis, k, level) fs
             }
         }
 
         # Remove trailing field separator if need be
         if (!silent)
-            s = substr(s, 1, length(s)-fslen)
+            retval = substr(retval, 1, length(retval)-fslen)
     }
-    return s
+    return retval
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -11236,41 +12103,51 @@ function xeq_fn__lrc(fn, M, nparam, param,
 #*****************************************************************************
 # @mid SYMBOL, START[, LENGTH]
 function xeq_fn__mid(fn, M, nparam, param,
-                     sym, str, pos, len, result,
-                     p, n, s)
+                     sym, str, param_Begin, param_Length, result,
+                     B, L, symlen, altB, substr_Begin, substr_Length)
 {
     if (nparam < 2 || nparam > 3)
         error("Bad parameters in '" M "':" $0)
     sym = param[1]
     assert_sym_valid_name(sym, "@" M "@")
     assert_sym_defined(sym, "@" M "@")
-    s = length(str = sym_fetch(sym))
-    pos = param[2]
-    if (!integerp(pos))
-        error("Value '" pos "' must be numeric:" $0)
-    p = abs(pos)
-    if (nparam == 2) {
-        # len absent
-        if (pos >= 0)
-            result = substr(str, p)
-        else
-            result = substr(str, s-p+1)
-    } else {                    # nparam must be 3
-        len = param[3]
-        if (!integerp(len))
-            error("Value '" len "' must be numeric:" $0)
-        n = abs(len)
-        if (pos >= 0)
-            if (len >= 0)
-                result = substr(str, p, n)
-            else
-                result = substr(str, p-n, (p-n <= 0) ? min(n, p - 1) : n)
-        else
-            if (len >= 0)
-                result = substr(str, s-p+1, n)
-            else
-                result = substr(str, s-p-n+1, (s-p-n+1 <= 0) ? min(n, s - p) : n)
+    symlen = length(str = sym_fetch(sym))
+    param_Begin = param[2]
+    if (!integerp(param_Begin))
+        error("Value '" param_Begin "' must be numeric:" $0)
+    B = abs(param_Begin)
+    if (nparam == 2) {          # param_Length absent
+        substr_Begin = (param_Begin >= 0) ? B : symlen-B+1
+        result = substr(str, substr_Begin)
+        #print_stderr("MID: substr('" str "', " substr_Begin ")=>'" result "'")
+        return result
     }
+
+    # nparam must be 3
+    param_Length = param[3]
+    if (!integerp(param_Length))
+        error("Value '" param_Length "' must be numeric:" $0)
+    if (param_Length == 0)
+        return EMPTY
+    if (param_Begin == 0)
+        B = abs(param_Begin = mth__sign(param_Length))
+    L = abs(param_Length)
+    if (param_Length >= 0)
+        substr_Length = L
+    if (param_Begin >= 0) {
+        substr_Begin = B
+        if (param_Length < 0)
+            substr_Length = ((substr_Begin -= L) <= 0) ? min(L, B - 1) : L
+    } else {
+        substr_Begin = symlen - B + 1
+        if (param_Length < 0)
+            substr_Length = ((substr_Begin -= L) <= 0) ? min(L, symlen - B) : L
+    }
+    result = substr(str, substr_Begin, substr_Length)
+    # Double substr() call here because sometimes (in pathological
+    # cases), mawk(1) returns a string longer than substr_Length.
+    result = substr(result, 1, substr_Length)
+    #print_stderr("MID: substr('" str "', " substr_Begin ", " substr_Length ")=>'" result "'")
     return result
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
@@ -11327,14 +12204,17 @@ function xeq_fn__mjd(fn, M, nparam, param,
 #*****************************************************************************
 # @mktemp SYM | templateXXXXXX
 function xeq_fn__mktemp(fn, M, nparam, param,
-                        p, template)
+                        p, template, info)
 {
     if (nparam == 0)
         # Skip the rigamarole and give me a random file name
         return mktemp(tmpdir() "m2Tmp.XXXXXXXX")
     p = param[1]
-    template = (sym_valid_p(p) && sym_defined_p(p)) \
-             ? sym_fetch(p) : substr(M, length(fn)+2)
+    info__create_from_text(p, info)
+#                sym_valid_p(p) && sym_defined_p(p)) \
+    template = (info__get(info, "type") == TYPE_SYMBOL &&
+                info__get(info, "defined") == TRUE) \
+             ? syminfo_fetch(info) : substr(M, length(fn)+2)
     if (match(template, "XXXXXX+$") == NOT_FOUND)
         error("@mktemp@: Invalid template '" template "': missing 6 or more X")
     if (index(template, TOK_SLASH) == NOT_FOUND)
@@ -11419,15 +12299,19 @@ function xeq_fn__right(fn, M, nparam, param,
 #*****************************************************************************
 # @rot13 SYM | Text@
 function xeq_fn__rot13(fn, M, nparam, param,
-                       p, i, c, result)
+                       p, i, c, result, info)
 {
     if (! __rot13_initialized)
         initialize_rot13()
     if (nparam == 0)
         error("Bad parameters in '" M "':" $0)
     p = param[1]
-    p = (sym_valid_p(p) && sym_defined_p(p)) \
-        ? sym_fetch(p) : substr(M, length(fn)+2)
+    info__create_from_text(p, info)
+#    p = (sym_valid_p(p) && sym_defined_p(p)) \
+#        ? sym_fetch(p) : substr(M, length(fn)+2)
+    p = (info__get(info, "type") == TYPE_SYMBOL &&
+         info__get(info, "defined") == TRUE) \
+        ? syminfo_fetch(info) : substr(nam__unqualify(M), length(fn)+2)
     result = ""
 
     for (i = 1; i <= length(p); i++) {
@@ -11553,7 +12437,7 @@ function xeq_fn__trim(fn, M, nparam, param,
 # @xbasename SYM@
 # @xdirname SYM@
 function xeq_fn__xname(fn, M, nparam, param,
-                       p, cmdline, expand)
+                       p, cmdline, output)
 {
     if (secure_level() >= SEC_PARANOID)
         security_violation(sprintf("@%s@: Forbidden", fn))
@@ -11563,10 +12447,10 @@ function xeq_fn__xname(fn, M, nparam, param,
     assert_sym_valid_name(p, "@" M "@")
     assert_sym_defined(p, "@" M "@")
     cmdline = build_prog_cmdline(fn, rm_quotes(sym_fetch(p)), MODE_IO_CAPTURE)
-    cmdline | getline expand
+    cmdline | getline output
     close(cmdline)
 
-    return expand
+    return output
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -11601,49 +12485,45 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     TERMINAL                    = 0     # Block zero means standard output
 
     # Block types and labels
-    BLK_AGG                     = "A"; __blk_label[BLK_AGG]      = "AGG"
-      OBJ_BLKNUM                = "b"; __blk_label[OBJ_BLKNUM]   = "BLKNUM"
-      OBJ_CMD                   = "c"; __blk_label[OBJ_CMD]      = "CMD"
-      OBJ_TEXT                  = "t"; __blk_label[OBJ_TEXT]     = "TEXT"
-      OBJ_USER                  = "u"; __blk_label[OBJ_USER]     = "USER"
-    BLK_CASE                    = "C"; __blk_label[BLK_CASE]     = "CASE"
-    BLK_FILE                    = "F"; __blk_label[BLK_FILE]     = "FILE"
-    BLK_FOR                     = "R"; __blk_label[BLK_FOR ]     = "FOR"
-    BLK_IF                      = "I"; __blk_label[BLK_IF]       = "IF"
-    BLK_LONGDEF                 = "L"; __blk_label[BLK_LONGDEF]  = "LONGDEF"
-    BLK_STRING                  = "S"; __blk_label[BLK_STRING]   = "STRING"
-    BLK_TERMINAL                = "T"; __blk_label[BLK_TERMINAL] = "TERMINAL"
-    BLK_USER                    = "U"; __blk_label[BLK_USER]     = "USER"
-    BLK_WHILE                   = "W"; __blk_label[BLK_WHILE]    = "WHILE"
+    BLK_AGG                     = "a"; __label[BLK_AGG]               = "AGG"
+      OBJ_BLKNUM                = "K"; __label[OBJ_BLKNUM]            = "obj_BLKNUM"
+      OBJ_CMD                   = "c"; __label[OBJ_CMD]               = "obj_CMD"
+      OBJ_TEXT                  = "t"; __label[OBJ_TEXT]              = "obj_TEXT"
+      OBJ_USER                  = "j"; __label[OBJ_USER]              = "obj_USER"
+    BLK_CASE                    = "e"; __label[BLK_CASE]              = "CASE"
+    BLK_FILE                    = "f"; __label[BLK_FILE]              = "FILE"
+    BLK_FOR                     = "O"; __label[BLK_FOR ]              = "FOR"
+    BLK_IF                      = "i"; __label[BLK_IF]                = "IF"
+    BLK_LONGDEF                 = "d"; __label[BLK_LONGDEF]           = "LONGDEF"
+    BLK_STRING                  = "q"; __label[BLK_STRING]            = "STRING"
+    BLK_TERMINAL                = "T"; __label[BLK_TERMINAL]          = "TERMINAL"
+    BLK_USER                    = "u"; __label[BLK_USER]              = "USER"
+    BLK_WHILE                   = "w"; __label[BLK_WHILE]             = "WHILE"
+    #
+    VALID_BLOCK_TYPES = BLK_AGG     BLK_CASE   BLK_FILE     BLK_FOR  BLK_IF \
+                        BLK_LONGDEF BLK_STRING BLK_TERMINAL BLK_USER BLK_WHILE
 
     # CRUDP
-    OP_CREATE                   =    1; __op_label[OP_CREATE]    = "CREATE"
-    OP_READ                     =    2; __op_label[OP_READ]      = "READ"
-    OP_UPDATE                   =    3; __op_label[OP_UPDATE]    = "UPDATE"
-    OP_DELETE                   =    4; __op_label[OP_DELETE]    = "DELETE"
-    OP_PRINT                    =    5; __op_label[OP_PRINT]     = "PRINT"
-
-    # Errors
-    ERR_OKAY                    =    0
-    ERR_PARSE_STACK             = -100
-    ERR_PARSE_MISMATCH          = -101
-    ERR_PARSE_DEPTH             = -102
-    ERR_SCAN_INVALID_NAME       = -103
-    NAME_NOT_FOUND              = -104 # nam__{lookup,find} no result - not considered an error
+    OP_CREATE                   = "1"; __label[OP_CREATE]             = "CREATE"
+    OP_READ                     = "2"; __label[OP_READ]               = "READ"
+    OP_UPDATE                   = "3"; __label[OP_UPDATE]             = "UPDATE"
+    OP_DELETE                   = "4"; __label[OP_DELETE]             = "DELETE"
+    OP_PRINT                    = "5"; __label[OP_PRINT]              = "PRINT"
 
     # Various modes
-    MODE_AT_LITERAL             = "L"; __mode_label[MODE_AT_LITERAL]       = "Literal"
-    MODE_AT_PROCESS             = "P"; __mode_label[MODE_AT_PROCESS]       = "ProcessAt"
-    MODE_IO_CAPTURE             = "I"; __mode_label[MODE_IO_CAPTURE]       = "CaptureIO"
-    MODE_IO_SILENT              = "X"; __mode_label[MODE_IO_SILENT]        = "SilentIO"
-    MODE_TEXT_PRINT             = "P"; __mode_label[MODE_TEXT_PRINT]       = "PrintText"
-    MODE_TEXT_STRING            = "S"; __mode_label[MODE_TEXT_STRING]      = "StringText"
-    MODE_STREAMS_DISCARD        = "D"; __mode_label[MODE_STREAMS_DISCARD]  = "DiscardStream"
-    MODE_STREAMS_SHIP_OUT       = "O"; __mode_label[MODE_STREAMS_SHIP_OUT] = "ShipOutStream"
-    MODE_XEQ_NORMAL             = "N"; __mode_label[MODE_XEQ_NORMAL]       = "XeqNormal"
-    MODE_XEQ_BREAK              = "B"; __mode_label[MODE_XEQ_BREAK]        = "XeqBreak"
-    MODE_XEQ_CONTINUE           = "C"; __mode_label[MODE_XEQ_CONTINUE]     = "XeqContinue"
-    MODE_XEQ_RETURN             = "R"; __mode_label[MODE_XEQ_RETURN]       = "XeqReturn"
+    MODE_AT_LITERAL             = "'"; __label[MODE_AT_LITERAL]       = "Literal"
+    MODE_AT_PROCESS             = "@"; __label[MODE_AT_PROCESS]       = "ProcessAt"
+    MODE_HOOKS_ENABLED          = "h"; __label[MODE_HOOKS_ENABLED]    = "HooksEnabled"
+    MODE_IO_CAPTURE             = "v"; __label[MODE_IO_CAPTURE]       = "CaptureIO"
+    MODE_IO_SILENT              = "z"; __label[MODE_IO_SILENT]        = "SilentIO"
+    MODE_TEXT_PRINT             = "p"; __label[MODE_TEXT_PRINT]       = "PrintText"
+    MODE_TEXT_STRING            = "s"; __label[MODE_TEXT_STRING]      = "StringText"
+    MODE_STREAMS_DISCARD        = "X"; __label[MODE_STREAMS_DISCARD]  = "DiscardStream"
+    MODE_STREAMS_SHIP_OUT       = ">"; __label[MODE_STREAMS_SHIP_OUT] = "ShipOutStream"
+    MODE_XEQ_NORMAL             = "x"; __label[MODE_XEQ_NORMAL]       = "XeqNormal"
+    MODE_XEQ_BREAK              = "b"; __label[MODE_XEQ_BREAK]        = "XeqBreak"
+    MODE_XEQ_CONTINUE           = "o"; __label[MODE_XEQ_CONTINUE]     = "XeqContinue"
+    MODE_XEQ_RETURN             = "r"; __label[MODE_XEQ_RETURN]       = "XeqReturn"
 
     # When to flush standard output
     SYNC_FORCE                  = 0 # only on request or end of job
@@ -11654,21 +12534,33 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     TOK_AND                     = "&&"
     TOK_AT                      = "@"
     TOK_AT_BRACE                = "@{"
+    TOK_BACKSLASH               = "\\"
     TOK_CANRUN_P                = "?R"; __predicate_token["canrun"]  = TOK_CANRUN_P
     TOK_COLON                   = ":"
     TOK_DEFINED_P               = "?D"; __predicate_token["defined"] = TOK_DEFINED_P
-    TOK_ENV_P                   = "?E"; __predicate_token["env"]     = TOK_ENV_P
     TOK_EXISTS_P                = "?X"; __predicate_token["exists"]  = TOK_EXISTS_P
     TOK_LBRACE                  = "{"
+    TOK_LBRACKET                = "["
     TOK_LPAREN                  = "("
     TOK_NEWLINE                 = "\n"
     TOK_NOT                     = "!"
+    TOK_NS_QUAL                 = TOK_COLON TOK_COLON
     TOK_OR                      = "||"
     TOK_QUOTE                   = "\""
     TOK_RBRACE                  = "}"
+    TOK_RBRACKET                = "]"
     TOK_RPAREN                  = ")"
     TOK_SLASH                   = "/"
     TOK_TAB                     = "\t"
+
+    # Errors
+    ERR_OKAY                    =    0
+    NAME_NOT_FOUND              =  -10 # nam__{lookup,find} no result - not considered an error
+    ERR_FENCE                   = -100 # if (ret < ERR_FENCE) error(...)
+    ERR_PARSE_STACK             = -101
+    ERR_PARSE_MISMATCH          = -102
+    ERR_PARSE_DEPTH             = -103
+    ERR_SCAN_INVALID_NAME       = -104
 
     # Global variables
     __buffer                    = EMPTY
@@ -11676,15 +12568,18 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     __curr_level                = ROOT_LEVEL
     __ord_initialized           = FALSE # becomes True in initialize_ord()
     __rot13_initialized         = FALSE # becomes True in initialize_rot13()
+    __ns_stack[0]               = 0;    __ns_stack["name"]     = "ns_stack"
     __parse_stack[0]            = 0;    __parse_stack["name"]  = "parse_stack"
     __source_stack[0]           = 0;    __source_stack["name"] = "source_stack"
     __stream_stack[0]           = 0;    __stream_stack["name"] = "stream_stack"
     __wrap_cnt                  = 0
 
     srand()                     # Seed random number generator
+    stk_push(__ns_stack, M2_SYSNS)
+    stk_push(__ns_stack, M2_NS)
     __m2_config_fs = flag_set_clear(PTYPE_ANY,
-                                    MODE_TEXT_PRINT  MODE_XEQ_NORMAL, # set by default
-                                    MODE_TEXT_STRING MODE_XEQ_BREAK MODE_XEQ_CONTINUE MODE_XEQ_RETURN) # cleared
+                                    MODE_HOOKS_ENABLED MODE_TEXT_PRINT  MODE_XEQ_NORMAL, # set by default
+                                    MODE_TEXT_STRING   MODE_XEQ_BREAK   MODE_XEQ_CONTINUE MODE_XEQ_RETURN) # cleared
     initialize_prog_paths()
 
     # Initialize days per month
@@ -11695,11 +12590,11 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
         __monthdays[month, leap] = monthdays[i+1]
     }
 
-    __roman[__rv[1]=1000] = "M"
+    __roman[__rv[1]=1000] =  "M"
     __roman[__rv[2]= 900] = "CM"; __roman[__rv[6]=90] = "XC"; __roman[__rv[10]=9] = "IX"
-    __roman[__rv[3]= 500] = "D" ; __roman[__rv[7]=50] = "L" ; __roman[__rv[11]=5] = "V"
+    __roman[__rv[3]= 500] =  "D"; __roman[__rv[7]=50] =  "L"; __roman[__rv[11]=5] =  "V"
     __roman[__rv[4]= 400] = "CD"; __roman[__rv[8]=40] = "XL"; __roman[__rv[12]=4] = "IV"
-    __roman[__rv[5]= 100] = "C" ; __roman[__rv[9]=10] = "X" ; __roman[__rv[13]=1] = "I"
+    __roman[__rv[5]= 100] =  "C"; __roman[__rv[9]=10] =  "X"; __roman[__rv[13]=1] =  "I"
 
     if (secure_level() < SEC_PARANOID) {
         # Set up some symbols that depend on external programs
@@ -11712,20 +12607,21 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
             close(get_date_cmd)
             split(dateout, d)
 
-            sym_ll_fiat("__DATE__",         "", PTYPE_READONLY_INTEGER, d[1] d[2] d[3])
-            sym_ll_fiat("__DOW__",          "", PTYPE_READONLY_SYMBOL,  d[9])
-            sym_ll_fiat("__EPOCH__",        "", PTYPE_READONLY_INTEGER, d[8])
-            sym_ll_fiat("__TIME__",         "", PTYPE_READONLY_SYMBOL,  d[4] d[5] d[6]) # not an INTEGER because I want leading 0 if before 12:00
-            sym_ll_fiat("__TIMESTAMP__",    "", PTYPE_READONLY_SYMBOL,  d[1] "-" d[2] "-" d[3] \
+            sym_ll_fiat("__DATE__",         NOKEY, PTYPE_READONLY_INTEGER, d[1] d[2] d[3])
+            sym_ll_fiat("__DOW__",          NOKEY, PTYPE_READONLY_SYMBOL,  d[9])
+            sym_ll_fiat("__EPOCH__",        NOKEY, PTYPE_READONLY_INTEGER, d[8])
+            sym_ll_fiat("__TIME__",         NOKEY, PTYPE_READONLY_SYMBOL,  d[4] d[5] d[6]) # not an INTEGER because I want leading 0 if before 12:00
+            sym_ll_fiat("__TIMESTAMP__",    NOKEY, PTYPE_READONLY_SYMBOL,  d[1] "-" d[2] "-" d[3] \
                                                                     "T" d[4] ":" d[5] ":" d[6] d[7])
-            sym_ll_fiat("__TZ__",           "", PTYPE_READONLY_SYMBOL,  d[7])
+            sym_ll_fiat("__TZ__",           NOKEY, PTYPE_READONLY_SYMBOL,  d[7])
         }
 
         # Deferred symbols
         if ("id" in PROG) {
             sym_deferred_symbol("__GID__",      PTYPE_READONLY_INTEGER, "id", "-g")
-            sym_deferred_symbol("__UID__",      PTYPE_READONLY_INTEGER, "id", "-u")
             sym_deferred_symbol("__USER__",     PTYPE_READONLY_SYMBOL,  "id", "-un")
+            if (! nam_ll_in_ns(M2_SYSNS, "__UID__", ROOT_LEVEL))
+                sym_deferred_symbol("__UID__",  PTYPE_READONLY_INTEGER, "id", "-u")
         }
         if ("hostname" in PROG) {
             sym_deferred_symbol("__HOST__",     PTYPE_READONLY_SYMBOL,  "hostname", "-s")
@@ -11737,41 +12633,42 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
             sym_deferred_symbol("__OSNAME__",   PTYPE_READONLY_SYMBOL,  "uname", "-s")
         }
         if ("sh" in PROG) {
-            sym_deferred_symbol("__PID__",      PTYPE_READONLY_INTEGER, "sh", "-c 'echo $PPID'")
+            sym_deferred_symbol("__PID__", PTYPE_READONLY_INTEGER, "sh", "-c 'echo $PPID'")
         }
     } else {
         # Try to get some common identifiers through other means
         if ("HOST" in ENVIRON)
-            sym_ll_fiat("__HOST__", "", PTYPE_READONLY_SYMBOL, ENVIRON["HOST"])
+            sym_ll_fiat("__HOST__", NOKEY, PTYPE_READONLY_SYMBOL, ENVIRON["HOST"])
         else if ("HOSTNAME" in ENVIRON)
-            sym_ll_fiat("__HOST__", "", PTYPE_READONLY_SYMBOL, ENVIRON["HOSTNAME"])
-        if ("UID" in ENVIRON)
-            sym_ll_fiat("__UID__", "",  PTYPE_READONLY_SYMBOL, ENVIRON["UID"])
+            sym_ll_fiat("__HOST__", NOKEY, PTYPE_READONLY_SYMBOL, ENVIRON["HOSTNAME"])
+        if ("UID" in ENVIRON &&
+            ! nam_ll_in_ns(M2_SYSNS, "__UID__", ROOT_LEVEL))
+            sym_ll_fiat("__UID__", NOKEY,  PTYPE_READONLY_INTEGER, ENVIRON["UID"])
         if ("USER" in ENVIRON)
-            sym_ll_fiat("__USER__", "", PTYPE_READONLY_SYMBOL, ENVIRON["USER"])
+            sym_ll_fiat("__USER__", NOKEY, PTYPE_READONLY_SYMBOL, ENVIRON["USER"])
         else if ("LOGNAME" in ENVIRON)
-            sym_ll_fiat("__USER__", "", PTYPE_READONLY_SYMBOL, ENVIRON["LOGNAME"])
+            sym_ll_fiat("__USER__", NOKEY, PTYPE_READONLY_SYMBOL, ENVIRON["LOGNAME"])
     }
 
-    nam_ll_write("__FMT__",    ROOT_LEVEL, TYPE_ARRAY FLAG_SYSTEM FLAG_WRITABLE)
-    nam_ll_write("__STRICT__", ROOT_LEVEL, TYPE_ARRAY FLAG_SYSTEM FLAG_WRITABLE FLAG_BOOLEAN)
+    nam_ll_write_ns(M2_SYSNS, "__FMT__",    ROOT_LEVEL, TYPE_ARRAY FLAG_SYSTEM FLAG_WRITABLE)
+    nam_ll_write_ns(M2_SYSNS, "__STRICT__", ROOT_LEVEL, TYPE_ARRAY FLAG_SYSTEM FLAG_WRITABLE FLAG_BOOLEAN)
 
     if ("COLUMNS" in ENVIRON)
-      sym_ll_fiat("__COLUMNS__",    "", PTYPE_WRITABLE_INTEGER, ENVIRON["COLUMNS"])
+      sym_ll_fiat("__COLUMNS__",    NOKEY, PTYPE_WRITABLE_INTEGER, ENVIRON["COLUMNS"])
     else if (secure_level() < SEC_PARANOID && ("tput" in PROG))
-      sym_deferred_symbol("__COLUMNS__",PTYPE_WRITABLE_INTEGER, "tput", "cols")
+      sym_deferred_symbol("__COLUMNS__",   PTYPE_WRITABLE_INTEGER, "tput", "cols")
     else
-      sym_ll_fiat("__COLUMNS__",    "", PTYPE_WRITABLE_INTEGER, 80)
+      sym_ll_fiat("__COLUMNS__",    NOKEY, PTYPE_WRITABLE_INTEGER, 80)
     if ("PWD" in ENVIRON)
-      sym_ll_fiat("__CWD__",        "", PTYPE_READONLY_SYMBOL,  with_trailing_slash(ENVIRON["PWD"]))
+      sym_ll_fiat("__CWD__",        NOKEY, PTYPE_READONLY_SYMBOL,  with_trailing_slash(ENVIRON["PWD"]))
     else if (secure_level() < SEC_PARANOID && ("pwd" in PROG))
-      sym_deferred_symbol("__CWD__",    PTYPE_READONLY_SYMBOL,  "pwd", "")
-    sym_ll_fiat("__DEBUGFILE__",    "", PTYPE_WRITABLE_SYMBOL,  STDERR)
-    sym_ll_fiat("__DEPTH__",        "", PTYPE_READONLY_INTEGER, 0)
-    sym_ll_fiat("__DIVNUM__",       "", PTYPE_READONLY_INTEGER, TERMINAL)
-    sym_ll_fiat("__EXPR__",         "", PTYPE_READONLY_NUMERIC, 0.0)
-    sym_ll_fiat("__FILE__",         "", PTYPE_READONLY_SYMBOL,  "")
-    sym_ll_fiat("__FILE_UUID__",    "", PTYPE_READONLY_SYMBOL,  "")
+      sym_deferred_symbol("__CWD__",       PTYPE_READONLY_SYMBOL,  "pwd", "")
+    sym_ll_fiat("__DEBUGFILE__",    NOKEY, PTYPE_WRITABLE_SYMBOL,  STDERR)
+    sym_ll_fiat("__DEPTH__",        NOKEY, PTYPE_READONLY_INTEGER, 0)
+    sym_ll_fiat("__DIVNUM__",       NOKEY, PTYPE_READONLY_INTEGER, TERMINAL)
+    sym_ll_fiat("__EXPR__",         NOKEY, PTYPE_READONLY_NUMERIC, 0.0)
+    sym_ll_fiat("__FILE__",         NOKEY, PTYPE_READONLY_SYMBOL,  "")
+    sym_ll_fiat("__FILE_UUID__",    NOKEY, PTYPE_READONLY_SYMBOL,  "")
     sym_ll_fiat("__FMT__",         "1", "",                     "1") # True
     sym_ll_fiat("__FMT__",         "0", "",                     "0") # False
     sym_ll_fiat("__FMT__",      "date", "",                     "%Y-%m-%d")
@@ -11781,102 +12678,78 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     sym_ll_fiat("__FMT__",      "time", "",                     "%H:%M:%S")
     sym_ll_fiat("__FMT__",        "tz", "",                     "%Z")
     sym_ll_fiat("__FMT__",       "utc", "",                     "%Y-%m-%dT%H:%M:%S%z") # ISO 8601
-    nam_ll_write("__FS__", ROOT_LEVEL, PTYPE_WRITABLE_SYMBOL) # NB - *not* in sync with real FS
+    nam_ll_write_ns(M2_SYSNS, "__FS__", ROOT_LEVEL, PTYPE_WRITABLE_SYMBOL) # NB - *not* in sync with real FS
     if ("HOME" in ENVIRON)
-      sym_ll_fiat("__HOME__",       "", PTYPE_READONLY_SYMBOL,  with_trailing_slash(ENVIRON["HOME"]))
+      sym_ll_fiat("__HOME__",       NOKEY, PTYPE_READONLY_SYMBOL,  with_trailing_slash(ENVIRON["HOME"]))
     else if ("LOGDIR" in ENVIRON)
-      sym_ll_fiat("__HOME__",       "", PTYPE_READONLY_SYMBOL,  with_trailing_slash(ENVIRON["LOGDIR"]))
-    sym_ll_fiat("__INCPATH__",      "", PTYPE_READONLY_SYMBOL,  "M2PATH" in ENVIRON ? ENVIRON["M2PATH"] : EMPTY)
-    sym_ll_fiat("__INPUT__",        "", PTYPE_WRITABLE_SYMBOL,  EMPTY)
-    sym_ll_fiat("__LENIENT__",      "", PTYPE_WRITABLE_BOOLEAN, FALSE) # Undocumented
-    sym_ll_fiat("__LINE__",         "", PTYPE_READONLY_INTEGER, 0)
-    sym_ll_fiat("__M2_UUID__",      "", PTYPE_READONLY_SYMBOL,  uuid())
-    sym_ll_fiat("__M2_VERSION__",   "", PTYPE_READONLY_SYMBOL,  M2_VERSION)
-    sym_ll_fiat("__NFILE__",        "", PTYPE_READONLY_INTEGER, 0); __rnf = 0
-    sym_ll_fiat("__NLINE__",        "", PTYPE_READONLY_INTEGER, 0)
+      sym_ll_fiat("__HOME__",       NOKEY, PTYPE_READONLY_SYMBOL,  with_trailing_slash(ENVIRON["LOGDIR"]))
+    sym_ll_fiat("__INCPATH__",      NOKEY, PTYPE_READONLY_SYMBOL,  "M2PATH" in ENVIRON ? ENVIRON["M2PATH"] : EMPTY)
+    sym_ll_fiat("__INPUT__",        NOKEY, PTYPE_WRITABLE_SYMBOL,  EMPTY)
+    sym_ll_fiat("__LENIENT__",      NOKEY, PTYPE_WRITABLE_INTEGER, 0)
+    sym_ll_fiat("__LINE__",         NOKEY, PTYPE_READONLY_INTEGER, 0)
+    sym_ll_fiat("__M2_UUID__",      NOKEY, PTYPE_READONLY_SYMBOL,  uuid())
+    sym_ll_fiat("__M2_VERSION__",   NOKEY, PTYPE_READONLY_SYMBOL,  M2_VERSION)
+    sym_ll_fiat("__NFILE__",        NOKEY, PTYPE_READONLY_INTEGER, 0); __rnf = 0
+    sym_ll_fiat("__NLINE__",        NOKEY, PTYPE_READONLY_INTEGER, 0)
+    sym_ll_fiat("__NSPATH__",       NOKEY, PTYPE_READONLY_SYMBOL,  EMPTY)
     sym_ll_fiat("__STRICT__",   "bool", "",                     TRUE)
     sym_ll_fiat("__STRICT__",    "def", "",                     TRUE)
     sym_ll_fiat("__STRICT__",    "env", "",                     TRUE)
     sym_ll_fiat("__STRICT__",   "file", "",                     TRUE)
     sym_ll_fiat("__STRICT__",    "key", "",                     TRUE)
-    sym_ll_fiat("__STRICT__",   "name", "",                     TRUE)
-    sym_ll_fiat("__SYNC__",         "", PTYPE_WRITABLE_INTEGER, SYNC_FILE)
-    sym_ll_fiat("__SYSVAL__",       "", PTYPE_READONLY_INTEGER, 0)
+    sym_ll_fiat("__SYNC__",         NOKEY, PTYPE_WRITABLE_INTEGER, SYNC_FILE)
+    sym_ll_fiat("__SYSVAL__",       NOKEY, PTYPE_READONLY_INTEGER, 0)
+    sym_ll_fiat("__VERBOSE__",      NOKEY, PTYPE_WRITABLE_INTEGER, FALSE) # Undocumented
 
     # IMMEDS
     # These commands are Immediate
-    split("break case continue else endcase endcmd endif endlong" \
-          " endlongdef endwhile esac fi for foreach if longdef" \
-          " newcmd next of otherwise return unless until wend while",
+    split("array break case continue define else endcase endcmd endif endlong" \
+          " endlongdef endwhile esac fi for foreach if list local longdef" \
+          " newcmd next of otherwise return set unless until wend while",
           array, TOK_SPACE)
     for (elem in array)
-        nam_ll_write(array[elem], ROOT_LEVEL, TYPE_COMMAND FLAG_SYSTEM FLAG_IMMEDIATE)
+        nam_ll_write_ns(M2_SYSNS, array[elem], ROOT_LEVEL, TYPE_COMMAND FLAG_SYSTEM FLAG_IMMEDIATE)
 
     # CMDS
     # Built-in commands
     # Also need to add entry in execute__command()  [search: DISPATCH]
-    split("append array cleardivert data debug decr default define divert" \
+    split("append cleardivert data debug decr default divert" \
           " divpop divpush dump dumpall dumpdef echo enddata eod error errprint" \
-          " esyscmd eval exit filedata filedef filedefine ignore include incr" \
-          " initialize input list literal local m2ctl nextfile null paste readonly" \
-          " secho sequence serror sexit sfiledata sfiledef sfiledefine shell sinclude" \
-          " spaste split syscmd tracemode traceoff traceon typeout undef undefine" \
-          " undivert warn wrap",
+          " esyscmd eval exit filedata filedef filedefine ignore import include incr" \
+          " initialize input literal m2ctl namespace nextfile" \
+          " nsinclude paste readonly secho sequence serror sexit sfiledata" \
+          " sfiledef sfiledefine shell simport sinclude snsinclude spaste split syscmd" \
+          " tracemode traceoff traceon typeout undef undefine undivert warn wrap",
           array, TOK_SPACE)
     for (elem in array)
-        nam_ll_write(array[elem], ROOT_LEVEL, TYPE_COMMAND FLAG_SYSTEM)
+        nam_ll_write_ns(M2_SYSNS, array[elem], ROOT_LEVEL, TYPE_COMMAND FLAG_SYSTEM)
 
     # FUNCS
     # They are similar to symbols but with optional parameter handling
     # Also need to add handler in dosubs()  [search: SYMFUNC]
     # Functions cannot be used as symbol or sequence names.
-    split("basename boolval center chr comma date dirname divnl dow epoch" \
-          " execpath expr format geodist getenv gregdate hex hms hr ifdef ifelse ifndef" \
+    split("basename boolval center chr comma date dirname divnl dow empty epoch" \
+          " execpath expr format geodist gregdate hex hms hr ifdef ifelse ifndef" \
           " ifx index join lc left len ljust ltrim mid mjd mktemp ord rem right" \
-          " rjust rot13 rtrim scenter scomma sexecpath sexpr sgetenv sjoin" \
+          " rjust rot13 rtrim scenter scomma sexecpath sexpr sjoin" \
           " sljust space spaces sprintf srem srjust strftime substr tab tabs time" \
+          " ns" \
           " trim tz uc utc uuid xbasename xdirname",
           array, TOK_SPACE)
     for (elem in array)
-        nam_ll_write(array[elem], ROOT_LEVEL, TYPE_FUNCTION FLAG_SYSTEM)
+        nam_ll_write_ns(M2_SYSNS, array[elem], ROOT_LEVEL, TYPE_FUNCTION FLAG_SYSTEM)
 
     # INTERNAL
     # Used for tracing internal functions - not reachable by user
-    split("dosubs", array, TOK_SPACE)
+    split("dosubs qualify", array, TOK_SPACE)
     for (elem in array)
-        nam_ll_write(array[elem], ROOT_LEVEL, TYPE_INTERNAL FLAG_SYSTEM)
-
-    __flag_label[PTYPE_ANY]      = "Any"
-    __flag_label[ TYPE_ARRAY]    = "Array"
-    __flag_label[ TYPE_COMMAND]  = "Command"
-    __flag_label[ TYPE_FUNCTION] = "Function"
-    __flag_label[PTYPE_IDXABLE]  = "Indexable"
-    __flag_label[ TYPE_INTERNAL] = "Intern"
-    __flag_label[ TYPE_LIST]     = "List"
-    __flag_label[PTYPE_NUMBER]   = "Number"
-    __flag_label[PTYPE_SCALAR]   = "Scalar"
-    __flag_label[ TYPE_SEQUENCE] = "Sequence"
-    __flag_label[ TYPE_SYMBOL]   = "Symbol"
-    __flag_label[PTYPE_UNDEF]    = "Undef"
-    __flag_label[ TYPE_USER]     = "User"
-
-    __flag_label[FLAG_BOOLEAN]   = "Boolean"
-    __flag_label[FLAG_DEFERRED]  = "Deferred"
-    __flag_label[FLAG_IMMEDIATE] = "Immediate"
-    __flag_label[FLAG_INTEGER]   = "Integer"
-    __flag_label[FLAG_KEY_NO]    = "Key-No"
-    __flag_label[FLAG_KEY_YES]   = "Key-Yes"
-    __flag_label[FLAG_NUMERIC]   = "Numeric"
-    __flag_label[FLAG_READONLY]  = "Read-only"
-    __flag_label[FLAG_SYSTEM]    = "System"
-    __flag_label[FLAG_TRACING]   = "Tracing"
-    __flag_label[FLAG_WRITABLE]  = "Writable"
+        nam_ll_write_ns(M2_SYSNS, array[elem], ROOT_LEVEL, TYPE_INTERNAL FLAG_SYSTEM)
 
     # Set up terminal to receive output as stream 0 (default)
-    div2blk[0] = TERMINAL
+    div2blktab[0] = TERMINAL
     stk_push(__stream_stack, TERMINAL) # sets __DIVNUM__
-    __block_cnt = -1            # blk_new() increments first, so
-    __terminal = blk_new(BLK_TERMINAL) # __terminal == block 0
+    __block_cnt = -1                   # blk_new() increments first,
+    __terminal = blk_new(BLK_TERMINAL) # so __terminal == block 0
     stk_push(__parse_stack, __terminal)
 }
 
@@ -11927,8 +12800,8 @@ function initialize_rot13(    from, to, i)
 #       @include my_precious_file
 function initialize_prog_paths()
 {
-    sym_ll_fiat("__TMPDIR__", "",       PTYPE_WRITABLE_SYMBOL,  "/tmp/")
-    nam_ll_write("__PROG__", ROOT_LEVEL, TYPE_ARRAY FLAG_READONLY FLAG_SYSTEM)
+    sym_ll_fiat("__TMPDIR__", NOKEY,       PTYPE_WRITABLE_SYMBOL,  "/tmp/")
+    nam_ll_write_ns(M2_SYSNS, "__PROG__", ROOT_LEVEL, TYPE_ARRAY FLAG_READONLY FLAG_SYSTEM)
     if (secure_level() >= SEC_PARANOID)
         return
 
@@ -11974,23 +12847,23 @@ function load_init_files(    old_debug)
     # to check.  Be careful to manipulate the symbol table directly!  We
     # don't want to trigger the special __DEBUG__ processing that is
     # baked into sym_ll_write().
-    old_debug = symtab["__DEBUG__", "", ROOT_LEVEL, "symval"]
-    symtab["__DEBUG__", "", ROOT_LEVEL, "symval"] = FALSE
+    old_debug = symtab[M2_SYSNS, "__DEBUG__", NOKEY, ROOT_LEVEL, "symval"]
+    symtab[M2_SYSNS, "__DEBUG__", NOKEY, ROOT_LEVEL, "symval"] = FALSE
 
     if ("M2RC" in ENVIRON && path_exists_p(ENVIRON["M2RC"]))
         dofile(ENVIRON["M2RC"])
-    else if (sym_ll_in("__HOME__", "", ROOT_LEVEL))
-        dofile(sym_ll_read("__HOME__", "", ROOT_LEVEL) \
+    else if (sym_ll_in_ns(M2_SYSNS, "__HOME__", NOKEY, ROOT_LEVEL))
+        dofile(sys_read("__HOME__") \
                ".m2rc")
     dofile("./.m2rc")
 
     # Don't count init files in total line/file tally - it's better to
     # keep them in sync with the files from the command line.
-    sym_ll_write("__NFILE__", "", ROOT_LEVEL, 0)
-    sym_ll_write("__NLINE__", "", ROOT_LEVEL, 0)
+    sys_write("__NFILE__", 0)
+    sys_write("__NLINE__", 0)
 
     # Restore debugging, if any, and we're done
-    symtab["__DEBUG__", "", ROOT_LEVEL, "symval"] = old_debug
+    symtab[M2_SYSNS, "__DEBUG__", NOKEY, ROOT_LEVEL, "symval"] = old_debug
     __init_files_loaded = TRUE
 
     # FOR TESTING - start in Debug mode
@@ -12025,8 +12898,13 @@ function process_command_line_arguments(    nfile, arg, i, eq, name, val, file,
         arg = ARGV[i]
         dbg__print("args", 3, ("BEGIN: ARGV[" i "]:" arg))
 
+        # Is it a command?
+        if (first(arg) == TOK_AT) {
+            dbg__print("args", 3, sprintf("BEGIN: Eval '%s'", arg))
+            xeq_cmd__eval("eval", arg)
+
         # If it's a definition on the command line, define it
-        if (arg ~ /^([^= ][^= ]*)=(.*)/) {
+        } else if (arg ~ /^([^= ][^= ]*)=(.*)/) {
             eq   = index(arg, "=")
             name = substr(arg, 1, eq-1)
             val  = substr(arg, eq+1)
@@ -12043,12 +12921,12 @@ function process_command_line_arguments(    nfile, arg, i, eq, name, val, file,
                 # Include-path elements on command-line are prepended
                 # to __INCPATH__ so they override M2PATH env variable values.
                 if (!emptyp(val)) {
-                    oldip = sym_ll_read("__INCPATH__", "", ROOT_LEVEL)
-                    sym_ll_write("__INCPATH__", "", ROOT_LEVEL,
-                                 val (!emptyp(oldip) ? TOK_COLON : "") oldip)
+                    oldip = sys_read("__INCPATH__")
+                    sys_write("__INCPATH__", val (!emptyp(oldip) ? TOK_COLON : "") oldip)
                 }
                 continue
             } else if (name == "init") {   # init=<VAL>
+                # This may cause __m2_begin_hook to run either prematurely or not at all
                 if (val > 0)
                     # Positive value loads init files immediately
                     # without needing to providing a command-line file.
@@ -12068,45 +12946,43 @@ function process_command_line_arguments(    nfile, arg, i, eq, name, val, file,
             } else if (name == "strict") {
                 val = to_bool(val) # (val > 0) # convert int value to bool
                 # Update strict settings
-                sym_ll_write("__STRICT__", "bool", ROOT_LEVEL, val)
-                sym_ll_write("__STRICT__",  "def", ROOT_LEVEL, val)
-                sym_ll_write("__STRICT__",  "env", ROOT_LEVEL, val)
-                sym_ll_write("__STRICT__", "file", ROOT_LEVEL, val)
-                sym_ll_write("__STRICT__",  "key", ROOT_LEVEL, val)
-                sym_ll_write("__STRICT__", "name", ROOT_LEVEL, val)
+                sym_ll_write_ns(M2_SYSNS, "__STRICT__", "bool", ROOT_LEVEL, val)
+                sym_ll_write_ns(M2_SYSNS, "__STRICT__",  "def", ROOT_LEVEL, val)
+                sym_ll_write_ns(M2_SYSNS, "__STRICT__",  "env", ROOT_LEVEL, val)
+                sym_ll_write_ns(M2_SYSNS, "__STRICT__", "file", ROOT_LEVEL, val)
+                sym_ll_write_ns(M2_SYSNS, "__STRICT__",  "key", ROOT_LEVEL, val)
                 continue
             } else if (name == "trace") {
                 if (emptyp(val))
                     # trace= sets __TRACE__ to False
-                    sym_ll_write("__TRACE__", "", ROOT_LEVEL, FALSE)
+                    sys_write("__TRACE__", FALSE)
                 else {
                     # trace=abcd sets __TRACE__ to True and _val is
                     # passed to @tracemode.  Don't forget "+" FLAGS
-                    sym_ll_write("__TRACE__", "", ROOT_LEVEL, TRUE)
+                    sys_write("__TRACE__", TRUE)
                     xeq_cmd__tracemode("tracemode", val)
                 }
                 continue
-            # Someday!  The world is not ready yet...
-            #           (because there is no namtab[] entry for the Symbol.)
-            # } else if (name == "T") {
-            #     xeq_cmd__traceon("traceon", val)
-            #     # T= sets __TRACE__ to True
-            #     continue
+            } else if (name == "T") {      # T=<name>
+                # traceon (and T=...) sets __TRACE__ to True
+                xeq_cmd__traceon("traceon", val)
+                continue
             } else if (name == "U") {      # U=<name>
                 # Undefine name, like @undef
                 xeq_cmd__undefine("undefine", val)
                 continue
+            } else if (name == "verbose") {
+                name = "__VERBOSE__"
             }
+
             # If we reach here, we still have our NAME=VAL arg to process,
             # and we haven't broken off taking some arg-triggered action.
             # Remember, "NAME=" on command line defines with empty value.
-            if (emptyp(val)) {
-                dbg__print("args", 3, "BEGIN: Setting '" name "' to @null")
-                xeq_cmd__null("null", name)
-            } else {
-                dbg__print("args", 3, "BEGIN: Setting '" name "' to '" val "'")
+            dbg__print("args", 3, "BEGIN: Setting '" name "' to '" val "'")
+            if (emptyp(val))
+                xeq_cmd__define("set", name)
+            else
                 xeq_cmd__define("define", name TOK_SPACE val)
-            }
 
         # If not NAME=VAL, try to load arg as a file.
         } else {
@@ -12114,13 +12990,13 @@ function process_command_line_arguments(    nfile, arg, i, eq, name, val, file,
             file = search_file(arg)
             if (emptyp(file)) {
                 warn("File '" arg "' not found", "ARGV", i)
-                sym_ll_write("__EXIT__", "", ROOT_LEVEL, EX_NOINPUT)
+                sys_write("__EXIT__", EX_NOINPUT)
                 continue
             }
             load_init_files()
             if (! dofile(file)) {
                 warn("Problem parsing file '" file "'", "ARGV", i)
-                sym_ll_write("__EXIT__", "", ROOT_LEVEL, EX_M2_ERROR)
+                sys_write("__EXIT__", EX_M2_ERROR)
             }
         }
     }
@@ -12136,11 +13012,10 @@ function process_command_line_arguments(    nfile, arg, i, eq, name, val, file,
         # means to read standard input, so that is what we must now do.
         if (nfile == 0) {
             load_init_files()
-            sym_ll_write("__EXIT__", "", ROOT_LEVEL,
-                         dofile("-") ? EX_OK : EX_NOINPUT)
+            sys_write("__EXIT__", dofile("-") ? EX_OK : EX_NOINPUT)
         } else {
             # User specified file(s) but not one of them existed.
-            sym_ll_write("__EXIT__", "", ROOT_LEVEL, EX_NOINPUT)
+            sys_write("__EXIT__", EX_NOINPUT)
         }
     }
 }
@@ -12164,8 +13039,7 @@ BEGIN {
     # by ARGC being equal to 1.  If so, process standard input.
     if (ARGC == 1) {
         load_init_files()
-        sym_ll_write("__EXIT__", "", ROOT_LEVEL,
-                     dofile("-") ? EX_OK : EX_NOINPUT)
+        sys_write("__EXIT__", dofile("-") ? EX_OK : EX_NOINPUT)
     } else
         # Otherwise, there must be at least one command line argument,
         # so process them all.  Args might be file names to parse, or
@@ -12211,8 +13085,13 @@ function close_open_files(delete_blocks_p,
 function end_program(diverted_streams_final_disposition,
                      i, timestamp, stream, exit_code)
 {
-    exit_code = sym_ll_read("__EXIT__", "", ROOT_LEVEL)
+    if (debugging_enabled_p())
+        print_debugfile(sprintf("m2:%s %s%s", "END PROGRAM", "Cave closing soon",
+                        VERBOSE() ? ".  All adventurers exit immediately through Main Office." : ""))
 
+    run_hook("m2_end")
+
+    exit_code = sys_read("__EXIT__")
     if (exit_code == EX_OK &&
         diverted_streams_final_disposition == MODE_STREAMS_SHIP_OUT) {
 
@@ -12234,20 +13113,20 @@ function end_program(diverted_streams_final_disposition,
         for (i = 1; i <= __wrap_cnt; i++)
             dostring(__wrap_text[i])
 
-    run_hook("m2_end")
+    run_hook("m2_exit")
 
-    # for (stream in div2blk)
-    #     blk_master_delete(div2blk[stream])
+    # for (stream in div2blktab)
+    #     blk_master_delete(div2blktab[stream])
 
     # Close open files, attempt to reclaim block
     close_open_files(TRUE)
 
     # NOTE - dev stuff here
-#    nam_purge(ROOT_LEVEL)
-    #sym_purge(ROOT_LEVEL)
+    # nam_purge(ROOT_LEVEL)
+    # sym_purge(ROOT_LEVEL)
 
-#    if (tracing_event_p(TRACE_BLOCKS))
-#        blk_nicer_dump_blktab()
+    # if (tracing_event_p(TRACE_BLOCKS))
+    #     blk_nicer_dump_blktab()
 
     if (debugging_enabled_p())
         print_debugfile(sprintf("m2:%s %d",

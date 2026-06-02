@@ -1,0 +1,4 @@
+@namespace other
+@sequence counter
+First : @++counter@
+Second: @++counter@

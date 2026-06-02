@@ -1,0 +1,6 @@
+In ns1, A=This is ns1 symbol 'A'
+In ns2, A=This is ns2 symbol 'A'
+Now in namespace m2
+ns1::A=This is ns1 symbol 'A'
+ns2::A=This is ns2 symbol 'A'
+In m2, A=A very normal @define command

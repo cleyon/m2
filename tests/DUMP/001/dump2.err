@@ -1,8 +1,8 @@
 @newcmd foo
-@local x
-@define x 3
+@__m2__::local x
+@__m2__::define x 3
 @while x > 0
-x=@x@
-@define x @expr x-1@
+x=@m2::x@
+@__m2__::define x @expr x-1@
 @endwhile
 @endcmd

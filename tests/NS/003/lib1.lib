@@ -1,0 +1,2 @@
+@namespace lib1
+@define sym Lib1_sym

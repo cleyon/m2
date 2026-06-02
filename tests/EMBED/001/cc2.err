@@ -1,6 +1,6 @@
 @newcmd greet{who}
 @newcmd private{name}
-Hello, @name@
+Hello, @m2::name@
 @endcmd
 @private{@{who}}
 @endcmd

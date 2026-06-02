@@ -1,1 +1,1 @@
-m2:short_and.m2:12:Division by zero:@fi
+m2:short_and.m2:12:Division by zero:@expr 1/0@

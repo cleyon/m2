@@ -2,4 +2,4 @@
 Foo
 @return     
 @endcmd
-Returning @foo@
+Returning '@foo@'

@@ -1,2 +1,2 @@
 m2:sp0.m2:4:@split: Symbol 'DATA' is null
-@null DATA
+@set DATA

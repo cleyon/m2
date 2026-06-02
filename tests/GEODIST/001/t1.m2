@@ -11,9 +11,9 @@ PART 2
 @comment        (58°_38′_38.48″N , 003°_04′_12.34″W)
 @define lat1 @hr  50 03 58.76@
 @define lon1 @hr 005 42 53.10@
-@define lat2 @hr  58 38 38.48@ 
+@define lat2 @hr  58 38 38.48@
 @define lon2 @hr 003 04 12.34@
-Distance from (@{lat1},@{lon1}) to (@{lat2},@{lon2}@)
+Distance from (@{lat1},@{lon1}) to (@{lat2},@{lon2})
 Expect: 969.954114 km
 Actual: @geodist @{lat1} @{lon1} @{lat2} @{lon2}@ km
 Control:@geodist 50.06632222 5.71475 58.64402222 3.070094444@
@@ -28,7 +28,7 @@ Flinders Peak	37°57′03.72030″S, 144°25′29.52440″E
 Buninyong		37°39′10.15610″S, 143°55′35.38390″E
 @define lat2 @hr  37 39 10.15610@
 @define lon2 @hr 143 55 35.38390@
-Distance from (@{lat1},@{lon1}) to (@{lat2},@{lon2}@)
+Distance from (@{lat1},@{lon1}) to (@{lat2},@{lon2})
 Expect: 54.972271 km
 Actual: @geodist @{lat1} @{lon1} @{lat2} @{lon2}@ km
 Control:@geodist 37.95103342  144.4248678    37.65282114  143.9264953@
@@ -48,6 +48,6 @@ PART 4
 @define lon1 -3.1965
 @define lat2 -41.2866
 @define lon2 174.7756
-Distance from (@{lat1},@{lon1}) to (@{lat2},@{lon2}@)
+Distance from (@{lat1},@{lon1}) to (@{lat2},@{lon2})
 Expect: 18364.45 km
 Actual: @geodist @{lat1} @{lon1} @{lat2} @{lon2}@ km

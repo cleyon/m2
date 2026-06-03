@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-06-02 18:11:48 cleyon>
+#  Time-stamp:  <2026-06-02 20:28:05 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -4835,10 +4835,8 @@ function info__dump(info,
 }
 
 
-function info__get(info, elem,
-                   type)
+function info__get(info, elem)
 {
-    type = first(info["code"])
     if (elem == "key_valid") {
         if (info["_key_valid"] == VOID)
             return info["_key_valid"] = \
@@ -4860,7 +4858,7 @@ function info__get(info, elem,
         else
             return info["_protected"]
     } else if (elem == "type")
-        return type
+        return first(info["code"])
     else if (! (elem in info))
         panic("(info__get) Info does not contain element '" elem "'")
     else
@@ -5763,7 +5761,7 @@ function sym_ll_read_ns(ns, name, key, level,
             # __NSPATH__ is not a real variable -- its value is
             # constructed on the fly by walking the namespace stack.
             for (i = stk_depth(__ns_stack); i > 0; i--)
-                retval = retval  (!emptyp(retval) ? TOK_COLON : EMPTY)  __ns_stack[i] 
+                retval = retval  (!emptyp(retval) ? TOK_COLON : EMPTY)  __ns_stack[i]
             return retval
         } else
             return symtab[M2_SYSNS, name, key, level, "symval"]
@@ -11062,6 +11060,7 @@ function nam__qualify(text,
                       retval)
 {
     orig = text
+    pre = post = EMPTY
     l2 = substr(text, 1, 2)
     if (l2 == "++" || l2 == "--") {
         pre = l2

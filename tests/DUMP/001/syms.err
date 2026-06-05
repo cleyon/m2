@@ -1,6 +1,6 @@
-@define bar	2
-@longdef baz
+@define m2::bar	2
+@longdef m2::baz
 Line A
 Line B
 @endlongdef
-@define foo	1
+@define m2::foo	1

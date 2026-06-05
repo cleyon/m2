@@ -1,5 +1,5 @@
-@define DATA	aaa bbb ccc
-@define MYARRAY[1]	aaa
-@define MYARRAY[2]	bbb
-@define MYARRAY[3]	ccc
+@define m2::DATA	aaa bbb ccc
+@define m2::MYARRAY[1]	aaa
+@define m2::MYARRAY[2]	bbb
+@define m2::MYARRAY[3]	ccc
 m2:sp3.m2:14:@m2::MYARRAY[4]@: Index '4' out of bounds

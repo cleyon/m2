@@ -1,2 +1,2 @@
-@define ARR[1]	aaa
-@define DATA	aaa
+@define m2::ARR[1]	aaa
+@define m2::DATA	aaa

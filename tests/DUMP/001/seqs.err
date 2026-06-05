@@ -1,5 +1,5 @@
-@sequence bar	create
-@sequence foo	create
-@sequence foo	setval 1
-@sequence quux	create
-@sequence quux	format %x
+@sequence m2::bar	create
+@sequence m2::foo	create
+@sequence m2::foo	setval 1
+@sequence m2::quux	create
+@sequence m2::quux	format %x

@@ -82,7 +82,7 @@
 # Test ids and results are shown on lines beginning and ending with "***":
 #       *** TEST: NEWCMD/004/simple.m2 ... PASS ***
 # Exit status codes and data streams are shown in sections whose titles appear
-#       >>> LIKE THIS <<<
+#        >> LIKE THIS <<
 #
 # EXIT STATUS
 # ===========
@@ -359,7 +359,7 @@ run_test()
             echo "FAIL ***"
             hanging=0
         fi
-        printf ">>> %s.m2: DEFECT - Expected exit code (%s) != Actual axit code (%s) <<<\n" \
+        printf " >> %s.m2 - DIFFERENT EXIT CODES (expected %s, got %s) <<\n" \
                $TESTNAME \
                "`cat_or_nodata ${TESTNAME}.expected_exit`" \
                "`cat_or_nodata ${TESTNAME}.run_exit`"
@@ -375,12 +375,12 @@ run_test()
             echo "FAIL ***"
             hanging=0
         fi
-        printf ">>> %s.m2: DEFECT - Expected errors != Actual errors <<<\n" \
+        printf " >> %s.m2 - DIFFERENT ERRORS <<\n" \
                $TESTNAME
         fail=$(expr $fail + 1)
-        echo "--- EXPECTED ERRORS (`lines ${TESTNAME}.expected_err`) ---"
+        echo "--- Expected Errors (`lines ${TESTNAME}.expected_err`) ---"
         cat_or_nodata ${TESTNAME}.expected_err
-        echo "--- ACTUAL ERRORS (`lines ${TESTNAME}.run_err`) ---"
+        echo "--- Actual Errors (`lines ${TESTNAME}.run_err`) ---"
         cat_or_nodata ${TESTNAME}.run_err
         saw_errors=1
         rc=127
@@ -394,23 +394,23 @@ run_test()
             echo "FAIL ***"
             hanging=0
         fi
-        printf ">>> %s.m2: DEFECT - Expected output != Actual output <<<\n" \
+        printf " >> %s.m2 - DIFFERENT OUTPUT <<\n" \
                $TESTNAME
         fail=$(expr $fail + 1)
         # Always create diff file
         diff ${diff_opt} ${TESTNAME}.expected_out ${TESTNAME}.run_out > ${TESTNAME}.run_diff
 
         if [ -f ${TESTNAME}.showdiff ]; then
-            echo "--- DIFF: EXPECTED OUTPUT vs ACTUAL OUTPUT ---"
+            echo "--- diff: Expected Output vs Actual Output ---"
             cat_or_nodata ${TESTNAME}.run_diff
         else
-            echo "--- EXPECTED OUTPUT (`lines ${TESTNAME}.expected_out`) ---"
+            echo "--- Expected Output (`lines ${TESTNAME}.expected_out`) ---"
             cat_or_nodata ${TESTNAME}.expected_out
-            echo "--- ACTUAL OUTPUT (`lines ${TESTNAME}.run_out`) ---"
+            echo "--- Actual Output (`lines ${TESTNAME}.run_out`) ---"
             cat_or_nodata ${TESTNAME}.run_out
         fi
         if [ $saw_errors -eq 0 -a -s ${TESTNAME}.run_err ]; then
-            echo "--- ACTUAL (EXPECTED) ERRORS (`lines ${TESTNAME}.run_err`) ---"
+            echo "--- Actual (Expected) ERRORS (`lines ${TESTNAME}.run_err`) ---"
             cat_or_nodata ${TESTNAME}.run_err
         fi
         rc=127

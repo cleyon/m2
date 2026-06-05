@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-06-02 20:28:05 cleyon>
+#  Time-stamp:  <2026-06-05 09:25:01 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -148,7 +148,8 @@ BEGIN {
     TYPE_SYMBOL      = "S"; __label[TYPE_SYMBOL]    = "Symbol";    __base_type[TYPE_SYMBOL  ] = TYPE_SYMBOL
     TYPE_USER        = "U"; __label[TYPE_USER]      = "User";      __base_type[TYPE_USER    ] = TYPE_USER
     #
-    VALID_TYPES      = TYPE_ARRAY  TYPE_COMMAND   TYPE_FUNCTION  TYPE_INTERNAL \
+    # used to include TYPE_INTERNAL but seeing how things work without it
+    VALID_TYPES      = TYPE_ARRAY  TYPE_COMMAND   TYPE_FUNCTION  \
                        TYPE_LIST   TYPE_SEQUENCE  TYPE_SYMBOL    TYPE_USER
     # Pseudo-types
     PTYPE_ANY        = "*"; __label[PTYPE_ANY]      = "Any";       __base_type[PTYPE_ANY    ] = VALID_TYPES
@@ -684,7 +685,7 @@ function awk_stat(path,
     # Use literal numbers; TRUE/FALSE might not be defined yet
     if (status >= 0) {          #  > 0 -> Found
         close(path)             # == 0 -> Empty but readable
-        return 1                # <0 -> Non-existent or unreadable
+        return 1                #  < 0 -> Non-existent or unreadable
     }
     return 0
 }
@@ -952,57 +953,54 @@ function vincenty_distance(lat1, lon1, lat2, lon2,
 
 function secure_level()
 {
-    return sys_read("__SECURE__")
+    return sys_read("__SECURE__", NOKEY)
 }
 
 function VERBOSE()
 {
-    return sys_read("__VERBOSE__") + 0
+    return sys_read("__VERBOSE__", NOKEY) + 0
 }
 
 function LINE()
 {
-    return sys_read("__LINE__") + 0
+    return sys_read("__LINE__", NOKEY) + 0
 }
 
 
 function FILE()
 {
-    return sys_read("__FILE__")
+    return sys_read("__FILE__", NOKEY)
 }
 
 
 function strictp(ssys)
 {
     if (ssys == EMPTY)
-        panic("(strictp) ssys cannot be empty!")
-    if (ssys == "name") return TRUE             # XXX
+        panic("(strictp) ssys must not be empty")
     # Use low-level function here, not sym_true_p(), to prevent infinite loop
-    return sym_ll_read_ns(M2_SYSNS, "__STRICT__", ssys, ROOT_LEVEL) != FALSE
+    return sys_read("__STRICT__", ssys) != FALSE
 }
 
 
 function build_prog_cmdline(prog, arg, mode)
 {
-    if (! sym_ll_in_ns(M2_SYSNS, "__PROG__", prog, ROOT_LEVEL))
+    if (! sys_in("__PROG__", prog))
         # This should be same as assert_[n]sym_defined()
         panic(sprintf("(build_prog_cmdline) __PROG__[%s] not defined", prog))
     return sprintf("%s %s%s", \
-                   sym_ll_read_ns(M2_SYSNS, "__PROG__", prog, ROOT_LEVEL),  \
+                   sys_read("__PROG__", prog),  \
                    arg, \
                    ((mode == MODE_IO_SILENT) ? sprintf(" >%s 2>%s", NULL, NULL) : EMPTY))
 }
 
 
-function exec_prog_cmdline(prog, arg,    sym)
+function exec_prog_cmdline(prog, arg,
+                           cmd)
 {
     if (secure_level() >= SEC_PARANOID)
         security_violation("(exec_prog_cmdline) Forbidden")
-
-    if (! sym_ll_in_ns(M2_SYSNS, "__PROG__", prog, ROOT_LEVEL))
-        # This should be same as assert_[n]sym_defined()
-        panic(sprintf("(exec_prog_cmdline) __PROG__[%s] not defined", prog))
-    return system(build_prog_cmdline(prog, arg, MODE_IO_SILENT)) # always silent
+    cmd = build_prog_cmdline(prog, arg, MODE_IO_SILENT) # always silent
+    return system(cmd)
 }
 
 
@@ -1015,7 +1013,7 @@ function tmpdir(    t)
     else if ("TMPDIR" in ENVIRON)
         t = ENVIRON["TMPDIR"]
     else
-        t = sys_read("__TMPDIR__")
+        t = sys_read("__TMPDIR__", NOKEY)
     while (last(t) == TOK_NEWLINE)
         t = chop(t)
     return with_trailing_slash(t)
@@ -1034,7 +1032,7 @@ function user_shell()
 function safe_shell()
 {
     if ("sh" in PROG)
-        return sym_ll_read_ns(M2_SYSNS, "__PROG__", "sh", ROOT_LEVEL)
+        return sys_read("__PROG__", "sh")
     panic("(safe_shell) No shell program found")
 }
 
@@ -1061,7 +1059,7 @@ function curr_atmode(    src_block)
 function curr_dstblk(    top_block)
 {
     if (stk_empty_p(__parse_stack))
-        panic("(curr_dstblk) Parse stack is empty!")
+        panic("(curr_dstblk) Parse stack is empty")
     top_block = stk_top(__parse_stack)
     dbg__print_block("ship_out", 7, top_block, "(curr_dstblk) top_block [top of __parse_stack]")
     if (! ((top_block, 0, "dstblk") in blktab)) {
@@ -1075,7 +1073,7 @@ function curr_dstblk(    top_block)
 function ppf__label(code)
 {
     if (code == EMPTY)
-        panic("(ppf__label) code is empty")
+        panic("(ppf__label) code must not be empty")
     code = first(code)
     dbg__print("xeq", 7, "(ppf__label) code = " code)
     if (! (code in __label)) {
@@ -1129,7 +1127,7 @@ function check__parse_stack(expected_block_type,
 
     btop = stk_top(__parse_stack)
     if (blk_type(btop) != expected_block_type) {
-        __m2_msg = sprintf("Missing parser; wanted %s but found %s",
+        __m2_msg = sprintf("Expected %s but found %s",
                            ppf__label(expected_block_type), ppf__label(blk_type(btop)))
         return ERR_PARSE_MISMATCH
     }
@@ -1138,8 +1136,8 @@ function check__parse_stack(expected_block_type,
     # before the block was pushed onto the __parse_stack; and at this
     # point it hasn't been popped yet...
     if (blktab[btop, 0, "depth"] != stk_depth(__parse_stack) - 1) {
-        __msg_msg = sprintf("Bad depth; wanted %d but found %d",
-                            stk_depth(__parse_stack) - 1, blktab[btop, 0, "depth"])
+        __m2_msg = sprintf("Bad depth; expected %d but found %d",
+                           stk_depth(__parse_stack) - 1, blktab[btop, 0, "depth"])
         return ERR_PARSE_DEPTH
     }
 
@@ -1150,9 +1148,7 @@ function check__parse_stack(expected_block_type,
 function run_hook(hook_event,
                   hook_func, user_block, info)
 {
-
-    if (! (__init_files_loaded &&
-           flag_1true_p(__m2_config_fs, MODE_HOOKS_ENABLED))) {
+    if (flag_anyfalse_p(__m2_config_flags, INIT_DOTFILES MODE_HOOKS_ENABLED)) {
         dbg__print("hook", 7, "(run_hook) Hooks are disabled")
         return
     }
@@ -1375,7 +1371,7 @@ function format_message(text, file, line,
 
 function flush_stdout(flushlev)
 {
-    if (flushlev <= sys_read("__SYNC__")) {
+    if (flushlev <= sys_read("__SYNC__", NOKEY)) {
         # One of these is bound to work, right?
         fflush(STDOUT)
         # Reputed to be more portable:
@@ -1424,9 +1420,9 @@ function error(text, file, line)
 {
     warn(text, file, line)
     sys_write("__EXIT__", EX_M2_ERROR)
-    if (sys_read("__LENIENT__") < 0)
+    if (sys_read("__LENIENT__", NOKEY) < 0)
         abend("FATAL", EX_M2_ERROR)
-    if (sys_read("__LENIENT__") == 0)
+    if (sys_read("__LENIENT__", NOKEY) == 0)
         end_program(MODE_STREAMS_DISCARD)
 }
 
@@ -1484,7 +1480,7 @@ function readline(    retval, i, s, done, topsrc, trim_ws)
     s = ""
     done = trim_ws = FALSE
     if (stk_empty_p(__source_stack))
-        panic("(readline) Source stack empty")
+        panic("(readline) Source stack is empty")
     topsrc = stk_top(__source_stack)
 
     if (blk_type(topsrc) == BLK_STRING) {
@@ -1656,7 +1652,7 @@ function dbg__all_lev_zero(    dsys)
 
 
 # NB - This function writes directly to the symbol table.  It does not
-# use sym_ll_write(), and does not trigger special __DEBUG__ handling.
+# use sym_ll_write_ns(), and does not trigger special __DEBUG__ handling.
 function enable_debugging()
 {
     symtab[M2_SYSNS, "__DEBUG__", NOKEY,  ROOT_LEVEL, "symval"] = TRUE
@@ -1665,7 +1661,7 @@ function enable_debugging()
 
 function debugging_enabled_p()
 {
-    return sys_read("__DEBUG__")+0 > 0
+    return sys_read("__DEBUG__", NOKEY)+0 > 0
 }
 
 
@@ -1677,13 +1673,13 @@ function debugging_enabled_p()
 function dbg__sys_level_p(dsys, lev)
 {
     if (lev == EMPTY)           lev = 1
-    if (dsys == EMPTY)          panic("(dbg) dsys cannot be empty")
+    if (dsys == EMPTY)          panic("(dbg) dsys must not be empty")
     if (! (dsys in __dbg_sysnames)) panic("(dbg) Unknown dsys name '" dsys "' (lev=" lev "): " $0)
     if (lev < 0)                return TRUE
     if (!debugging_enabled_p()) return FALSE
     if (lev == 0)               return TRUE # Don't combine with .-2; this allows negative levels to print regardless of __DEBUG__
     if (lev > MAX_DBG_LEVEL)    lev = MAX_DBG_LEVEL
-    if (!sym_ll_in_ns(M2_SYSNS, "__DBG__", dsys, ROOT_LEVEL))
+    if (!sys_in("__DBG__", dsys))
         return FALSE
     return dbg__get_level(dsys) >= lev
 }
@@ -1698,13 +1694,13 @@ function dbg__sys_level_p(dsys, lev)
 # going to be less than any LEV.
 function dbg__get_level(dsys)
 {
-    if (dsys == EMPTY) panic("(dbg__get_level) dsys cannot be empty")
+    if (dsys == EMPTY) panic("(dbg__get_level) dsys must not be empty")
     if (! (dsys in __dbg_sysnames)) panic("(dbg__get_level) Unknown dsys name '" dsys "'")
-    if (!sym_ll_in_ns(M2_SYSNS, "__DBG__", dsys, ROOT_LEVEL)) {
+    if (!sys_in("__DBG__", dsys)) {
         warn("(dbg__get_level(" dsys "} not defined, returning 0")
         return 0
     }
-    return (sym_ll_read_ns(M2_SYSNS, "__DBG__", dsys, ROOT_LEVEL)+0) \
+    return (sys_read("__DBG__", dsys)+0) \
          * (debugging_enabled_p() ? 1 : -1)
 }
 
@@ -1712,7 +1708,7 @@ function dbg__get_level(dsys)
 # Set the level (lev) for the debug dsys
 function dbg__set_level(dsys, lev)
 {
-    if (dsys == EMPTY)           panic("(dbg__set_level) dsys cannot be empty")
+    if (dsys == EMPTY)           panic("(dbg__set_level) dsys must not be empty")
     if (! (dsys in __dbg_sysnames)) panic("(dbg__set_level) Unknown dsys name '" dsys "'")
     if (lev == EMPTY)           lev = 1
     # Formerly, negative levels were automagically set to zero.
@@ -1736,7 +1732,7 @@ function print_debugfile(text,
                          debugfile)
 {
     debugfile = secure_level() == SEC_STANDARD \
-        ? sys_read("__DEBUGFILE__") \
+        ? sys_read("__DEBUGFILE__", NOKEY) \
         : STDERR
     printf "%s\n", text > debugfile
 }
@@ -1786,7 +1782,7 @@ function trace_prefix(    prefix,
                           trace_mode)
 {
     prefix = "M2Trace:"
-    trace_mode = sys_read("__TRACEMODE__")
+    trace_mode = sys_read("__TRACEMODE__", NOKEY)
     if (flag_1true_p(trace_mode, TRACE_SHOW_FILE_NAME))
         prefix = prefix (FILE() ? FILE() : __dofile_name) ":"
     if (flag_1true_p(trace_mode, TRACE_SHOW_LINE_NUM))
@@ -1832,7 +1828,7 @@ function tracing_event_p(event,
 {
     if (index(TRACE_VALID_EVENTS, event) == NOT_FOUND)
         panic("(tracing_event_p) Unrecognized trace event '" event "'")
-    trace_mode = sys_read("__TRACEMODE__")
+    trace_mode = sys_read("__TRACEMODE__", NOKEY)
     return flag_anytrue_p(trace_mode, event TRACE_ALL)
 }
 
@@ -1840,12 +1836,12 @@ function tracing_event_p(event,
 function trace(event, sym, message,
                trace_mode)
 {
-    if (sys_read("__TRACE__") == FALSE ||
+    if (sys_read("__TRACE__", NOKEY) == FALSE ||
         !tracing_event_p(event))
         return
     if (event == TRACE_COMMAND || event == TRACE_EXPANSION || event == TRACE_SYMBOL_READ_WRITE) {
         if (sym == EMPTY)
-            panic("(trace) sym cannot be empty")
+            panic("(trace) sym must not be empty")
         if (double_underscores_p(sym) ||
             !tracing_symbol_p(sym))
             return
@@ -2179,7 +2175,7 @@ function info__gate_2parts(opcode, optype, info, opns, oplevel, caller, assert_t
 
             # if (optype == TYPE_ARRAY) {
             #     #print_stderr("type_array")
-            #     if (! sym_ll_in(iname, ikey, oplevel))
+            #     if (! sym_ll_in_ns(NEED_NS, iname, ikey, oplevel))
             #         return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
             #                                   sprintf("Key '%s' not found in Array '%s'", ikey, iname))
             #     #print_stderr("in symtab")
@@ -2328,7 +2324,7 @@ function arr_fetch_info(info,
     else if (flag_1true_p(code, FLAG_NUMERIC))
         return 0.0 + val
     else if (flag_1true_p(code, FLAG_BOOLEAN))
-        return sym_ll_read_ns(M2_SYSNS, "__FMT__", to_bool(val)) # !! (0 + val))
+        return sys_read("__FMT__", to_bool(val)) # !! (0 + val))
     else
         return val
 }
@@ -2400,7 +2396,7 @@ function idx__key_exists_p(info, key,
 #                      k, x, del_list, agg_block, count, i)
 # {
 #     if (code == EMPTY)
-#         panic("(arr_clear) Missing code!")
+#         panic("(arr_clear) code must not be empty")
 #     if (flag_1true_p(code, FLAG_BLKARRAY)) {
 #         # # Clear block array
 #         # if (! ((M2_NS, arr, NOKEY, level, "agg_block") in symtab))
@@ -2491,9 +2487,9 @@ function idx__size(info, # arr, level, code,
                    icode, ilevel, iname, ins, agg_block, count, k, x)
 {
     if ((ins = info__get(info, "ns")) == EMPTY)
-        panic("(idx__size) Missing ns!")
+        panic("(idx__size) 'ns' must not be empty")
     if ((icode = info__get(info, "code")) == EMPTY)
-        panic("(idx__size) Missing code!")
+        panic("(idx__size) 'code' must not be empty")
 
     iname  = info__get(info, "name")
     ilevel = info__get(info, "level")
@@ -2537,7 +2533,7 @@ function blk_new(block_type,
                  new_blknum, msg)
 {
     if (block_type == EMPTY)
-        panic("(blk_new) Missing type")
+        panic("(blk_new) block_type must not be empty")
     new_blknum = ++__block_cnt
 
     blktab[new_blknum, 0, "depth"] = stk_depth(__parse_stack)
@@ -2678,7 +2674,7 @@ function blk_type(blknum,
                   bt)
 {
     if (! ((blknum, 0, "type") in blktab)) {
-        if (sys_read("__LENIENT__") <= 0)
+        if (sys_read("__LENIENT__", NOKEY) <= 0)
             panic("(blk_type) Block # " blknum " has no type!")
         warn("(blk_type) Block # " blknum " has no type => UNDEF")
         return PTYPE_UNDEF
@@ -2744,7 +2740,7 @@ function blk_dump_blktab(    f, b, blknum, seen, type)
         split(b, f, SUBSEP)
         blknum = f[BFN_BNUM] + 0
         if (! (blknum in seen)) {
-            type = blk_type(blknum+0)
+            type = blk_type(blknum)
             dbg__print("xeq", 5, "(blk_dump_blktab) type=" type)
             dbg__print_block("xeq", -1, blknum, "(blk_dump_blktab)")
         }
@@ -3072,14 +3068,14 @@ function blk_to_string(blknum,
     __textbuf = EMPTY
 
     # Temporarily force print mode to STRING output, will be restored
-    old_print_mode = flag_1true_p(__m2_config_fs, MODE_TEXT_PRINT)
-    __m2_config_fs = flag_set_clear(__m2_config_fs, MODE_TEXT_STRING, MODE_TEXT_PRINT)
+    old_print_mode = flag_1true_p(__m2_config_flags, MODE_TEXT_PRINT)
+    __m2_config_flags = flag_set_clear(__m2_config_flags, MODE_TEXT_STRING, MODE_TEXT_PRINT)
 
     execute__block(blknum)
     string = __textbuf
 
     # Restore old settings
-    __m2_config_fs = flag_set_clear(__m2_config_fs,
+    __m2_config_flags = flag_set_clear(__m2_config_flags,
                                     old_print_mode ? MODE_TEXT_PRINT : MODE_TEXT_STRING, # set one of old print mode
                                     MODE_TEXT_STRING MODE_TEXT_PRINT) # after clearing both
     __textbuf = old_textbuf
@@ -3143,7 +3139,7 @@ function execute__block(blknum,
     block_type = blk_type(blknum)
     dbg__print("xeq", 1, sprintf("(execute__block) START blknum=%d, type=%s",
                                 blknum, ppf__label(block_type)))
-    if (flag_1false_p(__m2_config_fs, MODE_XEQ_NORMAL)) {
+    if (flag_1false_p(__m2_config_flags, MODE_XEQ_NORMAL)) {
         dbg__print("xeq", 3, "(execute__block) NOP !MODE_XEQ_NORMAL")
         return
     }
@@ -3361,7 +3357,7 @@ function execute__command(name, cmdline,
 {
     dbg__print("xeq", 3, sprintf("(execute__command) START name='%s', cmdline='%s'",
                                 name, cmdline))
-    if (flag_1false_p(__m2_config_fs, MODE_XEQ_NORMAL)) {
+    if (flag_1false_p(__m2_config_flags, MODE_XEQ_NORMAL)) {
         dbg__print("xeq", 3, "(execute__command) NOP !MODE_XEQ_NORMAL")
         return
     }
@@ -3455,7 +3451,7 @@ function dump_parse_stack(    level, block, block_type)
         for (level = stk_depth(__parse_stack); level > 0; level--) {
             block = __parse_stack[level]
             block_type = blk_type(block)
-            print_debugfile("m2debug:(dump_parse_stack) Level " level ", block # " block ", type=" block_type )
+            print_debugfile("m2debug:(dump_parse_stack) Level " level ", block # " block ", type=" ppf__label(block_type) )
             dbg__print_block("xeq", -1, block)
         }
     print_debugfile("m2debug:(dump_parse_stack) END")
@@ -3523,7 +3519,7 @@ function parse__file(default_ns,
                      filename, file_block, pstat, d)
 {
     if (stk_empty_p(__source_stack))
-        panic("(parse__file) Source stack empty")
+        panic("(parse__file) Source stack is empty")
     file_block = stk_top(__source_stack)
 
     filename = blktab[file_block, 0, "filename"]
@@ -3540,7 +3536,7 @@ function parse__file(default_ns,
     if (filename in __active_files)
         error("Cannot recursively read '" filename "':" $0)
 
-    if (sys_read("__DEPTH__") > 0)
+    if (sys_read("__DEPTH__", NOKEY) > 0)
         run_hook("file_suspend")
 
     __active_files[filename] = file_block
@@ -3549,7 +3545,7 @@ function parse__file(default_ns,
     blktab[file_block, 0, "ever_opened"]   = TRUE
     blktab[file_block, 0, "old.buffer"]    = __buffer
     blktab[file_block, 0, "old.file"]      = FILE()
-    blktab[file_block, 0, "old.file_uuid"] = sys_read("__FILE_UUID__")
+    blktab[file_block, 0, "old.file_uuid"] = sys_read("__FILE_UUID__", NOKEY)
     blktab[file_block, 0, "old.line"]      = LINE()
     blktab[file_block, 0, "old.ns"]        = curr_ns()
     dbg__print_block("ship_out", 7, file_block, "(parse__file) file_block")
@@ -3589,7 +3585,7 @@ function parse__file(default_ns,
     sys_write("__LINE__",      blktab[file_block, 0, "old.line"])
     blk_master_delete(file_block)
 
-    if (sys_read("__DEPTH__") > 0)
+    if (sys_read("__DEPTH__", NOKEY) > 0)
         run_hook("file_resume")
 
     dbg__print("parse", 2, sprintf("(parse__file) END '%s' => %s",
@@ -3609,13 +3605,13 @@ function parse(    code, terminator, rstat, cmd, retval, new_block, fc,
     # The "parser" is the topmost element of the __parse_stack
     # which we wish to access a few times
     if (stk_empty_p(__parse_stack))
-        panic("Parse error, Empty parse stack")
+        panic("Parse error; Empty parse stack")
     parser = stk_top(__parse_stack)
     parser_type = blk_type(parser)
     parser_label = ppf__label(parser_type)
 
     if (stk_empty_p(__source_stack))
-        panic("Parse error, Empty source stack")
+        panic("Parse error; Empty source stack")
     src_block = stk_top(__source_stack)
 
     # terminator is a regular expression, and we call
@@ -3712,7 +3708,7 @@ function parse(    code, terminator, rstat, cmd, retval, new_block, fc,
                     trace(TRACE_QUALIFICATION, EMPTY,
                           sprintf("[Qualify] '%s' => '%s'", orig, $0))
                 } else if (ns != M2_SYSNS)
-                    error(sprintf("%s: Parse error, Command name conflicts with built-in",
+                    error(sprintf("%s: Parse error; Command name conflicts with built-in",
                                           "@" cmd))
 
                 # See if it's immediate
@@ -3740,7 +3736,7 @@ function parse(    code, terminator, rstat, cmd, retval, new_block, fc,
                             }
                         }
                         if (! found)
-                            error(sprintf("%s: Parse error, Missing parser; wanted FOR or WHILE but found %s",
+                            error(sprintf("%s: Parse error; FOR or WHILE loop not found %s",
                                           "@" cmd, parser_label))
                         dbg__print("parse", 3, sprintf("(parse) [%s] CALLING ship_out(CMD, '%s')", parser_label, $0))
                         ship_out(OBJ_CMD, $0)
@@ -3767,7 +3763,7 @@ function parse(    code, terminator, rstat, cmd, retval, new_block, fc,
                             dbg__print("parse", 5, "(parse) [" parser_label "] END; @endcase matched terminator => TRUE")
                             return TRUE
                         }
-                        error(sprintf("%s: Parse error, Missing terminator; wanted '%s' but found '@endcase'",
+                        error(sprintf("%s: Parse error; Missing terminator; expected '%s' but found '@endcase'",
                                       "@" cmd, terminator))
 
                     } else if (cmd == "endcmd") {
@@ -3809,7 +3805,7 @@ function parse(    code, terminator, rstat, cmd, retval, new_block, fc,
                             nam_ll_write_ns(ns, new_cmd_name, curr_level(), TYPE_USER)
                             return TRUE
                         }
-                        error(sprintf("%s: Parse error; Missing terminator; wanted '%s' but found '@endcmd'",
+                        error(sprintf("%s: Parse error; Missing terminator; expected '%s' but found '@endcmd'",
                                       "@" cmd, terminator))
 
                     } else if (cmd == "endif" || cmd == "fi") {
@@ -3866,6 +3862,14 @@ function parse(    code, terminator, rstat, cmd, retval, new_block, fc,
                         dbg__print("parse", 5, sprintf("(parse) [" parser_label "] CALLING ship_out(BLKNUM, %d)", new_block))
                         ship_out(OBJ_BLKNUM, new_block)
                         dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM ship_out()"))
+
+                    } else if (cmd == "sm2ctl") { # Undocumented: @sm2ctl is an immediate version of @m2ctl
+                        #print_stderr("(parse) [@sm2ctl] I see '" $0 "'")
+                        if ($1 == "dump_parse_stack") {
+                            dump_parse_stack()
+
+                        } else
+                            error("@sm2ctl: Unrecognized parameter: " $1)
 
                     } else if (cmd == "newcmd") {
                         dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__newcmd(dstblk=" curr_dstblk() ")"))
@@ -4092,7 +4096,7 @@ function scan__usercmd_call(s, info,
 {
     dbg__print("parse", 5, "(scan__usercmd_call) s='" s "'")
     if (emptyp(s))
-        panic("(scan__usercmd_call) s cannot be empty!")
+        panic("(scan__usercmd_call) s must not be empty")
     if (first(s) != TOK_AT)
         error(sprintf("(scan__usercmd_call) Doesn't start with @: s='%s'", s))
     if (info__get(info, "nparts") != 1)
@@ -4305,14 +4309,17 @@ function flag_set_clear(code, set_fs, clear_fs,
 
 
 function ppf__flags(code,
-                    l, s, desc, x)
+                    l, s, desc, x, type)
 {
+    s = desc = EMPTY
     if ((l = length(code)) == 0)
         error("(ppf__flags) Did not specify code")
-    s = ppf__label(first(code))
-    if (l > 1) {
-        desc = ""
-        for (x = 2; x <= l; x++)
+    if (valid_type_p(type = first(code))) {
+        s = ppf__label(type)
+        code = rest(code); l--
+    }
+    if (l > 0) {
+        for (x = 1; x <= l; x++)
             desc = desc ppf__label(substr(code, x, 1)) ","
         s = s "<" chop(desc) ">"
     }
@@ -4452,7 +4459,7 @@ function nam__scan(text, info,
 
         key = substr(text, lbrk+1, length(text)-lbrk-1)
         if (key == EMPTY)
-            panic("(nam__scan) Key cannot be empty!")
+            panic("(nam__scan) Key must not be empty")
         #print_stderr("(nam__scan) new scan: key='" key "'")
         info["key"] = key
 
@@ -4535,7 +4542,7 @@ function nam__lookup(info,
         if (info__get(info, "key") != EMPTY ||
             ! nam__valid_p(name, PTYPE_ENV_VAR, FALSE)) {
             info["errorp"] = TRUE
-            info["errtext"] = __msg_msg = \
+            info["errtext"] = __m2_msg = \
                 sprintf("Name '%s' not valid as %s", name, ppf__label(PTYPE_ENV_VAR))
             return ERR_SCAN_INVALID_NAME
         }
@@ -4720,14 +4727,18 @@ function nam_purge(ns, level,
 }
 
 
-function nam_dump_namtab(filter_fs, include_sys,
-                         f, n, ns, code, s, desc, name, level, l,
-                         include_system)
+function nam_dump_namtab_ns(target_namespace, filter_flags, include_sys,
+                            f, n, ns, code, s, desc, name, level, l,
+                            include_system, buf)
 {
-    include_system = flag_1true_p(filter_fs, FLAG_SYSTEM)
-    print_debugfile(sprintf("Begin namtab (%s%s):", filter_fs,
-                            include_system ? "+System" : ""))
-
+    if (include_sys)
+        filter_flags = flag_set_clear(filter_flags, FLAG_SYSTEM, EMPTY)
+    include_system = flag_1true_p(filter_flags, FLAG_SYSTEM)
+    buf = EMPTY
+    if (VERBOSE())
+        buf = sprintf("(nam_dump_namtab_ns) BEGIN ns=%s, filter (%s%s):\n",
+                      target_namespace, ppf__flags(filter_flags),
+                      include_system ? "+System" : EMPTY)
     for (n in namtab) {
         split(n, f, SUBSEP)
         ns    = f[NFN_NS]
@@ -4735,26 +4746,34 @@ function nam_dump_namtab(filter_fs, include_sys,
         level = f[NFN_LEVEL] + 0
         code = nam_ll_read_ns(ns, name, level)
 
-        if (! flag_alltrue_p(code, filter_fs)) {
-            #print_debugfile(sprintf("m2debug:(nam_dump_namtab) code=%s, filter=%s, flag filter failed", code, filter_fs))
+        if (target_namespace != PTYPE_ANY &&
+            target_namespace != ns) {
+            # print_debugfile(sprintf("m2debug:(nam_dump_namtab_ns) ns filter: ns=%s, name=%s, code=%s, filter=%s",
+            #                         ns, name, ppf__label(code), ppf__label(filter_flags)))
+            continue
+        }
+        if (! flag_alltrue_p(code, filter_flags)) {
+            # print_debugfile(sprintf("m2debug:(nam_dump_namtab_ns) flags filter: ns=%s, name=%s, code=%s, filter=%s",
+            #                         ns, name, ppf__label(code), ppf__label(filter_flags)))
             continue
         }
         if (flag_1true_p(code, FLAG_SYSTEM) && !include_system) {
-            #print_debugfile("m2debug:(nam_dump_namtab) system filter failed")
+            # print_debugfile(sprintf("m2debug:(nam_dump_namtab_ns) include_system filter: ns=%s, name=%s, code=%s, filter=%s",
+            #                         ns, name, ppf__label(code), ppf__label(filter_flags)))
             continue
         }
-        print_debugfile("m2debug:(nam_dump_namtab) " nam_ppf_name_level(ns, name, level))
+        buf = buf  nam_ppf_name_level(ns, name, level)  TOK_NEWLINE
     }
-    print_debugfile("m2debug:(nam_dump_namtab) End namtab")
+    return chop(buf)
 }
 
 
 function nam_ll_read_ns(ns, name, level)
 {
     if (level == EMPTY)
-        panic("(nam_ll_read_ns) LEVEL missing")
+        panic("(nam_ll_read_ns) LEVEL must not be empty")
     if (ns == EMPTY)
-        panic("(nam_ll_read_ns) NS missing")
+        panic("(nam_ll_read_ns) NS must not be empty")
     return namtab[ns, name, level] # returns code
 }
 
@@ -4762,9 +4781,9 @@ function nam_ll_read_ns(ns, name, level)
 function nam_ll_in_ns(ns, name, level)
 {
     if (level == EMPTY)
-        panic("(nam_ll_in_ns) LEVEL missing")
+        panic("(nam_ll_in_ns) LEVEL must not be empty")
     if (ns == EMPTY)
-        panic("(nam_ll_in_ns) NS missing")
+        panic("(nam_ll_in_ns) NS must not be empty")
     #if (name != "__LINE__" && name != "__NLINE__" && name != "__DBG__")
         #dbg__print("sym", 5, sprintf("(nam_ll_in) Looking for '%s' at level %s", name, level))
     if (double_underscores_p(name))
@@ -4779,9 +4798,9 @@ function nam_ll_write_ns(ns, name, level, code,
                          retval, msg)
 {
     if (level == EMPTY)
-        panic("(nam_ll_write_ns) LEVEL missing")
+        panic("(nam_ll_write_ns) LEVEL must not be empty")
     if (ns == EMPTY)
-        panic("(nam_ll_write_ns) NS missing")
+        panic("(nam_ll_write_ns) NS must not be empty")
     if (! nam__valid_p(ns, PTYPE_NS, TRUE) ||
         ns == "awk")
         panic("(nam_ll_write_ns) Bad ns '" ns "'")
@@ -4790,8 +4809,8 @@ function nam_ll_write_ns(ns, name, level, code,
 
     # It's important to use low-level functions here, and not invoke
     # dbg__* functions in this procedure, otherwise nasty loops ensue.
-    if (sym_ll_in_ns(M2_SYSNS, "__DBG__", "nam", ROOT_LEVEL) &&
-        sym_ll_read_ns(M2_SYSNS, "__DBG__", "nam", ROOT_LEVEL) >= 5)
+    if (sys_in("__DBG__", "nam") &&
+        sys_read("__DBG__", "nam") >= 5)
         print_debugfile(sprintf("m2debug:(nam_ll_write_ns) namtab[%s, \"%s\", %d] = %s",
                                 ns, name, level, code))
 
@@ -4808,13 +4827,7 @@ function nam_ppf_name_level(ns, name, level,
                             s, code, desc, l, x)
 {
     code = nam_ll_read_ns(ns, name, level)
-    s = ppf__label(first(code)) "'" name "'" TOK_LBRACE level TOK_RBRACE
-    code = rest(code)
-    desc = ""
-    if ((l = length(code)) > 0)
-        for (x = 1; x <= l; x++)
-            desc = desc ppf__label(substr(code, x, 1)) ","
-    s = s "<" chop(desc) ">"
+    s = ns TOK_NS_QUAL name (VERBOSE() ? TOK_LBRACE level TOK_RBRACE : EMPTY) TOK_TAB ppf__flags(code)
     return s
 }
 
@@ -4898,19 +4911,29 @@ function curr_ns()
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
 #*****************************************************************************
-function seq_definition_ppf_ns(ns, name,
-                            buf, AT_SEQUENCE)
+function seq_definition_ppf_ns(qname,
+                               buf, AT_SEQUENCE,
+                               q, ns, name)
 {
-    AT_SEQUENCE = "@sequence "
-    buf =         AT_SEQUENCE name TOK_TAB "create" TOK_NEWLINE
+    if ((q = index(qname, TOK_NS_QUAL)) == NOT_FOUND)
+        panic("(seq_definition_ppf_ns) Can only hand qualified names")
+    # ns::name
+    ns   = substr(qname, 1, q-1)
+    name = substr(qname, q+2)
+    AT_SEQUENCE = "@sequence " qname TOK_TAB
+    buf =         AT_SEQUENCE "create" TOK_NEWLINE
+
     if (seq_ll_read_ns(ns, name) != SEQ_DEFAULT_INIT)
-        buf = buf AT_SEQUENCE name TOK_TAB "setval " seq_ll_read_ns(ns, name) TOK_NEWLINE
-    if (symtab[ns, name, EMPTY, ROOT_LEVEL, "init"] != SEQ_DEFAULT_INIT)
-        buf = buf AT_SEQUENCE name TOK_TAB "setinit " symtab[ns, name, EMPTY, ROOT_LEVEL, "init"] TOK_NEWLINE
-    if (symtab[ns, name, EMPTY, ROOT_LEVEL, "incr"] != SEQ_DEFAULT_INCR)
-        buf = buf AT_SEQUENCE name TOK_TAB "setincr " symtab[ns, name, EMPTY, ROOT_LEVEL, "incr"] TOK_NEWLINE
-    if (symtab[ns, name, EMPTY, ROOT_LEVEL, "fmt"] != sym_ll_read_ns(M2_SYSNS, "__FMT__", "seq"))
-        buf = buf AT_SEQUENCE name TOK_TAB "format " symtab[ns, name, EMPTY, ROOT_LEVEL, "fmt"] TOK_NEWLINE
+        buf = buf AT_SEQUENCE "setval " seq_ll_read_ns(ns, name) TOK_NEWLINE
+    if (symtab[ns, name, NOKEY, ROOT_LEVEL, "init"] != SEQ_DEFAULT_INIT)
+        buf = buf AT_SEQUENCE "setinit " symtab[ns, name, NOKEY, ROOT_LEVEL, "init"] TOK_NEWLINE
+    if (symtab[ns, name, NOKEY, ROOT_LEVEL, "incr"] != SEQ_DEFAULT_INCR) {
+        print_stderr(sprintf("(seq_definition_ppf_ns) %s != %s ?",
+                             symtab[ns, name, EMPTY, ROOT_LEVEL, "incr"], SEQ_DEFAULT_INCR))
+        buf = buf AT_SEQUENCE "setincr " symtab[ns, name, NOKEY, ROOT_LEVEL, "incr"] TOK_NEWLINE
+    }
+    if (symtab[ns, name, NOKEY, ROOT_LEVEL, "fmt"] != sys_read("__FMT__", "seq"))
+        buf = buf AT_SEQUENCE "format " symtab[ns, name, NOKEY, ROOT_LEVEL, "fmt"] TOK_NEWLINE
     return chop(buf)
 }
 
@@ -5040,12 +5063,12 @@ function stk_pop(stack,
 }
 
 
-function stk_under(stack, elem,
-                   stkname, top)
+function stk_push_2nd(stack, elem,
+                      stkname, top)
 {
     stkname = stack["name"]
     if (stk_empty_p(stack))
-        panic("(stk_under) " stkname ": Empty stack")
+        panic("(stk_push_2nd) " stkname ": Empty stack")
     top = stk_pop(stack)
     stk_push(stack, elem)
     stk_push(stack, top)
@@ -5074,7 +5097,7 @@ function stk_under(stack, elem,
 #*****************************************************************************
 function DIVNUM()
 {
-    return sys_read("__DIVNUM__") + 0
+    return sys_read("__DIVNUM__", NOKEY) + 0
 }
 
 
@@ -5344,7 +5367,7 @@ function sym_destroy_ns(ns, name, key, level)
 function nam_system_p(name)
 {
     if (name == EMPTY)
-        panic("nam_system_p: NAME missing")
+        panic("nam_system_p: NAME must not be empty")
     return nam_ll_in_ns(M2_SYSNS, name, ROOT_LEVEL) &&
         flag_1true_p(nam_ll_read_ns(M2_SYSNS, name, ROOT_LEVEL), FLAG_SYSTEM)
 }
@@ -5564,8 +5587,9 @@ function syminfo_defined_p(info,
         #return seq_defined_p(info__get(info, "name"))
         return info__get(info, "defined")
     else if (itype == PTYPE_ENV_VAR)
-        return sym_ll_in_ns(info__get(info, "ns"), info__get(info, "name"),
-                            NOKEY, ROOT_LEVEL)
+        # If the type is Env_Var, always use namespace ENV::
+        # in case info["ns"] is compromised.
+        return sym_ll_in_ns(M2_ENVNS, info__get(info, "name"), NOKEY, ROOT_LEVEL)
     else
         panic(sprintf("(syminfo_defined_p) Cannot handle '%s' type %s",
                       info__get(info, "name"), ppf__label(itype)))
@@ -5670,7 +5694,7 @@ function syminfo_store(info, new_val,
         }
 
         if ((ins = info__get(info, "ns")) == EMPTY)
-            panic("(syminfo_store) Um, ns should not be empty")
+            panic("(syminfo_store) ns must not be empty")
 
         # At this point we know nam__lookup() found *something* because
         # ilevel != NAME_NOT_FOUND
@@ -5708,7 +5732,7 @@ function syminfo_store(info, new_val,
         if (dbg5) {
             print_debugfile(sprintf("m2debug:(syminfo_store) LOOP BOTTOM: name='%s', key='%s', level=%d, code='%s', good=%s",
                                  iname, ikey, ilevel, icode, ppf__bool(good)))
-            nam_dump_namtab(TYPE_SYMBOL, FALSE)
+            nam_dump_namtab_ns(ins, TYPE_SYMBOL, FALSE)
             print_debugfile(dump__symtab(M2_NS, TYPE_SYMBOL, FALSE)) # print_debugfile() adds newline.  FALSE means omit system symbols
         }
     } while (FALSE)
@@ -5738,13 +5762,14 @@ function syminfo_store(info, new_val,
 function sym_ll_read_ns(ns, name, key, level,
                         retval, i)
 {
-    if (level == EMPTY) level = ROOT_LEVEL
-    # if key == EMPTY that's probaby just fine.
-    # if name == EMPTY that's probably NOT fine.
+    if (level == EMPTY) # level = ROOT_LEVEL
+        panic("(sym_ll_read_ns) Level must not be empty!")
+    # if key  == EMPTY that's probably fine.
+    # if name == EMPTY that's probably *not* fine.
     if (name == EMPTY)
-        panic("(sym_ll_read_ns) Name cannot be empty!")
+        panic("(sym_ll_read_ns) Name must not be empty!")
     if (ns == EMPTY)
-        panic("(sym_ll_read_ns) NS cannot be empty!")
+        panic("(sym_ll_read_ns) NS must not be empty!")
 
     if (ns == M2_ENVNS) {
         if (key != EMPTY)
@@ -5789,9 +5814,9 @@ function sym_ll_in_ns(ns, name, key, level,
                       retval)
 {
     if (level == EMPTY)
-        panic("(sym_ll_in_ns) LEVEL missing")
+        panic("(sym_ll_in_ns) LEVEL must not be empty")
     if (ns == EMPTY)
-        panic("(sym_ll_in_ns) NS missing")
+        panic("(sym_ll_in_ns) NS must not be empty")
     if (ns == M2_ENVNS) {
         if (key != EMPTY)
             error(sprintf("(sym_ll_in_ns) Env var '%s' cannot have key [%s]",
@@ -5808,12 +5833,12 @@ function sym_ll_in_ns(ns, name, key, level,
 function sym_ll_write_ns(ns, name, key, level, val)
 {
     if (level == EMPTY)
-        panic("(sym_ll_write_ns) LEVEL missing")
+        panic("(sym_ll_write_ns) LEVEL must not be empty")
     if (ns == EMPTY)
-        panic("(sym_ll_write_ns) NS missing")
+        panic("(sym_ll_write_ns) NS must not be empty")
     # Can't call normal dbg__*() functions here, mutually recursive
-    if (sym_ll_in_ns(M2_SYSNS, "__DBG__", "sym", ROOT_LEVEL) &&
-        sym_ll_read_ns(M2_SYSNS, "__DBG__", "sym", ROOT_LEVEL) >= 5 &&
+    if (sys_in("__DBG__", "sym") &&
+        sys_read("__DBG__", "sym") >= 5 &&
         !nam_system_p(name))
          print_debugfile(sprintf("m2debug:(sym_ll_write_ns) symtab[%s, \"%s\", \"%s\", %d, \"symval\"] = %s",
                                 ns, name, key, level, val))
@@ -5832,8 +5857,8 @@ function sym_ll_write_ns(ns, name, key, level, val)
     if (name == "__DEBUG__") {
         if (val+0 >= 2) {
             # Disable hooks when super-debugging
-            __m2_config_fs = flag_set_clear(__m2_config_fs, EMPTY, MODE_HOOKS_ENABLED)
-            if (sys_read("__DEBUG__") == FALSE)
+            __m2_config_flags = flag_set_clear(__m2_config_flags, EMPTY, MODE_HOOKS_ENABLED)
+            if (sys_read("__DEBUG__", NOKEY) == FALSE)
                 dbg__all_lev_standard()
         }
     } else if (name == "__SECURE__") {
@@ -5844,8 +5869,8 @@ function sym_ll_write_ns(ns, name, key, level, val)
                key == "number" &&
                level == ROOT_LEVEL) {
         # Maintain equivalence:  __FMT__[number] === CONVFMT
-        if (sym_ll_in_ns(M2_SYSNS, "__DBG__", "sym", ROOT_LEVEL) &&
-            sym_ll_read_ns(M2_SYSNS, "__DBG__", "sym", ROOT_LEVEL) >= 7)
+        if (sys_in("__DBG__", "sym") &&
+            sys_read("__DBG__", "sym") >= 7)
             print_debugfile(sprintf("m2debug:(sym_ll_write_ns) Setting CONVFMT to %s", val))
         CONVFMT = val
     }
@@ -5862,11 +5887,11 @@ function sym_ll_incr_ns(ns, name, key, level, incr)
 {
     if (incr == EMPTY) incr = 1
     if (level == EMPTY)
-        panic("(sym_ll_incr_ns) LEVEL missing")
+        panic("(sym_ll_incr_ns) LEVEL must not be empty")
     if (ns == EMPTY)
-        panic("(sym_ll_incr_ns) NS missing")
-    if (sym_ll_in_ns(M2_SYSNS, "__DBG__", "sym", ROOT_LEVEL) &&
-        sym_ll_read_ns(M2_SYSNS, "__DBG__", "sym", ROOT_LEVEL) >= 5 &&
+        panic("(sym_ll_incr_ns) NS must not be empty")
+    if (sys_in("__DBG__", "sym") &&
+        sys_read("__DBG__", "sym") >= 5 &&
         !nam_system_p(name))
         print_debugfile(sprintf("m2debug:(sym_ll_incr_ns) symtab[%s, \"%s\", \"%s\", %d, \"symval\"] += %d",
                              ns, name, key, level, incr))
@@ -5874,9 +5899,14 @@ function sym_ll_incr_ns(ns, name, key, level, incr)
 }
 
 
-function sys_read(name)
+function sys_in(name,  key)
 {
-    return sym_ll_read_ns(M2_SYSNS, name, NOKEY, ROOT_LEVEL)
+    return sym_ll_in_ns(M2_SYSNS, name, key, ROOT_LEVEL)
+}
+
+function sys_read(name,  key)
+{
+    return sym_ll_read_ns(M2_SYSNS, name, key, ROOT_LEVEL)
 }
 
 function sys_write(name, val)
@@ -5897,10 +5927,10 @@ function lis__ll_incr_ns(ns, lis, idx, level, incr,
 {
     if (incr == EMPTY) incr = 1
     if (level == EMPTY)
-        panic("(lis__ll_incr) LEVEL missing")
+        panic("(lis__ll_incr) LEVEL must not be empty")
 
-    if (sym_ll_in_ns(M2_SYSNS, "__DBG__", "sym", ROOT_LEVEL) &&
-        sym_ll_read_ns(M2_SYSNS, "__DBG__", "sym", ROOT_LEVEL) >= 5 &&
+    if (sys_in("__DBG__", "sym") &&
+        sys_read("__DBG__", "sym") >= 5 &&
         !nam_system_p(lis))
         print_debugfile(sprintf("m2debug:(lis__ll_incr) List %s[%s] (level %d) += %d",
                                 lis, idx, level, incr))
@@ -6046,7 +6076,7 @@ function syminfo_fetch(syminfo,
     else if (flag_1true_p(icode, FLAG_NUMERIC))
         return 0.0 + val
     else if (flag_1true_p(icode, FLAG_BOOLEAN))
-        return sym_ll_read_ns(M2_SYSNS, "__FMT__", to_bool(val)) # !! (0 + val))
+        return sys_read("__FMT__", to_bool(val)) # !! (0 + val))
     else
         return val
 }
@@ -6223,7 +6253,7 @@ function execute__text(text,
                        stream, divblk)
 {
     dbg__print("xeq", 1, sprintf("(execute__text) START; text='%s'", text))
-    if (flag_1false_p(__m2_config_fs, MODE_XEQ_NORMAL)) {
+    if (flag_1false_p(__m2_config_flags, MODE_XEQ_NORMAL)) {
         dbg__print("xeq", 3, "(execute__text) NOP !MODE_XEQ_NORMAL")
         return
     }
@@ -6250,10 +6280,10 @@ function execute__text(text,
         return
     }
 
-    if (flag_1true_p(__m2_config_fs, MODE_TEXT_PRINT)) {
+    if (flag_1true_p(__m2_config_flags, MODE_TEXT_PRINT)) {
         printf("%s\n", text)
         flush_stdout(SYNC_LINE)
-    } else if (flag_1true_p(__m2_config_fs, MODE_TEXT_STRING))
+    } else if (flag_1true_p(__m2_config_flags, MODE_TEXT_STRING))
         __textbuf = sprintf("%s%s\n", __textbuf, text)
     else
         panic("(execute__text) Bad MODE_TEXT_*")
@@ -6574,11 +6604,11 @@ function xeq_cmd__break(cmd, cmdline,
                         level, block, block_type)
 {
     # Logical check
-    if (flag_1false_p(__m2_config_fs, MODE_XEQ_NORMAL))
+    if (flag_1false_p(__m2_config_flags, MODE_XEQ_NORMAL))
         panic("(xeq_cmd__break) !MODE_XEQ_NORMAL")
 
     # Set MODE_XEQ_BREAK flag
-    __m2_config_fs = flag_set_clear(__m2_config_fs, MODE_XEQ_BREAK, MODE_XEQ_NORMAL)
+    __m2_config_flags = flag_set_clear(__m2_config_flags, MODE_XEQ_BREAK, MODE_XEQ_NORMAL)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -6812,12 +6842,12 @@ function xeq_cmd__cleardivert(cmd, cmdline,
 function xeq_cmd__continue(cmd, cmdline)
 {
     # Logical check
-    if (flag_1false_p(__m2_config_fs, MODE_XEQ_NORMAL))
+    if (flag_1false_p(__m2_config_flags, MODE_XEQ_NORMAL))
         panic("(xeq_cmd__continue) !MODE_XEQ_NORMAL")
 
     # Set MODE_XEQ_CONTINUE flag
-    __m2_config_fs = flag_set_clear(__m2_config_fs, MODE_XEQ_CONTINUE,
-                                    MODE_XEQ_NORMAL)
+    __m2_config_flags = flag_set_clear(__m2_config_flags, MODE_XEQ_CONTINUE,
+                                       MODE_XEQ_NORMAL)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -7086,22 +7116,32 @@ function xeq_cmd__dump(cmd, cmdline,
         dbg__print("sym", 5, sprintf("dumpfile = '%s'", dumpfile))
     }
 
-    if (what ~ /sym(bol)?s?/) {
-        what_type = TYPE_SYMBOL
-        buf = dump__symtab(M2_NS, what_type, all_flag)
-    } else if (what ~ /seq(uence)?s?/) {
-        what_type = TYPE_SEQUENCE
-        buf = dump__sequences(M2_NS, what_type, all_flag)
-    } else if (what ~ /(cmd|command)s?/) {
-        what_type = TYPE_USER
-        #buf = nam_dump_namtab(what_type, all_flag)
-        buf = dump__commands(what_type, all_flag)
-    } else if (what ~ /name?s?/) {
-        what_type = PTYPE_ANY
-        buf = nam_dump_namtab(what_type, all_flag)
-    } else if (what ~ /bl(oc)?ks?/) {
+    if (what ~ /bl(oc)?ks?/) {
         what_type = PTYPE_ANY    # There is no "block" type
         buf = blk_dump_blktab()
+
+    } else if (what ~ /(cmd|command)s?/) {
+        what_type = TYPE_USER
+        #buf = nam_dump_namtab_ns(all_flag ? PTYPE_ANY : curr_ns(), what_type, all_flag)
+        buf = dump__commands(all_flag ? PTYPE_ANY : curr_ns(),
+                             what_type, all_flag)
+
+    } else if (what ~ /name?s?/) {
+        what_type = PTYPE_ANY
+        buf = nam_dump_namtab_ns(all_flag ? PTYPE_ANY : curr_ns(), # all namespaces or current
+                                 what_type,                        # all types, no filter
+                                 all_flag)                         # include System symbols or not
+
+    } else if (what ~ /seq(uence)?s?/) {
+        what_type = TYPE_SEQUENCE
+        buf = dump__sequences(all_flag ? PTYPE_ANY : curr_ns(),
+                              what_type, all_flag)
+
+    } else if (what ~ /sym(bol)?s?/) {
+        what_type = TYPE_SYMBOL
+        buf = dump__symtab(all_flag ? PTYPE_ANY : curr_ns(),
+                           what_type, all_flag)
+
     } else if (what ~ /[0-9]+/) {
         what_type = PTYPE_ANY    # There is no "block" type
         dbg__print("sym", 9, "Dump of block # " what)
@@ -7116,6 +7156,7 @@ function xeq_cmd__dump(cmd, cmdline,
             buf += ppf__BLK(what)
         if (all_flag)
             buf = buf "\nCode:\n" ppf__block(what)
+
     } else
         error(me ": Invalid dump argument '" what "'")
 
@@ -7239,13 +7280,13 @@ function dump__symtab(xns, type, include_sys, # caller names this "all_flag"
         key   = f[SFN_KEY  ]    # ; print "key   =", key
         level = f[SFN_LEVEL]    # ; print "level =", level
         tag   = f[SFN_TAG  ]    # ; print "tag   =", tag
-        dbg__print("sym", 8, sprintf("(dump__symbtab) ['%s','%s',%d,%s]",
-                                    name, key, level, tag))
+        dbg__print("sym", 8, sprintf("(dump__symbtab) [%s,'%s','%s',%d,%s]",
+                                     ns, name, key, level, tag))
 
         code = nam_ll_read_ns(ns, name, level) # name, level
         dbg__print("sym", 7, sprintf("(dump__symtab) name='%s', key='%s', code=%s",
                                     name, key, code))
-        if (ns != xns)  continue
+        #if (ns != xns)  continue
         if (!include_sys && flag_1true_p(code, FLAG_SYSTEM))
             continue
 
@@ -7259,7 +7300,7 @@ function dump__symtab(xns, type, include_sys, # caller names this "all_flag"
             if (count > 0)
                 for (i = 1; i <= count; i++) {
                     #print_stderr("Adding keys[" cnt+1 "] = " name TOK_LBRACKET i TOK_RBRACKET)
-                    keys[++cnt] = name TOK_LBRACKET i TOK_RBRACKET
+                    keys[++cnt] = ns TOK_NS_QUAL name TOK_LBRACKET i TOK_RBRACKET
                 }
             continue
 
@@ -7275,7 +7316,7 @@ function dump__symtab(xns, type, include_sys, # caller names this "all_flag"
         # It's a regular symbol so process it
         if ((flag_1true_p(code, TYPE_SYMBOL) && key == EMPTY) ||
             (flag_anytrue_p(code, TYPE_ARRAY TYPE_LIST)  && key != EMPTY))
-            keys[++cnt] = name (key != EMPTY ? TOK_LBRACKET key TOK_RBRACKET : NOKEY)
+            keys[++cnt] = ns TOK_NS_QUAL name (key != EMPTY ? TOK_LBRACKET key TOK_RBRACKET : NOKEY)
         else
             panic(sprintf("(dump__symtab) Strange combo: ('%s','%s') code=%s",
                           name, key, code))
@@ -7292,9 +7333,9 @@ function dump__symtab(xns, type, include_sys, # caller names this "all_flag"
 }
 
 
-function dump__sequences(ns, type, include_sys,
+function dump__sequences(target_namespace, type, include_sys,
                          f, n, keys, cnt, code, buf, i,
-                         name)
+                         ns, name, level)
 {
     dbg__print("seq", 4, "(dump__sequences) BEGIN")
     if (first(type) != TYPE_SEQUENCE)
@@ -7306,20 +7347,22 @@ function dump__sequences(ns, type, include_sys,
     include_sys = TRUE
     for (n in namtab) {
         split(n, f, SUBSEP)
-        # print "ns    =", f[NFN_NS]
-        # print "name  =", f[NFN_NAME]
-        # print "level =", f[NFN_LEVEL]
-        if (0+f[NFN_LEVEL] == ROOT_LEVEL) {
-            if (f[NFN_NS] != ns) continue
+        ns    = f[NFN_NS];      # print_stderr("ns    =" ns)
+        name  = f[NFN_NAME];    # print_stderr("name  =" name)
+        level = f[NFN_LEVEL];   # print_stderr("level =" level)
+        if (0+level == ROOT_LEVEL) {
+            if (target_namespace != PTYPE_ANY &&
+                ns != target_namespace)
+              continue
             code = nam_ll_read_ns(ns, name = f[NFN_NAME], ROOT_LEVEL)
-            dbg__print("seq", 7, sprintf("(dump__sequences) name='%s', code=%s",
-                                         name, code))
 
             if (flag_1true_p(code, TYPE_SEQUENCE)) {
                 # I don't think there are any system sequences yet...
-                if (!include_sys && flag_1true_p(code, FLAG_SYSTEM))
-                    continue
-                keys[++cnt] = f[NFN_NAME]
+                # if (!include_sys && flag_1true_p(code, FLAG_SYSTEM))
+                #     continue
+                # dbg__print("seq", -6, sprintf("(dump__sequences) ns=%s, Adding name='%s', code=%s",
+                #                               ns, name, ppf__flags(code)))
+                keys[++cnt] = ns TOK_NS_QUAL name
             }
         }
     }
@@ -7329,13 +7372,13 @@ function dump__sequences(ns, type, include_sys,
     # Construct output lines in buf
     buf = EMPTY
     for (i = 1; i <= cnt; i++)
-        buf = buf seq_definition_ppf_ns(ns, keys[i]) TOK_NEWLINE
+        buf = buf seq_definition_ppf_ns(keys[i]) TOK_NEWLINE
     dbg__print("seq", 4, "(dump__sequences) END")
     return chomp(buf)
 }
 
 
-function dump__commands(type, include_sys,
+function dump__commands(target_namespace, type, include_sys,
                       f, s, keys, cnt, code, buf, i)
 {
     dbg__print("cmd", 4, "(dump__commands) BEGIN")
@@ -7559,7 +7602,7 @@ function dostring(str,
 function parse__string(    str, string_block, pstat, d)
 {
     if (stk_empty_p(__source_stack))
-        panic("(parse__string) Source stack empty")
+        panic("(parse__string) Source stack is empty")
     string_block = stk_top(__source_stack)
     str = blktab[string_block, 0, "str"]
 
@@ -7613,7 +7656,7 @@ function xeq_cmd__exit(cmd, cmdline,
                        silent, exit_code)
 {
     silent = first(cmd) == "s"
-    exit_code = sys_read("__EXIT__")
+    exit_code = sys_read("__EXIT__", NOKEY)
     if (! emptyp(cmdline))
         exit_code = integerp(cmdline) ? cmdline+0 : EX_M2_ERROR
 
@@ -7909,11 +7952,11 @@ function execute__for(for_block,
                           : (counter -= abs(incr)) < end
 
         # Check for break or continue
-        if (flag_anytrue_p(__m2_config_fs, MODE_XEQ_BREAK MODE_XEQ_CONTINUE)) {
-            want_break = flag_1true_p(__m2_config_fs, MODE_XEQ_BREAK)
-            __m2_config_fs = flag_set_clear(__m2_config_fs,
-                                            MODE_XEQ_NORMAL,
-                                            MODE_XEQ_BREAK MODE_XEQ_CONTINUE MODE_XEQ_RETURN)
+        if (flag_anytrue_p(__m2_config_flags, MODE_XEQ_BREAK MODE_XEQ_CONTINUE)) {
+            want_break = flag_1true_p(__m2_config_flags, MODE_XEQ_BREAK)
+            __m2_config_flags = flag_set_clear(__m2_config_flags,
+                                               MODE_XEQ_NORMAL,
+                                               MODE_XEQ_BREAK MODE_XEQ_CONTINUE MODE_XEQ_RETURN)
             if (want_break)
                 break
        }
@@ -7968,11 +8011,11 @@ function execute__foreach_array(for_block,
         lower_level()
 
         # Check for break or continue
-        if (flag_anytrue_p(__m2_config_fs, MODE_XEQ_BREAK MODE_XEQ_CONTINUE)) {
-            want_break = flag_1true_p(__m2_config_fs, MODE_XEQ_BREAK)
-            __m2_config_fs = flag_set_clear(__m2_config_fs,
-                                            MODE_XEQ_NORMAL,
-                                            MODE_XEQ_BREAK MODE_XEQ_CONTINUE MODE_XEQ_RETURN)
+        if (flag_anytrue_p(__m2_config_flags, MODE_XEQ_BREAK MODE_XEQ_CONTINUE)) {
+            want_break = flag_1true_p(__m2_config_flags, MODE_XEQ_BREAK)
+            __m2_config_flags = flag_set_clear(__m2_config_flags,
+                                               MODE_XEQ_NORMAL,
+                                               MODE_XEQ_BREAK MODE_XEQ_CONTINUE MODE_XEQ_RETURN)
             if (want_break)
                 break
        }
@@ -8010,11 +8053,11 @@ function execute__foreach_list(for_block,
             done = (counter += 1) > count
 
             # Check for break or continue
-            if (flag_anytrue_p(__m2_config_fs, MODE_XEQ_BREAK MODE_XEQ_CONTINUE)) {
-                want_break = flag_1true_p(__m2_config_fs, MODE_XEQ_BREAK)
-                __m2_config_fs = flag_set_clear(__m2_config_fs,
-                                                MODE_XEQ_NORMAL,
-                                                MODE_XEQ_BREAK MODE_XEQ_CONTINUE MODE_XEQ_RETURN)
+            if (flag_anytrue_p(__m2_config_flags, MODE_XEQ_BREAK MODE_XEQ_CONTINUE)) {
+                want_break = flag_1true_p(__m2_config_flags, MODE_XEQ_BREAK)
+                __m2_config_flags = flag_set_clear(__m2_config_flags,
+                                                   MODE_XEQ_NORMAL,
+                                                   MODE_XEQ_BREAK MODE_XEQ_CONTINUE MODE_XEQ_RETURN)
                 if (want_break)
                     break
             }
@@ -8412,7 +8455,7 @@ function xeq_cmd__include(cmd, cmdline,
             error(me ": Bad parameters")
         lib = substr(cmdline, 1, sp - 1)
         cmdline = substr(cmdline, sp + 1)
-        stk_under(__ns_stack, lib)
+        stk_push_2nd(__ns_stack, lib)
     }
 
     # error_text is set aggressively, but only is seen if rc is FALSE
@@ -8458,7 +8501,7 @@ function search_file(f,
     if (first(f) == TOK_SLASH)
         # If path is absolute, do not invoke path search mechanism
         return pe ? f : EMPTY
-    icount = split(sys_read("__INCPATH__"),
+    icount = split(sys_read("__INCPATH__", NOKEY),
                    paths, TOK_COLON)
     for (i = 1; i <= icount; i++) {
         p = with_trailing_slash(paths[i]) f
@@ -8475,7 +8518,7 @@ function rm_INCPATH(elem,
                     i, tmpip, icount, paths)
 {
     tmpip = EMPTY
-    icount = split(sys_read("__INCPATH__"),
+    icount = split(sys_read("__INCPATH__", NOKEY),
                    paths, TOK_COLON)
     for (i = 1; i <= icount; i++)
         if (paths[i] != elem)
@@ -8903,7 +8946,7 @@ function xeq_cmd__m2ctl(cmd, cmdline,
         blk_dump_block_raw(blk)
 
     } else if ($1 == "dump_namtab") {
-        nam_dump_namtab(PTYPE_ANY, FALSE)
+        nam_dump_namtab_ns(PTYPE_ANY, PTYPE_ANY, FALSE)
 
     } else if ($1 == "dump_ns_stack") {
         dump_ns_stack()
@@ -8918,7 +8961,7 @@ function xeq_cmd__m2ctl(cmd, cmdline,
         dbg__set_level(dsys, lev)
 
     } else
-        error("Unrecognized parameter " $1)
+        error("@m2ctl: Unrecognized parameter: " $1)
 }
 
 function dump_ns_stack(    n, i)
@@ -9060,7 +9103,7 @@ function execute__user(user_invocation,
                        args, arg, narg, argval)
 {
     dbg__print("xeq", 3, sprintf("(execute__user) START"))
-    if (flag_1false_p(__m2_config_fs, MODE_XEQ_NORMAL)) {
+    if (flag_1false_p(__m2_config_flags, MODE_XEQ_NORMAL)) {
         dbg__print("xeq", 3, "(execute__user) NOP !MODE_XEQ_NORMAL")
         return
     }
@@ -9110,7 +9153,7 @@ function execute__user_body(user_block, args,
 
     # Evaluate arguments before any parameter instantiations.  It is
     # critical to do this first (and not all together in a loop as
-    # before), because invoking nam_ll_write() before sym_ll_write()
+    # before), because invoking nam_ll_write() before sym_ll_write_ns()
     # will LOSE if a parameter has the same name as a global variable
     # due to namtab[] mismatch.
     for (i = 1; i <= args[1] - 3; i++)
@@ -9151,14 +9194,14 @@ function execute__user_body(user_block, args,
     lower_level()
 
     # If we've been asked to return, well now we have
-    if (flag_1true_p(__m2_config_fs, MODE_XEQ_RETURN)) {
+    if (flag_1true_p(__m2_config_flags, MODE_XEQ_RETURN)) {
         dbg__print("cmd", 7, "(execute__user_body) Found RETURN, value is '" __return_value "'")
-        __m2_config_fs = flag_set_clear(__m2_config_fs,
-                                        MODE_XEQ_NORMAL,
-                                        MODE_XEQ_BREAK MODE_XEQ_CONTINUE MODE_XEQ_RETURN)
+        __m2_config_flags = flag_set_clear(__m2_config_flags,
+                                           MODE_XEQ_NORMAL,
+                                           MODE_XEQ_BREAK MODE_XEQ_CONTINUE MODE_XEQ_RETURN)
     }
     # If things are still not normal, that's a problem
-    if (flag_1false_p(__m2_config_fs, MODE_XEQ_NORMAL))
+    if (flag_1false_p(__m2_config_flags, MODE_XEQ_NORMAL))
         panic("(execute__user_body) !MODE_XEQ_NORMAL")
 
     dbg__print("cmd", 2, "(execute__user_body) END")
@@ -9319,14 +9362,14 @@ function xeq_cmd__readonly(cmd, cmdline,
 function xeq_cmd__return(cmd, cmdline)
 {
     # Logical check
-    if (flag_1false_p(__m2_config_fs, MODE_XEQ_NORMAL))
+    if (flag_1false_p(__m2_config_flags, MODE_XEQ_NORMAL))
         panic("(xeq_cmd__return) !MODE_XEQ_NORMAL")
 
     __return_found = TRUE
     __return_value = cmdline
-    __m2_config_fs = flag_set_clear(__m2_config_fs,
-                                    MODE_XEQ_RETURN,
-                                    MODE_XEQ_NORMAL MODE_XEQ_BREAK MODE_XEQ_CONTINUE)
+    __m2_config_flags = flag_set_clear(__m2_config_flags,
+                                       MODE_XEQ_RETURN,
+                                       MODE_XEQ_NORMAL MODE_XEQ_BREAK MODE_XEQ_CONTINUE)
     dbg__print("cmd", 5, "(xeq_cmd__return): RETURNING '" cmdline "'")
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
@@ -9350,7 +9393,7 @@ function xeq_cmd__sequence(cmd, cmdline,
     dbg__print("seq", 2, sprintf("(xeq_cmd__sequence) START dstblk=%d, cmd=%s, cmdline='%s'",
                                 curr_dstblk(), cmd, cmdline))
     if (NF == 0)
-        error("Bad parameters: Missing sequence name:" $0)
+        error("Bad parameters: Sequence name required:" $0)
     id = $1
     level = info__create_from_text(id, info)
     if (info__get(info, "lexvalid") != TRUE)
@@ -9374,9 +9417,9 @@ function xeq_cmd__sequence(cmd, cmdline,
             info__gate(OP_CREATE, TYPE_SEQUENCE, info, ns, ROOT_LEVEL, me, TRUE)
             #
             nam_ll_write_ns(ns, name, ROOT_LEVEL, TYPE_SEQUENCE FLAG_INTEGER)
-            symtab[ns, name, EMPTY, ROOT_LEVEL, "incr"] = SEQ_DEFAULT_INCR
-            symtab[ns, name, EMPTY, ROOT_LEVEL, "init"] = SEQ_DEFAULT_INIT
-            symtab[ns, name, EMPTY, ROOT_LEVEL, "fmt"]  = sym_ll_read_ns(M2_SYSNS, "__FMT__", "seq", ROOT_LEVEL)
+            symtab[ns, name, NOKEY, ROOT_LEVEL, "incr"] = SEQ_DEFAULT_INCR
+            symtab[ns, name, NOKEY, ROOT_LEVEL, "init"] = SEQ_DEFAULT_INIT
+            symtab[ns, name, NOKEY, ROOT_LEVEL, "fmt"]  = sys_read("__FMT__", "seq")
             seq_ll_write_ns(ns, name, SEQ_DEFAULT_INIT)
         } else if (action == "delete") {
             seq_destroy_ns(ns, name)
@@ -9486,8 +9529,8 @@ function xeq_cmd__shell(cmd, cmdline,
     shell_text_in = blk_to_string(shell_data_blk)
     dbg__print("parse", 5, sprintf("(xeq_cmd__shell) shell_text_in='%s'", shell_text_in))
 
-    input_file  = mktemp(tmpdir() "m2ShelI.XXXXXX")
-    output_file = mktemp(tmpdir() "m2ShelO.XXXXXX")
+    input_file  = mktemp(tmpdir() "m2ShInp.XXXXXX")
+    output_file = mktemp(tmpdir() "m2ShOut.XXXXXX")
     print dosubs(shell_text_in) > input_file
     close(input_file)
 
@@ -9650,7 +9693,7 @@ function xeq_cmd__tracemode(cmd, cmdline,
                     sys_write("__TRACE__", add_rem)
                 sys_write("__TRACEMODE__", add_rem ? TRACE_ALL_SET : EMPTY)
             } else
-                sys_write("__TRACEMODE__", flag_set_clear(sys_read("__TRACEMODE__"),
+                sys_write("__TRACEMODE__", flag_set_clear(sys_read("__TRACEMODE__", NOKEY),
                                                           add_rem ? flag : "",
                                                           add_rem ? ""   : flag))
         }
@@ -9675,7 +9718,7 @@ function xeq_cmd__traceoff(cmd, cmdline,
     $0 = cmdline
     if (NF == 0) {
         # Clear "t" trace flag
-        sys_write("__TRACEMODE__", flag_set_clear(sys_read("__TRACEMODE__"),
+        sys_write("__TRACEMODE__", flag_set_clear(sys_read("__TRACEMODE__", NOKEY),
                                                   EMPTY, TRACE_ALL))
         # Set __TRACE__ to False
         sys_write("__TRACE__", FALSE)
@@ -9705,8 +9748,8 @@ function xeq_cmd__traceon(cmd, cmdline,
     $0 = cmdline
     if (NF == 0) {
         # Set "t" trace flag
-        sys_write("__TRACEMODE__", flag_set_clear(sys_read("__TRACEMODE__"),
-                                                  TRACE_ALL))
+        sys_write("__TRACEMODE__", flag_set_clear(sys_read("__TRACEMODE__", NOKEY),
+                                                  TRACE_ALL, EMPTY))
     } else {
         # Set Tracing for every symbol mentioned
         i = 0
@@ -9966,11 +10009,11 @@ function xeq__BLK_WHILE(while_block,
             error("@while: Error evaluating condition '" condition "'")
 
         # Check for break or continue
-        if (flag_anytrue_p(__m2_config_fs, MODE_XEQ_BREAK MODE_XEQ_CONTINUE)) {
-            want_break = flag_1true_p(__m2_config_fs, MODE_XEQ_BREAK)
-            __m2_config_fs = flag_set_clear(__m2_config_fs,
-                                            MODE_XEQ_NORMAL,
-                                            MODE_XEQ_BREAK MODE_XEQ_CONTINUE MODE_XEQ_RETURN)
+        if (flag_anytrue_p(__m2_config_flags, MODE_XEQ_BREAK MODE_XEQ_CONTINUE)) {
+            want_break = flag_1true_p(__m2_config_flags, MODE_XEQ_BREAK)
+            __m2_config_flags = flag_set_clear(__m2_config_flags,
+                                               MODE_XEQ_NORMAL,
+                                               MODE_XEQ_BREAK MODE_XEQ_CONTINUE MODE_XEQ_RETURN)
             if (want_break)
                 break
        }
@@ -10139,7 +10182,7 @@ function calc3_eval(s,
 
     # Bare @expr@ returns most recent result
     if (emptyp(_c3__Sexpr))
-        return sys_read("__EXPR__")
+        return sys_read("__EXPR__", NOKEY)
 
     _c3__f = 1
     e = _c3_expr()
@@ -11163,26 +11206,25 @@ function xeq_fn__boolval(fn, M, nparam, param,
         # In an effort to spread a bit more entropy in the universe,
         # if you don't give an argument to boolval then you get
         # True 50% of the time and False the other 50%.
-        result = sym_ll_read_ns(M2_SYSNS, "__FMT__", rand() < 0.50)
+        result = sys_read("__FMT__", rand() < 0.50)
     else {
         p = param[1]
         # Always accept your current representation of True or False
         # to actually be true or false without further evaluation.
-        if (p == sym_ll_read_ns(M2_SYSNS, "__FMT__", TRUE) ||
-            p == sym_ll_read_ns(M2_SYSNS, "__FMT__", FALSE))
+        if (p == sys_read("__FMT__", TRUE) || p == sys_read("__FMT__", FALSE))
             result = p
         else if (sym_valid_p(p)) {
             # It's a valid name -- now see if it's defined or not.
             # If not, check if we're in strict mode (error) or not.
             if (sym_defined_p(p))
-                result = sym_ll_read_ns(M2_SYSNS, "__FMT__", sym_true_p(p))
+                result = sys_read("__FMT__", sym_true_p(p))
             else if (strictp("bool"))
                 error("Name '" p "' not defined (__STRICT__[bool] is True):" $0)
             else
-                result = sym_ll_read_ns(M2_SYSNS, "__FMT__", FALSE)
+                result = sys_read("__FMT__", FALSE)
         } else
             # It's not a symbol, so use its value interpreted as a boolean
-            result = sym_ll_read_ns(M2_SYSNS, "__FMT__", to_bool(p))  # !!p)
+            result = sys_read("__FMT__", to_bool(p))  # !!p)
     }
 
     return result
@@ -11293,7 +11335,7 @@ function xeq_fn__date(fn, M, nparam, param,
     if (fn == "strftime" && nparam == 0)
         error("Bad parameters in '" M "':" $0)
     y = fn == "strftime" ? substr(M, length(fn)+2) \
-        : sym_ll_read_ns(M2_SYSNS, "__FMT__", fn)
+        : sys_read("__FMT__", fn)
     gsub(/"/, "\\\"", y)
     cmdline = build_prog_cmdline("date", "+" TOK_QUOTE y TOK_QUOTE, MODE_IO_CAPTURE)
     if (fn == "utc")
@@ -11408,7 +11450,7 @@ function xeq_fn__dow(fn, M, nparam, param,
 #*****************************************************************************
 # @empty SYM@
 function xeq_fn__empty(fn, M, nparam, param,
-                       p, silent, cmdline, output)
+                       p)
 {
     if (nparam != 1)
         error("Bad parameters in '" M "':" $0)
@@ -12207,7 +12249,7 @@ function xeq_fn__mktemp(fn, M, nparam, param,
 {
     if (nparam == 0)
         # Skip the rigamarole and give me a random file name
-        return mktemp(tmpdir() "m2Tmp.XXXXXXXX")
+        return mktemp(tmpdir() "m2Tmp.XXXXXXXX")  # eight X's
     p = param[1]
     info__create_from_text(p, info)
 #                sym_valid_p(p) && sym_defined_p(p)) \
@@ -12242,7 +12284,7 @@ function xeq_fn__ord(fn, M, nparam, param,
 {
     if (nparam != 1)
         error("Bad parameters in '" M "':" $0)
-    if (! __ord_initialized)
+    if (flag_1false_p(__m2_config_flags, INIT_ORD))
         initialize_ord()
     p = param[1]
     if (sym_valid_p(p) && sym_defined_p(p))
@@ -12300,7 +12342,7 @@ function xeq_fn__right(fn, M, nparam, param,
 function xeq_fn__rot13(fn, M, nparam, param,
                        p, i, c, result, info)
 {
-    if (! __rot13_initialized)
+    if (flag_1false_p(__m2_config_flags, INIT_ROT13))
         initialize_rot13()
     if (nparam == 0)
         error("Bad parameters in '" M "':" $0)
@@ -12524,6 +12566,11 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     MODE_XEQ_CONTINUE           = "o"; __label[MODE_XEQ_CONTINUE]     = "XeqContinue"
     MODE_XEQ_RETURN             = "r"; __label[MODE_XEQ_RETURN]       = "XeqReturn"
 
+    # Initialization status
+    INIT_DOTFILES               = "."; __label[INIT_DOTFILES  ]       = "Dotfiles" # load_init_files()
+    INIT_ORD                    = "#"; __label[INIT_ORD       ]       = "Ord"      # initialize_ord()
+    INIT_ROT13                  = "<"; __label[INIT_ROT13     ]       = "Rot13"    # initialize_rot13()
+
     # When to flush standard output
     SYNC_FORCE                  = 0 # only on request or end of job
     SYNC_FILE                   = 1 # at end of each processed file; default.
@@ -12563,10 +12610,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
 
     # Global variables
     __buffer                    = EMPTY
-    __init_files_loaded         = FALSE # becomes True in load_init_files()
     __curr_level                = ROOT_LEVEL
-    __ord_initialized           = FALSE # becomes True in initialize_ord()
-    __rot13_initialized         = FALSE # becomes True in initialize_rot13()
     __ns_stack[0]               = 0;    __ns_stack["name"]     = "ns_stack"
     __parse_stack[0]            = 0;    __parse_stack["name"]  = "parse_stack"
     __source_stack[0]           = 0;    __source_stack["name"] = "source_stack"
@@ -12576,9 +12620,12 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     srand()                     # Seed random number generator
     stk_push(__ns_stack, M2_SYSNS)
     stk_push(__ns_stack, M2_NS)
-    __m2_config_fs = flag_set_clear(PTYPE_ANY,
-                                    MODE_HOOKS_ENABLED MODE_TEXT_PRINT  MODE_XEQ_NORMAL, # set by default
-                                    MODE_TEXT_STRING   MODE_XEQ_BREAK   MODE_XEQ_CONTINUE MODE_XEQ_RETURN) # cleared
+    __m2_config_flags = flag_set_clear(PTYPE_ANY,
+                                       # Set these:
+                                       MODE_HOOKS_ENABLED MODE_TEXT_PRINT  MODE_XEQ_NORMAL,
+                                       # Clear these:
+                                       MODE_TEXT_STRING   MODE_XEQ_BREAK   MODE_XEQ_CONTINUE  MODE_XEQ_RETURN \
+                                       INIT_DOTFILES      INIT_ORD         INIT_ROT13)
     initialize_prog_paths()
 
     # Initialize days per month
@@ -12704,7 +12751,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     # These commands are Immediate
     split("array break case continue define else endcase endcmd endif endlong" \
           " endlongdef endwhile esac fi for foreach if list local longdef" \
-          " newcmd next of otherwise return set unless until wend while",
+          " newcmd next of otherwise return set sm2ctl unless until wend while",
           array, TOK_SPACE)
     for (elem in array)
         nam_ll_write_ns(M2_SYSNS, array[elem], ROOT_LEVEL, TYPE_COMMAND FLAG_SYSTEM FLAG_IMMEDIATE)
@@ -12775,7 +12822,7 @@ function initialize_ord(    low, high, i, t)
         __ord[t] = i
     }
 
-    __ord_initialized = TRUE
+    __m2_config_flags = flag_set_clear(__m2_config_flags, INIT_ORD)
 }
 
 
@@ -12789,7 +12836,7 @@ function initialize_rot13(    from, to, i)
     to   = "NOPQRSTUVWXYZABCDEFGHIJKLMnopqrstuvwxyzabcdefghijklm"
     for (i = 1; i <= length(from); i++)
         __rot13[substr(from, i, 1)] = substr(to, i, 1)
-    __rot13_initialized = TRUE
+    __m2_config_flags = flag_set_clear(__m2_config_flags, INIT_ROT13, EMPTY)
 }
 
 
@@ -12829,7 +12876,7 @@ function initialize_prog_paths()
 }
 
 
-# Try to read init files: $M2RC, $HOME/.m2rc, and/or ./.m2rc
+# Try to read init "dotfiles" files: $M2RC, $HOME/.m2rc, and/or ./.m2rc
 # M2RC is intended to *override* $HOME (in case HOME is unavailable or
 # otherwise unsuitable), so if the variable is specified and the file
 # exists, then do that file; only otherwise do $HOME/.m2rc.  An init
@@ -12838,22 +12885,21 @@ function initialize_prog_paths()
 function load_init_files(    old_debug)
 {
     # Don't load the init files more than once
-    if (__init_files_loaded == TRUE)
+    if (flag_1true_p(__m2_config_flags, INIT_DOTFILES))
         return
 
     # If debugging is enabled, temporarily disable it while loading the
     # init files.  We presumably don't need it for files we don't want
     # to check.  Be careful to manipulate the symbol table directly!  We
     # don't want to trigger the special __DEBUG__ processing that is
-    # baked into sym_ll_write().
+    # baked into sym_ll_write_ns().
     old_debug = symtab[M2_SYSNS, "__DEBUG__", NOKEY, ROOT_LEVEL, "symval"]
     symtab[M2_SYSNS, "__DEBUG__", NOKEY, ROOT_LEVEL, "symval"] = FALSE
 
     if ("M2RC" in ENVIRON && path_exists_p(ENVIRON["M2RC"]))
         dofile(ENVIRON["M2RC"])
-    else if (sym_ll_in_ns(M2_SYSNS, "__HOME__", NOKEY, ROOT_LEVEL))
-        dofile(sys_read("__HOME__") \
-               ".m2rc")
+    else if (sys_in("__HOME__", NOKEY))
+        dofile(sys_read("__HOME__", NOKEY)  ".m2rc")
     dofile("./.m2rc")
 
     # Don't count init files in total line/file tally - it's better to
@@ -12863,7 +12909,7 @@ function load_init_files(    old_debug)
 
     # Restore debugging, if any, and we're done
     symtab[M2_SYSNS, "__DEBUG__", NOKEY, ROOT_LEVEL, "symval"] = old_debug
-    __init_files_loaded = TRUE
+    __m2_config_flags = flag_set_clear(__m2_config_flags, INIT_DOTFILES, EMPTY)
 
     # FOR TESTING - start in Debug mode
     # enable_debugging()
@@ -12920,7 +12966,7 @@ function process_command_line_arguments(    nfile, arg, i, eq, name, val, file,
                 # Include-path elements on command-line are prepended
                 # to __INCPATH__ so they override M2PATH env variable values.
                 if (!emptyp(val)) {
-                    oldip = sys_read("__INCPATH__")
+                    oldip = sys_read("__INCPATH__", NOKEY)
                     sys_write("__INCPATH__", val (!emptyp(oldip) ? TOK_COLON : "") oldip)
                 }
                 continue
@@ -12933,7 +12979,7 @@ function process_command_line_arguments(    nfile, arg, i, eq, name, val, file,
                 else
                     # Do not load the init files.  Inhibit init file
                     # loading by pretending we already did it.
-                    __init_files_loaded = TRUE
+                    __m2_config_flags = flag_set_clear(__m2_config_flags, INIT_DOTFILES, EMPTY)
                 continue
             } else if (name == "R") {      # R=<path>
                 # Remove element on command-line from Include-path
@@ -13090,7 +13136,7 @@ function end_program(diverted_streams_final_disposition,
 
     run_hook("m2_end")
 
-    exit_code = sys_read("__EXIT__")
+    exit_code = sys_read("__EXIT__", NOKEY)
     if (exit_code == EX_OK &&
         diverted_streams_final_disposition == MODE_STREAMS_SHIP_OUT) {
 

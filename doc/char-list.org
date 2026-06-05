@@ -17,9 +17,9 @@
 | O | BLK_"FOR"              | o | MODE_"XEQ_CONTINUE"  | * | PTYPE_"ANY"             |
 | P | PTYPE_"PARAM"          | p | MODE_"TEXT_PRINT"    | > | MODE_"STREAMS_SHIP_OUT" |
 | Q | TYPE_"SEQUENCE"        | q | BLK_"STRING"         | ' | MODE_"AT_LITERAL"       |
-| R | FLAG_"READONLY"        | r | MODE_"XEQ_RETURN"    |   |                         |
-| S | TYPE_"SYMBOL"          | s | MODE_"TEXT_STRING"   |   |                         |
-| T | BLK_"TERMINAL"         | t | "OBJ_TEXT"           |   |                         |
+| R | FLAG_"READONLY"        | r | MODE_"XEQ_RETURN"    | . | INIT_"DOTFILES"         |
+| S | TYPE_"SYMBOL"          | s | MODE_"TEXT_STRING"   | # | INIT_"ORD"              |
+| T | BLK_"TERMINAL"         | t | "OBJ_TEXT"           | < | INIT_"ROT13"            |
 | U | TYPE_"USER"            | u | BLK_"USER"           |   |                         |
 | V |                        | v | MODE_"IO_CAPTURE"    |   |                         |
 | W | FLAG_"WRITABLE"        | w | "BLK_WHILE"          |   |                         |

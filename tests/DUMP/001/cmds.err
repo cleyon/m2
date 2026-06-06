@@ -1,10 +1,10 @@
-@newcmd FOO
+@newcmd m2::FOO
 Foo on you!
 @endcmd
-@newcmd greet{name}
+@newcmd m2::greet{name}
 Hello, @m2::name@!
 @endcmd
-@newcmd pronounce{who}{judgment}
+@newcmd m2::pronounce{who}{judgment}
 @__m2__::for i 1 4 1
 That's @m2::judgment@, @m2::who@, @m2::judgment@!
 @next i

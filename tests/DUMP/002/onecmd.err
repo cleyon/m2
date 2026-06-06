@@ -1,4 +1,4 @@
-@newcmd one
+@newcmd m2::one
 @__m2__::define FOO 1
 Begin
 @case FOO

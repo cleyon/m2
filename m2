@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-06-06 14:32:38 cleyon>
+#  Time-stamp:  <2026-06-06 14:38:47 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -3316,7 +3316,7 @@ function ppf__user(user_block,
         params = params TOK_LBRACE blktab[user_block, i, "param_name"] TOK_RBRACE
     dbg__print("cmd", 5, "params='" params "'") # probably 7 or 8
 
-    return "@newcmd " (ns != curr_ns() ? ns TOK_NS_QUAL : "") name params TOK_NEWLINE \
+    return "@newcmd " ns TOK_NS_QUAL name params TOK_NEWLINE \
               ppf__agg(blktab[user_block, 0, "body_block"]) TOK_NEWLINE \
            "@endcmd"
 }

@@ -1,4 +1,4 @@
-@newcmd foo
+@newcmd m2::foo
 @__m2__::local x
 @__m2__::define x 3
 @while x > 0

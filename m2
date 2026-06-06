@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-06-05 21:41:05 cleyon>
+#  Time-stamp:  <2026-06-06 14:32:38 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -5629,17 +5629,6 @@ function info_defined_lev_p(info, level, type,
 }
 
 
-function sym_store(sym, new_val,
-                   info)
-{
-    dbg__print("sym", 5, sprintf("m2debug:(sym_store) START sym='%s'", sym))
-    if (nam__scan(sym, info) == ERROR)
-        error("(sym_store) Scan error: " __m2_msg)
-    nam__lookup(info)
-    syminfo_store(info, new_val)
-}
-
-
 #*****************************************************************************
 #
 #       S Y M I N F O  _  S T O R E
@@ -5663,7 +5652,7 @@ function syminfo_store(info, new_val,
 {
     dbg5 = dbg__sys_level_p("sym", 5)
 
-    # This needs to be much more robust, like sym_store() above
+    # This needs to be much more robust...
     iname = info__get(info, "name")
     ikey  = info__get(info, "key")
     ilevel = info__get(info, "level")
@@ -6003,7 +5992,7 @@ function syminfo_fetch(syminfo,
     # 0. Sequences return their value
     if (info__get(syminfo, "type") == TYPE_SEQUENCE) {
         val = seq_ll_read_ns(ins, iname)
-        dbg__print("sym", 2, sprintf("(sym_fetch) END sym='%s', level=%d RETURNING %d",
+        dbg__print("sym", 2, sprintf("(syminfo_fetch) END sym='%s', level=%d RETURNING %d",
                                      sym, level, val))
         return val
     }
@@ -7822,7 +7811,6 @@ function xeq_cmd__filedefine(cmd, cmdline,
         val = val line TOK_NEWLINE
     }
     close(filename)
-    #sym_store(name, chomp(val))
     syminfo_store(info, chomp(val))
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
@@ -8628,7 +8616,6 @@ function xeq_cmd__input(cmd, cmdline,
     getstat = getline input < TTY
     if (getstat == ERROR)
         warn(me ": Error reading file '" TTY "' [input]:" $0)
-    #sym_store(name, input)
     syminfo_store(info, input)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
@@ -8824,7 +8811,6 @@ function xeq__BLK_LONGDEF(longdef_block,
 
     body_block = blktab[longdef_block, 0, "body_block"]
     dbg__print_block("sym", 3, body_block, "(xeq__BLK_LONGDEF) body_block")
-    #sym_store(name, blk_to_string(body_block))
     syminfo_store(info, blk_to_string(body_block))
     dbg__print("sym", 2, "(xeq__BLK_LONGDEF) END")
 }
@@ -10235,7 +10221,7 @@ function _c3_expr(    var, e, op1, op2, m2,
         # But that's the start of the value -- I need to back up over it
         # to read the value properly.
         _c3__f--
-        return sym_store(var, _c3_expr()+0)
+        return syminfo_store(info, _c3_expr()+0)
     }
 
     e = _c3_rel()
@@ -11602,7 +11588,6 @@ function xeq_fn__geodist(fn, M, nparam, param,
     return trim(s)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
-# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
 
 
@@ -12956,7 +12941,7 @@ function load_init_files(    old_debug)
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
-#       ARGC is known to be greater than one, so loop through all argument.
+#       ARGC is known to be greater than one, so loop through all arguments.
 #       Each arg is either a NAME=VALUE definition, or a file to parse.
 #
 #*****************************************************************************

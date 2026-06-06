@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-06-05 09:25:01 cleyon>
+#  Time-stamp:  <2026-06-05 21:41:05 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -118,13 +118,11 @@ BEGIN {
     EX_NOPERM        = 77       # security violation
 
     # Master char list
-    #    Present means AVAILABLE:
-    #          GH             V
-    #          g
-    #          6789
+    #    Letters & Numerals (listed means available):
+    #           V g 6 7 8 9
     #
-    #    Present means TAKEN:
-    #    ! @ _ * > '
+    #    Symbols (listed means allocated):
+    #           ? ! @ _ ~ * > ' . # <
     #
     # See also doc/char-list.org
     FLAG_BOOLEAN     = "B"; __label[FLAG_BOOLEAN]   = "Boolean"
@@ -552,8 +550,8 @@ function leap_year_p(year)
 #*****************************************************************************
 function isalpha(s)
 {
-    return ((s >= "A" && s <= "Z") ||
-            (s >= "a" && s <= "z"))
+    return (s >= "A" && s <= "Z" ||
+            s >= "a" && s <= "z")
 }
 
 
@@ -2759,7 +2757,7 @@ function blk_dump_blktab(    f, b, blknum, seen, type)
 #         split(k, x, SUBSEP)
 #         blks[++cnt] = x[1]+0  # block #
 #     }
-#     nqsort(blks, 1, cnt)
+#     qsort(SORT_INTEGER, blks, 1, cnt)
 #
 #     # # "Touching the Void" (2003 movie)  True story of mountaineers on the
 #     # # west face of Siula Grande.  https://www.imdb.com/title/tt0379557/
@@ -4727,18 +4725,18 @@ function nam_purge(ns, level,
 }
 
 
-function nam_dump_namtab_ns(target_namespace, filter_flags, include_sys,
-                            f, n, ns, code, s, desc, name, level, l,
-                            include_system, buf)
+function dump__names(target_namespace, filter_flags, include_sys,
+                     f, n, ns, code, s, desc, name, level, l,
+                     include_system, buf, i, cnt, keys)
 {
     if (include_sys)
         filter_flags = flag_set_clear(filter_flags, FLAG_SYSTEM, EMPTY)
     include_system = flag_1true_p(filter_flags, FLAG_SYSTEM)
-    buf = EMPTY
-    if (VERBOSE())
-        buf = sprintf("(nam_dump_namtab_ns) BEGIN ns=%s, filter (%s%s):\n",
-                      target_namespace, ppf__flags(filter_flags),
-                      include_system ? "+System" : EMPTY)
+    dbg__print("sym", 4, sprintf("(dump__names) BEGIN ns=%s, filter (%s%s):\n",
+                                 target_namespace, ppf__flags(filter_flags),
+                                 include_system ? "+System" : EMPTY))
+
+    cnt = 0
     for (n in namtab) {
         split(n, f, SUBSEP)
         ns    = f[NFN_NS]
@@ -4748,21 +4746,29 @@ function nam_dump_namtab_ns(target_namespace, filter_flags, include_sys,
 
         if (target_namespace != PTYPE_ANY &&
             target_namespace != ns) {
-            # print_debugfile(sprintf("m2debug:(nam_dump_namtab_ns) ns filter: ns=%s, name=%s, code=%s, filter=%s",
+            # print_debugfile(sprintf("m2debug:(dump__names) ns filter: ns=%s, name=%s, code=%s, filter=%s",
             #                         ns, name, ppf__label(code), ppf__label(filter_flags)))
             continue
         }
         if (! flag_alltrue_p(code, filter_flags)) {
-            # print_debugfile(sprintf("m2debug:(nam_dump_namtab_ns) flags filter: ns=%s, name=%s, code=%s, filter=%s",
+            # print_debugfile(sprintf("m2debug:(dump__names) flags filter: ns=%s, name=%s, code=%s, filter=%s",
             #                         ns, name, ppf__label(code), ppf__label(filter_flags)))
             continue
         }
         if (flag_1true_p(code, FLAG_SYSTEM) && !include_system) {
-            # print_debugfile(sprintf("m2debug:(nam_dump_namtab_ns) include_system filter: ns=%s, name=%s, code=%s, filter=%s",
+            # print_debugfile(sprintf("m2debug:(dump__names) include_system filter: ns=%s, name=%s, code=%s, filter=%s",
             #                         ns, name, ppf__label(code), ppf__label(filter_flags)))
             continue
         }
-        buf = buf  nam_ppf_name_level(ns, name, level)  TOK_NEWLINE
+        keys[++cnt] = ns TOK_NS_QUAL name TOK_NS_QUAL level
+    }
+
+    qsort(SORT_NATURAL, keys, 1, cnt)
+
+    buf = EMPTY
+    for (i = 1; i <= cnt; i++) {
+        split(keys[i], f, TOK_NS_QUAL)
+        buf = buf  nam_ppf_name_level(f[1], f[2], f[3])  TOK_NEWLINE
     }
     return chop(buf)
 }
@@ -5174,7 +5180,7 @@ function undivert_all(    stream, keys, cnt, i)
     cnt = 0
     for (stream in div2blktab)
         keys[++cnt] = stream
-    nqsort(keys, 1, cnt)
+    qsort(SORT_INTEGER, keys, 1, cnt)
 
     for (i = 1; i <= cnt; i++) {
         stream = keys[i]
@@ -5238,7 +5244,7 @@ function cleardivert_all(    stream, keys, cnt, i)
     cnt = 0
     for (stream in div2blktab)
         keys[++cnt] = stream
-    nqsort(keys, 1, cnt)
+    qsort(SORT_INTEGER, keys, 1, cnt)
 
     for (i = 1; i <= cnt; i++) {
         stream = keys[i]
@@ -5270,7 +5276,7 @@ function sym_valid_p(sym,
         #error("(sym_valid_p) ERROR nam__scan('" sym "') failed")
         dbg__print("sym", 4, sprintf("(sym_valid_p) END sym='%s' => %s",
                                      sym, ppf__bool(FALSE)))
-        __msg_m2 = "Invalid name: '" sym "'"
+        __m2_msg = "Invalid name: '" sym "'"
         return FALSE
     }
     retval = syminfo_valid_p(info)
@@ -5732,8 +5738,8 @@ function syminfo_store(info, new_val,
         if (dbg5) {
             print_debugfile(sprintf("m2debug:(syminfo_store) LOOP BOTTOM: name='%s', key='%s', level=%d, code='%s', good=%s",
                                  iname, ikey, ilevel, icode, ppf__bool(good)))
-            nam_dump_namtab_ns(ins, TYPE_SYMBOL, FALSE)
-            print_debugfile(dump__symtab(M2_NS, TYPE_SYMBOL, FALSE)) # print_debugfile() adds newline.  FALSE means omit system symbols
+            dump__names(ins, TYPE_SYMBOL, FALSE)
+            print_debugfile(dump__symbols(M2_NS, TYPE_SYMBOL, FALSE)) # print_debugfile() adds newline.  FALSE means omit system symbols
         }
     } while (FALSE)
 
@@ -7122,13 +7128,13 @@ function xeq_cmd__dump(cmd, cmdline,
 
     } else if (what ~ /(cmd|command)s?/) {
         what_type = TYPE_USER
-        #buf = nam_dump_namtab_ns(all_flag ? PTYPE_ANY : curr_ns(), what_type, all_flag)
+        #buf = dump__names(all_flag ? PTYPE_ANY : curr_ns(), what_type, all_flag)
         buf = dump__commands(all_flag ? PTYPE_ANY : curr_ns(),
                              what_type, all_flag)
 
     } else if (what ~ /name?s?/) {
         what_type = PTYPE_ANY
-        buf = nam_dump_namtab_ns(all_flag ? PTYPE_ANY : curr_ns(), # all namespaces or current
+        buf = dump__names(all_flag ? PTYPE_ANY : curr_ns(), # all namespaces or current
                                  what_type,                        # all types, no filter
                                  all_flag)                         # include System symbols or not
 
@@ -7139,7 +7145,7 @@ function xeq_cmd__dump(cmd, cmdline,
 
     } else if (what ~ /sym(bol)?s?/) {
         what_type = TYPE_SYMBOL
-        buf = dump__symtab(all_flag ? PTYPE_ANY : curr_ns(),
+        buf = dump__symbols(all_flag ? PTYPE_ANY : curr_ns(),
                            what_type, all_flag)
 
     } else if (what ~ /[0-9]+/) {
@@ -7179,19 +7185,19 @@ function xeq_cmd__dump(cmd, cmdline,
 
 
 # Quicksort - from "The AWK Programming Language" p. 161.
-# Used in blt_dump() to sort the symbol table.
-function qsort(A, left, right,    i, lastpos)
+function qsort(strategy, A, left, right,    i, lastpos)
 {
     if (left >= right)          # Do nothing if array contains
         return                  #   less than two elements
     _swap(A, left, left + int((right-left+1)*rand()))
     lastpos = left              # A[left] is now partition element
     for (i = left+1; i <= right; i++)
-        if (_less_than(A[i], A[left]))
-            _swap(A, ++lastpos, i)
+        if (strategy == SORT_NATURAL && _nat_less_than(A[i], A[left])      ||
+            strategy == SORT_INTEGER && (A[i]+0 < A[left]+0))
+          _swap(A, ++lastpos, i)
     _swap(A, left, lastpos)
-    qsort(A, left,   lastpos-1)
-    qsort(A, lastpos+1, right)
+    qsort(strategy, A, left,   lastpos-1)
+    qsort(strategy, A, lastpos+1, right)
 }
 
 function _swap(A, i, j,    t)
@@ -7199,75 +7205,90 @@ function _swap(A, i, j,    t)
     t = A[i];  A[i] = A[j];  A[j] = t
 }
 
-# Special comparison to sort leading underscores after all other values,
-# and numbers before other values.
-function _less_than(s1, s2,    fs1, fs2, d1, d2)
+# Class()           = 0
+# Class( [A-Za-z] ) = 1
+# Class( [0-9]    ) = 2
+# Class( .        ) = 3
+function _nat_class(c)
 {
-    dbg__print("dump", 7, sprintf("_less_than: s1='%s', s='%s'", s1, s2))
-    fs1 = first(s1)
-    fs2 = first(s2)
-
-    if      (fs1 == "" && fs2 == "") panic("(_less_than) fs1 and fs2 are empty!")
-    else if (fs1 == "" && fs2 != "") return TRUE
-    else if (fs1 != "" && fs2 == "") return FALSE
-
-    # Sort underscore vs other
-    else if (fs1 == "_" && fs2 != "_") return FALSE
-    else if (fs1 != "_" && fs2 == "_") return TRUE
-
-    # Sort digit vs non-digit
-    else if ( isdigit(fs1) && !isdigit(fs2)) return FALSE
-    else if (!isdigit(fs1) &&  isdigit(fs2)) return TRUE
-
-    # If we're looking at numbers, grab them and do a numeric comparison
-    # -- hopefully they're different.
-    # BUG: Can't sort foo123A vs foo123B properly
-    else if (isdigit(fs1) && isdigit(fs2)) {
-        d1 = int(s1); d2 = int(s2)
-        if (d1 != d2)
-            return d1 < d2
-        else
-            # numbers are the same, so do a raw comparison
-            return s1 < s2
-
-    # If we're looking at the same character, compare the following ones
-    } else if (toupper(fs1) == toupper(fs2))
-        return _less_than(substr(s1,2), substr(s2,2))
-
-    # Sort characters case-insensitively
-    else if (isalpha(fs1) && isalpha(fs2))
-        return toupper(s1) < toupper(s2)
-
-    else
-        return s1 < s2
+    c = first(c)
+    if (emptyp(c))       return 0
+    else if (isalpha(c)) return 1
+    else if (isdigit(c)) return 2
+    else                 return 3 # Other
 }
 
-# Same thing, but no fancy sorting, just integers
-function nqsort(A, left, right,    i, lastpos)
+function _nat_scan_len(s,
+                       c, slen, l)
 {
-    if (left >= right)          # Do nothing if array contains
-        return                  #   less than two elements
-    _swap(A, left, left + int((right-left+1)*rand()))
-    lastpos = left              # A[left] is now partition element
-    for (i = left+1; i <= right; i++)
-        if (A[i]+0 < A[left]+0)
-            _swap(A, ++lastpos, i)
-    _swap(A, left, lastpos)
-    nqsort(A, left,   lastpos-1)
-    nqsort(A, lastpos+1, right)
+    if (emptyp(s))
+        return -1               # like RLENGTH when match() fails
+    slen = length(s);  l = 1
+    c = _nat_class(first(s))
+    while (l <= slen && _nat_class(substr(s, l+1, 1)) == c)
+        l++
+    return l
+}
+
+# TRUE if a is "naturally less than" b.
+function _nat_less_than(a, b,
+                        Ca, Cb, aTk, bTk)
+{
+    if (a == EMPTY && b == EMPTY)
+        return FALSE            # maybe not trigger a useless swap
+    Ca = _nat_class(a); Cb = _nat_class(b)
+    if (Ca != Cb)
+        return Ca < Cb          # return item with lower class
+
+    # At this point:
+    # 1. Classes are equal, so the same comparison approach will work
+    #    for both operands.  If the classes weren't equal, the above
+    #    "if" statement would have returned control by now.
+    # 2. *Both* a and b are non-empty, so various length and comparison
+    #    functions should behave sanely.  If one *were* empty, then either:
+    #    A. Both were empty, in which case topmost "if" applies, or
+    #    B. Only one is empty, in which case its class code of 0 would
+    #       be unequal to any *other* possible (non-zero) class code.
+    #    C. QED
+    a_val_len = _nat_scan_len(a);       a_val = substr(a, 1, a_val_len)
+    b_val_len = _nat_scan_len(b);       b_val = substr(b, 1, b_val_len)
+
+    # Alphabetical comparison - case insensitive
+    if (Ca == 1 && toupper(a_val) != toupper(b_val))
+        return toupper(a_val) < toupper(b_val)
+
+    # Numerical comparison - integer only
+    else if (Ca == 2 && 0+a_val != 0+b_val)
+        return 0+a_val < 0+b_val
+
+    # Other - ASCII order
+    else if (Ca == 3 && a_val != b_val)
+        return a_val < b_val
+
+    # No relevant difference; check next class.  Parameters are always
+    # successively smaller, so recursion must end.
+    aTk = substr(a, a_val_len + 1)
+    bTk = substr(b, b_val_len + 1)
+    if (emptyp(aTk) && emptyp(bTk))
+        return "" a_val < "" b_val
+
+    return _nat_less_than(aTk, bTk)
 }
 
 
 # Like ppf__XX functions, last line of multi-line buffer
 # *omits* newline.
-function dump__symtab(xns, type, include_sys, # caller names this "all_flag"
+function dump__symbols(target_namespace, filter_flags, include_sys, # caller names this "all_flag"
                       f, s, code, buf, cond_matched,
-                      name, key, level, tag,
+                      name, key, level, tag, include_system,
                       ns, keys, cnt, i, blk, count)
 {
-    dbg__print("sym", 4, "(dump__symtab) BEGIN")
-    if (first(type) != TYPE_SYMBOL)
-        panic("(dump__symtab) Bad type " ppf__flags(first(type)))
+    if (include_sys)
+        filter_flags = flag_set_clear(filter_flags, FLAG_SYSTEM, EMPTY)
+    include_system = flag_1true_p(filter_flags, FLAG_SYSTEM)
+    dbg__print("sym", 4, "(dump__symbols) BEGIN")
+    if (first(filter_flags) != TYPE_SYMBOL)
+        panic("(dump__symbols) Bad type " ppf__flags(first(filter_flags)))
     sym_define_all_deferred()
 
     # Build keys[] array, whose values are printable symbol names that
@@ -7284,15 +7305,20 @@ function dump__symtab(xns, type, include_sys, # caller names this "all_flag"
                                      ns, name, key, level, tag))
 
         code = nam_ll_read_ns(ns, name, level) # name, level
-        dbg__print("sym", 7, sprintf("(dump__symtab) name='%s', key='%s', code=%s",
+        dbg__print("sym", 7, sprintf("(dump__symbols) name='%s', key='%s', code=%s",
                                     name, key, code))
-        #if (ns != xns)  continue
-        if (!include_sys && flag_1true_p(code, FLAG_SYSTEM))
+        if (target_namespace != PTYPE_ANY &&
+            target_namespace != ns) {
+            # print_debugfile(sprintf("m2debug:(dump__names) ns filter: ns=%s, name=%s, code=%s, filter=%s",
+            #                         ns, name, ppf__label(code), ppf__label(filter_flags)))
+            continue
+        }
+        if (!include_system && flag_1true_p(code, FLAG_SYSTEM))
             continue
 
         if (tag == "agg_block") {
             if (flag_1false_p(code, TYPE_LIST))
-                panic("(dump__symtab) Found type 'agg_block' but not a List")
+                panic("(dump__symbols) Found type 'agg_block' but not a List")
             # It's a block array so insert all the keys.
             blk = symtab[ns, name, key, level, tag]
             count = blktab[blk, 0, "count"]
@@ -7310,7 +7336,7 @@ function dump__symtab(xns, type, include_sys, # caller names this "all_flag"
             continue
 
         } else if (tag != "symval")
-            panic(sprintf("(dump__symtab) Unexpected tag type: [%s, '%s','%s',%d,%s]",
+            panic(sprintf("(dump__symbols) Unexpected tag type: [%s, '%s','%s',%d,%s]",
                           ns, name, key, level, tag))
 
         # It's a regular symbol so process it
@@ -7318,17 +7344,17 @@ function dump__symtab(xns, type, include_sys, # caller names this "all_flag"
             (flag_anytrue_p(code, TYPE_ARRAY TYPE_LIST)  && key != EMPTY))
             keys[++cnt] = ns TOK_NS_QUAL name (key != EMPTY ? TOK_LBRACKET key TOK_RBRACKET : NOKEY)
         else
-            panic(sprintf("(dump__symtab) Strange combo: ('%s','%s') code=%s",
+            panic(sprintf("(dump__symbols) Strange combo: ('%s','%s') code=%s",
                           name, key, code))
     }
 
-    qsort(keys, 1, cnt)
+    qsort(SORT_NATURAL, keys, 1, cnt)
 
     # Construct output lines in buf
     buf = EMPTY
     for (i = 1; i <= cnt; i++)
         buf = buf sym_definition_ppf(keys[i]) TOK_NEWLINE
-    dbg__print("sym", 4, "(dump__symtab) END")
+    dbg__print("sym", 4, "(dump__symbols) END")
     return chomp(buf)
 }
 
@@ -7367,7 +7393,7 @@ function dump__sequences(target_namespace, type, include_sys,
         }
     }
 
-    qsort(keys, 1, cnt)
+    qsort(SORT_NATURAL, keys, 1, cnt)
 
     # Construct output lines in buf
     buf = EMPTY
@@ -7409,7 +7435,7 @@ function dump__commands(target_namespace, type, include_sys,
         }
     }
 
-    qsort(keys, 1, cnt)
+    qsort(SORT_NATURAL, keys, 1, cnt)
 
     # Construct output lines in buf
     buf = EMPTY
@@ -7437,7 +7463,8 @@ function xeq_cmd__dumpdef(cmd, cmdline,
 {
     $0 = cmdline
     if (NF == 0) {
-        buf = dump__symtab(M2_NS, TYPE_SYMBOL, FALSE) # normal symbols only
+        # BUG  Should use curr_ns() ?
+        buf = dump__symbols(M2_NS, TYPE_SYMBOL, FALSE) # normal symbols only
         if (emptyp(buf)) {
             warn("@dumpdef: Empty SYM table")
             return
@@ -8946,7 +8973,7 @@ function xeq_cmd__m2ctl(cmd, cmdline,
         blk_dump_block_raw(blk)
 
     } else if ($1 == "dump_namtab") {
-        nam_dump_namtab_ns(PTYPE_ANY, PTYPE_ANY, FALSE)
+        dump__names(PTYPE_ANY, PTYPE_ANY, FALSE)
 
     } else if ($1 == "dump_ns_stack") {
         dump_ns_stack()
@@ -12565,6 +12592,8 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     MODE_XEQ_BREAK              = "b"; __label[MODE_XEQ_BREAK]        = "XeqBreak"
     MODE_XEQ_CONTINUE           = "o"; __label[MODE_XEQ_CONTINUE]     = "XeqContinue"
     MODE_XEQ_RETURN             = "r"; __label[MODE_XEQ_RETURN]       = "XeqReturn"
+    SORT_NATURAL                = "G"; __label[SORT_NATURAL]          = "SortNatural"
+    SORT_INTEGER                = "H"; __label[SORT_INTEGER]          = "SortInteger"
 
     # Initialization status
     INIT_DOTFILES               = "."; __label[INIT_DOTFILES  ]       = "Dotfiles" # load_init_files()

@@ -1,0 +1,1 @@
+cat sym-names | sed 's/.*/@define & 666/' >symlist.lib

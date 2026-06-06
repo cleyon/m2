@@ -495,17 +495,20 @@ else
     fail_pct=`echo "scale=0; $nfail*100/$ntest" | bc`
     #echo $fail_pct
     if   [ "$nfail" -eq 1 ];     then descr="One"
-    elif [ "$fail_pct" -lt  6 ]; then descr="A few"
+    elif [ "$nfail" -lt 10 ];    then descr="Only a few"
+    elif [ "$fail_pct" -lt  6 ]; then descr="A small number of"
     elif [ "$fail_pct" -lt 16 ]; then descr="Some"
     elif [ "$fail_pct" -lt 26 ]; then descr="Several"
     elif [ "$fail_pct" -lt 36 ]; then descr="A number of"
     elif [ "$fail_pct" -lt 46 ]; then descr="Multiple"
     elif [ "$fail_pct" -lt 56 ]; then descr="Many"
     elif [ "$fail_pct" -lt 66 ]; then descr="Numerous"
-    elif [ "$fail_pct" -lt 76 ]; then descr="A majority of"
+    elif [ "$fail_pct" -lt 76 ]; then descr="A large number of"
     elif [ "$fail_pct" -lt 86 ]; then descr="Myriad"
     elif [ "$fail_pct" -lt 96 ]; then descr="Most"
+    elif [ "$npass" -lt 10 ];    then descr="Virtually every"; plural=""
     else                              descr="Nearly all"; fi
+
     echo "!!! TEST RUN STATUS: FAILURE - ${descr} test${plural} failed"
 fi
 

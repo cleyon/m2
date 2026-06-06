@@ -1,4 +1,4 @@
-@define m2::DUMPFILE	dumpfile.list
 @define m2::a	aa
 @define m2::b	bb
 @define m2::c	cc
+@define m2::DUMPFILE	dumpfile.list

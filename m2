@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-06-06 14:38:47 cleyon>
+#  Time-stamp:  <2026-06-07 15:30:55 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -61,8 +61,8 @@ BEGIN {
 
     # Customize these paths as needed for correct operation on your
     # system.  They are assumed to be safe to run even at secure level
-    # SECURE (but not PARANOID).  If a program is not available, simply
-    # remove the entry entirely.
+    # 2 SECURE (but not PARANOID 3).  If a program is not available,
+    # simply remove the entry entirely.
     split(                    \
           "/usr/bin/basename" \
              " /bin/date"     \
@@ -111,8 +111,8 @@ BEGIN {
                                         M2_ENVNS = "ENV"
     # Exit codes
     EX_OK            =  0
-    EX_M2_ERROR      =  1
-    EX_USER_REQUEST  =  2       # @error
+    EX_M2_ERROR      =  1       # internal error()
+    EX_USER_REQUEST  =  2       # m2 @error command
     EX_NOINPUT       = 66       # failure to process any files
     EX_SOFTWARE      = 70       # panic()
     EX_NOPERM        = 77       # security violation
@@ -172,23 +172,23 @@ BEGIN {
     # TRACE_* letters are user-visible, and advertised in the manual.
     # Not part of master char list!
     # For __TRACEMODE__   see also: xeq_cmd__tracemode()
-    TRACE_ARGUMENTS             = "a" # show actual arguments in each call
-    TRACE_BLOCKS                = "b" # show block create/destroy
-   #TRACE_MULTI_LINE            = "c" # show multiple trace lines for each call
-    TRACE_EXPANSION             = "e" # show macro expansion
-    TRACE_ENV_VAR               = "E" # show ENV::var read/write
-    TRACE_INPUT_FILE_CHG        = "i" # trace when input file changes
-    TRACE_SHOW_FILE_NAME        = "f" # show file name
-    TRACE_SHOW_LINE_NUM         = "l" # show line number
-    TRACE_COMMAND               = "m" # trace when a command is executed
-    TRACE_PATH_SEARCH           = "p" # trace when search path search succeeds
-    TRACE_QUALIFICATION         = "q" # trace ns qualification during parse()
-    TRACE_READLINE              = "r" # trace readline() text
-    TRACE_SYMBOL_READ_WRITE     = "s" # trace symbol low-level read & write
-    TRACE_ALL                   = "t" # trace internal macros too
-    TRACE_SET_ON                = "T" # Set __TRACE__ to true
-   #TRACE_SHOW_CALL_ID          = "x" # show unique call id (may not be used)
-    TRACE_WILDCARD_ALL_FLAGS    = "V" # shorthand for all of above options
+    TRACE_ARGUMENTS             = "a" #*std: show actual arguments in each call
+    TRACE_BLOCKS                = "b" # m2:  show block create/destroy
+   #TRACE_MULTI_LINE            = "c" # std: show multiple trace lines for each call
+    TRACE_EXPANSION             = "e" #*std: show macro expansion
+    TRACE_ENV_VAR               = "E" # m2:  show ENV::var read/write
+    TRACE_SHOW_FILE_NAME        = "f" #*std: show file name
+    TRACE_INPUT_FILE_CHG        = "i" # gnu: trace when input file changes
+    TRACE_SHOW_LINE_NUM         = "l" #*std: show line number
+    TRACE_COMMAND               = "m" # m2:  trace when a command is executed
+    TRACE_PATH_SEARCH           = "p" # gnu: trace when search path search succeeds
+    TRACE_QUALIFICATION         = "q" # m2:  trace ns qualification during parse()
+    TRACE_READLINE              = "r" # m2:  trace readline() text
+    TRACE_SYMBOL_READ_WRITE     = "s" # m2:  trace symbol low-level read & write
+    TRACE_ALL                   = "t" # std: trace internal macros too
+    TRACE_SET_ON                = "T" # m2:  Set __TRACE__ to true
+   #TRACE_SHOW_CALL_ID          = "x" # std: show unique id/number macro expansions
+    TRACE_WILDCARD_ALL_FLAGS    = "V" # std: shorthand for all of above options
     #
     TRACE_DEFAULT_SET           = TRACE_ARGUMENTS       TRACE_EXPANSION         \
                                   TRACE_SHOW_FILE_NAME  TRACE_SHOW_LINE_NUM
@@ -215,7 +215,7 @@ BEGIN {
     # Check for and resolve SEC_SQUASHROOT.  Must get uid manually,
     # since __PROG__ and much else is not defined yet.
     if (__secure_level == SEC_SQUASHROOT) {
-        #print_stderr("(BEGIN) squashroot: Checking uid")
+        #print_stderr("(BEGIN) [squashroot] Checking uid")
         __secure_level = SEC_SECURE     # default secure
 
         if ("id" in PROG) {
@@ -363,44 +363,46 @@ function rm_quotes(s)
 #
 #       https://quasar.as.utexas.edu/BillInfo/JulianDatesG.html
 #
-#       Return value is for 00:00h GMT, which means 0.5 fractional part.
+#       Calculate the Julian Day Number for 00:00 hours GMT, of the
+#       Y/M/D date provided.  The return value will include a XXXX.5
+#       fractional part, 0.5 representing being halfway through that
+#       Julian day.  This is because the Julian Day is defined to begin
+#       at noon, Greenwich time.  This is convenient for astronomers
+#       (who until recently only observed at night), but it is confusing.
+#       A later function greg() is given a Julian day number as a
+#       parameter, and it expects the ".5" to be present.  Fortunately,
+#       m2 presents to the user the *Modified* Julian Day which removes
+#       this 0.5 infelicity and results in smaller numbers to boot.
 #
-#*****************************************************************************
+#       ALGORITHM:
+#       1) Express the date as Y M D, where Y is the year, M is the month
+#       number (Jan = 1, Feb = 2, etc.), and D is the day in the month.
 #
-# ALGORITHM:
-# 1) Express the date as Y M D, where Y is the year, M is the month
-# number (Jan = 1, Feb = 2, etc.), and D is the day in the month.
+#       2) If the month is January or February, subtract 1 from the year to
+#       get a new Y, and add 12 to the month to get a new M.  (Thus, we are
+#       thinking of January and February as being the 13th and 14th month of
+#       the previous year).
 #
-# 2) If the month is January or February, subtract 1 from the year to
-# get a new Y, and add 12 to the month to get a new M.  (Thus, we are
-# thinking of January and February as being the 13th and 14th month of
-# the previous year).
+#       3) Dropping the fractional part of all results of all multiplications
+#       and divisions, let:
+#         A = Y/100
+#         B = A/4
+#         C = 2-A+B
+#         E = 365.25*(Y+4716)
+#         F = 30.6001*(M+1)
+#         JD= C+D+E+F-1524.5
 #
-# 3) Dropping the fractional part of all results of all multiplications
-# and divisions, let:
-#   A = Y/100
-#   B = A/4
-#   C = 2-A+B
-#   E = 365.25x(Y+4716)
-#   F = 30.6001x(M+1)
-#   JD= C+D+E+F-1524.5
+#       Example: If the date is 1582 October 15,
+#         Y = 1582
+#         M = 10
+#         D = 15
+#         A = 15
+#         B = 3
+#         C = -10
+#         E = 2300344
+#         F = 336
+#         JD = 2299160.5
 #
-# This is the Julian Day Number for the beginning of the date in
-# question at 0 hours, Greenwich time.  Note that this always gives you
-# a half day extra.  That is because the Julian Day begins at noon,
-# Greenwich time.  This is convenient for astronomers (who until
-# recently only observed at night), but it is confusing.
-#
-# Example: If the date is 1582 October 15,
-#   Y = 1582
-#   M = 10
-#   D = 15
-#   A = 15
-#   B = 3
-#   C = -10
-#   E = 2300344
-#   F = 336
-#   JD = 2299160.5
 #*****************************************************************************
 function jd(Y, M, D,
             A, B, C, E, F, JD)
@@ -435,7 +437,7 @@ function mjd(y, m, d)
 # NOTE: This method will not give dates accurately on the Gregorian
 # Proleptic Calendar, i.e., the calendar you get by extending the
 # Gregorian calendar backwards to years earlier than 1582. using the
-# Gregorian leap year rules. In particular, the method fails if Y<400.
+# Gregorian leap year rules.  In particular, the method fails if Y<400.
 #
 # Do the following calculations, again dropping the fractional part of
 # all multiplications and divisions:
@@ -446,9 +448,9 @@ function mjd(y, m, d)
 #   A = Z+1+W-X
 #   B = A+1524
 #   C = (B-122.1)/365.25
-#   D = 365.25xC
+#   D = 365.25*C
 #   E = (B-D)/30.6001
-#   F = 30.6001xE
+#   F = 30.6001*E
 #   Day of month = B-D-F+(Q-Z)
 #   Month = E-1 or E-13 (must get number less than or equal to 12)
 #   Year = C-4715 (if Month is January or February) or C-4716 (otherwise)
@@ -501,7 +503,7 @@ function greg(JD,
 function date_valid_p(year, month, day,
                       leap)
 {
-    if (   year  < 1858 || year  > 2099 \
+    if (   year  < 1858 || year  > 2100 \
         || month <    1 || month >   12 \
         || day   <    1)
         return FALSE
@@ -526,12 +528,12 @@ function leap_year_p(year)
     # 1. If the year is evenly divisible by 400, it is a leap year
     if (year % 400 == 0) return TRUE
 
-    # 2. If the year is not divisible by 400, but is divisible by 100,
-    #    it is not a leap year
+    # 2. If [the year is not divisible by 400,] but is evenly divisible
+    #    by 100, it is not a leap year
     if (year % 100 == 0) return FALSE
 
-    # 3. If the year is not divisible by 400, and also not divisible by
-    #    100, but is divisible by 4, it is a leap year
+    # 3. If [the year is not divisible by 400, and also not divisible by
+    #    100,] but is evently divisible by 4, it is a leap year
     if (year % 4 == 0) return TRUE
 
     # 4. Otherwise it is not a leap year
@@ -720,7 +722,7 @@ function mktemp(path_template,
         if (! path_exists_p(file_path))
             return file_path
     }
-    panic("(mktemp) Could not create temporary file name from template '" path_template "'")
+    panic("(mktemp) Could not construct temp file name from template '" path_template "'")
 }
 
 
@@ -3168,7 +3170,6 @@ function xeq__BLK_AGG(agg_block,
                       i, lim, slot_type, value, block_type, name,
                       hack_line, line, old_line)
 {
-    hack_line = FALSE
     block_type = blk_type(agg_block)
     dbg__print("xeq", 3, sprintf("(xeq__BLK_AGG) START dstblk=%d, agg_block=%d, type=%s",
                                 curr_dstblk(), agg_block, ppf__label(block_type)))
@@ -3177,10 +3178,11 @@ function xeq__BLK_AGG(agg_block,
     lim = blktab[agg_block, 0, "count"]
 
     # Hack __LINE__
+    hack_line = FALSE
     if ((agg_block, 0, "line") in blktab) {
+        hack_line = TRUE
         line = blktab[agg_block, 0, "line"]
         #print_stderr(sprintf("(xeq__BLK_AGG) Block %d had 'line' = %d", agg_block, line))
-        hack_line = TRUE
         old_line = LINE()
         sys_write("__LINE__", line)
     }
@@ -5969,13 +5971,12 @@ function syminfo_fetch(syminfo,
                        sym, nparts, info, iname, ikey, icode, level, val, good,
                        idxable, agg_block, count, has_bracket, ins)
 {
-    sym = info__get(syminfo, "name")
-    dbg__print("sym", 5, sprintf("(syminfo_fetch) START; sym='%s'", sym))
-
     iname = info__get(syminfo, "name")
     ikey  = info__get(syminfo, "key")
     level = info__get(syminfo, "level")
     ins   = info__get(syminfo, "ns")
+    dbg__print("sym", 5, sprintf("(syminfo_fetch) START; sym='%s'", iname))
+
     if (level == NAME_NOT_FOUND)
         error("(syminfo_fetch) nam__lookup(info) failed")
     if (ins == EMPTY)
@@ -5993,7 +5994,7 @@ function syminfo_fetch(syminfo,
     if (info__get(syminfo, "type") == TYPE_SEQUENCE) {
         val = seq_ll_read_ns(ins, iname)
         dbg__print("sym", 2, sprintf("(syminfo_fetch) END sym='%s', level=%d RETURNING %d",
-                                     sym, level, val))
+                                     iname, level, val))
         return val
     }
 
@@ -6004,7 +6005,7 @@ function syminfo_fetch(syminfo,
         #val = idx__size(iname, level, icode)
         val = idx__size(syminfo)
         dbg__print("sym", 2, sprintf("(syminfo_fetch) END sym='%s', level=%d RETURNING %d",
-                                    sym, level, val))
+                                    iname, level, val))
         return val
     }
 
@@ -6033,12 +6034,12 @@ function syminfo_fetch(syminfo,
         }
 
         panic(sprintf("(syminfo_fetch) LOOP BOTTOM: sym='%s', name='%s', key='%s', level=%d, code='%s'",
-                      sym, iname, ikey, level, icode))
+                      iname, iname, ikey, level, icode))
     } while (FALSE)
 
     if (flag_1true_p(icode, FLAG_DEFERRED)) {
         #warn("(syminfo_fetch) about to define deferred symbol")
-        sym_deferred_define_now(sym)
+        sym_deferred_define_now(iname)
     }
 
     if (flag_1true_p(icode, TYPE_LIST)) {
@@ -6065,7 +6066,7 @@ function syminfo_fetch(syminfo,
         val = sym_ll_read_ns(ins, iname, ikey, level)
     }
 
-    dbg__print("sym", 2, sprintf("(syminfo_fetch) END sym='%s', level=%d => %s", sym, level, ppf__bool(TRUE)))
+    dbg__print("sym", 2, sprintf("(syminfo_fetch) END sym='%s', level=%d => %s", iname, level, ppf__bool(TRUE)))
     if (flag_1true_p(icode, FLAG_INTEGER))
         return 0 + val
     else if (flag_1true_p(icode, FLAG_NUMERIC))
@@ -10115,9 +10116,6 @@ function ship_out(obj_type, obj,
         #print_stderr("NAME=" name)
         sub(/^[ \t]*[^ \t]+[ \t]*/, "", obj)
 
-        # XXX By the time we are shipping out, everything should be qualfied
-        #obj = qualify(obj)
-
         # Unlike every other command, @wrap ships out its line literally here.
         # Function end_program(), which handles wrapped text, calls dosubs().
         if (name != "__m2__::wrap") {
@@ -12745,7 +12743,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
       sym_ll_fiat("__HOME__",       NOKEY, PTYPE_READONLY_SYMBOL,  with_trailing_slash(ENVIRON["LOGDIR"]))
     sym_ll_fiat("__INCPATH__",      NOKEY, PTYPE_READONLY_SYMBOL,  "M2PATH" in ENVIRON ? ENVIRON["M2PATH"] : EMPTY)
     sym_ll_fiat("__INPUT__",        NOKEY, PTYPE_WRITABLE_SYMBOL,  EMPTY)
-    sym_ll_fiat("__LENIENT__",      NOKEY, PTYPE_WRITABLE_INTEGER, 0)
+    sym_ll_fiat("__LENIENT__",      NOKEY, PTYPE_WRITABLE_INTEGER, 0) # Undocumented
     sym_ll_fiat("__LINE__",         NOKEY, PTYPE_READONLY_INTEGER, 0)
     sym_ll_fiat("__M2_UUID__",      NOKEY, PTYPE_READONLY_SYMBOL,  uuid())
     sym_ll_fiat("__M2_VERSION__",   NOKEY, PTYPE_READONLY_SYMBOL,  M2_VERSION)

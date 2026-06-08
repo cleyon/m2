@@ -433,12 +433,14 @@ block does
 .Sy not
 execute the
 .Va PREAMBLE .
-(The purpose of the preamble is to provide "boiler-plate" header text for
+.Po
+The purpose of the preamble is to provide "boiler-plate" header text for
 known cases.
 The text and commands of the
 .Ic @otherwise
 block are expected
-to compensate for the lack of a preamble.)
+to compensate for the lack of a preamble.
+.Pc
 .It Ic @cleardivert Op Ar N ...
 Clear stream(s) specified by
 .Va N .
@@ -874,7 +876,7 @@ Cease execution of a user command.
 is only valid inside a
 .Ic @newcmd
 definition.
-.It Ic @sequence Ar ID Cm ACTION Op Ar N
+.It Ic @sequence Ar ID Cm ACTION Op Ar arg
 Create and manage sequences.
 See the
 .Sx Sequences
@@ -1884,7 +1886,7 @@ supports named sequences, which are integer values.  By default,
 sequences begin at 0 and increment by 1 as appropriate.  These
 defaults can be changed, and the value can be updated or restarted.
 You create and manage sequences with the
-.Ql Ic @sequence Ar ID Cm ACTION Oo Ar ARG Oc
+.Ql Ic @sequence Ar ID Cm ACTION Oo Ar arg Oc
 command.
 Valid actions are:
 .Pp
@@ -2245,19 +2247,6 @@ Initialized from environment variable
 The data read by
 .Ic @input ;
 user modifiable.
-.It Va __LENIENT__
-Controls how error conditions are handled.
-In the default case (0), errors are processed normally.
-If the value is negative, errors cause in an immediate abnormal
-program end.
-If positive, errors are not fatal: they are instead treated
-as warnings, and execution continues.
-.Po
-.Em Note :
-Subsequent
-.Nm
-processing may be adversely affected in this case.
-.Pc
 .It Va __NSPATH__
 Colon-separated list of namespaces to be searched during unqualfied name resolution.
 Can be modified with

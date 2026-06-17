@@ -54,14 +54,12 @@
 #                           also requires a test to positively specify "no output expected".
 # TESTNAME.sh               If present, this script will be invoked with sh to run the test.
 # TESTNAME.showdiff         If present, show diff of expected/actual output on failure.
-#                           (Diff file is always created, this just controls what is shown.)
 #
 # Temporary working files, deleted after test run:
 # ------------------------------------------------
-# TESTNAME.run_diff         Diff of expected output vs run output, if different
-# TESTNAME.run_err          m2 run standard error
-# TESTNAME.run_exit         m2 run exit code
-# TESTNAME.run_out          m2 run standard output
+# TESTNAME.actual_err       m2 run standard error
+# TESTNAME.actual_exit      m2 run exit code
+# TESTNAME.actual_out       m2 run standard output
 # TESTNAME.expected_err     Copy of desired error text, if any, default blank
 # TESTNAME.expected_exit    Copy of desired exit code
 # TESTNAME.expected_out     Copy of desired output text, if any, default blank
@@ -245,7 +243,7 @@ test_series()
     cd $SERIES
     test_id=`echo $CATEGORY/$SERIES | sed "s,${testdir}/,,"`
     if [ -f test.disabled ]; then
-        echo "*** Skipping: $test_id - Series disabled ***"
+        echo "*** SKIP: $test_id - Series disabled ***"
         cd ..
         return
     fi
@@ -267,6 +265,7 @@ run_test()
     local test_id
     local saw_errors
     local TESTNAME
+    local testfile
     local hanging
 
     CATEGORY="$1"
@@ -287,7 +286,8 @@ run_test()
 
     TESTNAME=`echo "$M2_FILE" | sed 's,^.*/,,;s,\.m2$,,'`   # remove CATEGORY and ext
     [ $debug = "true" ] && echo "TESTNAME is $TESTNAME"
-    printf "*** TEST: %s/%s.m2 ... " $test_id $TESTNAME
+    testfile="${test_id}/${TESTNAME}.m2"
+    printf "*** TEST: %s ... " $testfile
     hanging=1
     ntest=$(expr $ntest + 1)
 
@@ -302,8 +302,8 @@ run_test()
         return
     fi
 
-    rm -f ${TESTNAME}.expected_* ${TESTNAME}.run_*
-    trap '[ $hanging -eq 1 ] && echo; echo; echo "!!! TEST RUN: STOP"; echo "!!! TEST RUN STATUS: INTERRUPTED - Test run incomplete"; rm -f ${TESTNAME}.expected_* ${TESTNAME}.run_*; summarize_tests; echo "!!! JOB END: `date`"; time_end="`date +%s`"; elapsed=`echo "${time_end}-${time_begin}" | bc`; echo "!!! ELAPSED TIME: $elapsed s"; exit 1' 1 2 3 15
+    rm -f ${TESTNAME}.expected_* ${TESTNAME}.actual_*
+    trap '[ $hanging -eq 1 ] && echo; echo; echo "!!! TEST RUN: STOP"; echo "!!! TEST RUN STATUS: INTERRUPTED - Test run incomplete"; rm -f ${TESTNAME}.expected_* ${TESTNAME}.actual_*; summarize_tests; echo "!!! JOB END: `date`"; time_end="`date +%s`"; elapsed=`echo "${time_end}-${time_begin}" | bc`; echo "!!! ELAPSED TIME: $elapsed s"; exit 1' 1 2 3 15
 
     if [ ! -r "$M2_FILE" ]; then
         echo "FAIL: Unreadable test file ***"
@@ -339,30 +339,28 @@ run_test()
     if [ -r ${TESTNAME}.sh ]; then
         # Since we set up stdout and stderr here,
         # don't try to change them in TESTNAME.sh
-        /bin/sh ${TESTNAME}.sh "$new_M2" "$M2_FILE" > ${TESTNAME}.run_out 2> ${TESTNAME}.run_err
+        /bin/sh ${TESTNAME}.sh "$new_M2" "$M2_FILE" > ${TESTNAME}.actual_out 2> ${TESTNAME}.actual_err
     elif [ $busybox_awk = "true" ]; then
-        busybox awk -f $new_M2 $M2_FILE > ${TESTNAME}.run_out 2> ${TESTNAME}.run_err
+        busybox awk -f $new_M2 $M2_FILE > ${TESTNAME}.actual_out 2> ${TESTNAME}.actual_err
     elif [ $gawk_trad = "true" ]; then
-        gawk --traditional -f $new_M2 $M2_FILE > ${TESTNAME}.run_out 2> ${TESTNAME}.run_err
+        gawk --traditional -f $new_M2 $M2_FILE > ${TESTNAME}.actual_out 2> ${TESTNAME}.actual_err
     elif [ $mawk_trad = "true" ]; then
-        mawk -W traditional -f $new_M2 $M2_FILE > ${TESTNAME}.run_out 2> ${TESTNAME}.run_err
+        mawk -W traditional -f $new_M2 $M2_FILE > ${TESTNAME}.actual_out 2> ${TESTNAME}.actual_err
     else
-        $new_M2 $M2_FILE > ${TESTNAME}.run_out 2> ${TESTNAME}.run_err
+        $new_M2 $M2_FILE > ${TESTNAME}.actual_out 2> ${TESTNAME}.actual_err
     fi
-    echo $? >${TESTNAME}.run_exit
+    echo $? >${TESTNAME}.actual_exit
 
     #
     ##  Check exit code
     #
-    if ! cmp -s ${TESTNAME}.run_exit ${TESTNAME}.expected_exit; then
+    if ! cmp -s ${TESTNAME}.actual_exit ${TESTNAME}.expected_exit; then
         if [ $hanging -eq 1 ]; then
             echo "FAIL ***"
             hanging=0
         fi
-        printf " >> %s.m2 - DIFFERENT EXIT CODES (expected %s, got %s) <<\n" \
-               $TESTNAME \
-               "`cat_or_nodata ${TESTNAME}.expected_exit`" \
-               "`cat_or_nodata ${TESTNAME}.run_exit`"
+        printf " >> EXIT CODE: %s <<\n" $testfile
+        echo "--- Expected `cat ${TESTNAME}.expected_exit` but got `cat ${TESTNAME}.actual_exit` ---"
         fail=$(expr $fail + 1)
         rc=127
     fi
@@ -370,18 +368,23 @@ run_test()
     #
     ##  Check error messages
     #
-    if ! cmp -s ${TESTNAME}.run_err ${TESTNAME}.expected_err; then
+    if ! cmp -s ${TESTNAME}.actual_err ${TESTNAME}.expected_err; then
         if [ $hanging -eq 1 ]; then
             echo "FAIL ***"
             hanging=0
         fi
-        printf " >> %s.m2 - DIFFERENT ERRORS <<\n" \
-               $TESTNAME
+        printf " >> ERRORS: %s <<\n" $testfile
         fail=$(expr $fail + 1)
-        echo "--- Expected Errors (`lines ${TESTNAME}.expected_err`) ---"
-        cat_or_nodata ${TESTNAME}.expected_err
-        echo "--- Actual Errors (`lines ${TESTNAME}.run_err`) ---"
-        cat_or_nodata ${TESTNAME}.run_err
+
+        if [ -f ${TESTNAME}.showdiff ]; then
+            echo "--- diff: Expected Errors vs Actual Errors ---"
+            diff ${diff_opt} ${TESTNAME}.expected_err ${TESTNAME}.actual_err
+        else
+            echo "--- Expected Errors (`lines ${TESTNAME}.expected_err`) ---"
+            cat_or_nodata ${TESTNAME}.expected_err
+            echo "--- Actual Errors (`lines ${TESTNAME}.actual_err`) ---"
+            cat_or_nodata ${TESTNAME}.actual_err
+        fi
         saw_errors=1
         rc=127
     fi
@@ -389,29 +392,26 @@ run_test()
     #
     ##  Check actual output
     #
-    if ! cmp -s ${TESTNAME}.run_out ${TESTNAME}.expected_out; then
+    if ! cmp -s ${TESTNAME}.actual_out ${TESTNAME}.expected_out; then
         if [ $hanging -eq 1 ]; then
             echo "FAIL ***"
             hanging=0
         fi
-        printf " >> %s.m2 - DIFFERENT OUTPUT <<\n" \
-               $TESTNAME
+        printf " >> OUTPUT: %s <<\n" $testfile
         fail=$(expr $fail + 1)
-        # Always create diff file
-        diff ${diff_opt} ${TESTNAME}.expected_out ${TESTNAME}.run_out > ${TESTNAME}.run_diff
 
         if [ -f ${TESTNAME}.showdiff ]; then
             echo "--- diff: Expected Output vs Actual Output ---"
-            cat_or_nodata ${TESTNAME}.run_diff
+            diff ${diff_opt} ${TESTNAME}.expected_out ${TESTNAME}.actual_out
         else
             echo "--- Expected Output (`lines ${TESTNAME}.expected_out`) ---"
             cat_or_nodata ${TESTNAME}.expected_out
-            echo "--- Actual Output (`lines ${TESTNAME}.run_out`) ---"
-            cat_or_nodata ${TESTNAME}.run_out
+            echo "--- Actual Output (`lines ${TESTNAME}.actual_out`) ---"
+            cat_or_nodata ${TESTNAME}.actual_out
         fi
-        if [ $saw_errors -eq 0 -a -s ${TESTNAME}.run_err ]; then
-            echo "--- Actual (Expected) ERRORS (`lines ${TESTNAME}.run_err`) ---"
-            cat_or_nodata ${TESTNAME}.run_err
+        if [ $saw_errors -eq 0 -a -s ${TESTNAME}.actual_err ]; then
+            echo "--- Actual/Expected Errors (`lines ${TESTNAME}.actual_err`) ---"
+            cat_or_nodata ${TESTNAME}.actual_err
         fi
         rc=127
     fi
@@ -420,10 +420,10 @@ run_test()
         echo "PASS ***"
         hanging=0
         npass=$(expr $npass + 1)
-        rm -f ${TESTNAME}.run_*
+        rm -f ${TESTNAME}.actual_*
     else
         nfail=$(expr $nfail + 1)
-        # Retain ${TESTNAME}.run_* for further investigation
+        # Retain ${TESTNAME}.actual_* for further investigation
     fi
     rm -f ${TESTNAME}.expected_*
 }

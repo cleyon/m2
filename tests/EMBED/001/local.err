@@ -1,1 +1,1 @@
-m2:local.m2:7:@m2::bar@: Name 'm2::bar' not defined
+m2:local.m2:7: @m2::bar@: Name 'm2::bar' not defined

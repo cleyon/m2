@@ -1,1 +1,1 @@
-m2:undef.m2:7:@case: Symbol 'FOO' not defined
+m2:undef.m2:7: @case: Symbol 'FOO' not defined

@@ -1,5 +1,5 @@
 .PHONY:	all man manview callgraph callgraph-full callgraph-sane callgraph-io clean distclean lint tags \
-	funcs vars \
+	bat funcs vars \
 	debug check test \
 	check-quiet   test-quiet   quiet-check   quiet-test \
 	check-verbose test-verbose verbose-check verbose-test \
@@ -65,8 +65,11 @@ vars awkvars.out: m2
 	@rm -f awkvars.out
 	$(GAWK) -d -f m2 /dev/null >/dev/null
 
+bat:
+	bat -S  --language awk --theme ansi m2
+
 clean:
-	rm -f  m2.cat1  test.log.*  tests/*/*/*.run_*  tests/*/*/*.expected_*
+	rm -f  m2.cat1  test.log.*  tests/*/*/*.actual_*  tests/*/*/*.expected_*
 
 distclean: clean
 	rm -f *~ awkvars.out awkfuncs.out

@@ -1,0 +1,34 @@
+| Function    | Attribute   | Type    |  Initial Value | Notes       |
+|-------------+-------------+---------+----------------+-------------|
+| info__get   | defined     |         |                |             |
+|             | key_valid   |         |                |             |
+|             | lexvalid    |         |                |             |
+|             | protected   |         |                |             |
+|             | truep       |         |                |             |
+|             | type        |         |                |             |
+|             | value       |         |                |             |
+|-------------+-------------+---------+----------------+-------------|
+| nam__scan   | declared    | -1/0/1  |             -1 | in namtab   |
+|             | errorp      | 0/1     |              0 |             |
+|             | errtext     | Text    |             "" | __m2_msg    |
+|             | has_bracket | 0/1     |              0 | index("[")  |
+|             | has_qual    | 0/1     |              0 | index("::") |
+|             | key         | Text    |             "" | may be ""   |
+|             | name        | Text    |             "" | must != ""  |
+|             | name_valid  | 0/1     |                |             |
+|             | nparts      | 1/2     |                |             |
+|             | ns          | Text    |             "" |             |
+|             | urtext      | Text    |           orig |             |
+|             |             |         |                |             |
+|             | _defined    | -1/0/1  |             -1 |             |
+|             | _key_valid  | -1/0/1  |             -1 |             |
+|             | _lexvalid   | -1/0/1  |             -1 |             |
+|             | _protected  | -1/0/1  |             -1 |             |
+|-------------+-------------+---------+----------------+-------------|
+| nam__lookup | code        | Text    |    PTYPE_UNDEF |             |
+|             | idxable     | 0/1     |                |             |
+|             | level       | Integer | NAME_NOT_FOUND |             |
+|-------------+-------------+---------+----------------+-------------|
+| info__      | agg_block   | Block # |                |             |
+| lookup_     | user_block  | Block # |                |             |
+| found_p     |             |         |                |             |

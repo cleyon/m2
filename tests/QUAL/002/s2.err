@@ -1,1 +1,1 @@
-m2:s2.m2:1:Scan error: 'aaa::', Invalid name 'aaa::'
+m2:s2.m2:1: Scan error: 'aaa::', Invalid name 'aaa::'

@@ -2273,7 +2273,7 @@ Operating system name.
 process id.
 .It Va __PROG__[...]
 Paths to various system utility programs.
-.It Va __SECURE__
+.It Va __SECURITY__
 Security level (0, 2, or 3).
 See
 .Sx SECURITY CONSIDERATIONS
@@ -2332,10 +2332,18 @@ run start time as
 See section
 .Sx Times and Dates .
 .It Va __TMPDIR__
-Location for temporary files.
-Default is
-.Pa /tmp/ ;
-user modifiable.
+Directory used when utilizing temporary files.
+Its initial value is taken from environment variable
+.Ev TMPDIR ;
+if this is not present, a default value of
+.Qq /tmp/
+is used.
+User modifiable.
+.Em Note :
+If symbol
+.Va M2_TMPDIR
+is defined, its value will override
+.Va __TMPDIR__ .
 .It Va __TRACEMODE__
 String containing trace control flags.
 Default is
@@ -2781,7 +2789,7 @@ to abend.
 .It Li 77
 Security violation caused by attempting an operation forbidden
 at current
-.Va __SECURE__
+.Va __SECURITY__
 value.
 .El
 .Sh EXAMPLES
@@ -3113,7 +3121,7 @@ This is especially noticeable if
 is used in complex ways.
 .Sh SECURITY CONSIDERATIONS
 The symbol
-.Va __SECURE__
+.Va __SECURITY__
 contains an integer storing the security level, which controls how
 .Nm
 may invoke subprocesses.
@@ -3130,10 +3138,10 @@ files, for example by using
 or storing a path into symbol
 .Va __DEBUGFILE__ .
 .Pp
-Secure level 1 does not exist beyond program startup; it changes to
+Security level 1 does not exist beyond program startup; it changes to
 level 0 for regular users or level 2 for root.
 .Pp
-At secure level 2, those commands are disabled entirely.
+At security level 2, those commands are disabled entirely.
 It also prevents creation of additional files, so
 undiverting a stream to an output file is prohibited,
 as is specifying a file to receive

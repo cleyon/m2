@@ -1,1 +1,1 @@
-m2:s1.m2:1:Scan error: '::bbb', Invalid name '::bbb'
+m2:s1.m2:1: Scan error: '::bbb', Invalid name '::bbb'

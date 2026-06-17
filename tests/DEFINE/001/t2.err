@@ -1,1 +1,1 @@
-m2:t2.m2:1:Scan error: 'm2::BAD%', Invalid name 'm2::BAD%'
+m2:t2.m2:1: Scan error: 'm2::BAD%', Invalid name 'm2::BAD%'

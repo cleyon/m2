@@ -1,1 +1,1 @@
-m2:multi.m2:9:@m2::foo[3]@: Index '3' out of bounds
+m2:multi.m2:9: @m2::foo[3]@: Index '3' out of bounds

@@ -1,1 +1,1 @@
-m2:ooorder.m2:1:@newcmd: Required arguments must precede optional arguments: 'c'
+m2:ooorder.m2:1: @newcmd: Required arguments must precede optional arguments: 'c'

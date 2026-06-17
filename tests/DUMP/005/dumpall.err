@@ -133,6 +133,7 @@ __m2__::syscmd	Command<System>
 __m2__::tab	Function<System>
 __m2__::tabs	Function<System>
 __m2__::time	Function<System>
+__m2__::tmpdir	Function<System>
 __m2__::tracemode	Command<System>
 __m2__::traceoff	Command<System>
 __m2__::traceon	Command<System>
@@ -185,7 +186,7 @@ __m2__::__NSPATH__	Symbol<System,Read_Only>
 __m2__::__OSNAME__	Symbol<System,Read_Only,Deferred>
 __m2__::__PID__	Symbol<System,Read_Only,Integer,Deferred>
 __m2__::__PROG__	Array<Read_Only,System>
-__m2__::__SECURE__	Symbol<System,Writable,Integer>
+__m2__::__SECURITY__	Symbol<System,Writable,Integer>
 __m2__::__STRICT__	Array<System,Writable,Boolean>
 __m2__::__SYNC__	Symbol<System,Writable,Integer>
 __m2__::__SYSVAL__	Symbol<System,Read_Only,Integer>

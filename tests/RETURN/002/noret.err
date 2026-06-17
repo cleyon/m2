@@ -1,1 +1,1 @@
-m2:noret.m2:4:@m2::foo: Command did not return a value
+m2:noret.m2:4: @m2::foo: Command did not return a value

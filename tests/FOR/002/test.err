@@ -1,1 +1,1 @@
-m2:test.m2:5:@m2::X@: Name 'm2::X' not defined
+m2:test.m2:5: @m2::X@: Name 'm2::X' not defined

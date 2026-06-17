@@ -1,1 +1,1 @@
-m2:endif.m2:1:[@endif] Parse error; Expected IF but found TERMINAL
+m2:endif.m2:1: @endif: Parse error: Expected IF but found TERMINAL

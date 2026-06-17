@@ -1,1 +1,1 @@
-m2:shad3.m2:3:@__m2__::local __INPUT__: Cannot shadow '__INPUT__'
+m2:shad3.m2:3: @local: Cannot shadow '__INPUT__'

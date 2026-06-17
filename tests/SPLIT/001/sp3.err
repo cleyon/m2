@@ -2,4 +2,4 @@
 @define m2::MYARRAY[1]	aaa
 @define m2::MYARRAY[2]	bbb
 @define m2::MYARRAY[3]	ccc
-m2:sp3.m2:14:@m2::MYARRAY[4]@: Index '4' out of bounds
+m2:sp3.m2:14: @m2::MYARRAY[4]@: Index '4' out of bounds

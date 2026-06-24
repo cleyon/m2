@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-06-17 13:52:22 cleyon>
+#  Time-stamp:  <2026-06-24 16:10:01 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -119,7 +119,7 @@ BEGIN {
 
     # Master char list
     #    Letters & Numerals (listed means available):
-    #           V g 6 7 8 9
+    #           V Z g y 6 7 8 9
     #
     #    Symbols (listed means allocated):
     #           ? ! @ _ ~ * > ' . # <
@@ -129,39 +129,36 @@ BEGIN {
     FLAG_DEFERRED    = "D"; __label[FLAG_DEFERRED]  = "Deferred"
     FLAG_IMMEDIATE   = "!"; __label[FLAG_IMMEDIATE] = "Immediate"
     FLAG_INTEGER     = "I"; __label[FLAG_INTEGER]   = "Integer"
-    FLAG_KEY_NO      = "Z"; __label[FLAG_KEY_NO]    = "Key_No"  # Key element (and brackets) must not be present
-    FLAG_KEY_YES     = "y"; __label[FLAG_KEY_YES]   = "Key_Yes" # Key element to index Array or List is required
     FLAG_NUMERIC     = "m"; __label[FLAG_NUMERIC]   = "Numeric"
     FLAG_READONLY    = "R"; __label[FLAG_READONLY]  = "Read_Only"
     FLAG_SYSTEM      = "Y"; __label[FLAG_SYSTEM]    = "System"
     FLAG_WRITABLE    = "W"; __label[FLAG_WRITABLE]  = "Writable"
 
     # Real types
-    TYPE_ARRAY       = "A"; __label[TYPE_ARRAY]     = "Array";     __base_type[TYPE_ARRAY   ] = TYPE_ARRAY
-    TYPE_COMMAND     = "C"; __label[TYPE_COMMAND]   = "Command";   __base_type[TYPE_COMMAND ] = TYPE_COMMAND
-    TYPE_FUNCTION    = "F"; __label[TYPE_FUNCTION]  = "Function";  __base_type[TYPE_FUNCTION] = TYPE_FUNCTION
-    TYPE_INTERNAL    = "_"; __label[TYPE_INTERNAL]  = "Internal";  __base_type[TYPE_INTERNAL] = TYPE_INTERNAL
-    TYPE_LIST        = "L"; __label[TYPE_LIST]      = "List";      __base_type[TYPE_LIST    ] = TYPE_LIST
-    TYPE_SEQUENCE    = "Q"; __label[TYPE_SEQUENCE]  = "Sequence";  __base_type[TYPE_SEQUENCE] = TYPE_SEQUENCE
-    TYPE_SYMBOL      = "S"; __label[TYPE_SYMBOL]    = "Symbol";    __base_type[TYPE_SYMBOL  ] = TYPE_SYMBOL
-    TYPE_USER        = "U"; __label[TYPE_USER]      = "User";      __base_type[TYPE_USER    ] = TYPE_USER
+    TYPE_ARRAY       = "A"; __label[TYPE_ARRAY]     = "Array";     __base_type[TYPE_ARRAY    ] = TYPE_ARRAY
+    TYPE_COMMAND     = "C"; __label[TYPE_COMMAND]   = "Command";   __base_type[TYPE_COMMAND  ] = TYPE_COMMAND
+    TYPE_FUNCTION    = "F"; __label[TYPE_FUNCTION]  = "Function";  __base_type[TYPE_FUNCTION ] = TYPE_FUNCTION
+    TYPE_LIST        = "L"; __label[TYPE_LIST]      = "List";      __base_type[TYPE_LIST     ] = TYPE_LIST
+    TYPE_SEQUENCE    = "Q"; __label[TYPE_SEQUENCE]  = "Sequence";  __base_type[TYPE_SEQUENCE ] = TYPE_SEQUENCE
+    TYPE_SYMBOL      = "S"; __label[TYPE_SYMBOL]    = "Symbol";    __base_type[TYPE_SYMBOL   ] = TYPE_SYMBOL
+    TYPE_USER        = "U"; __label[TYPE_USER]      = "User";      __base_type[TYPE_USER     ] = TYPE_USER
     #
-    # used to include TYPE_INTERNAL but seeing how things work without it
     VALID_TYPES      = TYPE_ARRAY  TYPE_COMMAND   TYPE_FUNCTION  \
                        TYPE_LIST   TYPE_SEQUENCE  TYPE_SYMBOL    TYPE_USER
     # Pseudo-types
-    PTYPE_ANY        = "*"; __label[PTYPE_ANY]      = "Any";       __base_type[PTYPE_ANY    ] = VALID_TYPES
+    PTYPE_ANY        = "*"; __label[PTYPE_ANY]      = "Any";       __base_type[PTYPE_ANY     ] = VALID_TYPES
     #
-    PTYPE_IDXABLE    = "J"; __label[PTYPE_IDXABLE]  = "Indexable"; __base_type[PTYPE_IDXABLE] = TYPE_ARRAY   TYPE_LIST
-    PTYPE_SCALAR     = "l"; __label[PTYPE_SCALAR]   = "Scalar";    __base_type[PTYPE_SCALAR ] = PTYPE_IDXABLE FLAG_KEY_YES  TYPE_SYMBOL
-    PTYPE_NUMBER     = "n"; __label[PTYPE_NUMBER]   = "Number";    __base_type[PTYPE_NUMBER ] = PTYPE_SCALAR   TYPE_SEQUENCE
+    PTYPE_IDXABLE    = "J"; __label[PTYPE_IDXABLE]  = "Idxable";   __base_type[PTYPE_IDXABLE ] = TYPE_ARRAY  TYPE_LIST
+    PTYPE_SCALAR     = "l"; __label[PTYPE_SCALAR]   = "Scalar";    __base_type[PTYPE_SCALAR  ] = PTYPE_IDXABLE   TYPE_SYMBOL
+    PTYPE_NUMBER     = "n"; __label[PTYPE_NUMBER]   = "Number";    __base_type[PTYPE_NUMBER  ] = PTYPE_SCALAR    TYPE_SEQUENCE
     #
-    PTYPE_ENV_VAR    = "E"; __label[PTYPE_ENV_VAR]  = "Env_Var";   __base_type[PTYPE_ENV_VAR] = EMPTY
-    PTYPE_KEY        = "k"; __label[PTYPE_KEY]      = "Key";       __base_type[PTYPE_KEY    ] = EMPTY
-    PTYPE_NAME       = "M"; __label[PTYPE_NAME]     = "Name";      __base_type[PTYPE_NAME   ] = EMPTY
-    PTYPE_NS         = "N"; __label[PTYPE_NS]       = "Namespace"; __base_type[PTYPE_NS     ] = EMPTY
-    PTYPE_PARAM      = "P"; __label[PTYPE_PARAM]    = "Param";     __base_type[PTYPE_PARAM  ] = EMPTY
-    PTYPE_UNDEF      = "?"; __label[PTYPE_UNDEF]    = "Undef";     __base_type[PTYPE_UNDEF  ] = EMPTY # Undef ::= type of a not-found namtab lookup
+    PTYPE_ENV_VAR    = "E"; __label[PTYPE_ENV_VAR]  = "Env_Var";   __base_type[PTYPE_ENV_VAR ] = EMPTY
+    PTYPE_INTERNAL   = "_"; __label[PTYPE_INTERNAL] = "Internal";  __base_type[PTYPE_INTERNAL] = EMPTY # awk function, only for debugging
+    PTYPE_KEY        = "k"; __label[PTYPE_KEY]      = "Key";       __base_type[PTYPE_KEY     ] = EMPTY
+    PTYPE_NAME       = "M"; __label[PTYPE_NAME]     = "Name";      __base_type[PTYPE_NAME    ] = EMPTY
+    PTYPE_NS         = "N"; __label[PTYPE_NS]       = "Namespace"; __base_type[PTYPE_NS      ] = EMPTY
+    PTYPE_PARAM      = "P"; __label[PTYPE_PARAM]    = "Param";     __base_type[PTYPE_PARAM   ] = EMPTY
+    PTYPE_UNDEF      = "?"; __label[PTYPE_UNDEF]    = "Undef";     __base_type[PTYPE_UNDEF   ] = EMPTY # Undef ::= type of a not-found namtab lookup
     #
     PTYPE_READONLY_SYMBOL  = TYPE_SYMBOL FLAG_SYSTEM FLAG_READONLY
     PTYPE_READONLY_INTEGER = TYPE_SYMBOL FLAG_SYSTEM FLAG_READONLY FLAG_INTEGER
@@ -275,7 +272,7 @@ function first(s)
 
 function rest(s)
 {
-    return substr(s, 2)
+    return length(s) < 2 ? EMPTY : substr(s, 2)
 }
 
 
@@ -1040,14 +1037,14 @@ function safe_shell()
 # ATMODE is a property of the source.  If there is no source, we're probably
 # in the process of undiverting a stream after the program ends.  Streams
 # are not processed for macros, so the default mode in this case is literal.
-function curr_atmode(    src_block)
+function ATMODE(    src_block)
 {
     if (stk_empty_p(__source_stack))
         return MODE_AT_LITERAL
     src_block = stk_top(__source_stack)
-    dbg__print_block("ship_out", 7, src_block, "(curr_atmode) src_block [top of __source_stack]")
+    dbg__print_block("ship_out", 7, src_block, "(ATMODE) src_block [top of __source_stack]")
     if (! ((src_block, 0, "atmode") in blktab)) {
-        panic("(curr_atmode) Top block " src_block " does not have 'atmode'")
+        panic("(ATMODE) Top block " src_block " does not have 'atmode'")
     }
     return blktab[src_block, 0, "atmode"]
 }
@@ -1056,28 +1053,28 @@ function curr_atmode(    src_block)
 # DSTBLK is a property of the parser.  There should always be at least a
 # pass-through TERMINAL parser because initialize() creates it and it
 # gets popped at the end of main().
-function curr_dstblk(    top_block)
+function DSTBLK(    top_block)
 {
     if (stk_empty_p(__parse_stack))
-        panic("(curr_dstblk) Parse stack is empty")
+        panic("(DSTBLK) Parse stack is empty")
     top_block = stk_top(__parse_stack)
-    dbg__print_block("ship_out", 7, top_block, "(curr_dstblk) top_block [top of __parse_stack]")
+    dbg__print_block("ship_out", 7, top_block, "(DSTBLK) top_block [top of __parse_stack]")
     if (! ((top_block, 0, "dstblk") in blktab)) {
-        #panic("(curr_dstblk) Top block " top_block " does not have 'dstblk'")
+        #panic("(DSTBLK) Top block " top_block " does not have 'dstblk'")
         return TERMINAL
     }
     return blktab[top_block, 0, "dstblk"] + 0
 }
 
 
-function ppf__label(code)
+function ppf__1label(code)
 {
     if (code == EMPTY)
-        panic("(ppf__label) code must not be empty")
+        panic("(ppf__1label) code must not be empty")
     code = first(code)
-    dbg__print("xeq", 7, "(ppf__label) code = " code)
+    dbg__print("xeq", 7, "(ppf__1label) code = " code)
     if (! (code in __label)) {
-        panic("(ppf__label) Invalid type '" code "'")
+        panic("(ppf__1label) Invalid type '" code "'")
     }
     return __label[code]
 
@@ -1102,8 +1099,11 @@ function lower_level()
 {
     if (__curr_level == ROOT_LEVEL)
         panic("(lower_level) Cannot be called from root level")
-    sym_purge(__curr_level)
-    #print_stderr("NAM_PURGE " __curr_level)
+    # print_stderr(sprintf("(lower_level) Calling sym_purge('%s',%d)",
+    #                      NS(), __curr_level))
+    sym_purge(NS(), __curr_level)
+    # print_stderr(sprintf("(lower_level) Calling nam_purge('%s',%d)",
+    #                      NS(), __curr_level))
     nam_purge(NS(), __curr_level)
     __curr_level--
     dbg__print("level", 4, "(lower_level) Level now " __curr_level)
@@ -1128,7 +1128,7 @@ function check_parse_stack(expected_block_type,
     btop = stk_top(__parse_stack)
     if (blk_type(btop) != expected_block_type) {
         __m2_msg = sprintf("Expected %s but found %s",
-                           ppf__label(expected_block_type), ppf__label(blk_type(btop)))
+                           ppf__1label(expected_block_type), ppf__1label(blk_type(btop)))
         return ERR_PARSE_MISMATCH
     }
 
@@ -1541,7 +1541,7 @@ function readline(    retval, i, s, done, topsrc, trim_ws)
                     panic("(readline) getline returned strange value: " retval)
             }
         }
-        if (retval == OKAY && curr_atmode() == MODE_AT_PROCESS) {
+        if (retval == OKAY && ATMODE() == MODE_AT_PROCESS) {
             if (substr(s, length(s) - 2, 3) == "@\\n") {
                 # Remove @\n and replace it with newline
                 s = substr(s, 1, length(s) - 3) TOK_NEWLINE
@@ -1778,7 +1778,7 @@ function dbg__print_block(dsys, lev, blknum, description,
         panic("(dbg__print_block) No 'type' field for block " blknum)
     block_type = blk_type(blknum)
     # print_debugfile("m2debug:(dbg__print_block) block_type = " block_type)
-    blk_label = ppf__label(block_type)
+    blk_label = ppf__1label(block_type)
 
     print_debugfile(sprintf("m2debug:Block # %d, Type=%s: %s", blknum, blk_label, description))
     print_debugfile(ppf__BLK(blknum))
@@ -1882,7 +1882,7 @@ function info__gate(opcode,      # OP_xxx operation
         panic("(info__gate) Empty caller")
     if (opns == EMPTY)
         panic(sprintf("(info__gate) Empty ns; name='%s', opcode=%s, optype=%s",
-                      info__get(info, "name"), ppf__label(opcode), ppf__label(optype)))
+                      info__get(info, "name"), ppf__1label(opcode), ppf__1label(optype)))
     if (info__get(info, "errorp"))
         # If it starts out being bad, we're not going to touch it and leave
         # the error message alone.  It's probably a scan error.
@@ -1899,12 +1899,12 @@ function info__gate(opcode,      # OP_xxx operation
     if (optype == PTYPE_ANY || optype == PTYPE_UNDEF)
         return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
                                   sprintf("Type '%s' is not allowed here",
-                                          ppf__label(optype)))
+                                          ppf__1label(optype)))
 
     retval = info["nparts"] == 1 ? info__gate_1part(opcode, optype, info, opns, oplevel, caller, assert_true_or_exit) \
                                  : info__gate_2parts(opcode, optype, info, opns, oplevel, caller, assert_true_or_exit)
     dbg__print("gate", 3, sprintf("(info__gate) (opcode=%s, optype=%s, text='%s', opns=%s, oplevel=%d, caller='%s' asrtTrue=%s) => %s",
-                                  ppf__label(opcode), ppf__label(optype), info__get(info, "urtext"),
+                                  ppf__1label(opcode), ppf__1label(optype), info__get(info, "urtext"),
                                   opns, oplevel, caller, ppf__bool(assert_true_or_exit), ppf__bool(retval)))
     return retval
 }
@@ -1915,7 +1915,7 @@ function info__gate_1part(opcode, optype, info, opns, oplevel, caller, assert_tr
 {
     iname = info__get(info, "name")
     dbg__print("gate", 3, sprintf("(info__gate_1part) opcode=%s, optype=%s, name='%s', oplevel=%d",
-                                  ppf__label(opcode), ppf__label(optype), iname, oplevel))
+                                  ppf__1label(opcode), ppf__1label(optype), iname, oplevel))
     if (optype == PTYPE_SCALAR)
         optype = TYPE_SYMBOL
 
@@ -1937,7 +1937,7 @@ function info__gate_1part(opcode, optype, info, opns, oplevel, caller, assert_tr
                 if (ilevel != NAME_NOT_FOUND)
                     return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
                                               sprintf("Name '%s' already defined as a %s",
-                                                      iname, ppf__label(itype)))
+                                                      iname, ppf__1label(itype)))
                 # It's not found, so info[] won't be very helpful...
                 if (double_underscores_p(iname))
                     return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
@@ -1996,7 +1996,7 @@ function info__gate_1part(opcode, optype, info, opns, oplevel, caller, assert_tr
                     #     ilevel == LEVEL())    # if (nam_ll_in(name, LEVEL()))
                     #     return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
                     #                               sprintf("%s '%s' already defined",
-                    #                                       ppf__label(icode), iname))
+                    #                                       ppf__1label(icode), iname))
                     retval = TRUE; break
                 }
             }
@@ -2017,7 +2017,7 @@ function info__gate_1part(opcode, optype, info, opns, oplevel, caller, assert_tr
             #     if (itype != TYPE_SYMBOL && itype != TYPE_ARRAY && itype != TYPE_LIST)
             #         return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
             #                                   sprintf("A Name '%s' has type %s, not Scalar",
-            #                                           iname, ppf__label(itype)))
+            #                                           iname, ppf__1label(itype)))
             #     retval = TRUE; break
             #
             # # } else if (flag_alltrue_p(optype, PTYPE_IDXABLE)) {
@@ -2025,20 +2025,20 @@ function info__gate_1part(opcode, optype, info, opns, oplevel, caller, assert_tr
             #     if (itype != TYPE_ARRAY && itype != TYPE_LIST)
             #         return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
             #                                   sprintf("B Name '%s' has type %s, not Array or List",
-            #                                           iname, ppf__label(itype)))
+            #                                           iname, ppf__1label(itype)))
             #     retval = TRUE; break
             #
             # } else if (optype == TYPE_ARRAY) {
             #     if (itype != optype)
             #         return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
             #                                   sprintf("C Name '%s' has type %s, not %s",
-            #                                           iname, ppf__label(itype), ppf__label(optype)))
+            #                                           iname, ppf__1label(itype), ppf__1label(optype)))
             #     retval = TRUE; break
             # }
             if (! info__satisfies_type(info, optype))
                 return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
                                           sprintf("Name '%s' has type %s, not %s",
-                                                  iname, ppf__label(itype), ppf__label(optype)))
+                                                  iname, ppf__1label(itype), ppf__1label(optype)))
             retval = TRUE; break
 
         } else if (opcode == OP_UPDATE) {
@@ -2054,7 +2054,7 @@ function info__gate_1part(opcode, optype, info, opns, oplevel, caller, assert_tr
                 if (! info__satisfies_type(info, optype))
                     return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
                                               sprintf("Name '%s' has type %s, not %s",
-                                                      iname, ppf__label(itype), ppf__label(optype)))
+                                                      iname, ppf__1label(itype), ppf__1label(optype)))
                 # So it *was found, on some level...  Can it be updated?
                 # Good old dynamic scoping
                 if (flag_1true_p(icode, FLAG_WRITABLE))
@@ -2083,7 +2083,7 @@ function info__gate_1part(opcode, optype, info, opns, oplevel, caller, assert_tr
             }
         }
         panic(sprintf("(info__gate_1part) UNHANDLED (opcode=%s, optype=%s, name='%s', oplevel=%d, caller='%s' assert=%s) => %s",
-                      ppf__label(opcode), ppf__label(optype), iname,
+                      ppf__1label(opcode), ppf__1label(optype), iname,
                       oplevel, caller, ppf__bool(assert_true_or_exit), ppf__bool(retval)))
     } while (FALSE)
 
@@ -2097,7 +2097,7 @@ function info__gate_2parts(opcode, optype, info, opns, oplevel, caller, assert_t
     iname = info__get(info, "name")
     ikey  = info__get(info, "key")
     dbg__print("gate", 3, sprintf("(info__gate_2parts) opcode=%s, optype=%s, name='%s', key='%s', oplevel=%d",
-                                  ppf__label(opcode), ppf__label(optype), iname, ikey, oplevel))
+                                  ppf__1label(opcode), ppf__1label(optype), iname, ikey, oplevel))
     ilevel = info__get(info, "level")
     if (optype == PTYPE_SCALAR) {
         # Because Arrays and Lists must be declared before use, PTYPE_SCALAR
@@ -2114,7 +2114,7 @@ function info__gate_2parts(opcode, optype, info, opns, oplevel, caller, assert_t
         if (! info__satisfies_type(info, optype))
             return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
                                       sprintf("Type Array or List is required, not %s '%s'",
-                                              ppf__label(itype), iname))
+                                              ppf__1label(itype), iname))
         # Pretend it was either Array or List we needed all along...
         optype = itype
     }
@@ -2149,7 +2149,7 @@ function info__gate_2parts(opcode, optype, info, opns, oplevel, caller, assert_t
                 if (idx__key_exists_p(info, ikey))
                     return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
                                               sprintf("Key '%s' already found in %s '%s'",
-                                                      ikey, ppf__label(itype), iname))
+                                                      ikey, ppf__1label(itype), iname))
                 # It's not found at this level, but maybe it's at a higher level
                 # print_stderr("Want to create " iname TOK_LBRACKET ikey TOK_RBRACKET " at level " oplevel)
                 # print_stderr("  info[code]=" icode "   info_level=" info__get(info, "level"))
@@ -2166,7 +2166,7 @@ function info__gate_2parts(opcode, optype, info, opns, oplevel, caller, assert_t
             if (! idx__key_exists_p(info, ikey))
                     return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
                                               sprintf("Key '%s' not found in %s '%s'",
-                                                      ikey, ppf__label(itype), iname))
+                                                      ikey, ppf__1label(itype), iname))
 
             retval = TRUE; break
 
@@ -2176,7 +2176,7 @@ function info__gate_2parts(opcode, optype, info, opns, oplevel, caller, assert_t
             if (! info__satisfies_type(info, optype))
                 return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
                                           sprintf("Name '%s' has type %s, not %s",
-                                                  iname, ppf__label(itype), ppf__label(optype)))
+                                                  iname, ppf__1label(itype), ppf__1label(optype)))
             if (info__get(info, "protected"))
                 return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
                                           sprintf("Name '%s' is protected%s",
@@ -2189,7 +2189,7 @@ function info__gate_2parts(opcode, optype, info, opns, oplevel, caller, assert_t
             #     # if (! info__satisfies_type(info, optype))
             #     #     # return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
             #     #     #                           sprintf("Name '%s' has type %s, not %s",
-            #     #     #                                   iname, ppf__label(itype), ppf__label(optype)))
+            #     #     #                                   iname, ppf__1label(itype), ppf__1label(optype)))
             #     #     print_stderr("Type NOT satisfied")
             #     # else
             #     #     print_stderr("Type IS satisfied")
@@ -2209,13 +2209,13 @@ function info__gate_2parts(opcode, optype, info, opns, oplevel, caller, assert_t
                 if (! idx__key_exists_p(info, ikey))
                     return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
                                               sprintf("Key '%s' not found in %s '%s'",
-                                                      ikey, ppf__label(itype), iname))
+                                                      ikey, ppf__1label(itype), iname))
                 retval = TRUE; break
             }
         }
 
         panic(sprintf("(info__gate_2parts) UNHANDLED (opcode=%s, optype=%s, name='%s', key='%s', oplevel=%d, caller='%s' assert=%s) => %s",
-                      ppf__label(opcode), ppf__label(optype), iname, ikey,
+                      ppf__1label(opcode), ppf__1label(optype), iname, ikey,
                       oplevel, caller, ppf__bool(assert_true_or_exit), ppf__bool(retval)))
     } while (FALSE)
 
@@ -2372,7 +2372,7 @@ function idx__key_exists_p(info, key,
     else if (itype == TYPE_LIST)
         return lis__key_exists_p(ins, iname, key, ilevel)
     else
-        panic("(idx__key_exists_p) Cannot handle type " ppf__label(itype))
+        panic("(idx__key_exists_p) Cannot handle type " ppf__1label(itype))
 }
 
 
@@ -2535,7 +2535,7 @@ function blk_new(block_type,
         panic("(blk_new) Uncaught block_type '" block_type "'")
 
     msg = sprintf("[Block Create] %s => %d",
-                  ppf__label(block_type), new_blknum)
+                  ppf__1label(block_type), new_blknum)
     #print_stderr(msg)
     trace(TRACE_BLOCKS, EMPTY, msg)
     dbg__print("ship_out", 2, "(block_new) " msg)
@@ -2565,7 +2565,7 @@ function blk_walk_delete(blknum, seen,
                       block_type, blknum))
 
     msg = sprintf("[Block Delete] %d %s",
-                  blknum, ppf__label(block_type))
+                  blknum, ppf__1label(block_type))
     trace(TRACE_BLOCKS, EMPTY, msg)
     dbg__print("ship_out", 2, "(blk_walk_delete) " msg)
 
@@ -2628,7 +2628,7 @@ function blk_type(blknum,
         return PTYPE_UNDEF
     }
     bt = blktab[blknum, 0, "type"]
-    #print_stderr(sprintf("BLK_TYPE:bt=%s, label=%s", bt, ppf__label(bt)))
+    #print_stderr(sprintf("BLK_TYPE:bt=%s, label=%s", bt, ppf__1label(bt)))
     if (index(VALID_BLOCK_TYPES, bt) == NOT_FOUND)
         panic("(blk_type) Block # " blknum " has invalid block type '" bt "'")
     return bt
@@ -2668,16 +2668,16 @@ function blk_append(blknum, slot_type, value,
         panic(sprintf("(blk_append) Block '%s' is not an integer", blknum))
     if (blk_type(blknum) != BLK_AGG)
         panic(sprintf("(blk_append) Block %d has type %s, not AGG",
-                      blknum, ppf__label(blk_type(blknum))))
+                      blknum, ppf__1label(blk_type(blknum))))
 
     if (slot_type != OBJ_CMD  && slot_type != OBJ_BLKNUM &&
         slot_type != OBJ_TEXT && slot_type != OBJ_USER)
-        panic(sprintf("(blk_append) Argument has bad type %s; should be OBJ_{CMD,BLKNUM,TEXT,USER}", ppf__label(slot_type)))
+        panic(sprintf("(blk_append) Argument has bad type %s; should be OBJ_{CMD,BLKNUM,TEXT,USER}", ppf__1label(slot_type)))
 
     slot = ++blktab[blknum, 0, "count"]
     dbg__print("ship_out", 3,
               sprintf("(blk_append) blknum=%d, slot=%d, slot_type=%s, value='%s'",
-                      blknum, slot, ppf__label(slot_type), value))
+                      blknum, slot, ppf__1label(slot_type), value))
     blk_ll_write(blknum, slot, slot_type, value)
 }
 
@@ -2776,7 +2776,7 @@ function blk_nicer_print__obj(blknum, slot, seen, indent,
 {
     if (blk_type(blknum) != BLK_AGG)
         panic(sprintf("(blk_nicer_print__obj) Block %d has type %s, not AGG",
-                      blknum, ppf__label(blk_type(blknum))))
+                      blknum, ppf__1label(blk_type(blknum))))
     slot_type = blk_ll_slot_type(blknum, slot)
     value = blk_ll_slot_value(blknum, slot)
     print_stderr(sprintf("(blk_nicer_print__obj) block %d slot %d type %s => %s",
@@ -2998,7 +2998,7 @@ function blk_dump_block_raw(blknum,
             dbg__print("xeq", 9, "(blk_dump_block_raw) b=" b)
             slot_type_str = ""
             if (f[BFN_TAG] == "slot_type")
-                slot_type_str = " (" ppf__label(blktab[f[1], f[2], f[3]]) ")"
+                slot_type_str = " (" ppf__1label(blktab[f[1], f[2], f[3]]) ")"
             print_debugfile("m2debug:blknum=" f[BFN_BNUM] \
                             ", slot=" f[BFN_SLOT] \
                             ", tag=" f[BFN_TAG] \
@@ -3037,7 +3037,7 @@ function ppf__block(blknum,
 {
     block_type = blk_type(blknum)
     dbg__print("xeq", 3, sprintf("(ppf__block) START blknum=%d, type=%s",
-                                blknum, ppf__label(block_type)))
+                                blknum, ppf__1label(block_type)))
 
     if      (block_type == BLK_AGG)       buf = ppf__agg(blknum)
     else if (block_type == BLK_CASE)      buf = ppf__case(blknum)
@@ -3051,7 +3051,7 @@ function ppf__block(blknum,
     else if (block_type == BLK_WHILE)     buf = ppf__while(blknum)
     else
         panic(sprintf("(ppf__block) Block # %d: type %s (%s) not handled",
-                      blknum, block_type, ppf__label(block_type)))
+                      blknum, block_type, ppf__1label(block_type)))
     return buf
 }
 
@@ -3061,7 +3061,7 @@ function ppf__BLK(blknum,
 {
     block_type = blk_type(blknum)
     dbg__print("xeq", 3, sprintf("(ppf__BLK) START blknum=%d, type=%s",
-                                blknum, ppf__label(block_type)))
+                                blknum, ppf__1label(block_type)))
 
     if      (block_type == BLK_AGG)      text = ppf__BLK_AGG(blknum)
     else if (block_type == BLK_CASE)     text = ppf__BLK_CASE(blknum)
@@ -3086,7 +3086,7 @@ function execute__block(blknum,
 {
     block_type = blk_type(blknum)
     dbg__print("xeq", 1, sprintf("(execute__block) START blknum=%d, type=%s",
-                                blknum, ppf__label(block_type)))
+                                blknum, ppf__1label(block_type)))
     if (flag_1false_p(__m2_config_flags, MODE_XEQ_NORMAL)) {
         dbg__print("xeq", 3, "(execute__block) NOP !MODE_XEQ_NORMAL")
         return
@@ -3105,11 +3105,11 @@ function execute__block(blknum,
     else if (block_type == BLK_WHILE)     xeq__BLK_WHILE(blknum)
     else
         panic(sprintf("(execute__block) Block # %d: type %s (%s) not handled",
-                      blknum, block_type, ppf__label(block_type)))
+                      blknum, block_type, ppf__1label(block_type)))
 
     if (LEVEL() != old_level)
         panic(sprintf("(execute__block) blknum=%d, type=%s: %s; old_level=%d, LEVEL()=%d",
-                      blknum, ppf__label(block_type), "Level mismatch", old_level, LEVEL()))
+                      blknum, ppf__1label(block_type), "Level mismatch", old_level, LEVEL()))
     dbg__print("xeq", 1, "(execute__block) END")
 }
 
@@ -3120,7 +3120,7 @@ function xeq__BLK_AGG(agg_block,
 {
     block_type = blk_type(agg_block)
     dbg__print("xeq", 3, sprintf("(xeq__BLK_AGG) START dstblk=%d, agg_block=%d, type=%s",
-                                curr_dstblk(), agg_block, ppf__label(block_type)))
+                                DSTBLK(), agg_block, ppf__1label(block_type)))
     dbg__print_block("xeq", 7, agg_block, "(xeq__BLK_AGG) agg_block")
 
     lim = blktab[agg_block, 0, "count"]
@@ -3139,13 +3139,13 @@ function xeq__BLK_AGG(agg_block,
         slot_type = blk_ll_slot_type(agg_block, i)
         value = blk_ll_slot_value(agg_block, i)
         dbg__print("xeq", 7, sprintf("(xeq__BLK_AGG) LOOP; dstblk=%d, agg_block=%d, slot=%d, slot_type=%s, value='%s'",
-                                    curr_dstblk(), agg_block, i, ppf__label(slot_type), value))
+                                    DSTBLK(), agg_block, i, ppf__1label(slot_type), value))
         dbg__print("xeq", 3, sprintf("(xeq__BLK_AGG) TOP OF LOOP: ________ BLOCK %d  SLOT %d ________",
                                      agg_block, i))
 
         if (hack_line)
             sys__incr("__LINE__", 1)
-        dbg__print("xeq", 3, sprintf("(xeq__BLK_AGG) CALLING ship_out(%s, '%s')", ppf__label(slot_type), value))
+        dbg__print("xeq", 3, sprintf("(xeq__BLK_AGG) CALLING ship_out(%s, '%s')", ppf__1label(slot_type), value))
         # print_stderr(sprintf("(xeq__BLK_AGG) i=%d, __LINE__=%d, source='%s'",
         #                      i, sys__read("__LINE__", NOKEY), value))
         ship_out(slot_type, value)
@@ -3192,7 +3192,7 @@ function ppf__BLK_AGG(blknum,
         for (x = 1; x <= count; x++)
             slotinfo = slotinfo sprintf("  [%d]=%s: %s\n",
                                         x,
-                                        ppf__label(blk_ll_slot_type(blknum, x)),
+                                        ppf__1label(blk_ll_slot_type(blknum, x)),
                                         blk_ll_slot_value(blknum, x))
     }
     return sprintf("  count   : %d\n" \
@@ -3401,7 +3401,7 @@ function dump_parse_stack(    level, block, block_type)
         for (level = stk_depth(__parse_stack); level > 0; level--) {
             block = __parse_stack[level]
             block_type = blk_type(block)
-            print_debugfile("m2debug:(dump_parse_stack) Level " level ", block # " block ", type=" ppf__label(block_type) )
+            print_debugfile("m2debug:(dump_parse_stack) Level " level ", block # " block ", type=" ppf__1label(block_type) )
             dbg__print_block("xeq", -1, block)
         }
     print_debugfile("m2debug:(dump_parse_stack) END")
@@ -3474,8 +3474,8 @@ function parse__file(default_ns,
 
     filename = blktab[file_block, 0, "filename"]
     dbg__print("parse", 2, sprintf("(parse__file) filename='%s', dstblk=%d, mode=%s",
-                                  filename, curr_dstblk(),
-                                  ppf__label(blktab[file_block, 0, "atmode"])))
+                                  filename, DSTBLK(),
+                                  ppf__1label(blktab[file_block, 0, "atmode"])))
     if (!path_exists_p(filename)) {
         dbg__print("parse", 2, sprintf("(parse__file) END File '%s' does not exist => %s",
                                      filename, ppf__bool(FALSE)))
@@ -3551,7 +3551,7 @@ function parse(    code, terminator, rstat, cmd, retval, new_block, fc,
                    new_cmd_name, call_details, src_block, l2, _, ns, uname, nparts,
                    orig, info2, type2, code2, level2, new_type, name, qname, new_level, new_scan_name)
 {
-    dbg__print("parse", 3, "(parse) START dstblk=" curr_dstblk() ", mode=" ppf__label(curr_atmode()))
+    dbg__print("parse", 3, "(parse) START dstblk=" DSTBLK() ", mode=" ppf__1label(ATMODE()))
 
     # The "parser" is the topmost element of the __parse_stack
     # which we wish to access a few times
@@ -3559,7 +3559,7 @@ function parse(    code, terminator, rstat, cmd, retval, new_block, fc,
         panic("Parse error: Empty parse stack")
     parser = stk_top(__parse_stack)
     parser_type = blk_type(parser)
-    parser_label = ppf__label(parser_type)
+    parser_label = ppf__1label(parser_type)
 
     if (stk_empty_p(__source_stack))
         panic("Parse error: Empty source stack")
@@ -3599,7 +3599,7 @@ function parse(    code, terminator, rstat, cmd, retval, new_block, fc,
         orig = $0
 
         # Maybe short-circuit and ship line out now
-        if (curr_atmode() == MODE_AT_LITERAL ||
+        if (ATMODE() == MODE_AT_LITERAL ||
             index($0, TOK_AT) == NOT_FOUND ||
             first($0) != TOK_AT) {
             s = $0
@@ -3694,7 +3694,7 @@ function parse(    code, terminator, rstat, cmd, retval, new_block, fc,
                         dbg__print("parse", 3, "(parse) [" parser_label "] RETURNED FROM ship_out()")
 
                     } else if (cmd == "case") {
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__case(dstblk=" curr_dstblk() ")"))
+                        dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__case(dstblk=" DSTBLK() ")"))
                         new_block = parse__case()
                         dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__case() : new_block => " new_block))
                         dbg__print("parse", 5, sprintf("(parse) [" parser_label "] CALLING ship_out(BLKNUM, %d)", new_block))
@@ -3702,14 +3702,14 @@ function parse(    code, terminator, rstat, cmd, retval, new_block, fc,
                         dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM ship_out()"))
 
                     } else if (cmd == "else") {
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__else(dstblk=" curr_dstblk() ")"))
+                        dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__else(dstblk=" DSTBLK() ")"))
                         _ = parse__else()
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__else() : dstblk => " curr_dstblk()))
+                        dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__else() : dstblk => " DSTBLK()))
 
                     } else if (cmd == "endcase" || cmd == "esac") {
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__endcase(dstblk=" curr_dstblk() ")"))
+                        dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__endcase(dstblk=" DSTBLK() ")"))
                         _ = parse__endcase()
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__endcase() : dstblk => " curr_dstblk()))
+                        dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__endcase() : dstblk => " DSTBLK()))
                         if (match($1, terminator)) {
                             dbg__print("parse", 5, "(parse) [" parser_label "] END; @endcase matched terminator => TRUE")
                             return TRUE
@@ -3718,10 +3718,10 @@ function parse(    code, terminator, rstat, cmd, retval, new_block, fc,
                                       TOK_AT cmd, terminator))
 
                     } else if (cmd == "endcmd") {
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__endcmd(dstblk=" curr_dstblk() ")"))
+                        dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__endcmd(dstblk=" DSTBLK() ")"))
                         new_block = parse__endcmd()
                         dbg__print_block("parse", 7, new_block, sprintf("newcmd block returned from parse__endcmd"))
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__endcmd() : dstblk => " curr_dstblk()))
+                        dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__endcmd() : dstblk => " DSTBLK()))
 
                         if (match($1, terminator)) {
                             dbg__print("parse", 5, "(parse) [" parser_label "] END; @endcmd matched terminator => TRUE")
@@ -3760,9 +3760,9 @@ function parse(    code, terminator, rstat, cmd, retval, new_block, fc,
                                       TOK_AT cmd, terminator))
 
                     } else if (cmd == "endif" || cmd == "fi") {
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__endif(dstblk=" curr_dstblk() ")"))
+                        dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__endif(dstblk=" DSTBLK() ")"))
                         _ = parse__endif()
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__endif() : dstblk => " curr_dstblk()))
+                        dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__endif() : dstblk => " DSTBLK()))
                         if (match($1, terminator)) {
                             dbg__print("parse", 5, "(parse) [" parser_label "] END; @endif matched terminator => TRUE")
                             return TRUE
@@ -3770,9 +3770,9 @@ function parse(    code, terminator, rstat, cmd, retval, new_block, fc,
                         error("(parse) [" parser_label "] Found @" cmd " but expecting '" terminator "'")
 
                     } else if (cmd == "endlong" || cmd == "endlongdef") {
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__endlongdef(dstblk=" curr_dstblk() ")"))
+                        dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__endlongdef(dstblk=" DSTBLK() ")"))
                         _ = parse__endlongdef()
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__endlongdef() : dstblk => " curr_dstblk()))
+                        dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__endlongdef() : dstblk => " DSTBLK()))
                         if (match($1, terminator)) {
                             dbg__print("parse", 5, "(parse) [" parser_label "] END; @endlongdef matched terminator => TRUE")
                             return TRUE
@@ -3780,9 +3780,9 @@ function parse(    code, terminator, rstat, cmd, retval, new_block, fc,
                         error("(parse) [" parser_label "] Found @" cmd " but expecting '" terminator "'")
 
                     } else if (cmd == "endwhile" || cmd == "wend") {
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__endwhile(dstblk=" curr_dstblk() ")"))
+                        dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__endwhile(dstblk=" DSTBLK() ")"))
                         _ = parse__endwhile()
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__endwhile() : dstblk => " curr_dstblk()))
+                        dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__endwhile() : dstblk => " DSTBLK()))
                         if (match($1, terminator)) {
                             dbg__print("parse", 5, "(parse) [" parser_label "] END; @endwhile matched terminator => TRUE")
                             return TRUE
@@ -3790,8 +3790,8 @@ function parse(    code, terminator, rstat, cmd, retval, new_block, fc,
                         error("(parse) [" parser_label "] Found @" cmd " but expecting '" terminator "'")
 
                     } else if (cmd == "for" || cmd == "foreach") {
-                        dbg__print("parse", 5, sprintf("(parse) [%s] curr_dstblk()=%d CALLING parse__for()",
-                                                     parser_label, curr_dstblk()))
+                        dbg__print("parse", 5, sprintf("(parse) [%s] DSTBLK()=%d CALLING parse__for()",
+                                                     parser_label, DSTBLK()))
                         new_block = parse__for()
                         dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__for() : new_block is " new_block))
                         dbg__print("parse", 5, sprintf("(parse) [" parser_label "] CALLING ship_out(BLKNUM, %d)", new_block))
@@ -3799,7 +3799,7 @@ function parse(    code, terminator, rstat, cmd, retval, new_block, fc,
                         dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM ship_out()"))
 
                     } else if (cmd == "if" || cmd == "unless") {
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__if(dstblk=" curr_dstblk() ")"))
+                        dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__if(dstblk=" DSTBLK() ")"))
                         new_block = parse__if()
                         dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__if() : new_block => " new_block))
                         dbg__print("parse", 5, sprintf("(parse) [" parser_label "] CALLING ship_out(BLKNUM, %d)", new_block))
@@ -3807,7 +3807,7 @@ function parse(    code, terminator, rstat, cmd, retval, new_block, fc,
                         dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM ship_out()"))
 
                     } else if (cmd == "longdef") {
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__longdef(dstblk=" curr_dstblk() ")"))
+                        dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__longdef(dstblk=" DSTBLK() ")"))
                         new_block = parse__longdef()
                         dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__longdef() : new_block => " new_block))
                         dbg__print("parse", 5, sprintf("(parse) [" parser_label "] CALLING ship_out(BLKNUM, %d)", new_block))
@@ -3823,7 +3823,7 @@ function parse(    code, terminator, rstat, cmd, retval, new_block, fc,
                             error("@sm2ctl: Unrecognized parameter: " $1)
 
                     } else if (cmd == "newcmd") {
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__newcmd(dstblk=" curr_dstblk() ")"))
+                        dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__newcmd(dstblk=" DSTBLK() ")"))
                         new_block = parse__newcmd()
                         dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__newcmd() : new_block => " new_block))
                         dbg__print("parse", 5, sprintf("(parse) [" parser_label "] CALLING ship_out(BLKNUM, %d)", new_block))
@@ -3832,9 +3832,9 @@ function parse(    code, terminator, rstat, cmd, retval, new_block, fc,
 
                     } else if (cmd == "next") {
                         dbg__print("parse", 5, sprintf("(parse) [%s] dstblk=%d; CALLING parse__next()",
-                                                     parser_label, curr_dstblk()))
+                                                     parser_label, DSTBLK()))
                         _ = parse__next()
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__next() : dstblk => " curr_dstblk()))
+                        dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__next() : dstblk => " DSTBLK()))
                         if (match($1, terminator)) {
                             dbg__print("parse", 5, "(parse) [" parser_label "] END Matched terminator => TRUE")
                             return TRUE
@@ -3842,14 +3842,14 @@ function parse(    code, terminator, rstat, cmd, retval, new_block, fc,
                         error("(parse) [" parser_label "] Found @" cmd " but expecting '" terminator "'")
 
                     } else if (cmd == "of") {
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__of(dstblk=" curr_dstblk() ")"))
+                        dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__of(dstblk=" DSTBLK() ")"))
                         _ = parse__of()
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__of() : dstblk => " curr_dstblk()))
+                        dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__of() : dstblk => " DSTBLK()))
 
                     } else if (cmd == "otherwise") {
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__otherwise(dstblk=" curr_dstblk() ")"))
+                        dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__otherwise(dstblk=" DSTBLK() ")"))
                         _ = parse__otherwise()
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__otherwise() : dstblk => " curr_dstblk()))
+                        dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__otherwise() : dstblk => " DSTBLK()))
 
                     } else if (cmd == "return") {
                         found = FALSE
@@ -3869,7 +3869,7 @@ function parse(    code, terminator, rstat, cmd, retval, new_block, fc,
                         dbg__print("parse", 3, "(parse) [" parser_label "] RETURNED FROM ship_out()")
 
                     } else if (cmd == "while" || cmd == "until") {
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__while(dstblk=" curr_dstblk() ")"))
+                        dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__while(dstblk=" DSTBLK() ")"))
                         new_block = parse__while()
                         dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__while() : new_block => " new_block))
                         dbg__print("parse", 5, sprintf("(parse) [" parser_label "] CALLING ship_out(BLKNUM, %d)", new_block))
@@ -3881,8 +3881,9 @@ function parse(    code, terminator, rstat, cmd, retval, new_block, fc,
                         # print_stderr(sprintf("before, $0='%s'; $2='%s'", $0, $2))
                         if (index($2, TOK_NS_QUAL) > 0)
                             new_scan_name = $2
-                        else
+                        else {
                             new_scan_name = (double_underscores_p($2) ? M2_SYSNS : NS()) TOK_NS_QUAL $2
+                        }
                         qname = nam__qualify(new_scan_name)
                         #print_stderr(sprintf("qname='%s'", qname))
 
@@ -3898,13 +3899,13 @@ function parse(    code, terminator, rstat, cmd, retval, new_block, fc,
                         if (cmd == "define" || cmd == "set") {
                             # Define will auto-vivify Symbols, but not Arrays or Lists.
                             # print_stderr(sprintf("Found @define: ns='%s', cmd='%s', code='%s'\n   $0='%s'",
-                            #                      info__get(info2, "ns"), info__get(info2, "name"), ppf__flags(info__get(info2, "code")), $0))
+                            #                      info__get(info2, "ns"), info__get(info2, "name"), ppf__allcodes(info__get(info2, "code")), $0))
                             if (! nam__valid_p($2, PTYPE_SCALAR, TRUE))
                                 error(sprintf("%s: Name '%s' is not valid%s",
                                               TOK_AT cmd, $2, VERBOSE() ? " [parse:A]" TOK_NEWLINE $0 : EMPTY))
 
                             code2 = info__get(info2, "code")
-                            # print_stderr("(parse) from qname '" qname "', code2=" ppf__label(code2))
+                            # print_stderr("(parse) from qname '" qname "', code2=" ppf__1label(code2))
                             type2 = first(code2)
                             if (type2 == PTYPE_UNDEF)
                                 if (info__get(info2, "has_bracket")) # undeclared Array or List
@@ -3915,18 +3916,18 @@ function parse(    code, terminator, rstat, cmd, retval, new_block, fc,
                             else if (type2 == TYPE_SYMBOL)
                                 if (info__get(info2, "has_bracket")) # undeclared Array or List
                                     error(sprintf("%s: Cannot use brackets on %s '%s'",
-                                                  TOK_AT cmd, ppf__label(code2), $2))
+                                                  TOK_AT cmd, ppf__1label(code2), $2))
                                 else
                                     new_type = code2
                             else if (type2 == TYPE_ARRAY || type2 == TYPE_LIST)
                                 if (! info__get(info2, "has_bracket")) # missing required bracket
                                     error(sprintf("%s: Must use brackets on %s '%s'",
-                                                  TOK_AT cmd, ppf__label(code2), $2))
+                                                  TOK_AT cmd, ppf__1label(code2), $2))
                                 else
                                     new_type = code2
                             else
                                 panic(sprintf("(parse) Cannot handle '%s' of type %s",
-                                              $2, ppf__label(code2)))
+                                              $2, ppf__1label(code2)))
 
                             new_level = nam_system_p(info__get(info2, "name")) ? ROOT_LEVEL : LEVEL()
                             if (! nam_ll_in_ns(info__get(info2, "ns"),
@@ -3937,7 +3938,7 @@ function parse(    code, terminator, rstat, cmd, retval, new_block, fc,
                                     print_debugfile(sprintf("m2debug:(parse) [%s] Declaring '%s'::'%s' (lev=%d) as type %s",
                                                             parser_label,
                                                             info__get(info2, "ns"), info__get(info2, "name"),
-                                                            new_level, ppf__label(new_type)))
+                                                            new_level, ppf__1label(new_type)))
 
                                 nam_ll_write_ns(info__get(info2, "ns"), info__get(info2, "name"),
                                                 new_level, new_type)
@@ -3973,7 +3974,7 @@ function parse(    code, terminator, rstat, cmd, retval, new_block, fc,
                                 print_debugfile(sprintf("m2debug:(parse) [%s] Declaring '%s'::'%s' (lev=%d) as type %s",
                                                         parser_label,
                                                         info__get(info2, "ns"), info__get(info2, "name"),
-                                                        LEVEL(), ppf__label(new_type)))
+                                                        LEVEL(), ppf__1label(new_type)))
                             nam_ll_write_ns(info__get(info2, "ns"), info__get(info2, "name"),
                                             LEVEL(), new_type)
                         }
@@ -4105,7 +4106,7 @@ function ppf__BLK_FILE(blknum)
                    "  atmode  : %s",
                    blktab[blknum, 0, "filename"],
                    blktab[blknum, 0, "open"] ? "OPEN" : "CLOSED",
-                   ppf__label(blktab[blknum, 0, "atmode"]))
+                   ppf__1label(blktab[blknum, 0, "atmode"]))
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -4126,7 +4127,7 @@ function ppf__BLK_FILE(blknum)
 #           TYPE_ARRAY          A : Awk array refs, must use subscripts
 #           TYPE_COMMAND        C : Built-in "@" command; root level
 #           TYPE_FUNCTION       F : Root level
-#           TYPE_INTERNAL       _ : Awk function tracing, not reachable by user
+#           PTYPE_INTERNAL      _ : Awk function tracing, not reachable by user
 #           TYPE_LIST           L : Agg block lists; integer keys
 #           TYPE_SEQUENCE       Q : Root level
 #           TYPE_SYMBOL         S
@@ -4261,19 +4262,19 @@ function flag_set_clear(code, set_fs, clear_fs,
 }
 
 
-function ppf__flags(code,
+function ppf__allcodes(code,
                     l, s, desc, x, type)
 {
     s = desc = EMPTY
     if ((l = length(code)) == 0)
-        error("(ppf__flags) Did not specify code")
+        error("(ppf__allcodes) Did not specify code")
     if (valid_type_p(type = first(code))) {
-        s = ppf__label(type)
+        s = ppf__1label(type)
         code = rest(code); l--
     }
     if (l > 0) {
         for (x = 1; x <= l; x++)
-            desc = desc ppf__label(substr(code, x, 1)) ","
+            desc = desc ppf__1label(substr(code, x, 1)) ","
         s = s "<" chop(desc) ">"
     }
     return s
@@ -4310,7 +4311,7 @@ function ppf__flags(code,
 #             code        : String holding the type and any flags (from namtab)
 #             idxable     : TRUE if type == TYPE_ARRAY or TYPE_LIST.
 #                           Means this incantation can support NAME[KEY].
-#                           Useful for PTYPE_IDXABLE and FLAG_KEY_YES.
+#                           Useful for PTYPE_IDXABLE.
 #             level       : Level number where this object was found.
 #                           0 => ROOT_LEVEL; NAME_NOT_FOUND => symbol not found
 #             type        : Char encoding obj type, also in code; one of TYPE_*
@@ -4320,11 +4321,11 @@ function ppf__flags(code,
 function nam__valid_p(text, type, allow_double_underscores)
 {
     if (emptyp(text))
-        panic("(nam__valid_p) Empty text!  type=" ppf__label(type))
+        panic("(nam__valid_p) Empty text!  type=" ppf__1label(type))
     if (!allow_double_underscores &&
         double_underscores_p(text))
         return FALSE
-    if (type == TYPE_COMMAND || type == TYPE_FUNCTION || type == TYPE_INTERNAL)
+    if (type == TYPE_COMMAND || type == TYPE_FUNCTION || type == PTYPE_INTERNAL)
         return text ~ /^[a-z][a-z]*$/
     else if (type == PTYPE_ENV_VAR || type == PTYPE_NS || type == PTYPE_PARAM)
         return text ~ /^[A-Za-z_][A-Za-z_0-9]*$/
@@ -4341,7 +4342,7 @@ function nam__valid_p(text, type, allow_double_underscores)
     else if (type == PTYPE_SCALAR)
         return text ~ /^[A-Za-z#_:][A-Za-z#_0-9:]*(\[[ !-~]+\])?$/
     else
-        panic("(nam__valid_p) Cannot handle type " ppf__label(type) "; text='" text "'")
+        panic("(nam__valid_p) Cannot handle type " ppf__1label(type) "; text='" text "'")
 }
 
 
@@ -4493,7 +4494,7 @@ function nam__lookup(info,
             ! nam__valid_p(name, PTYPE_ENV_VAR, FALSE)) {
             info["errorp"] = TRUE
             info["errtext"] = __m2_msg = \
-                sprintf("Name '%s' not valid as %s", name, ppf__label(PTYPE_ENV_VAR))
+                sprintf("Name '%s' not valid as %s", name, ppf__1label(PTYPE_ENV_VAR))
             info["name_valid"] = FALSE
             return ERR_SCAN_INVALID_NAME
         }
@@ -4501,7 +4502,7 @@ function nam__lookup(info,
         if (! found) {
             # Set the text when the name isn't found, but not the error flag itself.
             info["errtext"] = sprintf("%s '%s' not found",
-                                      ppf__label(info__get(info, "type")), name)
+                                      ppf__1label(info__get(info, "type")), name)
             return NAME_NOT_FOUND
         }
         info["declared"] = info["_defined"] = TRUE
@@ -4555,7 +4556,7 @@ function nam__lookup(info,
     if (info["has_bracket"] && !info["idxable"]) {
         info["errorp"] = TRUE
         info["errtext"] = sprintf("Cannot use brackets with %s '%s'",
-                                  ppf__label(info__get(info, "type")), name)
+                                  ppf__1label(info__get(info, "type")), name)
         return ERR_SCAN_INVALID_NAME
     }
     return level
@@ -4578,12 +4579,11 @@ function info__lookup_found_p(info, ns, name, level,
 
     if (type == TYPE_ARRAY) {
         info["_defined"] = info__get(info, "lexvalid") &&
-                           ((ns, name, info__get(info, "key"), level, "symval") \
-                            in symtab)
+                           sym_ll_in_ns(ns, name, info__get(info, "key"), level)
 
     } else if (type == TYPE_COMMAND  ||
                type == TYPE_FUNCTION ||
-               type == TYPE_INTERNAL) {
+               type == PTYPE_INTERNAL) {
         info["_defined"] = info__get(info, "lexvalid") &&
                            ns == M2_SYSNS && level == ROOT_LEVEL
                            #((M2_SYSNS, name, ROOT_LEVEL) in namtab)
@@ -4601,7 +4601,7 @@ function info__lookup_found_p(info, ns, name, level,
     } else if (type == TYPE_SYMBOL) {
         info["_defined"] = info__get(info, "lexvalid") &&
                             (flag_1true_p(code, FLAG_DEFERRED) ||
-                             (ns, name, NOKEY, level, "symval") in symtab)
+                             sym_ll_in_ns(ns, name, NOKEY, level))
 
     } else if (type == TYPE_USER) {
         info["_defined"] = info__get(info, "lexvalid") &&
@@ -4610,10 +4610,10 @@ function info__lookup_found_p(info, ns, name, level,
             info["user_block"] = cmd_ll_read_ns(ns, name, level)
 
     } else
-        panic("(info__lookup_found_p) Unhandled type: " ppf__label(type))
+        panic("(info__lookup_found_p) Unhandled type: " ppf__1label(type))
 
     dbg__print("nam", 2, sprintf("(info__lookup_found_p) Found name '%s', level=%d, code=%s Found in namtab => %s",
-                                 name, level, ppf__flags(code),
+                                 name, level, ppf__allcodes(code),
                                  (level == 0 ? "ROOT_LEVEL" \
                                   : sprintf("Level %d", level))))
     return TRUE
@@ -4632,7 +4632,8 @@ function info__create_from_text(text, info,
 }
 
 
-# Remove any name at level "level" or greater
+# Remove any name at level "level" or greater,
+# in specified namespace.
 function nam_purge(ns, level,
                    f, n, d, del_list, code, type, agg_block,
                    pns, pname, plevel)
@@ -4655,9 +4656,9 @@ function nam_purge(ns, level,
         code = nam_ll_read_ns(pns, pname, plevel)
         type = first(code)
         if (double_underscores_p(pname) ||
-            type == TYPE_FUNCTION || type == TYPE_COMMAND || type == TYPE_INTERNAL)
+            type == TYPE_FUNCTION || type == TYPE_COMMAND || type == PTYPE_INTERNAL)
             continue
-        #print_stderr(sprintf("(nam_purge) '%s' type %s", pname, ppf__label(type)))
+        #print_stderr(sprintf("(nam_purge) '%s' type %s", pname, ppf__1label(type)))
         if (type == TYPE_LIST) {
             agg_block = symtab[pns, pname, NOKEY, plevel, "agg_block"]
             lis__clear(pns, pname, plevel)
@@ -4685,7 +4686,7 @@ function dump__names(target_namespace, filter_flags, include_sys,
         filter_flags = flag_set_clear(filter_flags, FLAG_SYSTEM, EMPTY)
     include_system = flag_1true_p(filter_flags, FLAG_SYSTEM)
     dbg__print("sym", 4, sprintf("(dump__names) BEGIN ns=%s, filter (%s%s):\n",
-                                 target_namespace, ppf__flags(filter_flags),
+                                 target_namespace, ppf__allcodes(filter_flags),
                                  include_system ? "+System" : EMPTY))
 
     cnt = 0
@@ -4699,17 +4700,17 @@ function dump__names(target_namespace, filter_flags, include_sys,
         if (target_namespace != PTYPE_ANY &&
             target_namespace != ns) {
             # print_debugfile(sprintf("m2debug:(dump__names) ns filter: ns=%s, name=%s, code=%s, filter=%s",
-            #                         ns, name, ppf__label(code), ppf__label(filter_flags)))
+            #                         ns, name, ppf__1label(code), ppf__1label(filter_flags)))
             continue
         }
         if (! flag_alltrue_p(code, filter_flags)) {
             # print_debugfile(sprintf("m2debug:(dump__names) flags filter: ns=%s, name=%s, code=%s, filter=%s",
-            #                         ns, name, ppf__label(code), ppf__label(filter_flags)))
+            #                         ns, name, ppf__1label(code), ppf__1label(filter_flags)))
             continue
         }
         if (flag_1true_p(code, FLAG_SYSTEM) && !include_system) {
             # print_debugfile(sprintf("m2debug:(dump__names) include_system filter: ns=%s, name=%s, code=%s, filter=%s",
-            #                         ns, name, ppf__label(code), ppf__label(filter_flags)))
+            #                         ns, name, ppf__1label(code), ppf__1label(filter_flags)))
             continue
         }
         keys[++cnt] = ns TOK_NS_QUAL name TOK_NS_QUAL level
@@ -4785,7 +4786,7 @@ function nam_ppf_name_level(ns, name, level,
                             s, code, desc, l, x)
 {
     code = nam_ll_read_ns(ns, name, level)
-    s = ns TOK_NS_QUAL name (VERBOSE() ? TOK_LBRACE level TOK_RBRACE : EMPTY) TOK_TAB ppf__flags(code)
+    s = ns TOK_NS_QUAL name (VERBOSE() ? TOK_LBRACE level TOK_RBRACE : EMPTY) TOK_TAB ppf__allcodes(code)
     return s
 }
 
@@ -5108,9 +5109,9 @@ function stream_block(stream)
 function undivert(stream,
                   count, i, dstblk, divblk)
 {
-    dstblk = curr_dstblk()
+    dstblk = DSTBLK()
     dbg__print("divert", 2, sprintf("(undivert) START dstblk=%d, stream=%d",
-                                   curr_dstblk(), stream))
+                                   DSTBLK(), stream))
     if (dstblk < 0) {
         dbg__print("divert", 3, "(undivert) END because dstblk <0")
         return
@@ -5125,7 +5126,7 @@ function undivert(stream,
     divblk = stream_block(stream)
     if (blk_type(divblk) != BLK_AGG)
         panic(sprintf("(undivert) Block %d has type %s, not AGG",
-                      divblk, ppf__label(blk_type(stream))))
+                      divblk, ppf__1label(blk_type(stream))))
     if ((count = blktab[divblk, 0, "count"]) > 0) {
         # It is required to clear the stream immediately after undiverting.
         # This is to prevent
@@ -5173,7 +5174,7 @@ function undivert_to_file(stream, file,
     divblk = stream_block(stream)
     if (blk_type(divblk) != BLK_AGG)
         panic(sprintf("(undivert_to_file) Block %d has type %s, not AGG",
-                      divblk, ppf__label(blk_type(divblk))))
+                      divblk, ppf__1label(blk_type(divblk))))
     if ((count = blktab[divblk, 0, "count"]) > 0) {
         ship_out_to_file(divblk, file)
         cleardivert(stream)
@@ -5186,7 +5187,7 @@ function cleardivert(stream,
                      count, i, divblk)
 {
     dbg__print("divert", 2, sprintf("(cleardivert) START dstblk=%d, stream=%d",
-                                    curr_dstblk(), stream, divblk))
+                                    DSTBLK(), stream, divblk))
     if (stream <= TERMINAL) {
         dbg__print("divert", 3, "(cleardivert) END because stream <=0")
         return
@@ -5197,7 +5198,7 @@ function cleardivert(stream,
     divblk = stream_block(stream)
     if (blk_type(divblk) != BLK_AGG)
         panic(sprintf("(cleardivert) Block %d has type %s, not AGG",
-                      divblk, ppf__label(blk_type(divblk))))
+                      divblk, ppf__1label(blk_type(divblk))))
     if ((count = blktab[divblk, 0, "count"]) > 0) {
         for (i = 1; i <= count; i++) {
             delete blktab[divblk, i, "slot_type"]
@@ -5316,8 +5317,9 @@ function nam_system_p(name)
 }
 
 
-# Remove any symbol at level "level" or greater
-function sym_purge(level,
+# Remove any symbol at level "level" or greater,
+# in specified namespace.
+function sym_purge(ns, level,
                    f, s, d, sym_del_list, cmd_del_list,
                    pns, pname, pkey, plevel, ptag)
 {
@@ -5328,10 +5330,10 @@ function sym_purge(level,
         pname  = f[SFN_NAME]
         pkey   = f[SFN_KEY]
         plevel = f[SFN_LEVEL]+0
-        if (plevel >= level) {
+        ptag   = f[SFN_TAG]
+        if (pns == ns && plevel >= level) {
             if (double_underscores_p(pname))
                 continue
-            ptag = f[SFN_TAG]
             if (ptag == "user_block") {
                 cmd_del_list[symtab[pns, pname, pkey, plevel, ptag]] = TRUE
                 sym_del_list[pns, pname, pkey, plevel, ptag] = TRUE
@@ -5469,7 +5471,7 @@ function _syminfo_defined_p(info,
         return sym_ll_in_ns(M2_ENVNS, info__get(info, "name"), NOKEY, ROOT_LEVEL)
     else
         panic(sprintf("(_syminfo_defined_p) Cannot handle '%s' type %s",
-                      info__get(info, "name"), ppf__label(itype)))
+                      info__get(info, "name"), ppf__1label(itype)))
 }
 
 
@@ -5487,7 +5489,7 @@ function info__defined_lev_p(info, level, type,
     ins   = info__get(info, "ns")
     dbg__print("sym", 5, sprintf("(info__defined_lev_p) isn=%s, iname='%s' START", ins, iname))
 
-    if (type == TYPE_SYMBOL && (ins, iname, ikey, 0+level, "symval") in symtab) {
+    if (type == TYPE_SYMBOL && sym_ll_in_ns(ins, iname, ikey, 0+level)) {
         dbg__print("sym", 5, sprintf("(info__defined_lev_p) END [%s,\"%s\",\"%s\",%d,\"symval\"] Found Symbol => TRUE", ins, iname, ikey, level))
         return TRUE
     } else if (type == TYPE_USER && (ins, iname, ikey, 0+level, "user_block") in symtab) {
@@ -5567,7 +5569,7 @@ function syminfo_store(info, new_val,
         itype = info__get(info, "type")
         if (itype != TYPE_SYMBOL && itype != TYPE_LIST && itype != TYPE_ARRAY)
             error(sprintf("Name '%s' has type %s which is not valid here",
-                          iname, ppf__label(itype)))
+                          iname, ppf__1label(itype)))
 
         icode = info__get(info, "code")
         idxable = info__satisfies_type(info, PTYPE_IDXABLE)
@@ -5609,7 +5611,7 @@ function syminfo_store(info, new_val,
     # Add entry:        symtab[NS, iname, ikey, ilevel, "symval"] = new_val
     if (good) {
         dbg__print("sym", 2, sprintf("(syminfo_store) code=%s [%s, \"%s\",\"%s\",%d,\"symval\"]=%s",
-                                     ppf__flags(itype), ins, iname, ikey, ilevel, new_val))
+                                     ppf__allcodes(itype), ins, iname, ikey, ilevel, new_val))
         if (! ((itype == TYPE_SYMBOL && ikey == EMPTY) ||
                ((itype == TYPE_ARRAY || itype == TYPE_LIST) && ikey != EMPTY))) {
             info__dump(info)
@@ -5628,8 +5630,16 @@ function syminfo_store(info, new_val,
 }
 
 
+function sym_ll_depth_ns(ns, name, key, level,
+                         retval)
+{
+#    if (ns == M2_SYSNS)
+        return "symval"
+}
+
+
 function sym_ll_read_ns(ns, name, key, level,
-                        retval, i)
+                        retval, i, stackdepth)
 {
     if (level == EMPTY) # level = ROOT_LEVEL
         panic("(sym_ll_read_ns) Level must not be empty!")
@@ -5664,7 +5674,10 @@ function sym_ll_read_ns(ns, name, key, level,
     if (! sym_ll_in_ns(ns, name, key, level))
         panic(sprintf("(sym_ll_read_ns) symtab[%s, '%s','%s',%d,'symval'] does not exist",
                       ns, name, key, level))
-    retval = symtab[ns, name, key, level, "symval"]
+    stackdepth = sym_ll_depth_ns(ns, name, key, level)
+    #print_stderr("depth=" stackdepth)
+    #retval = symtab[ns, name, key, level, "symval"]
+    retval = symtab[ns, name, key, level, stackdepth]
 
     #print_stderr("ll_read: name='" name "'")
     if (! double_underscores_p(name))
@@ -5978,7 +5991,7 @@ function syminfo_increment(info, incr,
     else if (itype == TYPE_SEQUENCE)
         seq_ll_incr_ns(ins, iname, incr)
     else
-        panic("(syminfo_increment) Cannot handle type " ppf__label(itype))
+        panic("(syminfo_increment) Cannot handle type " ppf__1label(itype))
 }
 
 
@@ -6095,7 +6108,7 @@ function execute__text(text,
 
     __ship_text = text
 
-    if (curr_atmode() == MODE_AT_PROCESS) {
+    if (ATMODE() == MODE_AT_PROCESS) {
         dbg__print("xeq", 5, sprintf("(execute__text) Calling dosubs('%s')", text))
         text = dosubs(text)
     }
@@ -6461,22 +6474,23 @@ function xeq_cmd__break(cmd, cmdline,
 # @case
 function parse__case(                case_block, preamble_block, pstat)
 {
-    dbg__print("case", 3, sprintf("(parse__case) START dstblk=%d, $0='%s'", curr_dstblk(), $0))
+    dbg__print("case", 3, sprintf("(parse__case) START dstblk=%d, $0='%s'", DSTBLK(), $0))
 
     raise_level()
 
     # Create a new block for case_block
     case_block = blk_new(BLK_CASE)
-    dbg__print("case", 5, "(parse__case) New block # " case_block " type " ppf__label(blk_type(case_block)))
+    dbg__print("case", 5, "(parse__case) New block # " case_block " type " ppf__1label(blk_type(case_block)))
     preamble_block = blk_new(BLK_AGG)
-    dbg__print("case", 5, "(parse__case) New block # " case_block " type " ppf__label(blk_type(preamble_block)))
+    dbg__print("case", 5, "(parse__case) New block # " case_block " type " ppf__1label(blk_type(preamble_block)))
 
     $1 = ""
+    $2 = nam__qualify($2)
     blktab[case_block, 0, "casevar"]        = $2
     blktab[case_block, 0, "preamble_block"] = preamble_block
     blktab[case_block, 0, "seen_otherwise"] = FALSE
     blktab[case_block, 0, "dstblk"]         = preamble_block
-    blktab[case_block, 0, "blkvalid"]          = FALSE
+    blktab[case_block, 0, "blkvalid"]       = FALSE
     dbg__print_block("case", 7, case_block, "(parse__case) case_block")
     stk_push(__parse_stack, case_block) # Push it on to the parse_stack
 
@@ -6494,7 +6508,7 @@ function parse__case(                case_block, preamble_block, pstat)
 function parse__of(                case_block, of_block, of_val)
 {
     dbg__print("case", 3, sprintf("(parse__of) START dstblk=%d, mode=%s, $0='%s'",
-                                 curr_dstblk(), ppf__label(curr_atmode()), $0))
+                                  DSTBLK(), ppf__1label(ATMODE()), $0))
     if (check_parse_stack(BLK_CASE) != ERR_OKAY)
         error("@of: Parse error: " __m2_msg)
     case_block = stk_top(__parse_stack)
@@ -6519,7 +6533,7 @@ function parse__of(                case_block, of_block, of_val)
 function parse__otherwise(                case_block, otherwise_block)
 {
     dbg__print("case", 3, sprintf("(parse__otherwise) START dstblk=%d, mode=%s",
-                               curr_dstblk(), ppf__label(curr_atmode())))
+                               DSTBLK(), ppf__1label(ATMODE())))
     if (check_parse_stack(BLK_CASE) != ERR_OKAY)
         error("@otherwise: Parse error: " __m2_msg)
     case_block = stk_top(__parse_stack)
@@ -6544,7 +6558,7 @@ function parse__otherwise(                case_block, otherwise_block)
 function parse__endcase(                case_block) # OK
 {
     dbg__print("case", 3, sprintf("(parse__endcase) START dstblk=%d, mode=%s",
-                               curr_dstblk(), ppf__label(curr_atmode())))
+                               DSTBLK(), ppf__1label(ATMODE())))
     if (check_parse_stack(BLK_CASE) != ERR_OKAY)
         error("@endcase: Parse error: " __m2_msg)
 
@@ -6561,7 +6575,7 @@ function xeq__BLK_CASE(case_block,
 {
     block_type = blk_type(case_block)
     dbg__print("case", 3, sprintf("(xeq__BLK_CASE) START dstblk=%d, case_block=%d, type=%s",
-                                 curr_dstblk(), case_block, ppf__label(block_type)))
+                                 DSTBLK(), case_block, ppf__1label(block_type)))
 
     dbg__print_block("case", 7, case_block, "(xeq__BLK_CASE) case_block")
     if ((blk_type(case_block) != BLK_CASE) ||  \
@@ -6651,8 +6665,8 @@ function xeq_cmd__cleardivert(cmd, cmdline,
 {
     $0 = cmdline
     dbg__print("divert", 2, sprintf("(xeq_cmd__cleardivert) START dstblk=%d, cmdline='%s'",
-                                    curr_dstblk(), cmdline))
-    dbg__print_block("ship_out", 8, curr_dstblk(), "(xeq_cmd__cleardivert) curr_dstblk()")
+                                    DSTBLK(), cmdline))
+    dbg__print_block("ship_out", 8, DSTBLK(), "(xeq_cmd__cleardivert) DSTBLK()")
     if (NF == 0)
         cleardivert_all()
     else {
@@ -6705,7 +6719,7 @@ function xeq_cmd__data(cmd, cmdline,
                        lis, info, key, level, ins)
 {
     dbg__print("parse", 5, sprintf("(xeq_cmd__data) START dstblk=%d, mode=%s, $0='%s'",
-                                curr_dstblk(), ppf__label(curr_atmode()), $0))
+                                DSTBLK(), ppf__1label(ATMODE()), $0))
 
     $0 = cmdline
     if (NF == 0)
@@ -6860,7 +6874,7 @@ function xeq_cmd__divert(cmd, cmdline,
 {
     $0 = cmdline
     dbg__print("divert", 2, sprintf("(xeq_cmd__divert) START dstblk=%d, NF=%d, cmdline='%s'",
-                                   curr_dstblk(), NF, cmdline))
+                                   DSTBLK(), NF, cmdline))
     new_stream = (NF == 0) ? "0" : dosubs($1)
     if (!integerp(new_stream))
         return
@@ -6985,7 +6999,7 @@ function xeq_cmd__dump(cmd, cmdline,
         if (! ((what, 0, "type") in blktab))
             panic("(xeq_cmd__dump) No 'type' field for block " what)
         block_type = blk_type(what)
-        blk_label = ppf__label(block_type)
+        blk_label = ppf__1label(block_type)
         dbg__print("sym", 7, "(xeq_cmd__dump) block_type = " block_type)
         desc = ppf__BLK(what)
         buf = sprintf("Block # %d, Type=%s:\n", what, blk_label)
@@ -7004,13 +7018,13 @@ function xeq_cmd__dump(cmd, cmdline,
         # that if the user asks for the symbol table and there's nothing
         # to print, she'd probably like to know.  Perhaps a config file
         # was not read properly...
-        #warn(sprintf("%s: Empty %s table", ME(), ppf__flags(what_type)))
+        #warn(sprintf("%s: Empty %s table", ME(), ppf__allcodes(what_type)))
         warn(sprintf("%s: No data", ME()))
     } else if (emptyp(dumpfile))  # No FILE arg provided to @dump command
         print_debugfile(buf)
     else {
         dbg__print("sym", 3, sprintf("(xeq_cmd__dump) %s table dump to '%s'",
-                                    ppf__flags(what_type), dumpfile))
+                                    ppf__allcodes(what_type), dumpfile))
         print buf > dumpfile
         close(dumpfile)
     }
@@ -7065,7 +7079,8 @@ function _nat_scan_len(s,
 
 # TRUE if a is "naturally less than" b.
 function _nat_less_than(a, b,
-                        Ca, Cb, aTk, bTk, retval)
+                        Ca, Cb, aTk, bTk, retval,
+                        a_val, a_val_len, b_val, b_val_len)
 {
     if (a == EMPTY && b == EMPTY)
         return FALSE            # maybe not trigger a useless swap
@@ -7147,7 +7162,7 @@ function dump__symbols(target_namespace, filter_flags, include_sys, # caller nam
     dbg__print("sym", 4, "(dump__symbols) BEGIN")
     #if (first(filter_flags) != TYPE_SYMBOL)
     # if (first(filter_flags) != PTYPE_SCALAR)
-    #     panic("(dump__symbols) Bad type " ppf__flags(first(filter_flags)))
+    #     panic("(dump__symbols) Bad type " ppf__allcodes(first(filter_flags)))
     sym_define_all_deferred()
 
     # Build keys[] array, whose values are printable symbol names that
@@ -7169,7 +7184,7 @@ function dump__symbols(target_namespace, filter_flags, include_sys, # caller nam
         if (target_namespace != PTYPE_ANY &&
             target_namespace != ns) {
             # print_debugfile(sprintf("m2debug:(dump__names) ns filter: ns=%s, name=%s, code=%s, filter=%s",
-            #                         ns, name, ppf__label(code), ppf__label(filter_flags)))
+            #                         ns, name, ppf__1label(code), ppf__1label(filter_flags)))
             continue
         }
         if (!include_system && flag_1true_p(code, FLAG_SYSTEM))
@@ -7224,7 +7239,7 @@ function dump__sequences(target_namespace, type, include_sys,
 {
     dbg__print("seq", 4, "(dump__sequences) BEGIN")
     if (first(type) != TYPE_SEQUENCE)
-        panic("(dump__sequences) Bad type " ppf__flags(first(type)))
+        panic("(dump__sequences) Bad type " ppf__allcodes(first(type)))
 
     # Build keys[] array, whose values are printable symbol names that
     # pass restrictive checks.
@@ -7246,7 +7261,7 @@ function dump__sequences(target_namespace, type, include_sys,
                 # if (!include_sys && flag_1true_p(code, FLAG_SYSTEM))
                 #     continue
                 # dbg__print("seq", -6, sprintf("(dump__sequences) ns=%s, Adding name='%s', code=%s",
-                #                               ns, name, ppf__flags(code)))
+                #                               ns, name, ppf__allcodes(code)))
                 keys[++cnt] = ns TOK_NS_QUAL name
             }
         }
@@ -7268,7 +7283,7 @@ function dump__commands(target_namespace, type, include_sys,
 {
     dbg__print("cmd", 4, "(dump__commands) BEGIN")
     if (first(type) != TYPE_USER)
-        panic("(dump__commands) Bad type " ppf__flags(first(type)))
+        panic("(dump__commands) Bad type " ppf__allcodes(first(type)))
 
     # Build keys[] array, whose values are printable symbol names that
     # pass restrictive checks.
@@ -7493,8 +7508,8 @@ function parse__string(    str, string_block, pstat, d)
     str = blktab[string_block, 0, "str"]
 
     dbg__print("parse", 2, sprintf("(parse__string) str='%s', dstblk=%d, mode=%s",
-                                   str, curr_dstblk(),
-                                   ppf__label(blktab[string_block, 0, "atmode"])))
+                                   str, DSTBLK(),
+                                   ppf__1label(blktab[string_block, 0, "atmode"])))
 
     blktab[string_block, 0, "old.buffer"] = __buffer
     blktab[string_block, 0, "old.ns"]     = NS()
@@ -7524,7 +7539,7 @@ function ppf__BLK_STRING(blknum)
     return sprintf("  str     : '%s'\n"         \
                    "  atmode  : %s",
                    blktab[blknum, 0, "str"],
-                   ppf__label(blktab[blknum, 0, "atmode"]))
+                   ppf__1label(blktab[blknum, 0, "atmode"]))
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -7582,7 +7597,7 @@ function xeq_cmd__filedata(cmd, cmdline,
 {
     $0 = cmdline
     dbg__print("xeq", 2, sprintf("(xeq_cmd__filedata) START dstblk=%d, cmd=%s, cmdline='%s'",
-                                curr_dstblk(), cmd, cmdline))
+                                DSTBLK(), cmd, cmdline))
 
     if (NF < 2)
         error(sprintf("%s: Bad parameters%s",
@@ -7699,7 +7714,7 @@ function xeq_cmd__filedefine(cmd, cmdline,
 function parse__for(                  for_block, body_block, pstat, incr, info, nparts, level, cmd, me)
 {
     dbg__print("for", 5, sprintf("(parse__for) START dstblk=%d, mode=%s, $0='%s'",
-                                curr_dstblk(), ppf__label(curr_atmode()), $0))
+                                DSTBLK(), ppf__1label(ATMODE()), $0))
     cmd = $1
     me = TOK_AT nam__unqualify(rest($1))
     if (NF < 3)
@@ -7710,9 +7725,9 @@ function parse__for(                  for_block, body_block, pstat, incr, info, 
     # Create two new blocks: "for_block" for loop control (for_block),
     # and "body_block" for the loop code definition.
     for_block = blk_new(BLK_FOR)
-    dbg__print("for", 5, "(parse__for) for_block # " for_block " type " ppf__label(blk_type(for_block)))
+    dbg__print("for", 5, "(parse__for) for_block # " for_block " type " ppf__1label(blk_type(for_block)))
     body_block = blk_new(BLK_AGG)
-    dbg__print("for", 5, "(parse__for) body_block # " body_block " type " ppf__label(blk_type(body_block)))
+    dbg__print("for", 5, "(parse__for) body_block # " body_block " type " ppf__1label(blk_type(body_block)))
 
     blktab[for_block, 0, "body_block"] = body_block
     blktab[for_block, 0, "dstblk"]     = body_block
@@ -7761,7 +7776,7 @@ function parse__for(                  for_block, body_block, pstat, incr, info, 
 function parse__next(                   for_block)
 {
     dbg__print("for", 3, sprintf("(parse__next) START dstblk=%d, mode=%s, $0='%s'",
-                                curr_dstblk(), ppf__label(curr_atmode()), $0))
+                                DSTBLK(), ppf__1label(ATMODE()), $0))
     if (check_parse_stack(BLK_FOR) != ERR_OKAY)
         error("@next: Parse error: " __m2_msg)
     for_block = stk_pop(__parse_stack)
@@ -7784,7 +7799,7 @@ function xeq__BLK_FOR(for_block,
 {
     block_type = blk_type(for_block)
     dbg__print("for", 3, sprintf("(xeq__BLK_FOR) START dstblk=%d, for_block=%d, type=%s",
-                                curr_dstblk(), for_block, ppf__label(block_type)))
+                                DSTBLK(), for_block, ppf__1label(block_type)))
     dbg__print_block("for", 7, for_block, "(xeq__BLK_FOR) for_block")
     if ((block_type != BLK_FOR) || \
         (blktab[for_block, 0, "blkvalid"] != TRUE))
@@ -7999,7 +8014,7 @@ function ppf__BLK_FOR(blknum)
 # @if CONDITION
 function parse__if(                 name, if_block, true_block, pstat)
 {
-    dbg__print("if", 3, sprintf("(parse__if) START dstblk=%d, $0='%s'", curr_dstblk(), $0))
+    dbg__print("if", 3, sprintf("(parse__if) START dstblk=%d, $0='%s'", DSTBLK(), $0))
     name = $1
     $1 = ""
     sub("^[ \t]*", "")
@@ -8008,9 +8023,9 @@ function parse__if(                 name, if_block, true_block, pstat)
 
     # Create two new blocks: one for if_block, other for true branch
     if_block = blk_new(BLK_IF)
-    dbg__print("if", 5, "(parse__if) New block # " if_block " type " ppf__label(blk_type(if_block)))
+    dbg__print("if", 5, "(parse__if) New block # " if_block " type " ppf__1label(blk_type(if_block)))
     true_block = blk_new(BLK_AGG)
-    dbg__print("if", 5, "(parse__if) New block # " true_block " type " ppf__label(blk_type(true_block)))
+    dbg__print("if", 5, "(parse__if) New block # " true_block " type " ppf__1label(blk_type(true_block)))
 
     blktab[if_block, 0, "condition"]   = $0
     blktab[if_block, 0, "init_negate"] = (name == "@__m2__::unless")
@@ -8036,7 +8051,7 @@ function parse__if(                 name, if_block, true_block, pstat)
 function parse__else(                   if_block, false_block)
 {
     dbg__print("if", 3, sprintf("(parse__else) START dstblk=%d, mode=%s",
-                               curr_dstblk(), ppf__label(curr_atmode())))
+                               DSTBLK(), ppf__1label(ATMODE())))
     if (check_parse_stack(BLK_IF) != ERR_OKAY)
         error("@else: Parse error: " __m2_msg)
     if_block = stk_top(__parse_stack)
@@ -8061,7 +8076,7 @@ function parse__else(                   if_block, false_block)
 function parse__endif(                    if_block)
 {
     dbg__print("if", 3, sprintf("(parse__endif) START dstblk=%d, mode=%s",
-                               curr_dstblk(), ppf__label(curr_atmode())))
+                               DSTBLK(), ppf__1label(ATMODE())))
     if (check_parse_stack(BLK_IF) != ERR_OKAY)
         error("@endif: Parse error: " __m2_msg)
 
@@ -8078,7 +8093,7 @@ function xeq__BLK_IF(if_block,
 {
     block_type = blk_type(if_block)
     dbg__print("if", 3, sprintf("(xeq__BLK_IF) START dstblk=%d, if_block=%d, type=%s",
-                               curr_dstblk(), if_block, ppf__label(block_type)))
+                               DSTBLK(), if_block, ppf__1label(block_type)))
 
     dbg__print_block("if", 7, if_block, "(xeq__BLK_IF) if_block")
     if ((block_type != BLK_IF) || \
@@ -8280,7 +8295,7 @@ function xeq_cmd__ignore(cmd, cmdline,
                          readstat, save_line, save_lineno)
 {
     dbg__print("parse", 5, sprintf("(xeq_cmd__ignore) START dstblk=%d, mode=%s, $0='%s'",
-                                curr_dstblk(), ppf__label(curr_atmode()), $0))
+                                DSTBLK(), ppf__1label(ATMODE()), $0))
 
     $0 = cmdline
     if (NF == 0)
@@ -8458,13 +8473,18 @@ function xeq_cmd__incr(cmd, cmdline,
 # data.  If no symbol is specified, __INPUT__ is used by default.
 function xeq_cmd__input(cmd, cmdline,
                         name, info, getstat, input,
-                        ins)
+                        ins, level)
 {
     $0 = cmdline
     name = (NF == 0) ? "__INPUT__" : $1
-    info__create_from_text(name, info)
+
+    # print_stderr(sprintf("before, name='%s'", name))
+    level = info__create_from_text(name, info)
     ins = info__get(info, "ns")
-    info__gate(OP_CREATE, PTYPE_SCALAR, info, ins, LEVEL(), ME(), TRUE)
+    if (level == NAME_NOT_FOUND)
+        info__gate(OP_CREATE, PTYPE_SCALAR, info, ins, LEVEL(), ME(), TRUE)
+    else
+        info__gate(OP_UPDATE, PTYPE_SCALAR, info, ins, LEVEL(), ME(), TRUE)
 
     input = EMPTY
     getstat = getline input < TTY
@@ -8520,7 +8540,7 @@ function xeq_cmd__literal(cmd, cmdline,
                           readstat, save_line, save_lineno, lit_block)
 {
     dbg__print("parse", 5, sprintf("(xeq_cmd__literal) START dstblk=%d, mode=%s, $0='%s'",
-                                curr_dstblk(), ppf__label(curr_atmode()), $0))
+                                DSTBLK(), ppf__1label(ATMODE()), $0))
 
     $0 = cmdline
     if (NF == 0)
@@ -8579,7 +8599,7 @@ function xeq_cmd__local(cmd, cmdline,
                       ME(), name, VERBOSE() ? " [xeq_cmd__local:I]" : ""))
     if (nam_ll_in_ns(ins, name, LEVEL()))
         error(sprintf("%s: Name '%s' already defined as a %s",
-                      ME(), name, ppf__label(info__get(info, "type"))))
+                      ME(), name, ppf__1label(info__get(info, "type"))))
     nam_ll_write_ns(ins, name, LEVEL(), TYPE_SYMBOL)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
@@ -8598,13 +8618,13 @@ function parse__longdef(    name, sym_block, body_block, pstat,
                             info, ins)
 {
     stk_push(__me_stack, TOK_AT "longdef")
-    dbg__print("sym", 5, "(parse__longdef) START dstblk=" curr_dstblk() ", mode=" ppf__label(curr_atmode()) "; $0='" $0 "'")
+    dbg__print("sym", 5, "(parse__longdef) START dstblk=" DSTBLK() ", mode=" ppf__1label(ATMODE()) "; $0='" $0 "'")
 
     # Create two new blocks: one for the "longdef" block, other for definition body
     sym_block = blk_new(BLK_LONGDEF)
-    dbg__print("sym", 5, "(parse__longdef) New block # " sym_block " type " ppf__label(blk_type(sym_block)))
+    dbg__print("sym", 5, "(parse__longdef) New block # " sym_block " type " ppf__1label(blk_type(sym_block)))
     body_block = blk_new(BLK_AGG)
-    dbg__print("sym", 5, "(parse__longdef) New block # " body_block " type " ppf__label(blk_type(body_block)))
+    dbg__print("sym", 5, "(parse__longdef) New block # " body_block " type " ppf__1label(blk_type(body_block)))
 
     $1 = ""
     name = $2
@@ -8635,7 +8655,7 @@ function parse__longdef(    name, sym_block, body_block, pstat,
 function parse__endlongdef(    sym_block)
 {
     dbg__print("sym", 3, sprintf("(parse__endlongdef) START dstblk=%d, mode=%s",
-                                 curr_dstblk(), ppf__label(curr_atmode())))
+                                 DSTBLK(), ppf__1label(ATMODE())))
     if (check_parse_stack(BLK_LONGDEF) != ERR_OKAY)
         error("@endlongdef: Parse error: " __m2_msg)
     sym_block = stk_pop(__parse_stack)
@@ -8653,7 +8673,7 @@ function xeq__BLK_LONGDEF(longdef_block,
     stk_push(__me_stack, TOK_AT "longdef")
     block_type = blk_type(longdef_block)
     dbg__print("sym", 3, sprintf("(xeq__BLK_LONGDEF) START dstblk=%d, longdef_block=%d, type=%s",
-                                 curr_dstblk(), longdef_block, ppf__label(block_type)))
+                                 DSTBLK(), longdef_block, ppf__1label(block_type)))
     dbg__print_block("sym", 7, longdef_block, "(xeq__BLK_LONGDEF) longdef_block")
     if ((block_type != BLK_LONGDEF) ||
         (blktab[longdef_block, 0, "blkvalid"] != TRUE))
@@ -8727,7 +8747,7 @@ function xeq_cmd__m2ctl(cmd, cmdline,
 {
     $0 = cmdline
     dbg__print("xeq", 2, sprintf("(xeq_cmd__m2ctl) START dstblk=%d, cmdline='%s'",
-                                   curr_dstblk(), cmdline))
+                                   DSTBLK(), cmdline))
     if (NF == 0)
         error(sprintf("%s: Bad parameters%s",
                       "@m2ctl", VERBOSE() ? TOK_NEWLINE $0 : EMPTY))
@@ -8868,13 +8888,13 @@ function parse__newcmd(    name, user_block, body_block, pstat, nparam, p, pname
 {
     stk_push(__me_stack, TOK_AT "newcmd")
     nparam = 0
-    dbg__print("cmd", 5, "(parse__newcmd) START dstblk=" curr_dstblk() ", mode=" ppf__label(curr_atmode()) "; $0='" $0 "'")
+    dbg__print("cmd", 5, "(parse__newcmd) START dstblk=" DSTBLK() ", mode=" ppf__1label(ATMODE()) "; $0='" $0 "'")
 
     # Create two new blocks: one for the "new command" block, other for command body
     user_block = blk_new(BLK_USER)
-    dbg__print("cmd", 5, "(parse__newcmd) New block # " user_block " type " ppf__label(blk_type(user_block)))
+    dbg__print("cmd", 5, "(parse__newcmd) New block # " user_block " type " ppf__1label(blk_type(user_block)))
     body_block = blk_new(BLK_AGG)
-    dbg__print("cmd", 5, "(parse__newcmd) New block # " body_block " type " ppf__label(blk_type(body_block)))
+    dbg__print("cmd", 5, "(parse__newcmd) New block # " body_block " type " ppf__1label(blk_type(body_block)))
 
     $1 = ""
     name = $2
@@ -8937,7 +8957,7 @@ function parse__newcmd(    name, user_block, body_block, pstat, nparam, p, pname
 function parse__endcmd(                     newcmd_block)
 {
     dbg__print("cmd", 3, sprintf("(parse__endcmd) START dstblk=%d, mode=%s",
-                                 curr_dstblk(), ppf__label(curr_atmode())))
+                                 DSTBLK(), ppf__1label(ATMODE())))
     if (check_parse_stack(BLK_USER) != ERR_OKAY)
         error("@endcmd: Parse error: " __m2_msg)
     newcmd_block = stk_pop(__parse_stack)
@@ -8956,7 +8976,7 @@ function xeq__BLK_USER(newcmd_block,
 {
     block_type = blk_type(newcmd_block)
     dbg__print("cmd", 1, sprintf("(xeq__BLK_USER) START dstblk=%d, newcmd_block=%d, type=%s",
-                                 curr_dstblk(), newcmd_block, ppf__label(block_type)))
+                                 DSTBLK(), newcmd_block, ppf__1label(block_type)))
     dbg__print_block("cmd", 7, newcmd_block, "(xeq__BLK_USER) newcmd_block")
     if ((block_type != BLK_USER) ||
         (blktab[newcmd_block, 0, "blkvalid"] != TRUE))
@@ -9023,7 +9043,7 @@ function execute__user_body(user_block, args,
 {
     block_type = blk_type(user_block)
     dbg__print("cmd", 3, sprintf("(execute__user_body) START dstblk=%d, user_block=%d, type=%s",
-                                 curr_dstblk(), user_block, ppf__label(block_type)))
+                                 DSTBLK(), user_block, ppf__1label(block_type)))
     dbg__print_block("cmd", 7, user_block, "(execute__user_body) user_block")
     if ((block_type != BLK_USER) ||
         (blktab[user_block, 0, "blkvalid"] != TRUE))
@@ -9157,7 +9177,7 @@ function xeq_cmd__nextfile(cmd, cmdline,
                            readstat, save_line, save_lineno)
 {
     dbg__print("parse", 5, sprintf("(xeq_cmd__nextfile) START dstblk=%d, mode=%s, $0='%s'",
-                                curr_dstblk(), ppf__label(curr_atmode()), $0))
+                                DSTBLK(), ppf__1label(ATMODE()), $0))
     save_line = $0
     save_lineno = LINE()
 
@@ -9268,7 +9288,7 @@ function xeq_cmd__sequence(cmd, cmdline,
 {
     $0 = cmdline
     dbg__print("seq", 2, sprintf("(xeq_cmd__sequence) START dstblk=%d, cmd=%s, cmdline='%s'",
-                                curr_dstblk(), cmd, cmdline))
+                                DSTBLK(), cmd, cmdline))
     if (NF == 0)
         error(sprintf("%s: Bad parameters - Sequence name required%s",
                       ME(), VERBOSE() ? TOK_NEWLINE $0 : EMPTY))
@@ -9457,7 +9477,7 @@ function xeq_cmd__shell(cmd, cmdline,
 function xeq_cmd__split(cmd, cmdline,
                         sym, lis, count, lisinfo, code, level,
                         val, k, tmparr, agg_block,
-                        wantfs, tmpfs, ins, syminfo, fsinfo)
+                        wantfs, tmpfs, ins, syminfo, fsinfo, ins2)
 {
     dbg__print("cmd", 3, sprintf("(xeq_cmd__split) START"))
     $0 = cmdline
@@ -9498,7 +9518,7 @@ function xeq_cmd__split(cmd, cmdline,
         ins2 = syminfo["ns"] = NS()
     # if (! info__get(syminfo, "defined"))
     #     error(sprintf("%s: Symbol '%s' is not defined", ME(), sym))
-    info__gate(OP_READ, TYPE_SYMBOL, syminfo, ins, LEVEL(), ME(), TRUE)
+    info__gate(OP_READ, TYPE_SYMBOL, syminfo, ins2, LEVEL(), ME(), TRUE)
     val = info__get(syminfo, "value")
     if (emptyp(val))
         warn(sprintf("%s: Symbol '%s' is null", ME(), sym))
@@ -9769,8 +9789,8 @@ function xeq_cmd__undivert(cmd, cmdline,
 {
     $0 = cmdline
     dbg__print("divert", 2, sprintf("(xeq_cmd__undivert) START dstblk=%d, cmdline='%s'",
-                                   curr_dstblk(), cmdline))
-    dbg__print_block("divert", 8, curr_dstblk(), "(xeq_cmd__undivert) curr_dstblk()")
+                                   DSTBLK(), cmdline))
+    dbg__print_block("divert", 8, DSTBLK(), "(xeq_cmd__undivert) DSTBLK()")
     if (NF == 0) {
         undivert_all()
         return
@@ -9814,7 +9834,7 @@ function xeq_cmd__undivert(cmd, cmdline,
 # @until CONDITION
 function parse__while(                 name, while_block, body_block, pstat)
 {
-    dbg__print("while", 3, sprintf("(parse__while) START dstblk=%d, $0='%s'", curr_dstblk(), $0))
+    dbg__print("while", 3, sprintf("(parse__while) START dstblk=%d, $0='%s'", DSTBLK(), $0))
     name = $1
     $1 = ""
     sub("^[ \t]*", "")
@@ -9823,9 +9843,9 @@ function parse__while(                 name, while_block, body_block, pstat)
 
     # Create two new blocks: one for while_block, other for true branch
     while_block = blk_new(BLK_WHILE)
-    dbg__print("while", 5, "(parse__while) New block # " while_block " type " ppf__label(blk_type(while_block)))
+    dbg__print("while", 5, "(parse__while) New block # " while_block " type " ppf__1label(blk_type(while_block)))
     body_block = blk_new(BLK_AGG)
-    dbg__print("while", 5, "(parse__while) New block # " body_block " type " ppf__label(blk_type(body_block)))
+    dbg__print("while", 5, "(parse__while) New block # " body_block " type " ppf__1label(blk_type(body_block)))
 
     blktab[while_block, 0, "condition"] = $0
     blktab[while_block, 0, "init_negate"] = (name == "@__m2__::until")
@@ -9850,7 +9870,7 @@ function parse__while(                 name, while_block, body_block, pstat)
 function parse__endwhile(                    while_block)
 {
     dbg__print("while", 3, sprintf("(parse__endwhile) START dstblk=%d, mode=%s",
-                               curr_dstblk(), ppf__label(curr_atmode())))
+                               DSTBLK(), ppf__1label(ATMODE())))
     if (check_parse_stack(BLK_WHILE) != ERR_OKAY)
         error("@endwhile: Parse error: " __m2_msg)
     while_block = stk_pop(__parse_stack)
@@ -9866,7 +9886,7 @@ function xeq__BLK_WHILE(while_block,
 {
     block_type = blk_type(while_block)
     dbg__print("while", 3, sprintf("(xeq__BLK_WHILE) START dstblk=%d, while_block=%d, type=%s",
-                               curr_dstblk(), while_block, ppf__label(block_type)))
+                               DSTBLK(), while_block, ppf__1label(block_type)))
 
     dbg__print_block("while", 7, while_block, "(xeq__BLK_WHILE) while_block")
     if ((block_type != BLK_WHILE) || \
@@ -9947,7 +9967,7 @@ function ppf__BLK_WHILE(blknum)
 function xeq_cmd__wrap(cmd, cmdline)
 {
     dbg__print("parse", 5, sprintf("(xeq_cmd__wrap) START dstblk=%d, mode=%s, $0='%s'",
-                                curr_dstblk(), ppf__label(curr_atmode()), $0))
+                                DSTBLK(), ppf__1label(ATMODE()), $0))
 
     $0 = cmdline
     if (NF == 0)
@@ -9968,9 +9988,9 @@ function xeq_cmd__wrap(cmd, cmdline)
 function ship_out(obj_type, obj,
                   dstblk, name)
 {
-    dstblk = curr_dstblk()
+    dstblk = DSTBLK()
     dbg__print("ship_out", 3, sprintf("(ship_out) START dstblk=%d, obj_type=%s, obj='%s'",
-                                      dstblk, ppf__label(obj_type), obj))
+                                      dstblk, ppf__1label(obj_type), obj))
     if (dstblk < 0) {
         dbg__print("ship_out", 3, "(ship_out) END, because dstblk <0")
         return
@@ -10031,14 +10051,14 @@ function ship_out_to_file(block, file,
                                      block, file))
     if (blk_type(block) != BLK_AGG)
         panic(sprintf("(ship_out_to_file) Block %d has type %s, not AGG",
-                      block, ppf__label(blk_type(block))))
+                      block, ppf__1label(blk_type(block))))
 
     lim = blktab[block, 0, "count"]
     for (i = 1; i <= lim; i++) {
         slot_type = blk_ll_slot_type(block, i)
         if (slot_type != OBJ_TEXT)
             panic(sprintf("(ship_out_to_file) Block %d slot %d has type %s, not TEXT",
-                          block, i, ppf__label(slot_type)))
+                          block, i, ppf__1label(slot_type)))
 
         value = blk_ll_slot_value(block, i)
         print value > file
@@ -10640,7 +10660,7 @@ function macro_expand(macro,
     fntype = info__get(fninfo, "type")
     fnname = info__get(fninfo, "name")
     fnns   = info__get(fninfo, "ns")
-    dbg__print("dosubs", 5, "(macro_expand) fninfo[" fnns TOK_NS_QUAL fnname "] => " ppf__label(fntype))
+    dbg__print("dosubs", 5, "(macro_expand) fninfo[" fnns TOK_NS_QUAL fnname "] => " ppf__1label(fntype))
 
     if (fnns == M2_ENVNS) {
         if (info__get(fninfo, "defined")) {
@@ -10648,7 +10668,7 @@ function macro_expand(macro,
             macro_set_expansion(macro, sym_ll_read_ns(fnns, fnname, NOKEY, ROOT_LEVEL))
         } else if (strictp("env")) {
             error(sprintf("%s '%s' not defined%s",
-                          ppf__label(PTYPE_ENV_VAR),
+                          ppf__1label(PTYPE_ENV_VAR),
                           fnname, VERBOSE() ? " [(macro_expand) && __STRICT__[env]]" : EMPTY))
         } else {
             trace(TRACE_ENV_VAR, fnname,
@@ -10895,12 +10915,12 @@ function substitute_params(str, nparam, param,
 
 # qualify() can be given random text that it will look through.
 # dosubs() and qualify_braces() expect the first arg to be an actual name.
-# qualify() is NOP when curr_atmode() == MODE_AT_LITERAL
+# qualify() is NOP when ATMODE() == MODE_AT_LITERAL
 function qualify(s,
                  orig, r)
 {
     dbg__print("qual", 3, sprintf("(qualify) START; s='%s'", s))
-    if (curr_atmode() == MODE_AT_LITERAL) {
+    if (ATMODE() == MODE_AT_LITERAL) {
         trace(TRACE_QUALIFICATION, EMPTY,
               sprintf("[Qualify] NOP/LITERAL => '%s'", s))
         dbg__print("qual", 1, sprintf("(qualify) NOP/LITERAL; RETURNING '%s'", s))
@@ -11027,9 +11047,9 @@ function nam__qualify(text,
     if (ns == EMPTY)
         ns = info["ns"] = NS()
     key = info__get(info, "has_bracket") ? TOK_LBRACKET info__get(info, "key") TOK_RBRACKET : EMPTY
-    dbg__print("qual", 4, sprintf("(nam__qualify) text='%s' => %s ns='%s', name='%s' %s",
-                                  orig, pre, ns, name, post))
     retval = pre ns TOK_NS_QUAL name key post
+    dbg__print("qual", 4, sprintf("(nam__qualify) text='%s' => '%s'",
+                                  orig, retval))
     return retval
 }
 
@@ -12624,6 +12644,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
         __monthdays[month, leap] = monthdays[i+1]
     }
 
+    # Set up Roman numerals
     __roman[__rv[1]=1000] =  "M"
     __roman[__rv[2]= 900] = "CM"; __roman[__rv[6]=90] = "XC"; __roman[__rv[10]=9] = "IX"
     __roman[__rv[3]= 500] =  "D"; __roman[__rv[7]=50] =  "L"; __roman[__rv[11]=5] =  "V"
@@ -12659,8 +12680,6 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
         }
         if ("hostname" in PROG) {
             sym_deferred_symbol("__HOST__",     PTYPE_READONLY_SYMBOL,  "hostname", "-s")
-            # OpenBSD's hostname(1) does not support the `-f' flag;
-            # since it is already the default on FreeBSD, I just removed it.
             sym_deferred_symbol("__HOSTNAME__", PTYPE_READONLY_SYMBOL,  "hostname", "")
         }
         if ("uname" in PROG) {
@@ -12776,7 +12795,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     # Used for tracing internal functions - not reachable by user
     split("dosubs qualify", array, TOK_SPACE)
     for (elem in array)
-        nam_ll_write_ns(M2_SYSNS, array[elem], ROOT_LEVEL, TYPE_INTERNAL FLAG_SYSTEM)
+        nam_ll_write_ns(M2_SYSNS, array[elem], ROOT_LEVEL, PTYPE_INTERNAL FLAG_SYSTEM)
 
     # Set up terminal to receive output as stream 0 (default)
     div2blktab[0] = TERMINAL
@@ -13161,16 +13180,17 @@ function end_program(diverted_streams_final_disposition,
 
     run_hook("m2_exit")
 
-    # for (stream in div2blktab)
-    #     blk_master_delete(div2blktab[stream])
-
     # Close open files, attempt to reclaim block
     close_open_files(TRUE)
 
     # NOTE - dev stuff here
-    # nam_purge(ROOT_LEVEL)
-    # sym_purge(ROOT_LEVEL)
-
+    #
+    # for (stream in div2blktab)
+    #     blk_master_delete(div2blktab[stream])
+    #
+    # nam_purge(M2_SYSNS, ROOT_LEVEL)
+    # sym_purge(M2_SYSNS, ROOT_LEVEL)
+    #
     # if (tracing_event_p(TRACE_BLOCKS))
     #     blk_nicer_dump_blktab()
 

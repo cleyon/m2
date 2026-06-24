@@ -1,7 +1,7 @@
 @newcmd m2::one
 @__m2__::define FOO 1
 Begin
-@case FOO
+@case m2::FOO
 Preamble
 Of clauses may print in different order - that's okay
 @of 2

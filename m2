@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-06-22 09:39:02 cleyon>
+#  Time-stamp:  <2026-06-22 11:03:05 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -6490,7 +6490,7 @@ function parse__case(                case_block, preamble_block, pstat)
     blktab[case_block, 0, "preamble_block"] = preamble_block
     blktab[case_block, 0, "seen_otherwise"] = FALSE
     blktab[case_block, 0, "dstblk"]         = preamble_block
-    blktab[case_block, 0, "blkvalid"]          = FALSE
+    blktab[case_block, 0, "blkvalid"]       = FALSE
     dbg__print_block("case", 7, case_block, "(parse__case) case_block")
     stk_push(__parse_stack, case_block) # Push it on to the parse_stack
 
@@ -6508,7 +6508,7 @@ function parse__case(                case_block, preamble_block, pstat)
 function parse__of(                case_block, of_block, of_val)
 {
     dbg__print("case", 3, sprintf("(parse__of) START dstblk=%d, mode=%s, $0='%s'",
-                                 DSTBLK(), ppf__1label(ATMODE()), $0))
+                                  DSTBLK(), ppf__1label(ATMODE()), $0))
     if (check_parse_stack(BLK_CASE) != ERR_OKAY)
         error("@of: Parse error: " __m2_msg)
     case_block = stk_top(__parse_stack)
@@ -11047,9 +11047,9 @@ function nam__qualify(text,
     if (ns == EMPTY)
         ns = info["ns"] = NS()
     key = info__get(info, "has_bracket") ? TOK_LBRACKET info__get(info, "key") TOK_RBRACKET : EMPTY
-    dbg__print("qual", 4, sprintf("(nam__qualify) text='%s' => %s ns='%s', name='%s' %s",
-                                  orig, pre, ns, name, post))
     retval = pre ns TOK_NS_QUAL name key post
+    dbg__print("qual", 4, sprintf("(nam__qualify) text='%s' => '%s'",
+                                  orig, retval))
     return retval
 }
 
@@ -12644,6 +12644,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
         __monthdays[month, leap] = monthdays[i+1]
     }
 
+    # Set up Roman numerals
     __roman[__rv[1]=1000] =  "M"
     __roman[__rv[2]= 900] = "CM"; __roman[__rv[6]=90] = "XC"; __roman[__rv[10]=9] = "IX"
     __roman[__rv[3]= 500] =  "D"; __roman[__rv[7]=50] =  "L"; __roman[__rv[11]=5] =  "V"
@@ -12679,8 +12680,6 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
         }
         if ("hostname" in PROG) {
             sym_deferred_symbol("__HOST__",     PTYPE_READONLY_SYMBOL,  "hostname", "-s")
-            # OpenBSD's hostname(1) does not support the `-f' flag;
-            # since it is already the default on FreeBSD, I just removed it.
             sym_deferred_symbol("__HOSTNAME__", PTYPE_READONLY_SYMBOL,  "hostname", "")
         }
         if ("uname" in PROG) {

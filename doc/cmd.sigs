@@ -1,0 +1,80 @@
+:Chars          Arbitrary text, consumes rest of command line
+:Filename       Like :Chars, I guess.  Path is stripped of "quotes" and <brackets>
+:Int            Integer
+:Name           String of letters/numbers, might or might not be a real Symbol/List/Array name
+:Optional       Item may or may not appear
+:Repeat         Last element (not :Chars) can be repeated an aribitrary # of additional times
+:Void           Command takes no parameters; only valid singly
+
+@append         SYM:Name VALUE:Chars
+@array          ARR:Name
+@break          :Void
+@case           VAR:Name
+@cleardivert    :Optional :Repeat N
+@comment        :Optional TEXT:Chars
+@continue       :Void
+@data           LIS:Name
+@debug          :Optional TEXT:Chars
+@decr           NAME:Name :Optional N:Int
+@default        NAME:Name VALUE:Chars
+@define         NAME:Name :Optional VALUE:Chars
+@divert         :Optional N:Int
+@divpop         :Void
+@divpush        N:Int
+@dump           :Optional WHAT:Name :Optional FILE:Filename
+@dumpall        :Optional :Repeat WHAT:Name
+@dumpdef        :Optional :Repeat SYM:Name
+@echo           :Optional :Chars
+@else           :Void
+@endcase        :Void
+@endcmd         :Void
+@enddata        :Void
+@endif          :Void
+@endlongdef     :Void
+@endwhile       :Void
+@error          :Optional TEXT:Chars
+@esyscmd        CMDLINE:Chars
+@eval           TEXT:Chars
+@exit           :Optional N:Int
+@filedata       LIS:Name FILE:Filename
+@filedefine     NAME:Name FILE:Filename
+@for            VAR:Name START:Int END:Int :Optional INCR:Int
+@foreach        VAR:Name LIS:Name
+@if             EXPR:Chars
+@ignore         PATTERN:Chars
+@import         LIB:Name FILE:Filename
+@include        FILE:Filename
+@incr           NAME:Name :Optional N:Integer
+@initialize     NAME:Name VAL:Chars
+@input          :Optional NAME:Name
+@list           LIS:Name
+@literal        PATTERN:Chars
+@local          NAME:Name
+@longdef        NAME:Name
+@namespace      NAMESPACE:Name
+@newcmd         SPEC:Chars
+@next           VAR:Name
+@nextfile       :Void
+@nsinclude      FILE:Filename
+@of             TEXT:Chars
+@otherwise      :Void
+@paste          FILE:Filename
+@readonly       NAME:Name
+@return         :Optional VALUE:Chars
+@sequence       ID:Name ACTION:Name :Optional ARG:Chars
+@set            NAME:Name :Optional TEXT:Chars
+@shell          PATTERN:Name :Optional PROG:Chars
+@split          NAME:Name LIS:Name :Optional FS:Chars
+@syscmd         CMDLINE:Chars
+@tracemode      :Optional FLAG:Chars
+@traceoff       :Optional :Repeat SYM:Name
+@traceon        :Optional :Repeat SYM:Name
+@typeout        :Void
+@undefine       NAME:Name
+@undivert       :Optional :Repeat N:Integer
+ -or-
+@undivert       N:Integer FILE:Filename
+@unless         EXPR:Chars
+@until          EXPR:Chars
+@while          EXPR:Chars
+@wrap           TEXT:Chars

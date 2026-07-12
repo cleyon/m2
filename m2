@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-06-24 16:10:01 cleyon>
+#  Time-stamp:  <2026-07-05 23:45:37 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #  SPDX-License-Identifier: BSD-2-Clause
@@ -102,10 +102,10 @@ BEGIN {
 # DO NOT CHANGE anything below this line
 
 BEGIN {
-    TRUE  = OKAY     =  1;              NULL     = "/dev/null"
-    FALSE = EOF      =  0;              STDIN    = "/dev/stdin"
-    ERROR = VOID     = -1;              STDOUT   = "/dev/stdout"
-    EMPTY = NOKEY    = "";              STDERR   = "/dev/stderr"
+    TRUE    = OKAY   =  1;              NULL     = "/dev/null"
+    FALSE   = EOF    =  0;              STDIN    = "/dev/stdin"
+    UNKNOWN = ERROR  = -1;              STDOUT   = "/dev/stdout"
+    EMPTY   = NOKEY  = "";              STDERR   = "/dev/stderr"
     ROOT_LEVEL       =  0;              TTY      = "/dev/tty"
     M2_NS            = "m2";            M2_SYSNS = "__m2__"
                                         M2_ENVNS = "ENV"
@@ -172,22 +172,22 @@ BEGIN {
     # Not part of master char list!
     # For __TRACEMODE__   see also: xeq_cmd__tracemode()
     TRACE_ARGUMENTS             = "a" #*std: show actual arguments in each call
-    TRACE_BLOCKS                = "b" # m2:  show block create/destroy
+    TRACE_BLOCKS                = "B" # m2:  show block create/destroy
    #TRACE_MULTI_LINE            = "c" # std: show multiple trace lines for each call
+    TRACE_COMMAND               = "C" # m2:  trace when a command is executed
     TRACE_EXPANSION             = "e" #*std: show macro expansion
     TRACE_ENV_VAR               = "E" # m2:  show ENV::var read/write
     TRACE_SHOW_FILE_NAME        = "f" #*std: show file name
     TRACE_INPUT_FILE_CHG        = "i" # gnu: trace when input file changes
     TRACE_SHOW_LINE_NUM         = "l" #*std: show line number
-    TRACE_COMMAND               = "m" # m2:  trace when a command is executed
     TRACE_PATH_SEARCH           = "p" # gnu: trace when search path search succeeds
-    TRACE_QUALIFICATION         = "q" # m2:  trace ns qualification during parse()
-    TRACE_READLINE              = "r" # m2:  trace readline() text
-    TRACE_SYMBOL_READ_WRITE     = "s" # m2:  trace symbol low-level read & write
+    TRACE_QUALIFICATION         = "Q" # m2:  trace ns qualification during parse()
+    TRACE_READLINE              = "R" # m2:  trace readline() text
+    TRACE_SYMBOL_READ_WRITE     = "S" # m2:  trace symbol low-level read & write
     TRACE_ALL                   = "t" # std: trace internal macros too
     TRACE_SET_ON                = "T" # m2:  Set __TRACE__ to true
+    TRACE_WILDCARD_ALL_FLAGS    = "V" # std: shorthand for all options
    #TRACE_SHOW_CALL_ID          = "x" # std: show unique id/number macro expansions
-    TRACE_WILDCARD_ALL_FLAGS    = "V" # std: shorthand for all of above options
     #
     TRACE_DEFAULT_SET           = TRACE_ARGUMENTS       TRACE_EXPANSION         \
                                   TRACE_SHOW_FILE_NAME  TRACE_SHOW_LINE_NUM
@@ -2592,7 +2592,7 @@ function blk_master_delete(blknum,
         warn("(blk_master_delete) Refusing to delete blk " blknum " refcnt > 0")
         return
     }
-    seen[VOID] = TRUE
+    split("", seen)
     blk_walk_delete(blknum, seen)
 }
 function blk_lint(blknum,
@@ -2711,7 +2711,7 @@ function blk_dump_blktab(    f, b, blknum, seen, type)
 #
 #     # # "Touching the Void" (2003 movie)  True story of mountaineers on the
 #     # # west face of Siula Grande.  https://www.imdb.com/title/tt0379557/
-#     # seen[VOID] = TRUE
+#     # seen[DISCARD] = TRUE
 #     # seen[TERMINAL] = TRUE
 #     for (i = 1; i <= cnt; i++) {
 #         blknum = blks[i]
@@ -4382,7 +4382,7 @@ function nam__scan(text, info,
     # To see if `text' is syntactically correct, check info["lexvalid"] but
     # be aware you may be referring to a non-existent symbol.
     info["_key_valid"] = info["_lexvalid"] = info["declared"] = \
-       info["_defined"] = info["_protected"] = VOID
+       info["_defined"] = info["_protected"] = UNKNOWN
     info["errorp"] = info["has_qual"] = info["has_bracket"] = FALSE
 
     # Simple test for
@@ -4811,25 +4811,25 @@ function info__get(info, elem,
                    val)
 {
     if (elem == "defined") {
-        if (info["_defined"] == VOID)
+        if (info["_defined"] == UNKNOWN)
             info["_defined"] = _syminfo_defined_p(info)
         return info["_defined"]
     }
     else if (elem == "key_valid") {
-        if (info["_key_valid"] == VOID)
+        if (info["_key_valid"] == UNKNOWN)
             info["_key_valid"] = nam__valid_p(info__get(info, "key"),
                                               PTYPE_KEY, TRUE)
         return info["_key_valid"]
     }
     else if (elem == "lexvalid") {
-        if (info["_lexvalid"] == VOID)
+        if (info["_lexvalid"] == UNKNOWN)
             info["_lexvalid"] = info__get(info, "name_valid") &&
                                 (info__get(info, "nparts") == 1 ? TRUE  \
                                  : info__get(info, "key_valid"))
         return info["_lexvalid"]
     }
     else if (elem == "protected") {
-        if (info["_protected"] == VOID)
+        if (info["_protected"] == UNKNOWN)
             info["_protected"] = _sym_ll_protected(info["name"], info["code"])
         return info["_protected"]
     }
@@ -5026,7 +5026,7 @@ function stk_pop(stack,
         trace(TRACE_INPUT_FILE_CHG, EMPTY,
               sprintf("[File Update] Input file now '%s'", blktab[new_top, 0, "filename"]))
     } else if (stkname == "stream_stack") {
-        new_top = stk_empty_p(stack) ? -1 : stk_top(stack)
+        new_top = stk_empty_p(stack) ? DISCARD : stk_top(stack)
         sys__write("__DIVNUM__", new_top)
         dbg__print("divert", 2, sprintf("(stk_pop) __DIVNUM__ now %d", new_top))
     }
@@ -7069,7 +7069,7 @@ function _nat_scan_len(s,
                        c, slen, l)
 {
     if (emptyp(s))
-        return -1               # like RLENGTH when match() fails
+        return ERROR            # -1, like RLENGTH when match() fails
     slen = length(s);  l = 1
     c = _nat_class(first(s))
     while (l <= slen && _nat_class(substr(s, l+1, 1)) == c)
@@ -8304,7 +8304,7 @@ function xeq_cmd__ignore(cmd, cmdline,
     save_lineno = LINE()
 
     dbg__print("parse", 5, "(xeq_cmd__ignore) CALLING read_lines_until()")
-    readstat = read_lines_until(cmdline, VOID)
+    readstat = read_lines_until(cmdline, DISCARD)
     dbg__print("parse", 5, "(xeq_cmd__ignore) RETURNED FROM read_lines_until() => " ppf__bool(readstat))
     if (readstat != TRUE)
         error(sprintf("%s: Pattern '%s' not found%s",
@@ -9182,7 +9182,7 @@ function xeq_cmd__nextfile(cmd, cmdline,
     save_lineno = LINE()
 
     dbg__print("parse", 5, "(xeq_cmd__nextfile) CALLING read_lines_until()")
-    readstat = read_lines_until("", VOID)
+    readstat = read_lines_until("", DISCARD)
     dbg__print("parse", 5, "(xeq_cmd__nextfile) RETURNED FROM read_lines_until() => " ppf__bool(readstat))
     if (readstat != TRUE)
         error("@nextfile: Read error:" save_line, "", save_lineno)
@@ -11348,7 +11348,7 @@ function xeq_fn__dow(fn, M, nparam, param,
     if (nparam == 0) {
         if (SECURITY() >= SEC_PARANOID)
             security_violation(sprintf("%s: Forbidden", ME()))
-        if (! sys__in(M2_SYSNS, "__DATE__", NOKEY))
+        if (! sys__in("__DATE__", NOKEY))
             error(sprintf("%s: Date not available", ME()))
         date  = sys__read("__DATE__", NOKEY)
         year  = 0 + substr(date, 1, 4)
@@ -11745,11 +11745,13 @@ function xeq_fn__ifdef(fn, M, nparam, param,
 #       If the first argument is equal to the second,
 #          then the value is the third argument.
 #       If not, and if there are more than four arguments,
-#          the process is repeated with arguments 4, 5, 6, and 7.
-#       Otherwise, the value is either the fourth argument, or void if omitted.
+#          the process is repeated with arguments 4, 5, 6, 7.
+#       Otherwise, the value is either the fourth argument,
+#          or void (empty string) if omitted.
 #
 #       NOTE: All of the {} clauses must be on the same line,
-#       since dosubs CANNOT call readline().
+#       since dosubs CANNOT call readline().  However, you
+#       may use the @\ or @\- line continuation mechanism.
 #
 #*****************************************************************************
 # @ifelse{S1}{S2}{True text}{False text}...@
@@ -12153,7 +12155,13 @@ function xeq_fn__mid(fn, M, nparam, param,
     if (param_Length == 0)
         return EMPTY
     if (param_Begin == 0)
-        B = abs(param_Begin = mth__sign(param_Length))
+        if (param_Length > 0)
+            B = param_Begin = 1
+        else {
+            B = abs(param_Begin = param_Length)
+            param_Length = -param_Length
+        }
+
     L = abs(param_Length)
     if (param_Length >= 0)
         substr_Length = L
@@ -12197,7 +12205,7 @@ function xeq_fn__mjd(fn, M, nparam, param,
     } else if (nparam == 0) {
         if (SECURITY() >= SEC_PARANOID)
             security_violation(sprintf("@%s@: Forbidden", fn))
-        if (! sys__in(M2_SYSNS, "__DATE__", NOKEY))
+        if (! sys__in("__DATE__", NOKEY))
             error(sprintf("%s: Date not available", ME()))
         date  = sys__read("__DATE__", NOKEY)
         year  = 0 + substr(date, 1, 4)
@@ -12515,115 +12523,116 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
                         monthdays, month, leap)
 {
     # Constants
-   #EPSILON                     = mth__epsilon()
-    EULER                       = exp(1)
-    JD_MJD_DIFF                 = 2400000.5
-    LOG2                        = log(2)
-    LOG10                       = log(10)
-    MAX_DBG_LEVEL               = 10
-    MAX_PARAM                   = 20
-    NOT_FOUND                   = 0     # index() when search fails
-    PI                          = atan2(0, -1)
-    SEQ_DEFAULT_INCR            = 1
-    SEQ_DEFAULT_INIT            = 0
-    TAU                         = 8 * atan2(1, 1) # 2 * PI
-      DEG_RADIANS               = TAU / 360
-    TERMINAL                    = 0     # Block zero means standard output
+    DISCARD               = -1  # Canonical block/stream to discard data
+   #EPSILON               = mth__epsilon()
+    EULER                 = exp(1)
+    JD_MJD_DIFF           = 2400000.5
+    LOG2                  = log(2)
+    LOG10                 = log(10)
+    MAX_DBG_LEVEL         = 10
+    MAX_PARAM             = 20
+    NOT_FOUND             = 0   # index() when search fails
+    PI                    = atan2(0, -1)
+    SEQ_DEFAULT_INCR      = 1
+    SEQ_DEFAULT_INIT      = 0
+    TAU                   = 8 * atan2(1, 1) # 2 * PI
+      DEG_RADIANS         = TAU / 360
+    TERMINAL              = 0   # Block zero means standard output
 
     # Block types and labels
-    BLK_AGG                     = "a"; __label[BLK_AGG]               = "AGG"
-      OBJ_BLKNUM                = "K"; __label[OBJ_BLKNUM]            = "obj_BLKNUM"
-      OBJ_CMD                   = "c"; __label[OBJ_CMD]               = "obj_CMD"
-      OBJ_TEXT                  = "t"; __label[OBJ_TEXT]              = "obj_TEXT"
-      OBJ_USER                  = "j"; __label[OBJ_USER]              = "obj_USER"
-    BLK_CASE                    = "e"; __label[BLK_CASE]              = "CASE"
-    BLK_FILE                    = "f"; __label[BLK_FILE]              = "FILE"
-    BLK_FOR                     = "O"; __label[BLK_FOR ]              = "FOR"
-    BLK_IF                      = "i"; __label[BLK_IF]                = "IF"
-    BLK_LONGDEF                 = "d"; __label[BLK_LONGDEF]           = "LONGDEF"
-    BLK_STRING                  = "q"; __label[BLK_STRING]            = "STRING"
-    BLK_TERMINAL                = "T"; __label[BLK_TERMINAL]          = "TERMINAL"
-    BLK_USER                    = "u"; __label[BLK_USER]              = "USER"
-    BLK_WHILE                   = "w"; __label[BLK_WHILE]             = "WHILE"
+    BLK_AGG               = "a"; __label[BLK_AGG]               = "AGG"
+      OBJ_BLKNUM          = "K"; __label[OBJ_BLKNUM]            = "obj_BLKNUM"
+      OBJ_CMD             = "c"; __label[OBJ_CMD]               = "obj_CMD"
+      OBJ_TEXT            = "t"; __label[OBJ_TEXT]              = "obj_TEXT"
+      OBJ_USER            = "j"; __label[OBJ_USER]              = "obj_USER"
+    BLK_CASE              = "e"; __label[BLK_CASE]              = "CASE"
+    BLK_FILE              = "f"; __label[BLK_FILE]              = "FILE"
+    BLK_FOR               = "O"; __label[BLK_FOR ]              = "FOR"
+    BLK_IF                = "i"; __label[BLK_IF]                = "IF"
+    BLK_LONGDEF           = "d"; __label[BLK_LONGDEF]           = "LONGDEF"
+    BLK_STRING            = "q"; __label[BLK_STRING]            = "STRING"
+    BLK_TERMINAL          = "T"; __label[BLK_TERMINAL]          = "TERMINAL"
+    BLK_USER              = "u"; __label[BLK_USER]              = "USER"
+    BLK_WHILE             = "w"; __label[BLK_WHILE]             = "WHILE"
     #
     VALID_BLOCK_TYPES = BLK_AGG     BLK_CASE   BLK_FILE     BLK_FOR  BLK_IF \
                         BLK_LONGDEF BLK_STRING BLK_TERMINAL BLK_USER BLK_WHILE
 
     # CRUDP
-    OP_CREATE                   = "1"; __label[OP_CREATE]             = "CREATE"
-    OP_READ                     = "2"; __label[OP_READ]               = "READ"
-    OP_UPDATE                   = "3"; __label[OP_UPDATE]             = "UPDATE"
-    OP_DELETE                   = "4"; __label[OP_DELETE]             = "DELETE"
-    OP_PRINT                    = "5"; __label[OP_PRINT]              = "PRINT"
+    OP_CREATE             = "1"; __label[OP_CREATE]             = "CREATE"
+    OP_READ               = "2"; __label[OP_READ]               = "READ"
+    OP_UPDATE             = "3"; __label[OP_UPDATE]             = "UPDATE"
+    OP_DELETE             = "4"; __label[OP_DELETE]             = "DELETE"
+    OP_PRINT              = "5"; __label[OP_PRINT]              = "PRINT"
 
     # Various modes
-    MODE_AT_LITERAL             = "'"; __label[MODE_AT_LITERAL]       = "Literal"
-    MODE_AT_PROCESS             = "@"; __label[MODE_AT_PROCESS]       = "ProcessAt"
-    MODE_HOOKS_ENABLED          = "h"; __label[MODE_HOOKS_ENABLED]    = "HooksEnabled"
-    MODE_IO_CAPTURE             = "v"; __label[MODE_IO_CAPTURE]       = "CaptureIO"
-    MODE_IO_SILENT              = "z"; __label[MODE_IO_SILENT]        = "SilentIO"
-    MODE_TEXT_PRINT             = "p"; __label[MODE_TEXT_PRINT]       = "PrintText"
-    MODE_TEXT_STRING            = "s"; __label[MODE_TEXT_STRING]      = "StringText"
-    MODE_STREAMS_DISCARD        = "X"; __label[MODE_STREAMS_DISCARD]  = "DiscardStream"
-    MODE_STREAMS_SHIP_OUT       = ">"; __label[MODE_STREAMS_SHIP_OUT] = "ShipOutStream"
-    MODE_XEQ_NORMAL             = "x"; __label[MODE_XEQ_NORMAL]       = "XeqNormal"
-    MODE_XEQ_BREAK              = "b"; __label[MODE_XEQ_BREAK]        = "XeqBreak"
-    MODE_XEQ_CONTINUE           = "o"; __label[MODE_XEQ_CONTINUE]     = "XeqContinue"
-    MODE_XEQ_RETURN             = "r"; __label[MODE_XEQ_RETURN]       = "XeqReturn"
-    SORT_NATURAL                = "G"; __label[SORT_NATURAL]          = "SortNatural"
-    SORT_INTEGER                = "H"; __label[SORT_INTEGER]          = "SortInteger"
+    MODE_AT_LITERAL       = "'"; __label[MODE_AT_LITERAL]       = "Literal"
+    MODE_AT_PROCESS       = "@"; __label[MODE_AT_PROCESS]       = "ProcessAt"
+    MODE_HOOKS_ENABLED    = "h"; __label[MODE_HOOKS_ENABLED]    = "HooksEnabled"
+    MODE_IO_CAPTURE       = "v"; __label[MODE_IO_CAPTURE]       = "CaptureIO"
+    MODE_IO_SILENT        = "z"; __label[MODE_IO_SILENT]        = "SilentIO"
+    MODE_TEXT_PRINT       = "p"; __label[MODE_TEXT_PRINT]       = "PrintText"
+    MODE_TEXT_STRING      = "s"; __label[MODE_TEXT_STRING]      = "StringText"
+    MODE_STREAMS_DISCARD  = "X"; __label[MODE_STREAMS_DISCARD]  = "DiscardStream"
+    MODE_STREAMS_SHIP_OUT = ">"; __label[MODE_STREAMS_SHIP_OUT] = "ShipOutStream"
+    MODE_XEQ_NORMAL       = "x"; __label[MODE_XEQ_NORMAL]       = "XeqNormal"
+    MODE_XEQ_BREAK        = "b"; __label[MODE_XEQ_BREAK]        = "XeqBreak"
+    MODE_XEQ_CONTINUE     = "o"; __label[MODE_XEQ_CONTINUE]     = "XeqContinue"
+    MODE_XEQ_RETURN       = "r"; __label[MODE_XEQ_RETURN]       = "XeqReturn"
+    SORT_NATURAL          = "G"; __label[SORT_NATURAL]          = "SortNatural"
+    SORT_INTEGER          = "H"; __label[SORT_INTEGER]          = "SortInteger"
 
     # Initialization status
-    INIT_DOTFILES               = "."; __label[INIT_DOTFILES  ]       = "Dotfiles" # load_init_files()
-    INIT_ORD                    = "#"; __label[INIT_ORD       ]       = "Ord"      # initialize_ord()
-    INIT_ROT13                  = "<"; __label[INIT_ROT13     ]       = "Rot13"    # initialize_rot13()
+    INIT_DOTFILES         = "."; __label[INIT_DOTFILES  ]       = "Dotfiles" # load_init_files()
+    INIT_ORD              = "#"; __label[INIT_ORD       ]       = "Ord"      # initialize_ord()
+    INIT_ROT13            = "<"; __label[INIT_ROT13     ]       = "Rot13"    # initialize_rot13()
 
     # When to flush standard output
-    SYNC_FORCE                  = 0 # only on request or end of job
-    SYNC_FILE                   = 1 # at end of each processed file; default.
-    SYNC_LINE                   = 2 # after every printed line
+    SYNC_FORCE            = 0 # only on request or end of job
+    SYNC_FILE             = 1 # at end of each processed file; default.
+    SYNC_LINE             = 2 # after every printed line
 
     # Tokens used in boolean expression evaluation
-    TOK_AND                     = "&&"
-    TOK_AT                      = "@"
-    TOK_AT_BRACE                = "@{"
-    TOK_BACKSLASH               = "\\"
-    TOK_CANRUN_P                = "?R"; __predicate_token["canrun"]  = TOK_CANRUN_P
-    TOK_COLON                   = ":"
-    TOK_DEFINED_P               = "?D"; __predicate_token["defined"] = TOK_DEFINED_P
-    TOK_EXISTS_P                = "?X"; __predicate_token["exists"]  = TOK_EXISTS_P
-    TOK_LBRACE                  = "{"
-    TOK_LBRACKET                = "["
-    TOK_LPAREN                  = "("
-    TOK_NEWLINE                 = "\n"
-    TOK_NOT                     = "!"
-    TOK_NS_QUAL                 = TOK_COLON TOK_COLON
-    TOK_OR                      = "||"
-    TOK_QUOTE                   = "\""
-    TOK_RBRACE                  = "}"
-    TOK_RBRACKET                = "]"
-    TOK_RPAREN                  = ")"
-    TOK_SLASH                   = "/"
-    TOK_TAB                     = "\t"
+    TOK_AND               = "&&"
+    TOK_AT                = "@"
+    TOK_AT_BRACE          = "@{"
+    TOK_BACKSLASH         = "\\"
+    TOK_CANRUN_P          = "?R"; __predicate_token["canrun"]  = TOK_CANRUN_P
+    TOK_COLON             = ":"
+    TOK_DEFINED_P         = "?D"; __predicate_token["defined"] = TOK_DEFINED_P
+    TOK_EXISTS_P          = "?X"; __predicate_token["exists"]  = TOK_EXISTS_P
+    TOK_LBRACE            = "{"
+    TOK_LBRACKET          = "["
+    TOK_LPAREN            = "("
+    TOK_NEWLINE           = "\n"
+    TOK_NOT               = "!"
+    TOK_NS_QUAL           = TOK_COLON TOK_COLON
+    TOK_OR                = "||"
+    TOK_QUOTE             = "\""
+    TOK_RBRACE            = "}"
+    TOK_RBRACKET          = "]"
+    TOK_RPAREN            = ")"
+    TOK_SLASH             = "/"
+    TOK_TAB               = "\t"
 
     # Errors
-    ERR_OKAY                    =    0
-    NAME_NOT_FOUND              =  -10 # nam__{lookup,find} no result - not considered an error
-    ERR_FENCE                   = -100 # if (ret < ERR_FENCE) error(...)
-    ERR_PARSE_STACK             = -101
-    ERR_PARSE_MISMATCH          = -102
-    ERR_PARSE_DEPTH             = -103
-    ERR_SCAN_INVALID_NAME       = -104
+    ERR_OKAY              =    0
+    NAME_NOT_FOUND        =  -10 # nam__{lookup,find} no result - not considered an error
+    ERR_FENCE             = -100 # if (ret < ERR_FENCE) error(...)
+    ERR_PARSE_STACK       = -101
+    ERR_PARSE_MISMATCH    = -102
+    ERR_PARSE_DEPTH       = -103
+    ERR_SCAN_INVALID_NAME = -104
 
     # Global variables
-    __buffer                    = EMPTY
-    __curr_level                = ROOT_LEVEL
-    __me_stack[0]               = 0;    __me_stack["name"]     = "me_stack"  # :-)
-    __ns_stack[0]               = 0;    __ns_stack["name"]     = "ns_stack"
-    __parse_stack[0]            = 0;    __parse_stack["name"]  = "parse_stack"
-    __source_stack[0]           = 0;    __source_stack["name"] = "source_stack"
-    __stream_stack[0]           = 0;    __stream_stack["name"] = "stream_stack"
-    __wrap_cnt                  = 0
+    __buffer              = EMPTY
+    __curr_level          = ROOT_LEVEL
+    __me_stack[0]         = 0;    __me_stack["name"]     = "me_stack"  # :-)
+    __ns_stack[0]         = 0;    __ns_stack["name"]     = "ns_stack"
+    __parse_stack[0]      = 0;    __parse_stack["name"]  = "parse_stack"
+    __source_stack[0]     = 0;    __source_stack["name"] = "source_stack"
+    __stream_stack[0]     = 0;    __stream_stack["name"] = "stream_stack"
+    __wrap_cnt            = 0
 
     srand()                     # Seed random number generator
     stk_push(__ns_stack, M2_SYSNS)

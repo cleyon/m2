@@ -22,6 +22,16 @@
 .\" CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 .\" OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 .\" OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+.\"
+.\" = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+.\"
+.\" [from groff.info]
+.\" To leave the debugging statements in the code
+.\" and have them turned on by a command line flag:
+.\"      .if \n(DB .tm Debugging Output
+.\" To activate these statements say:
+.\"      groff -rDB=1 file
+.\"
 .Dd $Mdocdate$
 .Dt M2 1
 .Os
@@ -30,8 +40,8 @@
 .Nd Line-oriented macro processor
 .Sh SYNOPSIS
 .Nm
-.Op Ar name=value ...
-.Op Ar file ...
+.Op Ar name=value No ...
+.Op Ar file No ...
 .Sh DESCRIPTION
 .Nm
 is a line-oriented macro processor, a
@@ -69,7 +79,7 @@ based upon whether a macro is or is not defined.
 Comments are removed from the output.
 .Ic @comment
 commands appear on a line of their own and are dropped from the output.
-.Ic @rem ...@
+.Ic @rem No ... Ns Ic @
 macros are embedded in the input text and produce no output.
 Use
 .Ic @ignore
@@ -78,7 +88,7 @@ for a multi-line comment.
 Manage multiple output data streams with diversions.
 Different streams may be saved to different files.
 .It
-Partition symbol names into different namespaces.
+Partition symbol names into separate namespaces.
 .Va Legal::approved
 and
 .Va Audit::approved
@@ -272,7 +282,7 @@ Lists are ordered collections with integer keys.
 Arrays are unordered collections with arbitrary text keys.
 Elements of both arrays and lists are accessed
 by appending
-.Ql Bq Ar key
+.Bq Ar key
 to the array or list name.
 Lists and arrays must be declared before use.
 See section
@@ -283,7 +293,7 @@ There may be occasions when you wish to continue a logical line
 onto the next physical line.
 It is common in many Unix programs for a
 .Ql \e
-character at end of line to do this.
+character at the end of a line to do this.
 However,
 .Nm
 is not in the business of altering, without being requested, text which
@@ -291,17 +301,22 @@ may be sent to other programs.
 In order to continue lines, the characters
 .Ic @\e
 may be used at the end of a logical line, indicating that the next line shall
-be joined to the first line without any intervening newline.
-If you wish to append the next line with a newline separator,
-end the current line with
-.Ic @\en
+be joined to the previous without any intervening newline.
+This results in
+.Dq Va line1 Ns Va line2 .
 This allows
 .Nm
 to work on files with backslashes without disturbing
 them, while still providing a mechanism for line continuation that will
 not be triggered spuriously.
-.Ic @\e-
-will also remove leading whitespace from the subsequent line.
+If you wish to append the next line with a newline separator,
+end the current line with
+.Ic @\en .
+This results in
+.Dq Va line1 Ns Ic \en Ns Va line2 .
+A third variant,
+.Ic @\e- ,
+removes leading whitespace from the subsequent line.
 .Pp
 .Em Example :
 .Bd -literal -offset indent -compact
@@ -410,7 +425,7 @@ is only valid inside a
 or
 .Ic @while
 block.
-.It Ic @case Ar NAME Oo Ar PREAMBLE... Oc Oo Ic @of Va TEXT ... Oc Oo Ic @otherwise Va ... Oc Ic @endcase
+.It Ic @case Ar NAME Oo Ar PREAMBLE Ns No ... Oc Oo Ic @of Va TEXT No ... Oc Oo Ic @otherwise No ... Oc Ic @endcase
 Evaluate value of
 .Va NAME ,
 comparing it with
@@ -441,7 +456,7 @@ The text and commands of the
 block are expected
 to compensate for the lack of a preamble.
 .Pc
-.It Ic @cleardivert Op Ar N ...
+.It Ic @cleardivert Op Ar N No ...
 Clear stream(s) specified by
 .Va N .
 If no arguments are provided then all streams are cleared.
@@ -473,7 +488,7 @@ is only valid inside a
 or
 .Ic @while
 block.
-.It Ic @data Ar LIS Ar ... Ic @enddata
+.It Ic @data Ar LIS No ... Ic @enddata
 Store all lines until
 .Ic @enddata
 into list
@@ -558,7 +573,7 @@ is omitted, output is sent to
 Like
 .Ic @dump
 but include System symbols.
-.It Ic @dumpdef Op Ar SYM ...
+.It Ic @dumpdef Op Ar SYM No ...
 Output definition of
 .Va SYM
 to
@@ -633,7 +648,7 @@ For complete control over error messages, variant
 prints only
 .Va TEXT ,
 omitting file and line number information.
-.It Ic @esyscmd Ar CMDLINE...
+.It Ic @esyscmd Ar CMDLINE Ns No ...
 Execute
 .Va CMDLINE
 in a subshell.
@@ -703,7 +718,7 @@ does not print an error message if
 does not exist.
 See also
 .Ic @define .
-.It Ic @for Ar VAR START END Oo Ar INCR Oc Ar ... Oc Ic @next Ar VAR
+.It Ic @for Ar VAR START END Oo Ar INCR Oc No ... Ic @next Ar VAR
 Execute a loop with
 .Va VAR
 taking on successive
@@ -714,12 +729,15 @@ and
 Default
 .Va INCR
 is 1.
-.It Ic @foreach Ar VAR ARR No | Ar LIS ... Ic @next Ar VAR
+.\" .It Ic @foreach Ar VAR ARR No | Ar LIS ... Ic @next Ar VAR
+.It Ic @foreach Ar VAR NAME No ... Ic @next Ar VAR
 Execute a loop with
 .Va VAR
 taking on successive values of
 .Em keys
-to an array or list.
+of
+.Va NAME ,
+which must be an array or list.
 .Em Note :
 Different Awk implementations may return array keys in differing order.
 However, lists and data created with
@@ -727,7 +745,7 @@ However, lists and data created with
 or
 .Ic @filedata
 are guaranteed to return their integer indices in numerical order.
-.It Ic @if Ar EXPR ... Oo Ic @else Ar ... Oc Ic @endif
+.It Ic @if Ar EXPR No ... Oo Ic @else No ... Oc Ic @endif
 Include subsequent lines of text if boolean expression is True.
 If
 .Va EXPR
@@ -808,7 +826,7 @@ Declare
 .Va NAME
 as a symbol local to the current level.
 The name must not be qualified.
-.It Ic @longdef Ar NAME ... Ic @endlongdef
+.It Ic @longdef Ar NAME No ... Ic @endlongdef
 Set value of
 .Va NAME
 to all lines until
@@ -820,7 +838,7 @@ the current namespace.
 The name should not be quoted.
 See also
 .Ic @ns@ .
-.It Ic @newcmd Ar NAME ... Ic @endcmd
+.It Ic @newcmd Ar NAME No ... Ic @endcmd
 Create a user command
 .Va NAME
 whose definition will be all lines until
@@ -937,7 +955,7 @@ which means fields will be split on whitespace.
 See also
 .Ic @join@ ,
 .Ic @list .
-.It Ic @syscmd Ar CMDLINE...
+.It Ic @syscmd Ar CMDLINE Ns No ...
 Execute
 .Va CMDLINE
 using Awk's
@@ -946,7 +964,7 @@ function.
 Standard output and standard error are both discarded.
 The command's exit code is saved in
 .Va __SYSVAL__ .
-.It Ic @tracemode Op Ar FLAG...
+.It Ic @tracemode Op Ar FLAG Ns No ...
 With no arguments, reset trace flags to default value.
 Preceding flag with
 .Ql +
@@ -954,14 +972,16 @@ or
 .Ql \-
 will add to or remove from trace flags;
 otherwise, overwrite trace flags with new value.
-See also
-.Va __TRACEMODE__ .
-.It Ic @traceoff Op Ar SYM ...
+See also symbol
+.Va __TRACEMODE__
+and section
+.Sx Tracing .
+.It Ic @traceoff Op Ar SYM No ...
 Disable tracing for specified symbols.
 If
 .Va SYM
 is omitted, disable tracing for all symbols.
-.It Ic @traceon Op Ar SYM ...
+.It Ic @traceon Op Ar SYM No ...
 Enable tracing for specified symbols.
 If
 .Va SYM
@@ -977,7 +997,7 @@ Remove definition of
 .Va NAME .
 Symbols can also be removed from the command line with
 .Ql U=<symName>
-.It Ic @undivert Oo Ar N ... Oc No | Ar N FILE
+.It Ic @undivert Oo Ar N No ... Oc No | Ar N FILE
 Inject stream
 .Va N
 (default all) into current stream.
@@ -990,7 +1010,7 @@ After a stream has been undiverted, it is implicitly cleared.
 See the
 .Sx Streams and Diversions
 section.
-.It Ic @unless Ar EXPR ... Oo Ic @else Ar ... Oc Ic @endif
+.It Ic @unless Ar EXPR No ... Oo Ic @else No ... Oc Ic @endif
 Include subsequent text if
 .Va EXPR
 is False.
@@ -999,11 +1019,11 @@ If
 is a simple NAME, check if NAME\ ==\ 0 (or undefined).
 See section
 .Sx Boolean Expressions .
-.It Ic @until Ar EXPR ... Ic @endwhile
+.It Ic @until Ar EXPR No ... Ic @endwhile
 Repeatedly evaluate input lines while boolean expression
 .Va EXPR
 is False and stop when it becomes True.
-.It Ic @while Ar EXPR ... Ic @endwhile
+.It Ic @while Ar EXPR No ... Ic @endwhile
 Repeatedly evaluate input lines while boolean expression
 .Va EXPR
 is True and stop when it becomes False.
@@ -1040,6 +1060,25 @@ which is also the default value.
 See also the
 .Sx Tracing
 section for additional information.
+.Ss Environment
+.Nm
+implements a special namespace named
+.Qq ENV
+which contains symbols for every process environment variable.
+Simply refer to
+.Qq @ENV::variable@
+to expand
+.Va variable Ap s
+value.
+The value of
+.Va __STRICT__[env]
+determines whether accessing an undefined environment
+variable results in the empty string or an error.
+If this concerns you, use
+.Qq defined(ENV::variable)
+to determine if
+.Va variable
+is defined in the process environment.
 .Ss Functions
 The following built-in functions are recognized:
 .Pp
@@ -1147,7 +1186,7 @@ performs the same calculations but does not output the result.
 However, assignments are still performed and
 .Va __EXPR__
 is still set.
-.It Ic @format Ar FMT Oo Ar ARG ... Oc Ns Ic @
+.It Ic @format Ar FMT Oo Ar ARG No ... Oc Ns Ic @
 Print up to five parameters (args 2..6),
 .\" Five params is entirely arbitrary, limited only by my patience
 .\" for repeatedly typing printf()'s for cases that will likely
@@ -1200,9 +1239,9 @@ is defined, return
 else return
 .Va FALSE_TEXT .
 The
-.Ql Bro Va FALSE_TEXT Brc
+.Bro Va FALSE_TEXT Brc
 clause is optional, and defaults to the empty string.
-.It Ic @ifelse{ Ns Ar arg1 Ns Ic }{ Ns Ar arg2 Ns Ic }{ Ns Ar arg3 Ns Ic }{ Ns arg4 Ns Ic } Ns Ar ... Ns Ic @
+.It Ic @ifelse{ Ns Ar arg1 Ns Ic }{ Ns Ar arg2 Ns Ic }{ Ns Ar arg3 Ns Ic }{ Ns Ar arg4 Ns Ic } Ns No ... Ns Ic @
 .Ic @ifelse@
 takes three or more arguments.
 If the first argument is equal to the second, then the value is the
@@ -1250,7 +1289,7 @@ defined, return
 else return
 .Va FALSE_TEXT .
 The
-.Ql Bro Va FALSE_TEXT Brc
+.Bro Va FALSE_TEXT Brc
 clause is optional, and defaults to the empty string.
 .It Ic @index Ar SYM SUBSTR Ns Ic @
 Return the position of
@@ -1403,7 +1442,7 @@ Strings longer than
 .Va WIDTH
 are truncated as necessary.
 Variant
-.Ic Ic @srjust@
+.Ic @srjust@
 does not truncate output.
 .It Ic @rot13 Ar SYM Ns Ic @
 Output value of
@@ -1587,7 +1626,7 @@ as in
 will return the number of elements in the array or list.
 .Ss Mathematical Expressions
 The
-.Ic @expr ...@
+.Ic @expr No ... Ns Ic @
 function evaluates mathematical expressions and
 inserts their results.
 .Ic @expr@
@@ -1760,10 +1799,10 @@ accepts negative arguments for both
 and
 .Va LEN .
 Consider the symbol SYM containing the seven character string
-.Dq ABCDEFG ,
+.Dq ABCDEFG ;
 counting characters from 1 (as in Awk), and also backwards from the
 end of the string:
-.Bd -offset indent
+.Bd -literal -offset indent
 .TS
 tab(&);
 l r r r r r r r.
@@ -1786,22 +1825,40 @@ characters to the right, which includes the initial character.
 \ \ \ => EF
 .Ed
 .Pp
-Positive lengths look to the right, negative lengths look to the left.
-From the same initial position, the two characters looking left are
-.Qq CD ,
-and note they do
+While positive lengths look to the right, negative lengths look to the left;
+but note they do
 .Em not
 include the initial character.
+From the same initial position (5 or -3), the two characters looking left are
+.Qq CD .
 .Bd -literal -offset indent -compact
 @mid SYM -3 -2@
 \ \ \ => CD
 .Ed
 .Pp
-If
+Even though there is no position zero, if
 .Va BEGIN
-does have a value of zero, it is coerced to either +1 or -1,
-depending on the sign of
-.Va LEN .
+is given a value of 0, it is silently coerced to either
+.Ql 1
+if
+.Va LEN
+is positive,
+or an artificial
+.Dq end of string
+if
+.Va LEN
+is negative.
+This is so
+.Dl @mid SYM 0 N@
+returns the first
+.Va N
+characters of
+.Va SYM ,
+and
+.Dl @mid SYM 0 -N@
+returns the last
+.Va N
+characters.
 .Ss Namespaces
 Every symbol is implicitly qualified at parse time; unqualified names
 are resolved by searching each namespace in the namespace search list.
@@ -1861,32 +1918,13 @@ ns2::X=@ns2::X@
 In m2, X=@X@
 \ \ \ => In m2, X=A very normal @define command
 .Ed
-.Pp
-.Nm
-implements a special namespace named
-.Qq ENV
-which contains symbols for every process environment variable.
-Simply refer to
-.Qq @ENV::variable@
-to expand
-.Va variable Ap s
-value.
-The value of
-.Va __STRICT__[env]
-determines whether accessing an undefined environment
-variable results in the empty string or an error.
-If this concerns you, use
-.Qq defined(ENV::variable)
-to determine if
-.Va variable
-is defined in the process environment.
 .Ss Sequences
 .Nm
 supports named sequences, which are integer values.  By default,
 sequences begin at 0 and increment by 1 as appropriate.  These
 defaults can be changed, and the value can be updated or restarted.
 You create and manage sequences with the
-.Ql Ic @sequence Ar ID Cm ACTION Oo Ar arg Oc
+.Ic @sequence Ar ID Cm ACTION Oo Ar arg Oc
 command.
 Valid actions are:
 .Pp
@@ -2015,13 +2053,13 @@ All subsequent output is discarded.
 .It @divert Ar N
 All subsequent output is sent to stream
 .Va N .
-.It @divert Ar N1 N2 ...
-Error!  Multiple arguments are not allowed.
+.It @divert Ar N1 N2 No ...
+Error!  Multiple streams are not allowed.
 .El
 .It Em Undivert :
 .Bl -tag -width @undivert_N1_N2____ -compact -offset indent
 .It @undivert
-Inject all diversions, in numerical order, into the current stream.
+Inject all streams, in numerical order, into the current diversion.
 .It @undivert 0
 No effect.
 .It @undivert \-1
@@ -2029,9 +2067,9 @@ No effect.
 .It @undivert Ar N
 Inject only stream
 .Va N
-into the current stream.
-.It @undivert Ar N1 N2 ...
-Inject all specified diversions into current stream,
+into the current diversion.
+.It @undivert Ar N1 N2 No ...
+Inject all specified streams into current diversion,
 in argument order (not numerical order).
 .It @undivert Ar N FILE
 As an extension to m4's undivert,
@@ -2271,7 +2309,7 @@ Operating system name.
 .It Va __PID__
 .Nm
 process id.
-.It Va __PROG__[...]
+.It Va __PROG__[ Ns No ... Ns Va ]
 Paths to various system utility programs.
 .It Va __SECURITY__
 Security level (0, 2, or 3).
@@ -2321,7 +2359,9 @@ or
 .Ic @syscmd
 command.
 .It Va __TIMESTAMP__
-ISO 8601 timestamp, with "T" separator.
+ISO 8601 timestamp, with
+.Ql T
+separator.
 See section
 .Sx Times and Dates .
 .It Va __TIME__
@@ -2393,24 +2433,23 @@ prints
 \ \ \ => 1945\&\-07\&\-16T05:30:00\&\-0600
 .Ed
 .Ss Tracing
-Tracing an
 .Nm
-file results in printing additional diagnostic information
+tracing prints additional diagnostic information
 to the debug file when certain triggering events occur.
 It most frequently happens when a macro is expanded but there are other
 possible triggers.
 These lines are prefixed with "M2Trace:" for easy identification.
-System symbol
+Symbol
 .Va __TRACE__
 provides control over tracing output; nothing will be printed for any
 event if its value is False.
 Once it is True, tracing output is managed by calling the commands
 .Ic @traceon
 and
-.Ic @traceoff ,
+.Ic @traceoff
 to control which macros will be traced, and
 .Ic @tracemode
-which controls various options.
+to control various options.
 .Bl -inset
 .It Em Trace On :
 Calling
@@ -2424,9 +2463,10 @@ Called without arguments, bare
 .Ic @traceon
 will trace
 .Sy ALL
-symbols, including internal built-ins: it does this by enabling the "t"
+symbols, including internal built-ins: it does this by enabling the
+.Ql t
 option in the trace mode.
-.It @traceon SYM ...
+.It @traceon SYM No ...
 Calling
 .Ic @traceon
 with one or more symbol names will enable tracing for those symbols.
@@ -2438,29 +2478,31 @@ so it is possible to request tracing for symbols that are not yet defined.
 .It @traceoff
 Calling
 .Ic @traceoff
-with no arguments will clear the "t" flag from the trace modes and also set
+with no arguments will clear the
+.Ql t
+flag from the trace modes and also set
 .Va __TRACE__
 to False.
-.It @traceoff SYM ...
+.It @traceoff SYM No ...
 Calling
 .Ic @traceoff
 with one or more symbol names will disable tracing for those symbols.
-It makes no changes to the "t" trace mode nor to
+It makes no changes to the
+.Ql t
+trace mode nor to
 the value of
 .Va __TRACE__ .
 .El
 .It Em Trace Configuration :
 Tracing is configured by specifying one or more flag letters, of which
-"t" is just one of several.
+.Ql t
+is just one of several.
 .Bl -tag -width @tracemode_FLAGS___ -compact -offset indent
 .It @tracemode
-With no arguments, the trace flags are reset to their default values.
-.\"     BSD default = eq
-.\"     GNU default = aqe
-Currently, the
-.Nm
-default value is "ae", although this is subject to change.
-.It @tracemode [{+|\-}]FLAG...
+With no arguments, the trace flags are reset to their default values,
+currently
+.Qq aefl .
+.It @tracemode [{+|\-}]FLAG Ns No ...
 Otherwise, if the argument consists of the various flag letters shown
 below, the value of trace flags is set to the argument, overriding its
 previous value.
@@ -2474,6 +2516,10 @@ These are the only values accepted by
 Most do not alter the value of
 .Va __TRACE__ ;
 only T and V can change it.
+.Nm
+adds a number of additional flag letters as extensions;
+they are all upper-case to better differentiate them from
+standard flags.
 .Pp
 .Bl -tag -width indent -offset indent
 .It a   \" BSD & GNU
@@ -2482,7 +2528,7 @@ This applies to all macro calls if the `t' flag is used, otherwise only
 the macros covered by calls of
 .Ic @traceon .
 This flag is enabled by default.
-.It b   \" m2 only
+.It B   \" m2 only
 Print a message each time a block is created or destroyed.
 .\" .It c   \" BSD & GNU
 .\" [CURRENTLY NOT IMPLEMENTED]
@@ -2490,6 +2536,8 @@ Print a message each time a block is created or destroyed.
 .\" A line is shown when the macro is seen, but before the arguments are
 .\" collected; a second line when the arguments have been collected and a
 .\" third line after the call has completed.
+.It C   \" m2 extension
+Print a message when a built-in command is executed.
 .It e   \" BSD & GNU
 Show the expansion of each macro call, if it is not void.
 This applies to all macro calls if the `t' flag is used,
@@ -2500,13 +2548,13 @@ This flag is enabled by default.
 Print a message when an environment variable is read, written, or queried.
 .It f   \" BSD & GNU
 Show the current input file name in each trace output line.
+This flag is enabled by default.
 .It i   \" GNU only
 Print a message each time the current input file is changed, giving file
 name and input line number.
 .It l   \" BSD & GNU
 Show the current input line number in each trace output line.
-.It m   \" m2 extension
-Print a message when a built-in command is executed.
+This flag is enabled by default.
 .It p   \" GNU only
 Print a message when a named file is found through the path search
 mechanism, giving the actual filename used.
@@ -2514,15 +2562,15 @@ mechanism, giving the actual filename used.
 .\" Quote actual arguments and macro expansions in the
 .\" display with the current quotes.
 .\" [m2 - NOT IMPLEMENTED: this is quite useless because m2 has no quote characters.]
-.It q   \" m2 extension
+.It Q   \" m2 extension
 Print a message when a namespace qualification is performed.
-.It r   \" m2 extension
+.It R   \" m2 extension
 Print a message whenever an input line is read.
-.It s   \" m2 extension
+.It S   \" m2 extension
 Print a message when a symbol is read or written.
 .It t   \" BSD & GNU
 Trace all macro calls.
-.It T
+.It T   \" m2 extension
 When encountered as an unadorned flag letter or with "+",
 .Va __TRACE__
 is set to True; "\-T" sets it to False.
@@ -2642,8 +2690,8 @@ A parameter may be designated as
 .Dq optional
 by suffixing its name with an equals sign
 .Ql = .
-The optional default value may be supplied on the right hand side;
-or, if omitted, the empty string is used.
+An optional default value may be supplied on the right hand side;
+or, if omitted, the empty string will be used.
 All required parameters must be supplied with arguments when the command is invoked.
 .Pp
 .Em Example :
@@ -2666,6 +2714,7 @@ This table will have @n@ lines:
 @next i
 @endcmd
 @;
+@comment        Generate the default @table
 @table
 \ \ \ => This table will have 9 lines:
 \ \ \ => |  N | N^2 | sqrt(N) |

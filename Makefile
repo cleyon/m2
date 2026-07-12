@@ -37,10 +37,10 @@ debug:
 	$(GAWK) -D -f m2
 
 m2.cat1: m2.1
-	nroff -mdoc $^ > $@
+	tbl $^ | nroff -mdoc > $@
 
 m2.ps: m2.1
-	groff -Tps -mdoc $^ > $@
+	tbl $^ | groff -Tps -mdoc > $@
 
 m2.pdf: m2.ps
 	pstopdf $^ -o $@

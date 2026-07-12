@@ -1,80 +1,119 @@
-:Chars          Arbitrary text, consumes rest of command line
-:Filename       Like :Chars, I guess.  Path is stripped of "quotes" and <brackets>
-:Int            Integer
-:Name           String of letters/numbers, might or might not be a real Symbol/List/Array name
-:Optional       Item may or may not appear
-:Repeat         Last element (not :Chars) can be repeated an aribitrary # of additional times
-:Void           Command takes no parameters; only valid singly
+Every command has a "signature", which is a list of tagged elements.
+Attempting to use the empty string as a signature is an error.  (The
+correct signature to indicate "no parameters" is ":void".)  Every
+element must be tagged with a `:' tag; any NAME prefix is optional.
 
-@append         SYM:Name VALUE:Chars
-@array          ARR:Name
-@break          :Void
-@case           VAR:Name
-@cleardivert    :Optional :Repeat N
-@comment        :Optional TEXT:Chars
-@continue       :Void
-@data           LIS:Name
-@debug          :Optional TEXT:Chars
-@decr           NAME:Name :Optional N:Int
-@default        NAME:Name VALUE:Chars
-@define         NAME:Name :Optional VALUE:Chars
-@divert         :Optional N:Int
-@divpop         :Void
-@divpush        N:Int
-@dump           :Optional WHAT:Name :Optional FILE:Filename
-@dumpall        :Optional :Repeat WHAT:Name
-@dumpdef        :Optional :Repeat SYM:Name
-@echo           :Optional :Chars
-@else           :Void
-@endcase        :Void
-@endcmd         :Void
-@enddata        :Void
-@endif          :Void
-@endlongdef     :Void
-@endwhile       :Void
-@error          :Optional TEXT:Chars
-@esyscmd        CMDLINE:Chars
-@eval           TEXT:Chars
-@exit           :Optional N:Int
-@filedata       LIS:Name FILE:Filename
-@filedefine     NAME:Name FILE:Filename
-@for            VAR:Name START:Int END:Int :Optional INCR:Int
-@foreach        VAR:Name LIS:Name
-@if             EXPR:Chars
-@ignore         PATTERN:Chars
-@import         LIB:Name FILE:Filename
-@include        FILE:Filename
-@incr           NAME:Name :Optional N:Integer
-@initialize     NAME:Name VAL:Chars
-@input          :Optional NAME:Name
-@list           LIS:Name
-@literal        PATTERN:Chars
-@local          NAME:Name
-@longdef        NAME:Name
-@namespace      NAMESPACE:Name
-@newcmd         SPEC:Chars
-@next           VAR:Name
-@nextfile       :Void
-@nsinclude      FILE:Filename
-@of             TEXT:Chars
-@otherwise      :Void
-@paste          FILE:Filename
-@readonly       NAME:Name
-@return         :Optional VALUE:Chars
-@sequence       ID:Name ACTION:Name :Optional ARG:Chars
-@set            NAME:Name :Optional TEXT:Chars
-@shell          PATTERN:Name :Optional PROG:Chars
-@split          NAME:Name LIS:Name :Optional FS:Chars
-@syscmd         CMDLINE:Chars
-@tracemode      :Optional FLAG:Chars
-@traceoff       :Optional :Repeat SYM:Name
-@traceon        :Optional :Repeat SYM:Name
-@typeout        :Void
-@undefine       NAME:Name
-@undivert       :Optional :Repeat N:Integer
- -or-
-@undivert       N:Integer FILE:Filename
-@unless         EXPR:Chars
-@until          EXPR:Chars
-@while          EXPR:Chars
-@wrap           TEXT:Chars
+
+Tags:
+
+:filename       Like :rest, I guess.  Path is stripped of "quotes" and <brackets>
+:int            Integer
+:optional       Item may or may not appear
+:repeat         Last element (not :rest) can be repeated an aribitrary # of additional times
+:rest           Arbitrary text, consumes rest of command line
+:string         Any series of non-whitespace chars, a single value
+:symbol         String of letters/numbers which should be a Symbol name with optional Key
+:void           Command takes no parameters; only valid singly
+
+
+These are immediate:
+
+@array          ARR:symbol
+@break          :void
+@case           NAME:symbol
+@continue       :void
+@define         NAME:symbol :optional TEXT:rest
+@else           :void
+@endcase        :void
+@endcmd         :void
+@endif          :void
+@endlong        :void
+@endlongdef     :void
+@endwhile       :void
+@esac           :void
+@fi             :void
+@for            VAR:symbol START:int END:int :optional INCR:int
+@foreach        VAR:symbol NAME:symbol
+@if             EXPR:rest
+@list           LIS:symbol
+@local          NAME:symbol
+@longdef        NAME:symbol
+@newcmd         NAME:symbol :optional SPEC:rest
+@next           VAR:symbol
+@of             TEXT:rest
+@otherwise      :void
+@return         :optional VALUE:rest
+@set            NAME:symbol :optional TEXT:rest
+@sm2ctl         TEXT:rest
+@unless         EXPR:rest
+@until          EXPR:rest
+@wend           :void
+@while          EXPR:rest
+
+
+These are not:
+
+@append         NAME:symbol TEXT:rest
+@cleardivert    :optional :repeat N:int
+# @comment        ?? :optional TEXT:rest         Removed from input stream by the parser, but perhaps it shouldn't be
+@data           LIS:symbol
+@debug          :optional TEXT:rest
+@decr           NAME:symbol :optional N:int
+@default        NAME:symbol VAL:rest
+@divert         :optional N:int
+@divpop         :void
+@divpush        N:int
+@dump           :optional WHAT:string :optional FILE:filename
+@dumpall        :optional WHAT:string :optional FILE:filename
+@dumpdef        :optional :repeat SYM:symbol
+@echo           :optional TEXT:rest
+@enddata        :void
+@error          :optional TEXT:rest
+@eod            :void
+@error          :optional TEXT:rest
+@errprint       :optional TEXT:rest
+@esyscmd        CMDLINE:rest
+@eval           TEXT:rest
+@exit           :optional N:int
+@filedata       LIS:symbol FILE:filename
+@filedef        NAME:symbol FILE:filename
+@filedefine     NAME:symbol FILE:filename
+@ignore         PATTERN:rest
+@import         LIB:symbol FILE:filename
+@include        FILE:filename
+@incr           NAME:symbol :optional N:int
+@initialize     NAME:symbol VAL:rest
+@input          :optional NAME:symbol
+@m2ctl          TEXT:rest
+@literal        PATTERN:rest
+@namespace      NAMESPACE:symbol
+@nextfile       :void
+@nsinclude      FILE:filename
+@paste          FILE:filename
+@readonly       NAME:symbol
+@secho          :optional TEXT:rest
+@sequence       ID:symbol ACTION:string :optional ARG:rest
+@serror         :optional TEXT:rest
+@sexit          :optional N:int
+@sfiledata
+@sfiledef
+@sfiledefine
+@shell          PATTERN:string :optional PROG:rest
+@simport
+@sinclude
+@snsinclude
+@spaste
+@split          NAME:symbol LIS:symbol :optional FS:string
+@syscmd         CMDLINE:rest
+@tracemode      :optional FLAG:string
+@traceoff       :optional :repeat SYM:symbol
+@traceon        :optional :repeat SYM:symbol
+@typeout        :void
+@undef
+@undefine       NAME:symbol
+# @undivert       :optional :repeat N:int
+#  -or-
+# @undivert       N:int FILE:filename
+@undivert       :optional N:int :optional N__FILE:rest
+@warn
+@wrap           TEXT:rest

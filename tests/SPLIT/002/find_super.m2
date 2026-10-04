@@ -1,4 +1,3 @@
-Some BSD-based systems might find a superuser named "toor" - that's okay
 @list PASSWD
 @list fld
 @sfiledata PASSWD /etc/passwd

@@ -1,4 +1,4 @@
-@newcmd foo::bar{a}
+@newcmd foo::bar {a}
 In foo::bar, a=@foo::a@
 @endcmd
 @namespace foo

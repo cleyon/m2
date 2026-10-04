@@ -1,12 +1,12 @@
-@define A A very normal @define command
+@define X A very normal @define command
 @namespace ns1
-@define A This is ns1 symbol 'A'
-In @ns@, A=@A@
+@define X This is ns1 symbol 'X'
+In @ns@, X=@X@
 @namespace ns2
-@define A This is ns2 symbol 'A'
-In @ns@, A=@A@
+@define X This is ns2 symbol 'X'
+In @ns@, X=@X@
 @namespace m2
 Now in namespace @ns@
-ns1::A=@ns1::A@
-ns2::A=@ns2::A@
-In m2, A=@A@
+ns1::X=@ns1::X@
+ns2::X=@ns2::X@
+In m2, X=@X@

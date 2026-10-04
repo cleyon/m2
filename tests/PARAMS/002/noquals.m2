@@ -1,4 +1,4 @@
-@newcmd okquals{a}
+@newcmd okquals {a}
 @endcmd
-@newcmd noquals{foo::a}
+@newcmd noquals {foo::a}
 @endcmd

@@ -1,9 +1,9 @@
-@newcmd m2::long
+@newcmd m2::long { :void }
 @longdef bar
 222
 333
 @endlongdef
 @endcmd
-@newcmd m2::single
-@__m2__::define foo 111
+@newcmd m2::single { :void }
+@define foo 111
 @endcmd

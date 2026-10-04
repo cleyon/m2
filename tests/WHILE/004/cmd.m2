@@ -8,4 +8,3 @@ Down to @n@
 All done
 @endcmd
 @foo
-@undefine foo

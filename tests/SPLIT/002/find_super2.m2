@@ -1,5 +1,4 @@
-Some BSD-based systems might find a superuser named "toor" - that's okay
-@newcmd check_backdoor{line}
+@newcmd check_backdoor {line}
 @list fld
 @split line fld :
 @if @fld@ != 7

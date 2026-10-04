@@ -1,4 +1,4 @@
-@newcmd foo{a}{x=BAR}
+@newcmd foo {a :optional x=BAR}
 a='@a@', x='@x@'
 @endcmd
 @foo{1}{2}

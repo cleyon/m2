@@ -40,7 +40,7 @@
 .Nd Line-oriented macro processor
 .Sh SYNOPSIS
 .Nm
-.Op Ar name=value No ...
+.Op Ar name Ns = Ns Ar value No ...
 .Op Ar file No ...
 .Sh DESCRIPTION
 .Nm
@@ -66,7 +66,7 @@ to define with empty value.
 .It
 Include files.  Special
 .Ic @include
-directives in a file are
+commands in a file are
 replaced with the contents of the named file.
 Includes can
 be nested, with one included file including another.
@@ -88,11 +88,25 @@ for a multi-line comment.
 Manage multiple output data streams with diversions.
 Different streams may be saved to different files.
 .It
+Define new commands, interpreted by the m2 parser.
+Unlike text-based macro expansion, commands may include
+complex control logic such as loops
+.Po
+.Ic @while ,
+.Ic @for
+.Pc
+and conditionals
+.Po
+.Ic @if ,
+.Ic @case
+.Pc .
+.It
 Partition symbol names into separate namespaces.
-.Va Legal::approved
+.Va Legal::approved ,
+.Va Audit::approved ,
 and
-.Va Audit::approved
-are both co-existing symbols named
+.Va Mother::approved
+are all co-existing symbols named
 .Dq approved .
 .El
 .Ss m2 Syntax
@@ -110,7 +124,7 @@ in the input is replaced in the output by the corresponding value.
 To compensate for the burden of having to manually invoke
 macro expansion, there is conversely no need to
 .Dq quote
-identifiers to protect against unwanted or inadvertent replacement,
+identifiers to protect against inadvertent or unwanted replacement,
 which, depending upon the insistence of
 .Em other
 macro processors, may
@@ -121,21 +135,21 @@ Substitutions can occur multiple times in a line.
 .Bd -literal -offset indent -compact
 @define Condition under
 You are clearly @Condition@worked.
-\ \ \ => You are clearly underworked.
+\ \ \ \(rA You are clearly underworked.
 .Ed
 .Pp
 No white space is allowed between
 .Ql @
 and the name, so a lone at\&-sign does not trigger macro processing in any way.
 Thus, a line like
-.Dl 100 dollars @ 5% annual interest.
+.Dl 100 dollars @ 5% annual interest
 is completely benign.
 .Pp
 Using the same character to delimit both the beginning and end of macro
 invocations was a conscious design decision by m1's author, but it
 presents challenges when attempting to parse more advanced syntax, such
 as invoking macros in a nested fashion.
-It is difficult to distinguish, purely lexically:
+It is difficult to distinguish, lexically:
 .Dl @one + 2@\~\~AND ALSO\~\~@three + 4@
 from
 .Dl @substr Symbol\~\~@Pos1 Field1@\~\~Length@
@@ -152,19 +166,27 @@ characters, so
 is correct; it means
 .Ql @SYMBOL@ .
 Thus, the example above is correctly written:
+.Pp
 .\"  See file tests/SUBSTR/002/examp.m2
 .Dl @substr Symbol @{Pos1 Field1} @{Length}@
 .\"  This syntax is admittedly klunky, but with repeated exposure,
 .\"  it soon becomes almost numbingly bearable.
+.Pp
 .Qq @{Length}
 is still required to use braces even though there are no parameters
 because you must still expand the value of the symbol
 .Va Length .
+Note that the final
+.Ql @
+character of the line closes the initial
+.Ic @substr
+and has nothing to do with the
+.Va Length
+argument.
 .Pp
 .Em Example :
-.Bd -literal -offset indent -compact
-@data_list[@{my_key}]@
-.Ed
+.Dl @data_list[@{my_key}]@
+.Pp
 uses the value in
 .Va my_key
 to look up data from the list
@@ -184,31 +206,43 @@ is used as a crude form of function invocation.
 Macros can expand positional parameters whose actual values will be
 supplied when the macro is called.
 The definition should refer to $1, $2, etc.
-${1} also works, so ${1}1 is distinguishable from $11.
-$0 refers to the name of the macro itself.
-$# is replaced with the actual number of parameters provided.
-$* expands to each given parameter, separated by a space character.
+.Ql ${1}
+also works, so ${1}1 is distinguishable from $11.
+.Ql $0
+refers to the name of the macro itself, without namespace.
+.Ql $#
+is replaced with the actual number of arguments provided.
+.Ql $*
+expands to each given argument, separated by a space character.
 When a definition refers to a parameter which is not supplied, an empty
 string will be used as a default value.
-You may supply more parameters than needed; excess parameters are
+You may supply more arguments than needed; excess data are
 simply ignored.
 .Pp
 .Em Example :
 .Bd -literal -offset indent -compact
 @define greet Hello, $1!  m2 sends you $0ings.
 @greet world@
-\ \ \ => Hello, world!  m2 sends you greetings.
+\ \ \ \(rA Hello, world!  m2 sends you greetings.
 .Ed
 .Pp
+When invoking functions in this way, a closing
+.Ql @
+is required to separate the invocation from any following text.
 .Em Note :
 Parameters passed using this syntax are parsed by splitting on
 white space.
 This means that in:
+.Pp
 .Dl @foo \[dq]a b\[dq] c@
-foo is given three arguments, not two: '"a', 'b"', and 'c'.
-To support parameters with embedded spaces, an alternate syntax
-is supported:
+.Pp
+.Ic @foo@
+is given three arguments, not two: '"a', 'b"', and 'c'.
+To support parameters with embedded spaces, an optional alternate syntax
+is provided:
+.Pp
 .Dl @foo{a b}{c}@
+.Pp
 will provide two arguments: 'a b' and 'c'.  In order for this syntax to
 be recognized, there must be no whitespace between the function name and
 the first open brace; and no text at all between the final closing brace
@@ -219,11 +253,11 @@ and the trailing
 .Bd -literal -offset indent -compact
 @define foo Arg1='$1' Arg2='$2' Arg3='$3'  narg=$#
 @foo "a b" c@
-\ \ \ => Arg1='"a' Arg2='b"' Arg3='c'  narg=3
+\ \ \ \(rA Arg1='"a' Arg2='b"' Arg3='c'  narg=3
 @foo{a b}{c}@
-\ \ \ => Arg1='a b' Arg2='c' Arg3=''  narg=2
+\ \ \ \(rA Arg1='a b' Arg2='c' Arg3=''  narg=2
 @foo{a b}{c}{}@
-\ \ \ => Arg1='a b' Arg2='c' Arg3=''  narg=3
+\ \ \ \(rA Arg1='a b' Arg2='c' Arg3=''  narg=3
 .Ed
 .Pp
 See the
@@ -256,7 +290,7 @@ section for a complete list of built-in commands.
 .Nm
 implements
 .Dq namespaces
-in a manner similar to, but not dependent upon, gawk's example.
+in a manner similar to, but not dependent upon, GNU\ Awk's example.
 A
 .Dq qualified name
 is an identifier that
@@ -313,7 +347,9 @@ If you wish to append the next line with a newline separator,
 end the current line with
 .Ic @\en .
 This results in
-.Dq Va line1 Ns Ic \en Ns Va line2 .
+.Sm off
+.Dq Va line1 Ic \en Va line2 .
+.Sm on
 A third variant,
 .Ic @\e- ,
 removes leading whitespace from the subsequent line.
@@ -322,14 +358,14 @@ removes leading whitespace from the subsequent line.
 .Bd -literal -offset indent -compact
 Foo@\e
   bar
-\ \ \ => Foo  bar
+\ \ \ \(rA Foo  bar
 Foo@\en
 bar
-\ \ \ => Foo
-\ \ \    bar
+\ \ \ \(rA Foo
+\ \ \   bar
 Foo@\e-
   bar
-\ \ \ => Foobar
+\ \ \ \(rA Foobar
 .Ed
 .El
 .Ss Boolean Expressions
@@ -355,7 +391,7 @@ Parentheses may be used to enforce evaluation order.
 The following boolean predicate functions return either True or False.
 Arguments to these functions are scanned for macro expansion.
 .Pp
-.Bl -tag -width elem_IN_array____ -offset indent
+.Bl -tag -width indent -offset indent
 .It Fn canrun PROGRAM
 True if
 .Va PROGRAM
@@ -381,7 +417,8 @@ exists.
 .It Ar ELEM Cm in Ar ARR
 True if
 .Va ARR
-(array or list) contains
+.Pq array or list
+contains
 .Va ELEM
 and False if not.
 .El
@@ -389,12 +426,17 @@ and False if not.
 Any other expression is evaluated as a mathematical expression and
 considered True if the result is non-zero.
 .Ss Commands
-The following table lists control commands to
-evaluate, control, or define macros for subsequent processing:
+The following table lists built-in commands to evaluate conditions,
+control logic flow, or define macros for subsequent processing.
+The command's signature is also shown.
+.Po
+The
+.Sx Signatures
+section describes their format.
+.Pc
 .Pp
-.\" This table could use a little formatting TLC...
-.Bl -tag -width @if(_not)_defined -offset indent
-.It Ic @append Ar NAME TEXT
+.Bl -tag -width indent -offset indent
+.It Ic @append No "" Bro Ar NAME Ns No :lval Ar TEXT Ns No :rest Brc
 Add
 .Va TEXT
 to an already defined
@@ -409,14 +451,14 @@ If
 is a list,
 .Va TEXT
 is added as the next element.
-.It Ic @array Ar ARR
+.It Ic @array No "" Bro :repeat Ar ARR Ns No :name! Brc
 Declare
 .Va ARR
 to be an array.
 The name must not be qualified.
 See also
 .Ic @list .
-.It Ic @break
+.It Ic @break No "" Bro :void Brc
 Interrupt execution of enclosing loop.
 .Ic @break
 is only valid inside a
@@ -425,7 +467,7 @@ is only valid inside a
 or
 .Ic @while
 block.
-.It Ic @case Ar NAME Oo Ar PREAMBLE Ns No ... Oc Oo Ic @of Va TEXT No ... Oc Oo Ic @otherwise No ... Oc Ic @endcase
+.It Ic @case No "" Bro Ar NAME Ns No :lval Brc
 Evaluate value of
 .Va NAME ,
 comparing it with
@@ -448,22 +490,40 @@ block does
 .Sy not
 execute the
 .Va PREAMBLE .
-.Po
-The purpose of the preamble is to provide "boiler-plate" header text for
+(The purpose of the preamble is to provide "boiler-plate" header text for
 known cases.
 The text and commands of the
 .Ic @otherwise
 block are expected
-to compensate for the lack of a preamble.
-.Pc
-.It Ic @cleardivert Op Ar N No ...
+to compensate for the lack of a preamble.)
+If any
+.Ic @of
+or
+.Ic @otherwise
+clause executes, the
+.Ic @ensure
+block will also execute.
+Format:
+.Bd -unfilled -offset indent -compact
+.Ic @case Ar NAME
+.No "   " Oo Ar PREAMBLE No ... Oc
+.Oo Ic @of Ar TEXT
+.No "   ..." Oc
+.Oo Ic @of ... Oc ...
+.Oo Ic @otherwise
+.No "   ..." Oc
+.Oo Ic @ensure
+.No "   ..." Oc
+.Ic @endcase
+.Ed
+.It Ic @cleardivert No "" Bro :optional :repeat Ar STREAM Ns No :integer Brc
 Clear stream(s) specified by
-.Va N .
+.Va STREAM .
 If no arguments are provided then all streams are cleared.
 See the
 .Sx Streams and Diversions
 section.
-.It Ic @comment Op Ar TEXT
+.It Ic @comment No "" Bro :optional Ar TEXT Ns No :rest Brc
 Comment; ignore line.  Also
 .Ic @@ ,
 .Ic @c ,
@@ -479,7 +539,7 @@ must be followed by whitespace in order to be recognized as comment commands.
 and
 .Ic @#
 are recognized as comments whenever they appear in columns 1 and 2.
-.It Ic @continue
+.It Ic @continue No "" Bro :void Brc
 Continue next iteration of enclosing loop.
 .Ic @continue
 is only valid inside a
@@ -488,7 +548,7 @@ is only valid inside a
 or
 .Ic @while
 block.
-.It Ic @data Ar LIS No ... Ic @enddata
+.It Ic @data No "" Bro Ar LIS Ns No :name! Brc
 Store all lines until
 .Ic @enddata
 into list
@@ -499,26 +559,32 @@ must declared with
 .Ic @list .
 See also
 .Ic @filedata .
-.It Ic @debug Op Ar TEXT
+Command format:
+.Bd -unfilled -offset indent -compact
+.Ic @data Ar LIS
+.No "   ..."
+.Ic @enddata
+.Ed
+.It Ic @debug No "" Bro :optional Ar TEXT Ns No :rest! Brc
 If debugging, send
 .Va TEXT
 to the debug file.
 See also
 .Va __DEBUG__ .
-.It Ic @decr Ar NAME Op Ar N
+.It Ic @decr No "" Bro Ar NAME Ns No :lval :optional Ar N Ns No :integer=1 Brc
 Subtract
 .Va N
 (default 1) from an already defined
 .Va NAME .
 See note at
 .Ic @incr .
-.It Ic @default Ar NAME VAL
+.It Ic @default No "" Bro Ar NAME Ns No :lval Ar TEXT Ns No :rest Brc
 Like
 .Ic @define ,
 but no\&-op if
 .Va NAME
 already defined.
-.It Ic @define Ar NAME Op Ar TEXT
+.It Ic @define No "" Bro Ar NAME Ns No :lval :optional Ar TEXT Ns No :rest Brc
 Set value of
 .Va NAME
 to
@@ -528,28 +594,27 @@ If
 is missing, a value of 1 is assumed.
 See also
 .Ic @set .
-.It Ic @divert Op Ar N
+.It Ic @divert No "" Bro :optional Ar STREAM Ns No :integer Brc
 Divert subsequent text to stream
 .Va N .
 Default 0 resets to standard output.
 If
 .Va N
 is negative, text is discarded.
-No error message or action if argument is not an integer.
 See the
 .Sx Streams and Diversions
 section.
-.It Ic @divpop
+.It Ic @divpop No "" Bro :void Brc
 Remove the current diversion and restore the previous diversion.
 See also
 .Ic @divpush .
-.It Ic @divpush Ar N
+.It Ic @divpush No "" Bro Ar STREAM Ns No :integer Brc
 Create a new diversion to stream
-.Ar N
+.Ar STREAM
 while saving the current one to be restored later.
 See also
 .Ic @divpop .
-.It Ic @dump Op Ar WHAT Op Ar FILE
+.It Ic @dump No "" Bro :optional Ar WHAT Ns No :string! Ar FILE Ns No :filename Brc
 Output names and definitions to
 .Va FILE .
 .Va WHAT
@@ -569,18 +634,18 @@ If
 .Va FILE
 is omitted, output is sent to
 .Va __DEBUGFILE__ .
-.It Ic @dumpall Op Ar WHAT Op Ar FILE
+.It Ic @dumpall No "" Bro :optional Ar WHAT Ns No :string! Ar FILE Ns No :filename Brc
 Like
 .Ic @dump
 but include System symbols.
-.It Ic @dumpdef Op Ar SYM No ...
+.It Ic @dumpdef No "" Bro :optional :repeat Ar SYM Ns No :name! Brc
 Output definition of
 .Va SYM
 to
 .Va __DEBUGFILE__ .
 More than one symbol may be listed.
 If no symbols are specified, all symbols are dumped.
-.It Ic @echo Op Ar TEXT
+.It Ic @echo No "" Bro :optional Ar TEXT Ns No :rest Brc
 Send
 .Va TEXT
 to standard error.
@@ -591,45 +656,47 @@ is similar, but adds the current file name and line number to output.
 Variant
 .Ic @secho
 does not automatically add a newline to output.
-.It Ic @else
+.It Ic @else No "" Bro :void Brc
 Switch to the alternate condition branch of an
 .Ic @if
+or
+.Ic @unless
 block.
 Only one
 .Ic @else
 statement is allowed per
 .Ic @if
 block.
-.It Ic @endcase
+.It Ic @endcase No "" Bro :void Brc
 Indicate the end of a
 .Ic @case
 structure.
 Also called
 .Ic @esac
 thanks to Algol\ 68.
-.It Ic @endcmd
+.It Ic @endcmd No "" Bro :void Brc
 Indicate the end of a
 .Ic @newcmd
 definition.
-.It Ic @enddata
+.It Ic @enddata No "" Bro :void Brc
 Indicate the end of a
 .Ic @data
 block.
 Also called
 .Ic @eod .
-.It Ic @endif
+.It Ic @endif No "" Bro :void Brc
 Indicate the end of an
 .Ic @if
 or
 .Ic @unless
-condition block.
+qblock.
 Also called
 .Ic @fi ,
 keeping the dream alive.
-.It Ic @endlongdef
+.It Ic @endlongdef No "" Bro :void Brc
 Indicate the end of a multi-line
 .Ic @longdef .
-.It Ic @endwhile
+.It Ic @endwhile No "" Bro :void Brc
 Indicate the end of a
 .Ic @while
 or
@@ -638,7 +705,15 @@ loop.
 Also called
 .Ic @wend ,
 by few.
-.It Ic @error Op Ar TEXT
+.It Ic @ensure No "" Bro :void Brc
+Inside a
+.Ic @case
+statement, execute following commands if any
+.Ic @of
+or
+.Ic @otherwise
+block executes.
+.It Ic @error No "" Bro :optional Ar TEXT Ns No :rest Brc
 Send
 .Va TEXT
 to standard error; exit code 2.
@@ -648,7 +723,7 @@ For complete control over error messages, variant
 prints only
 .Va TEXT ,
 omitting file and line number information.
-.It Ic @esyscmd Ar CMDLINE Ns No ...
+.It Ic @esyscmd No "" Bro Ar CMDLINE Ns No :rest Brc
 Execute
 .Va CMDLINE
 in a subshell.
@@ -658,11 +733,11 @@ Standard input is set to
 but standard error is not modified.
 The command's exit code is saved in
 .Va __SYSVAL__ .
-.It Ic @eval Ar TEXT
+.It Ic @eval No "" Bro Ar TEXT Ns No :rest Brc
 Parse and evaluate
 .Va TEXT
 as a command.
-.It Ic @exit Op Ar N
+.It Ic @exit No "" Bro :optional Ar N Ns No :integer=@__EXIT__@ Brc
 Immediately stop parsing; exit with status
 .Va N .
 If
@@ -670,7 +745,7 @@ If
 is omitted, the current exit status is unchanged.
 Invalid
 .Va N ,
-values less than zero, or greater than 126, are changed to 1.
+values less than zero, or values greater than 126, are changed to 1.
 If variant
 .Ic @sexit
 is used, or if exit status is non-zero, diverted streams are discarded.
@@ -681,7 +756,7 @@ are processed regardless of
 value.
 See also
 .Va __EXIT__ .
-.It Ic @filedata Ar LIS FILE
+.It Ic @filedata No "" Bro Ar LIS Ns No :name! Ar FILE Ns No :filename Brc
 Read each line from
 .Va FILE
 into list
@@ -700,7 +775,7 @@ before
 can be used.
 See also
 .Ic @data .
-.It Ic @filedefine Ar NAME FILE
+.It Ic @filedefine No "" Bro Ar NAME Ns No :lval Ar FILE Ns No :filename Brc
 Read
 .Va FILE
 contents to define
@@ -718,7 +793,7 @@ does not print an error message if
 does not exist.
 See also
 .Ic @define .
-.It Ic @for Ar VAR START END Oo Ar INCR Oc No ... Ic @next Ar VAR
+.It Ic @for No "" Bro Ar VAR Ns No :name! Ar START Ns No :int Ar END Ns No :int :optional Ar INCR Ns No :int=1 Brc
 Execute a loop with
 .Va VAR
 taking on successive
@@ -729,8 +804,13 @@ and
 Default
 .Va INCR
 is 1.
-.\" .It Ic @foreach Ar VAR ARR No | Ar LIS ... Ic @next Ar VAR
-.It Ic @foreach Ar VAR NAME No ... Ic @next Ar VAR
+Format:
+.Bd -unfilled -offset indent -compact
+.Ic @for Ar VAR START END Op Ar INCR
+.No "   ..."
+.Ic @next Ar VAR
+.Ed
+.It Ic @foreach No "" Bro Ar VAR Ns No :name! Ar NAME Ns No :name! Brc
 Execute a loop with
 .Va VAR
 taking on successive values of
@@ -745,18 +825,34 @@ However, lists and data created with
 or
 .Ic @filedata
 are guaranteed to return their integer indices in numerical order.
-.It Ic @if Ar EXPR No ... Oo Ic @else No ... Oc Ic @endif
+Command format:
+.Bd -unfilled -offset indent -compact
+.Ic @foreach Ar VAR NAME
+.No "   ..."
+.Ic @next Ar VAR
+.Ed
+.Pp
+.It Ic @if No "" Bro Ar EXPR Ns No :rest Brc
 Include subsequent lines of text if boolean expression is True.
 If
 .Va EXPR
 is a simple NAME, check if NAME is True.
 See section
 .Sx Boolean Expressions .
-.It Ic @ignore Ar PATTERN
+Command format:
+.Bd -unfilled -offset indent -compact
+.Ic @if Ar EXPR
+.No "   ..."
+.Oo Ic @else Oc
+.No "   ..."
+.Ic @endif
+.Ed
+.Pp
+.It Ic @ignore No "" Bro Ar PATTERN Ns No :rest Brc
 Discard input until a line that matches regular expression
 .Va PATTERN
 is found.
-.It Ic @import Ar LIB FILE
+.It Ic @import No "" Bro Ar LIB Ns No :name! Ar FILE Ns No :filename Brc
 Like
 .Ic @include
 but the library name
@@ -764,7 +860,7 @@ but the library name
 is added to the namespace search list.
 See also
 .Va __NSPATH__ .
-.It Ic @include Ar FILE
+.It Ic @include No "" Bro Ar FILE Ns No :filename Brc
 Read and process contents of
 .Va FILE .
 The current namespace is temporarily set to
@@ -781,7 +877,7 @@ See also
 .Ic @nsinclude
 and
 .Ic @paste .
-.It Ic @incr Ar NAME Op Ar N
+.It Ic @incr No "" Bro Ar NAME Ns No :lval :optional Ar N Ns No :integer=1 Brc
 Add
 .Va N
 (default 1) to an already defined
@@ -795,13 +891,13 @@ Unlike
 .Xr m4 1 ,
 .Ic @incr
 modifies the named symbol and produces no expansion output.
-.It Ic @initialize Ar NAME VAL
+.It Ic @initialize No "" Bro Ar NAME Ns No :lval Ar TEXT Ns No :rest Brc
 Like
 .Ic @define ,
 but error if
 .Va NAME
 already defined.
-.It Ic @input Op Ar NAME
+.It Ic @input No "" Bro :optional Ar NAME Ns No :name!=__INPUT__ Brc
 Read a single line from keyboard to define
 .Va NAME .
 No prompt is issued; if you want one, use
@@ -810,52 +906,70 @@ If
 .Va NAME
 is omitted, value is stored in symbol
 .Va __INPUT__ .
-.It Ic @list Ar LIS
+.It Ic @list No "" Bro :repeat Ar LIS Ns No :name! Brc
 Declare
 .Va LIS
 to be a list.
 The name must not be qualified.
 See also
 .Ic @array .
-.It Ic @literal Ar PATTERN
+.It Ic @literal No "" Bro Ar PATTERN Ns No :rest Brc
 Read and print input literally, without interpretation, until line that
 matches regular expression
 .Va PATTERN .
-.It Ic @local Ar NAME
+.It Ic @local No "" Bro :repeat Ar NAME Ns No :name! Brc
 Declare
 .Va NAME
 as a symbol local to the current level.
 The name must not be qualified.
-.It Ic @longdef Ar NAME No ... Ic @endlongdef
+.It Ic @longdef No "" Bro Ar NAME Ns No :name! Brc
 Set value of
 .Va NAME
 to all lines until
 .Ic @endlongdef .
-.It Ic @namespace Ar NAMESPACE
+Format:
+.Bd -unfilled -offset indent -compact
+.Ic @longdef Ar NAME
+.No "   ..."
+.Ic @endlongdef
+.Ed
+.Pp
+.It Ic @namespace No "" Bro Ar NAMESPACE Ns No :name! Brc
 Make
 .Va NAMESPACE
 the current namespace.
 The name should not be quoted.
 See also
 .Ic @ns@ .
-.It Ic @newcmd Ar NAME No ... Ic @endcmd
+.It Ic @newcmd No "" Bro Ar NAME Ns No :name! :optional Ar SIGNATURE Ns No :rest! Brc
 Create a user command
 .Va NAME
 whose definition will be all lines until
 .Ic @endcmd .
-.It Ic @next Ar VAR
+If
+.Va SIGNATURE
+is omitted, it is assumed to be
+.Cm :void .
+Command format:
+.Bd -unfilled -offset indent -compact
+.Ic @newcmd Ar NAME Op Ar SIGNATURE
+.No "   ..."
+.Ic @endcmd
+.Ed
+.Pp
+.It Ic @next No "" Bro Ar VAR Ns No :name! Brc
 Continue execution of next iteration of enclosing
 .Ic @for
 or
 .Ic @foreach
 loop.
-.It Ic @nextfile
+.It Ic @nextfile No "" Bro :void Brc
 Ignore remainder of current file and resume processing with the next file.
-.It Ic @nsinclude Ar FILE
+.It Ic @nsinclude No "" Bro Ar FILE Ns No :filename Brc
 Similar to
 .Ic @include
 but the current namespace remains unchanged.
-.It Ic @of Ar TEXT
+.It Ic @of No "" Bro Ar TEXT Ns No :rest! Brc
 Begin a new branch of an enclosing
 .Ic @case
 structure matching
@@ -864,7 +978,7 @@ at run time.
 Every branch's
 .Va TEXT
 label must be unique.
-.It Ic @otherwise
+.It Ic @otherwise No "" Bro :void Brc
 Begin a new branch of an enclosing
 .Ic @case
 structure which is executed if no
@@ -875,7 +989,7 @@ Only one
 branch is permitted per
 .Ic @case
 structure.
-.It Ic @paste Ar FILE
+.It Ic @paste No "" Bro Ar FILE Ns No :filename Brc
 Insert
 .Va FILE
 contents literally, with no changes or macros.
@@ -884,22 +998,22 @@ Variant
 does not print an error message if
 .Va FILE
 does not exist.
-.It Ic @readonly Ar NAME
+.It Ic @readonly No "" Bro Ar NAME Ns No :name! Brc
 Make
 .Va NAME
 unchangeable \(em cannot be undone.
-.It Ic @return Op Ar VALUE
+.It Ic @return No "" Bro :optional Ar VALUE Ns No :rest Brc
 Cease execution of a user command.
 .Ic @return
 is only valid inside a
 .Ic @newcmd
 definition.
-.It Ic @sequence Ar ID Cm ACTION Op Ar arg
+.It Ic @sequence No "" Bro Ar ID Ns No :name! :optional Ar ACTION Ns No :string!=create Ar ARG Ns No :rest Brc
 Create and manage sequences.
 See the
 .Sx Sequences
 section.
-.It Ic @set Ar NAME Op Ar TEXT
+.It Ic @set No "" Bro Ar NAME Ns No :lval :optional Ar TEXT Ns No :rest Brc
 Like
 .Ic @define ,
 but if
@@ -909,7 +1023,7 @@ is missing,
 is set to the empy string.
 See also
 .Ic @define .
-.It Ic @shell Ar PATTERN Op Ar PROG
+.It Ic @shell No "" Bro Ar DELIM Ns No :string :optional Ar PROG Ns No :rest Brc
 Evaluate input until
 .Va PATTERN
 and send raw data to
@@ -934,7 +1048,7 @@ reader, or
 It must be a program that functions as a filter (in the Unix sense,
 i.e., reading from standard input and writing to standard output).
 Standard error is not redirected, so any errors will appear on the terminal.
-.It Ic @split Ar NAME LIS Op Ar FS
+.It Ic @split No "" Bro Ar NAME Ns No :lval Ar LIS Ns No :name! :optional Ar FS Ns No :string Brc
 Split value of
 .Va NAME
 into N individual fields, storing them in
@@ -955,7 +1069,7 @@ which means fields will be split on whitespace.
 See also
 .Ic @join@ ,
 .Ic @list .
-.It Ic @syscmd Ar CMDLINE Ns No ...
+.It Ic @syscmd No "" Bro Ar CMDLINE Ns No :rest Brc
 Execute
 .Va CMDLINE
 using Awk's
@@ -964,7 +1078,7 @@ function.
 Standard output and standard error are both discarded.
 The command's exit code is saved in
 .Va __SYSVAL__ .
-.It Ic @tracemode Op Ar FLAG Ns No ...
+.It Ic @tracemode No "" Bro :optional Ar FLAG Ns No :string! Brc
 With no arguments, reset trace flags to default value.
 Preceding flag with
 .Ql +
@@ -976,12 +1090,12 @@ See also symbol
 .Va __TRACEMODE__
 and section
 .Sx Tracing .
-.It Ic @traceoff Op Ar SYM No ...
+.It Ic @traceoff No "" Bro :optional :repeat Ar SYM Ns No :name! Brc
 Disable tracing for specified symbols.
 If
 .Va SYM
 is omitted, disable tracing for all symbols.
-.It Ic @traceon Op Ar SYM No ...
+.It Ic @traceon No "" Bro :optional :repeat Ar SYM Ns No :name! Brc
 Enable tracing for specified symbols.
 If
 .Va SYM
@@ -989,15 +1103,15 @@ is omitted, enable tracing for all symbols.
 See also
 .Va __TRACE__ .
 Symbols can also be traced from the command line with
-.Ql T=<symName>
-.It Ic @typeout
+.Dl T=<symName>
+.It Ic @typeout No "" Bro :void Brc
 Print remainder of input file literally; no macro processing will be done.
-.It Ic @undefine Ar NAME
+.It Ic @undefine No "" Bro Ar NAME Ns No :name! Brc
 Remove definition of
 .Va NAME .
 Symbols can also be removed from the command line with
-.Ql U=<symName>
-.It Ic @undivert Oo Ar N No ... Oc No | Ar N FILE
+.Dl U=<symName>
+.It Ic @undivert No "" Bro :optional Ar N Ns No :integer Ar REST Ns No :rest Brc
 Inject stream
 .Va N
 (default all) into current stream.
@@ -1010,7 +1124,7 @@ After a stream has been undiverted, it is implicitly cleared.
 See the
 .Sx Streams and Diversions
 section.
-.It Ic @unless Ar EXPR No ... Oo Ic @else No ... Oc Ic @endif
+.It Ic @unless No "" Bro Ar EXPR Ns No :rest Brc
 Include subsequent text if
 .Va EXPR
 is False.
@@ -1019,15 +1133,38 @@ If
 is a simple NAME, check if NAME\ ==\ 0 (or undefined).
 See section
 .Sx Boolean Expressions .
-.It Ic @until Ar EXPR No ... Ic @endwhile
+Command format:
+.Bd -unfilled -offset indent -compact
+.Ic @unless Ar EXPR
+.No "   ..."
+.Oo Ic @else Oc
+.No "   ..."
+.Ic @endif
+.Ed
+.Pp
+.It Ic @until No "" Bro Ar EXPR Ns No :rest Brc
 Repeatedly evaluate input lines while boolean expression
 .Va EXPR
 is False and stop when it becomes True.
-.It Ic @while Ar EXPR No ... Ic @endwhile
+Command format:
+.Bd -unfilled -offset indent -compact
+.Ic @until Ar EXPR
+.No "   ..."
+.Ic @endwhile
+.Ed
+.Pp
+.It Ic @while No "" Bro Ar EXPR Ns No :rest Brc
 Repeatedly evaluate input lines while boolean expression
 .Va EXPR
 is True and stop when it becomes False.
-.It Ic @wrap Ar TEXT
+Command format:
+.Bd -unfilled -offset indent -compact
+.Ic @while Ar EXPR
+.No "   ..."
+.Ic @endwhile
+.Ed
+.Pp
+.It Ic @wrap No "" Bro Ar TEXT Ns No :rest! Brc
 Defer
 .Va TEXT
 until
@@ -1080,16 +1217,16 @@ to determine if
 .Va variable
 is defined in the process environment.
 .Ss Functions
-The following built-in functions are recognized:
+The following is a list of all built-in functions and their signatures:
 .Pp
-.Bl -tag -width @right_SYM_[N]@ -offset indent
-.It Ic @basename Ar SYM Ns Ic @
+.Bl -tag -width indent -offset indent
+.It Ic @basename No "" Bro Ar SYM Ns No :name! Brc Ic @
 Base (file) name of
 .Va SYM
 implemented in Awk, assuming Unix style path separators.
 See also
 .Ic @xbasename@ .
-.It Ic @boolval Oo Ar SYM Oc Ns Ic @
+.It Ic @boolval No "" Bro Ar VAL Ns No :string Brc Ic @
 Output a formatted representation of the truthiness of
 .Va SYM .
 If the argument is not a symbol, use its value as a boolean state.
@@ -1101,7 +1238,7 @@ See system symbols
 .Va __FMT__[1] ,
 and
 .Va __STRICT__[bool] .
-.It Ic @center Ar SYM Oo Ar WIDTH Oc Ns Ic @
+.It Ic @center No "" Bro Ar SYM Ns No :name! :optional Ar WIDTH Ns No :integer Brc Ic @
 Center the value of
 .Va SYM
 in a field of
@@ -1118,10 +1255,10 @@ are truncated as necessary.
 Variant
 .Ic @scenter@
 does not truncate output.
-.It Ic @chr Ar SYM Ns Ic @
+.It Ic @chr No "" Bro Ar N Ns No :integer Brc Ic @
 Output character with ASCII code
-.Va SYM .
-.It Ic @comma Ar SYM Ns Ic @
+.Va N .
+.It Ic @comma No "" Bro Ar VAL Ns No :string Brc Ic @
 Output the value of
 .Va SYM ,
 or a literal number, with comma-separated groupings of digits.
@@ -1131,18 +1268,21 @@ Variant
 commas, and as an added bonus, any leading
 .Ql $
 as well.
-.It Ic @date@
-Current date (format as
-.Va __FMT__[date] ) .
+.It Ic @date@ No "" Bro :void Brc
+Current date
+.Po
+format as
+.Va __FMT__[date]
+.Pc .
 See section
 .Sx Times and Dates .
-.It Ic @dirname Ar SYM Ns Ic @
+.It Ic @dirname No "" Bro Ar SYM Ns No :name! Brc Ic @
 Directory name of
 .Va SYM
 implemented in Awk, assuming Unix style path separators.
 See also
 .Ic @xdirname@ .
-.It Ic @divnl Oo Ar STREAM Oc Ns Ic @
+.It Ic @divnl No "" Bro :optional Ar STREAM Ns No :integer Brc Ic @
 Return the number of lines in
 .Va STREAM ,
 or 0 if empty.
@@ -1152,24 +1292,24 @@ is omitted, the current stream is assumed.
 If
 .Va STREAM
 is negative or zero, return 0.
-.It Ic @dow Oo Ar MJD No | Ar YYYY MM DD Oc Ns Ic @
+.It Ic @dow No "" Bro :void | Ar MJD Ns No :integer | Ar YYYY Ns No :integer Ar MM Ns No :integer Ar DD Ns No :integer Brc Ic @
 Return the ISO day number corresponding to the date specified,
 where 1=Monday, 2=Tuesday, ..., 7=Sunday.
 With no parameters, use current date.
 See also
 .Va __DOW__ .
-.It Ic @empty Ar SYM Ns Ic @
+.It Ic @empty No "" Bro Ar SYM Ns No :name! Brc Ic @
 Return 1 if
 .Va SYM Ap s
 value is the empty string, 0 if non-empty.
 See also
 .Ic @set .
-.It Ic @epoch@
+.It Ic @epoch@ No "" Bro :void Brc
 Unix epoch time, the number of non-leap seconds which
 have passed since 00:00:00\ UTC on Thursday, 1\ January\ 1970.
 See section
 .Sx Times and Dates .
-.It Ic @execpath Ar PROGRAM Ns Ic @
+.It Ic @execpath No "" Bro Ar PROGRAM Ns No :rest Brc Ic @
 Return expanded path to
 .Va PROGRAM ,
 printing a warning if program is not found.
@@ -1178,7 +1318,7 @@ Variant
 does not print a warning.
 See also
 .Fn canrun .
-.It Ic @expr Ar MATH Ns Ic @
+.It Ic @expr No "" Bro Ar MATH Ns No :rest Brc Ic @
 Evaluate and print mathematical expression.
 Variant
 .Ic @sexpr@
@@ -1186,16 +1326,16 @@ performs the same calculations but does not output the result.
 However, assignments are still performed and
 .Va __EXPR__
 is still set.
-.It Ic @format Ar FMT Oo Ar ARG No ... Oc Ns Ic @
-Print up to five parameters (args 2..6),
-.\" Five params is entirely arbitrary, limited only by my patience
+.It Ic @format No "" Bro Ar FMT Ns No :string :optional :repeat Ar ARG Ns :string Brc Ic @
+Print up to nine parameters,
+.\" Nine is entirely arbitrary, limited only by my patience
 .\" for repeatedly typing printf()'s for cases that will likely
 .\" never be used.  If you need monster @format ...@, go for it!
 using the first argument as a format specifier.
 Arguments must be compatible with format string.
 Also called
 .Ic @sprintf@ .
-.It Ic @geodist Ar LAT1 LON1 LAT2 LON2 Ns Ic @
+.It Ic @geodist No "" Bro Ar LAT1 Ns No :float Ar LON1 Ns No :float Ar LAT2 Ns No :float Ar LON2 Ns No :float Brc Ic @
 Return distance between points
 .Po
 .Va LAT1 , LON1
@@ -1211,29 +1351,32 @@ Latitude and longitude must be given in fractional degrees,
 so use
 .Ic @hr@
 to convert degrees/minutes/seconds.
-.It Ic @gregdate Ar MJD Ns Ic @
+.It Ic @gregdate No "" Bro Ar MJD Ns No :integer Brc Ic @
 Print the date corresponding to Modified Julian Day
 .Va MJD .
-The output format is always "YYYY\-MM\-DD" (
+The output format is always "YYYY\-MM\-DD"
+.Po
 .Va __FMT__[date]
-is not used).
+is not used
+.Pc .
 See also
 .Ic @mjd@ .
-.It Ic @hex Ar SYM Ns Ic @
-Print value of
-.Va SYM
-in hexadecimal.
-.It Ic @hms Ar HR.ddddd Ns Ic @
+.It Ic @hex No "" Bro Ar VAL Ns No :string Brc Ic @
+If
+.Va VAL
+is either a symbol name or a decimal integer, print the value in
+hexadecimal.
+.It Ic @hms No "" Bro Ar HR.dddd Ns No :float Brc Ic @
 Convert decimal (fractional) hours to hours, minutes, and seconds.
 See also
 .Ic @geodist@ , @hr@ .
-.It Ic @hr Ar HOUR.MMSSssss No | Ar HOUR MIN SEC Ns Ic @
+.It Ic @hr No "" Bro Ar HOUR.MMSSssss Ns No :float | Ar HOUR Ns No :integer Ar MIN Ns No :integer Ar SEC.sss Ns No :float Brc Ic @
 Convert hours, minutes, and seconds to fractional hours.
 See also
 .Ic @geodist@ , @hms@ .
-.It Ic @ifdef{ Ns Ar SYMBOL Ns Ic }{ Ns Ar TRUE_TEXT Ns Ic }{ Ns Ar FALSE_TEXT Ns Ic }@
+.It Ic @ifdef No "" Bro Ar SYM Ns :name! Ar TRUE_TEXT Ns :string! No :optional Ar FALSE_TEXT Ns :string! Brc Ic @
 If
-.Va SYMBOL
+.Va SYM
 is defined, return
 .Va TRUE_TEXT ,
 else return
@@ -1241,15 +1384,19 @@ else return
 The
 .Bro Va FALSE_TEXT Brc
 clause is optional, and defaults to the empty string.
-.It Ic @ifelse{ Ns Ar arg1 Ns Ic }{ Ns Ar arg2 Ns Ic }{ Ns Ar arg3 Ns Ic }{ Ns Ar arg4 Ns Ic } Ns No ... Ns Ic @
+The resulting text is again processed for macro substitutions.
+.It Ic @ifelse No "" Bro :repeat Ar ARG Ns :string! Brc Ic @
 .Ic @ifelse@
-takes three or more arguments.
+takes 3 or more arguments.
 If the first argument is equal to the second, then the value is the
 third argument.
-If not equal, and if there are more than four arguments, then the
+If not equal, and if there are
+.Em more
+than four arguments, then the
 process repeats with arguments 4, 5, 6, and 7.
-Otherwise, the value is either the fourth argument if present, or null
+Otherwise (either three or four arguments), the value is either the fourth argument if present, or null
 if omitted.
+The resulting text is subject to macro expansion.
 Long lines may be split using
 .Ic @\e .
 This baroque arrangement is modeled after
@@ -1267,19 +1414,21 @@ in-line with other text, whereas
 and
 .Ic @case
 cannot.
-.It Ic @ifx{ Ns Ar BOOL_EXP Ns Ic }{ Ns Ar TRUE_TEXT Ns Ic }{ Ns Ar FALSE_TEXT Ns Ic }@
+.It Ic @ifx No "" Bro Ar EXPR Ns :string Ar TRUE_TEXT Ns :string! :optional Ar FALSE_TEXT Ns :string! Brc Ic @
 Evaluate
-.Va BOOL_EXP ;
+.Va EXPR ;
 if True, return
 .Va TRUE_TEXT
 else return
 .Va FALSE_TEXT .
-All three brace-enclosed clauses must be present.
-Resulting text is again processed for macro substitutions.
+The
+.Va FALSE_TEXT
+argument is optional.
+The resulting text is again processed for macro substitutions.
 .Ic @ifx
 stands for
 .Dq IF eXpression .
-.It Ic @ifndef{ Ns Ar SYMBOL Ns Ic }{ Ns Ar TRUE_TEXT Ns Ic }{ Ns Ar FALSE_TEXT Ns Ic }@
+.It Ic @ifndef No "" Bro Ar SYM Ns :name! Ar TRUE_TEXT Ns :string! No :optional Ar FALSE_TEXT Ns No :string! Brc Ic @
 If
 .Va SYMBOL
 is
@@ -1291,9 +1440,9 @@ else return
 The
 .Bro Va FALSE_TEXT Brc
 clause is optional, and defaults to the empty string.
-.It Ic @index Ar SYM SUBSTR Ns Ic @
+.It Ic @index No "" Bro Ar SYM Ns :name! Ar STRING Ns :string Brc Ic @
 Return the position of
-.Va SUBSTR
+.Va STRING
 within the value of
 .Va SYM .
 .Em Note :
@@ -1303,11 +1452,11 @@ this is different from
 .Xr m4 1 ,
 which is zero-based.
 If
-.Va SUBSTR
+.Va STRING
 is not found, the returned value is 0.
-.It Ic @join Ar LIS Oo Ar FS Oc Ns Ic @
+.It Ic @join No "" Bro Ar LIST Ns :name! :optional Ar FS Ns :string Brc Ic @
 Concatenate each element of
-.Va LIS
+.Va LIST
 into a single string,
 inserting
 .Va FS
@@ -1322,24 +1471,27 @@ Variant
 .Ic @sjoin@
 adds a final
 .Va FS
-after the last element (useful when
+after the last element
+.Po
+useful when
 .Va __FS__
-is a newline).
+is a newline
+.Pc .
 See also
 .Ic @split .
-.It Ic @lc Ar SYM Ns Ic @
+.It Ic @lc No "" Bro Ar SYM Ns :name! Brc Ic @
 Lower case.
-.It Ic @left Ar SYM Oo Ar N Oc Ns Ic @
+.It Ic @left No "" Bro Ar SYM Ns :name! :optional Ar LENGTH Ns :integer=1 Brc Ic @
 Substring of
 .Va SYM
 from 1 to
 .Va N Ns th
 character.
-.It Ic @len Ar SYM Ns Ic @
+.It Ic @len No "" Bro Ar SYM Ns :name! Brc Ic @
 Number of characters in
 .Va SYM Ap s
 value.
-.It Ic @ljust Ar SYM Oo Ar WIDTH Oc Ns Ic @
+.It Ic @ljust No "" Bro Ar SYM Ns No :name! :optional Ar WIDTH Ns No :integer Brc Ic @
 Left-justify the value of
 .Va SYM
 in a field of
@@ -1356,14 +1508,14 @@ are truncated as necessary.
 Variant
 .Ic @sljust@
 does not truncate output.
-.It Ic @ltrim Ar SYM Ns Ic @
+.It Ic @ltrim No "" Bro Ar SYM Ns :name! Brc Ic @
 Remove leading whitespace.
-.It Ic @mid Ar SYM BEGIN Oo Ar LEN Oc Ns Ic @
+.It Ic @mid No "" Bro Ar SYM Ns No :name! Ar BEGIN Ns No :integer :optional Ar LENGTH Ns No :integer Brc Ic @
 Substring of
 .Va SYM
 from
 .Va BEGIN ,
-.Va LEN
+.Va LENGTH
 chararacters long.
 Also called
 .Ic @substr@ .
@@ -1375,23 +1527,23 @@ Negative
 .Va BEGIN
 starts counting backward from the end of the string.
 Positive
-.Va LEN
+.Va LENGTH
 counts rightward from the starting position; negative
-.Va LEN
+.Va LENGTH
 counts leftward.
-.Va LEN
+.Va LENGTH
 may be omitted, in which case all characters to the right of (including)
 .Va BEGIN
 are returned.
 See also the section entitled
 .Sx @mid@ Parameters .
-.It Ic @mjd Oo Ar YEAR MONTH DAY Oc Ns Ic @
+.It Ic @mjd No "" Bro :void | Ar YEAR Ns :integer Ar MONTH Ns :integer Ar DAY Ns :integer Brc Ic @
 Return the Modified Julian Day, which is
 the number of days since midnight on November\ 17, 1858.
 Without parameters, the current date is used.
 See also
 .Ic @gregdate@ .
-.It Ic @mktemp Oo Ar SYM No | Ar TEMPLATE Oc Ns Ic @
+.It Ic @mktemp No "" Bro :void | Ar SYM Ns :name! | Ar TEMPLATE Ns :string Brc Ic @
 Output a unique file path which does not currently exist.
 .Va TEMPLATE
 is expected to end with at least six
@@ -1409,25 +1561,25 @@ this function does
 actually create the file; it merely returns a likely path.
 It makes no guarantees that such a path can
 actually be created, so the caller must still take care.
-.It Ic @ns@
+.It Ic @ns@ No "" Bro :void Brc
 Return the current namespace.
 See also
 .Ic @namespace .
-.It Ic @ord Ar SYM Ns Ic @
+.It Ic @ord No "" Bro Ar VAL Ns :string Brc Ic @
 Output ASCII code of first character in
 .Va SYM .
-.It Ic @rem Oo Ar COMMENT Oc Ns Ic @
+.It Ic @rem No "" Bro :optional Ar COMMENT Ns :rest Brc Ic @
 Embedded comment text is ignored.
 Variant
 .Ic @srem@
 also discards preceding whitespace.
-.It Ic @right Ar SYM Oo Ar N Oc Ns Ic @
+.It Ic @right No "" Bro Ar SYM Ns :name! :optional Ar LENGTH Ns :integer Brc Ic @
 Substring of
 .Va SYM
 from
 .Va N Ap th
 to last character.
-.It Ic @rjust Ar SYM Oo Ar WIDTH Oc Ns Ic @
+.It Ic @rjust No "" Bro Ar SYM Ns No :name! :optional Ar WIDTH Ns No :integer Brc Ic @
 Right-justify the value of
 .Va SYM
 in a field of
@@ -1444,71 +1596,98 @@ are truncated as necessary.
 Variant
 .Ic @srjust@
 does not truncate output.
-.It Ic @rot13 Ar SYM Ns Ic @
+.It Ic @rot13 No "" Bro Ar VAL Ns :rest Brc Ic @
 Output value of
 .Va SYM
 (or literal string if
 .Va SYM
 not defined) with rot13 text.
-.It Ic @rtrim Ar SYM Ns Ic @
+.It Ic @rtrim No "" Bro Ar SYM Ns :name! Brc Ic @
 Remove trailing whitespace.
-.It Ic @space Oo Ar N Oc Ns Ic @
+.It Ic @sig No "" Bro Ar NAME Ns No :name! Brc Ic @
+Output the signature for command or function
+.Va NAME .
+.It Ic @space No "" Bro Ar COUNT Ns :integer=1 Brc Ic @
 Output
 .Va N
 (default 1) space characters, ASCII 0x20.
 Also called
 .Ic @spaces@ .
-.It Ic @strftime Ar FMT Ns Ic @
+.It Ic @strftime No "" Bro Ar FORMAT Ns No :rest Brc Ic @
 Current date/time in user-specified format.
-.It Ic @tab Oo Ar N Oc Ns Ic @
+.It Ic @tab No "" Bro Ar COUNT Ns :integer=1 Brc Ic @
 Output
 .Va N
 (default 1) tab characters, ASCII 0x09.
 Also called
 .Ic @tabs@ .
-.It Ic @time@
-Current time (format as
-.Va __FMT__[time] ) .
+.It Ic @time@ No "" Bro :void Brc
+Current time
+.Po
+format as
+.Va __FMT__[time]
+.Pc .
 See section
 .Sx Times and Dates .
-.It Ic @trim Ar SYM Ns Ic @
+.It Ic @trim No "" Bro Ar SYM Ns :name! Brc Ic @
 Remove both leading and trailing whitespace.
-.It Ic @tz@
-Time zone name (format as
-.Va __FMT__[tz] ) .
+.It Ic @tz@ No "" Bro :void Brc
+Time zone name
+.Po
+format as
+.Va __FMT__[tz]
+.Pc .
 See section
 .Sx Times and Dates .
-.It Ic @uc Ar SYM Ns Ic @
+.It Ic @uc No "" Bro Ar SYM Ns :name! Brc Ic @
 Upper case.
-.It Ic @utc@
+.It Ic @utc@ No "" Bro :void Brc
 Current timestamp in UTC time zone, displayed in ISO\ 8601 format
 (format as
 .Va __FMT__[utc] ) .
-.It Ic @uuid@
+.It Ic @uuid@ No "" Bro :void Brc
 UUID (Universally Unique Identifier) version 4, such as
 .Qq c3525388\&-e400\&\-43a7\&-bc95\&\-9df5fa3c4a52 .
-.It Ic @xbasename Ar SYM Ns Ic @
+.It Ic @xbasename No "" Bro Ar SYM Ns :name! Brc Ic @
 Base (file) name of
 .Va SYM
 determined by external program.
-.It Ic @xdirname Ar SYM Ns Ic @
+.It Ic @xdirname No "" Bro Ar SYM Ns :name! Brc Ic @
 Directory name of
 .Va SYM
 determined by external program.
 .El
+.Pp
+The above signatures are shown in canonical form, and do not reflect
+actual brace placement when calling.
+(Indeed,
+.Cm :void
+signatures are shown outside the
+.Ql @
+signs.)
+To be clear, a function with the following signature:
+.Dq Ic @myfunc No "" Bro Ar LABEL Ns :text Ar VAL Ns :integer Brc Ic @
+would be called as:
+.Pp
+.D1 "@myfunc{XLERB}{42}@"
 .Ss Hooks
-If defined,
+If available,
 .Nm
-will run specially named user commands
-.Po
+will run specially named user commands known as
 .Dq hooks
-.Pc
 at certain predefined points during its execution.
+Hooks are defined using
+.Ic @newcmd
+and they must be created in the
+.Qq m2
+namespace.
 Hook command names begin with
 .Qq __
 and end with
 .Qq _hook .
-Hooks take no formal parameters.
+All hooks have a 
+.Cm :void
+signature.
 .Bl -tag -width __m2_file_suspend_hook -offset indent
 .It Ic __m2_begin_hook
 Invoked once at the beginning of
@@ -1574,7 +1753,7 @@ in the current directory,
 it will consult the include path found in
 .Va __INCPATH__ .
 Directories can be inserted into the include path by specifying
-.Ql I=<directory>
+.Dl I=<directory>
 on the command line.
 Paths specified this way are examined before entries from
 .Ev M2PATH ,
@@ -1582,7 +1761,7 @@ to allow run-specific overrides.
 The include path is also used, if needed, for file names passed on the
 command line.
 Elements may be removed from the include path by specifying
-.Ql R=<directory>
+.Dl R=<directory>
 on the command line.
 .Ss Lists and Arrays
 Arrays are stored internally as an Awk associative array, and can be
@@ -1654,24 +1833,24 @@ supports the following functions:
 .Bl -tag -width defined(sym)____ -compact -offset indent
 .It Fn abs x
 Absolute value of
-.Va x ,
+.Va x ;
 |x|
 .It Fn acos x
 Arc-cosine of
-.Va x ,
+.Va x ;
 \-1 \*(Le x \*(Le 1
 .It Fn asin x
 Arc-sine of
-.Va x ,
+.Va x ;
 \-1 \*(Le x \*(Le 1
 .It Fn atan2 y x
 Arctangent of
-.Va y / x ,
+.Va y / x ;
 \-\*(Pi \*(Le atan2 \*(Le \*(Pi
 .It Fn ceil x
 Ceiling of
 .Va x ,
-smallest integer \*(Ge x
+smallest integer \*(Ge x; \(lcx\(rc
 .It Fn cos x
 Cosine of
 .Va x ,
@@ -1684,12 +1863,12 @@ is defined, else 0
 Convert radians to degrees
 .It Fn exp x
 Exponential (anti-logarithm) of
-.Va x ,
+.Va x ;
 e^x
 .It Fn floor x
 Floor of
 .Va x ,
-largest integer \*(Le x
+largest integer \*(Le x; \(lfx\(rf
 .It Fn gcd x y
 Greatest common divisor of
 .Va x
@@ -1736,26 +1915,27 @@ Raise
 .Va x
 to the
 .Va y
-power, x^y
+power; x^y
 .It Fn rad x
 Convert degrees to radians
 .It Fn rand
-Random float, 0 \*(Le rand \*(Lt 1
+Random float; 0 \*(Le rand \*(Lt 1
 .It Fn randint x
-Random integer, 1 \*(Le randint \*(Le x
+Random integer; 1 \*(Le randint \*(Le x
 .It Fn round x
 Normal rounding to nearest integer
 .It Fn sign x
 Signum of
-.Va x
+.Va x ;
 [\-1, 0, or +1]
 .It Fn sin x
 Sine of
-.VA x ,
+.Va x ,
 in radians
 .It Fn sqrt x
 Square root of
-.Va x
+.Va x ;
+\(srx.
 .It Fn tan x
 Tangent of
 .Va x ,
@@ -1791,24 +1971,28 @@ and also outputs the result.
 To assign a value to a variable without printing, use
 .Ic @define .
 .Ss Ic @mid@ Parameters
+As in standard Awk,
+.Ic @mid@
+.Pq or Ic @substr@
+starts counting characters at position one.
 Unlike standard Awk
 .Fn substr ,
 .Ic @mid@
 accepts negative arguments for both
 .Va BEGIN
 and
-.Va LEN .
+.Va LENGTH .
 Consider the symbol SYM containing the seven character string
 .Dq ABCDEFG ;
-counting characters from 1 (as in Awk), and also backwards from the
-end of the string:
+counting characters from 1 (as in Awk), and also negatively,
+backwards from the end of the string:
 .Bd -literal -offset indent
 .TS
 tab(&);
-l r r r r r r r.
-BEGIN (+)&1&2&3&4&5&6&7
-\~&A&B&C&D&E&F&G
-BEGIN (-)&-7&-6&-5&-4&-3&-2&-1
+l r r r r r r r l.
+BEGIN (+)&1&2&3&4&5&6&7&\~
+\~&A&B&C&D&E&F&G&\~
+\~&-7&-6&-5&-4&-3&-2&-1&BEGIN (-)
 .TE
 .Ed
 .Pp
@@ -1820,9 +2004,9 @@ After locating the initial character, the length of +2 prints two
 characters to the right, which includes the initial character.
 .Bd -literal -offset indent -compact
 @mid SYM 5 2@
-\ \ \ => EF
+\ \ \ \(rA EF
 @mid SYM -3 2@
-\ \ \ => EF
+\ \ \ \(rA EF
 .Ed
 .Pp
 While positive lengths look to the right, negative lengths look to the left;
@@ -1833,7 +2017,7 @@ From the same initial position (5 or -3), the two characters looking left are
 .Qq CD .
 .Bd -literal -offset indent -compact
 @mid SYM -3 -2@
-\ \ \ => CD
+\ \ \ \(rA CD
 .Ed
 .Pp
 Even though there is no position zero, if
@@ -1841,12 +2025,12 @@ Even though there is no position zero, if
 is given a value of 0, it is silently coerced to either
 .Ql 1
 if
-.Va LEN
+.Va LENGTH
 is positive,
 or an artificial
 .Dq end of string
-if
-.Va LEN
+value if
+.Va LENGTH
 is negative.
 This is so
 .Dl @mid SYM 0 N@
@@ -1903,20 +2087,20 @@ if the included file does not exist.
 @namespace ns1
 @define X This is ns1 symbol 'X'
 In @ns@, X=@X@
-\ \ \ => In ns1, X=This is ns1 symbol 'X'
+\ \ \ \(rA In ns1, X=This is ns1 symbol 'X'
 @namespace ns2
 @define X This is ns2 symbol 'X'
 In @ns@, X=@X@
-\ \ \ => In ns2, X=This is ns2 symbol 'X'
+\ \ \ \(rA In ns2, X=This is ns2 symbol 'X'
 @namespace m2
 Now in namespace @ns@
-\ \ \ => Now in namespace m2
+\ \ \ \(rA Now in namespace m2
 ns1::X=@ns1::X@
-\ \ \ => ns1::X=This is ns1 symbol 'X'
+\ \ \ \(rA ns1::X=This is ns1 symbol 'X'
 ns2::X=@ns2::X@
-\ \ \ => ns2::X=This is ns2 symbol 'X'
-In m2, X=@X@
-\ \ \ => In m2, X=A very normal @define command
+\ \ \ \(rA ns2::X=This is ns2 symbol 'X'
+m2::X=@X@
+\ \ \ \(rA m2::X=A very normal @define command
 .Ed
 .Ss Sequences
 .Nm
@@ -1924,7 +2108,9 @@ supports named sequences, which are integer values.  By default,
 sequences begin at 0 and increment by 1 as appropriate.  These
 defaults can be changed, and the value can be updated or restarted.
 You create and manage sequences with the
-.Ic @sequence Ar ID Cm ACTION Oo Ar arg Oc
+.Pp
+.Dl Ic @sequence Ar ID Cm ACTION Oo Ar arg Oc
+.Pp
 command.
 Valid actions are:
 .Pp
@@ -1932,27 +2118,30 @@ Valid actions are:
 .It Ar ID Oo Cm create Oc
 Create a new sequence named
 .Va ID .
-.It Ar ID Cm delete
+.It Cm delete
 Destroy sequence named
 .Va ID .
-.It Ar ID Cm format Ar STR
-Specify format string for printing (default
-.Qq %d ) .
-.It Ar ID Cm next
+.It Cm format Ar STR
+Specify format string for printing
+.Po
+default
+.Qq %d
+.Pc .
+.It Cm next
 Increment value (no output).
-.It Ar ID Cm prev
+.It Cm prev
 Decrement value (no output).
-.It Ar ID Cm restart
+.It Cm restart
 Reset current value to initial value.
-.It Ar ID Cm setincr Ar N
+.It Cm setincr Ar N
 Set increment to
 .Va N
 (default 1).
-.It Ar ID Cm setinit Ar N
+.It Cm setinit Ar N
 Set initial value to
 .Va N
 (default 0).
-.It Ar ID Cm setval Ar N
+.It Cm setval Ar N
 Set value directly to
 .Va N .
 .El
@@ -1969,7 +2158,7 @@ and
 .Ql %\&r
 specifiers to print Roman numerals.
 The form
-.Ql @++ID@
+.Ql Ic @++ Ns Va ID Ns Ic @
 is used to generate an increasing sequence of values printed in a
 user-customizable format.
 Use
@@ -1980,7 +2169,7 @@ to decrement.
 These operators can be used in either a prefix or postfix position.
 To get the current value printed in
 decimal without modification or formatting, say
-.Ql @ID currval@ .
+.Ql Ic @ Ns Va ID Ic currval@ .
 .Pp
 Sequence values can be modified in three ways:
 .Bl -enum
@@ -2003,18 +2192,253 @@ or
 modify the sequence while outputting the desired value.
 .It
 The form
-.Ql @ID nextval@
+.Ql Ic @ Ns Va ID Cm nextval@
 will increment the value and return it in decimal without special formatting.
 .El
 .Pp
 .Em Example :
 .Bd -literal -offset indent -compact
-@sequence counter create
-@sequence counter format # %d=
-@++counter@ First header
-\ \ \ => # 1=First header
-@++counter@ Second header
-\ \ \ => # 2=Second header
+@sequence h1 create
+@sequence h1 format %R.
+@sequence h1 setval 3
+@++h1@ Fourth header
+\ \ \ \(rA IV. Fourth header
+@++h1@ Fifth header
+\ \ \ \(rA V. Fifth header
+@++h1@ Sixth header
+\ \ \ \(rA VI. Sixth header
+.Ed
+.Ss Shortcuts
+.\" These *are* documented elsewhere in the manual,
+.\" but the information is obscure and scattered...
+Normally, command line arguments are either filenames or
+.Qq Ar name Ns = Ns Ar value
+assignments.
+To assist the user and to provide typing shortcuts,
+certain liberties with command line arguments are permitted.
+Some shortcuts, like
+.Qq debug
+and
+.Qq trace
+are merely aliases for other, harder-to-type symbol names.
+They just get re-written.
+Others, like
+.Qq init=
+or
+.Qq U=
+trigger actions which are executed immediately.
+.Bl -tag -width VERBOSE=VALX -offset indent
+.It Cm @ Ns Ar cmd No ...
+Arguments beginning with
+.Qq @
+characters are interpreted as commands to evaluate.
+.It Cm debug
+Alias for
+.Va __DEBUG__ .
+.It Cm fs
+Alias for
+.Va __FS__ .
+.It Cm I= Ns Ar PATH
+Add
+.Va PATH
+to include path
+.Va __INCPATH__ .
+Elements are prepended, so they override
+.Ev M2PATH
+environment variable values.
+.It Cm init Ns = Ns Ar VALUE
+Control loading of initialization files.
+With a positive
+.Va VALUE ,
+force loading of init files immediately, without needing to provide a
+file name.
+If
+.Va VALUE
+is zero or negative, prevent init files from loading in future.
+.It Cm R= Ns Ar PATH
+Remove
+.Va PATH
+from include path
+.Va __INCPATH__ .
+.It Cm secure
+Alias for
+.Va __SEC_LEVEL__ .
+.It Cm strict
+Alias for
+.Va __STRICT__ .
+.It Cm T= Ns Ar NAME
+Set
+.Va __TRACE__
+to True and begin tracing variable
+.Va NAME .
+.It Cm trace Ns = Ns Ar VALUE
+Set
+.Va __TRACE__
+to True and pass
+.Va VALUE
+to
+.Ic @tracemode .
+If
+.Va VALUE
+is omitted, set
+.Va __TRACE__
+to False.
+.It Cm U= Ns Ar NAME
+Undefine
+.Va NAME .
+.It Cm verbose
+Alias for
+.Va __VERBOSE__ .
+.El
+.Ss Signatures
+A
+.Dq signature
+is a series of one or more elements, individually called
+.Dq sigs ,
+which describes the names and types of parameters accepted
+by commands and functions.
+When printed or used with
+.Ic @newcmd ,
+signatures are typically enclosed in braces.
+Individual sigs are formatted as follows:
+.Pp
+.D1 Oo Ar NAME Oc Ns Oo Ic ":\&" Ns Ar tag Oc Ns Oo Cm "!\&" Oc Ns Oo Ic "=\&" Ns Qo Ar default value Qc Oc
+.Pp
+Every sig contains a
+.Ql :\&
+character followed by a tag which identifies the sig type.
+If the tag is omitted, a default type of
+.Cm :string
+will be used.
+Sigs may or may not have names attached to them, which become the formal parameter
+names to the new command.
+Some tags, like
+.Cm :integer
+or
+.Cm :filename ,
+take values and are called
+.Dq "consuming tags" .
+They define parameters to a command, and must include a
+.Va NAME .
+Other tags, such as
+.Cm :optional ,
+are
+.Dq "non-consuming tags" ;
+they define no parameters, do not take values, and must
+.Sy not
+be named.
+Instead, they affect the characteristics of the following sigs.
+If a
+.Ql "!\&"
+be affixed to the tag, the sig is marked as
+.Dq immediate .
+This means the value supplied to the parameter is not subject to
+macro expansion \(em it must be syntactically correct at the time the
+command is parsed.
+Finally, if a parameter is marked
+.Cm :optional ,
+you may specify a default value
+following
+the
+.Ql = .
+This value will be used if the parameter is omitted.
+.Pp
+The following table lists the valid tag types.
+Tags marked
+.Ql C
+are consuming tags; those marked
+.Ql NC
+are non-consuming.
+.Bl -tag -width 10XXXXXXXX -offset indent
+.It Cm :boolean
+(C) Defines a parameter which accepts only True or False values (currently only
+.Qq 0
+or
+.Qq 1
+are accepted, although this is likely to change in a future release.)
+Also called
+.Cm :bool .
+.It Cm :filename
+(C) Defines a parameter specifying a file name.
+Currently treated like
+.Cm :rest .
+Enclosing quotes and angle brackets are removed.
+.It Cm :float
+(C) Defines a parameter restricted to floating point values.
+Also called
+.Cm :real .
+.It Cm :integer
+(C) Defines a parameter restricted to integer values.
+Also called
+.Cm :int .
+.It Cm :lval
+(C) Defines a parameter which can be defined: either a Name, or a
+bracketed index value of an Array or List.
+.It Cm :name
+(C) Defines a parameter which must be a valid symbol name.
+Indexing (i.e., brackets) are not allowed.
+.It Cm :optional
+(NC) Indicates that all following consuming sigs are optional.
+It will then not be an error if an invocation omits those parameters:
+their default values will be used in that case.
+.It Cm :repeat
+(NC) Indicates that the name and type of the
+.Sy following
+sig shall be a List, and 
+the remaining arguments shall be its elements.
+If the next sig has a restricted type
+.Po
+most notably
+.Cm :integer
+.Pc
+then all of the remaining arguments must also be compatible with this type.
+.It Cm :rest
+(C) Defines a final parameter which will contain all of the remaining
+command line arguments as a single string.
+Must the the last sig in the signature.
+.It Cm :string
+(C) Defines a parameter containing arbitrary characters, with no special interpretation.
+This is the default type if the tag is omitted.
+.It Cm :void
+(NC) Indicates that a function takes no parameters.
+If a signature is
+.Cm :void ,
+no other sigs may be present.
+.El
+.Pp
+It is important to realize that even though a parameter may be marked
+.Cm :optional ,
+at the time the user command executes, every parameter will have been bound to
+a value.
+Parameters created with
+.Cm :repeat ,
+which accept multiple arguments, are instantiated as full-fledged Lists.
+You can examine their size with
+.Ql @NAME@
+and iterate through them with
+.Ic @foreach .
+.Pp
+.Em Example :
+.Bd -literal -offset indent -compact
+@newcmd sigdemo { ACTION LUCKY:int :repeat :opt items }
+I see @items@ objects to @ACTION@@ifx{items > 0}{:}{.}@
+@foreach this items
+@format{#%d = '%s'}{@{this}}{@{items[@{this}]}}@
+@next this
+Lucky number: @LUCKY@
+@endcmd
+
+@sigdemo{Contemplate the nothingness of}{7}
+\ \ \ \(rA I see 0 objects to Contemplate the nothingness of.
+\ \ \ \(rA Lucky number: 7
+@sigdemo{Beat}{42}{It}{The clock}{Your high score}
+\ \ \ \(rA I see 3 objects to Beat:
+\ \ \ \(rA #1 = 'It'
+\ \ \ \(rA #2 = 'The clock'
+\ \ \ \(rA #3 = 'Your high score'
+\ \ \ \(rA Lucky number: 42
+@sigdemo{Whoops}{BAD INT}{@{expr 1/0}}{Not evaluated}
+\ \ \ \(rA m2:<stdin>:11: @m2::sigdemo: Parameter LUCKY value 'BAD INT' is not an :integer
 .Ed
 .Ss Streams and Diversions
 Instead of printing lines immediately to standard output,
@@ -2022,7 +2446,7 @@ the stream of text can be
 .Dq diverted
 to a temporary buffer area.
 Later, you can choose whether to print that diverted text,
-write it to an ASCII file, or discard it entirely.
+write it to a text file, or discard it entirely.
 .Nm
 attempts to follow
 .Xr m4 1
@@ -2070,7 +2494,7 @@ Inject only stream
 into the current diversion.
 .It @undivert Ar N1 N2 No ...
 Inject all specified streams into current diversion,
-in argument order (not numerical order).
+in argument (not numerical) order.
 .It @undivert Ar N FILE
 As an extension to m4's undivert,
 .Nm
@@ -2086,8 +2510,18 @@ This form is only available at standard security level.
 world!
 @divert
 Hello,
-\ \ \ => Hello,
-\ \ \ => world!
+\ \ \ \(rA Hello,
+@undivert 1
+\ \ \ \(rA world!
+@divert 2
+cruel world!
+@divert 1
+Goodbye
+@divert
+Back to it, lads!
+\ \ \ \(rA Back to it, lads!
+\ \ \ \(rA Goodbye
+\ \ \ \(rA cruel world!
 .Ed
 .Pp
 A new diversion can also be created via
@@ -2106,6 +2540,7 @@ without a previously corresponding
 You can determine if a stream buffer contains text by using the function
 .Ic @divnl Ns Ic @ ,
 which returns the number of lines stored in a diversion.
+An empty buffer returns zero.
 This allows the user to alter processing depending on the availability
 of text in a stream.
 .It Em End-of-Data Processing :
@@ -2176,8 +2611,11 @@ run start date as
 See section
 .Sx Times and Dates .
 .It Va __DEBUGFILE__
-File path for debug and trace output (user modifiable, default
-.Pa /dev/stderr ) .
+File path for debug and trace output
+.Po
+user modifiable, default
+.Pa /dev/stderr
+.Pc .
 .It Va __DEBUG__
 Debugging enabled? (boolean, user modifiable, default False).
 .It Va __DEPTH__
@@ -2217,8 +2655,11 @@ Date format for
 .Ic @date@ .
 Default is "%Y\&-%m\&-%d"; user modifiable.
 .It Va __FMT__[number]
-Format for printing numbers (synchronized with
-.Va CONVFMT ) ;
+Format for printing numbers
+.Po
+synchronized with
+.Va CONVFMT
+.Pc ;
 user modifiable.
 .It Va __FMT__[seq]
 Format for printing sequence values.
@@ -2311,7 +2752,7 @@ Operating system name.
 process id.
 .It Va __PROG__[ Ns No ... Ns Va ]
 Paths to various system utility programs.
-.It Va __SECURITY__
+.It Va __SEC_LEVEL__
 Security level (0, 2, or 3).
 See
 .Sx SECURITY CONSIDERATIONS
@@ -2402,6 +2843,9 @@ See section
 User id (effective uid).
 .It Va __USER__
 User name.
+.It Va __VERBOSE__
+Include further information when displaying certain error messages.
+User modifiable.
 .El
 .Ss Times and Dates
 .Va __DATE__ ,
@@ -2430,7 +2874,7 @@ prints
 .Bd -literal -offset indent -compact
 @define timestamp @date@T@time@@__TZ__@
 @timestamp@
-\ \ \ => 1945\&\-07\&\-16T05:30:00\&\-0600
+\ \ \ \(rA 1945\&\-07\&\-16T05:30:00\&\-0600
 .Ed
 .Ss Tracing
 .Nm
@@ -2632,9 +3076,9 @@ or
 Symbols and functions can be used in-line with other text and generally
 produce or modify output in some way.
 Parameters may be specified with either syntax:
-.Ql @func AAA BBB CCC@
+.Dl @func AAA BBB CCC@
 (split on whitespace), or
-.Ql @func{AAA}{BBB}{CCC}@ .
+.Dl @func{AAA}{BBB}{CCC}@
 Available conditionals include
 .Ic @ifdef@ ,
 .Ic @ifelse@ ,
@@ -2698,14 +3142,14 @@ All required parameters must be supplied with arguments when the command is invo
 .\"  See tests/FOR/007/table.m2
 .Bd -literal -offset indent -compact
 @comment        @line{n} produces one data line of the table
-@newcmd line{n}
+@newcmd line {n}
 | @format %2d @{n}@ @\e
 | @format %3d @{expr n^2}@ @\e
 | @format %7.4f @{expr sqrt(n)}@ |
 @endcmd
 @;
 @comment        @table{n} prints a table with a number of rows
-@newcmd table{n=9}
+@newcmd table {n=9}
 This table will have @n@ lines:
 |  N | N^2 | sqrt(N) |
 |----|-----|---------|
@@ -2716,18 +3160,18 @@ This table will have @n@ lines:
 @;
 @comment        Generate the default @table
 @table
-\ \ \ => This table will have 9 lines:
-\ \ \ => |  N | N^2 | sqrt(N) |
-\ \ \ => |----|-----|---------|
-\ \ \ => |  1 |   1 |  1.0000 |
-\ \ \ => |  2 |   4 |  1.4142 |
-\ \ \ => |  3 |   9 |  1.7321 |
-\ \ \ => |  4 |  16 |  2.0000 |
-\ \ \ => |  5 |  25 |  2.2361 |
-\ \ \ => |  6 |  36 |  2.4495 |
-\ \ \ => |  7 |  49 |  2.6458 |
-\ \ \ => |  8 |  64 |  2.8284 |
-\ \ \ => |  9 |  81 |  3.0000 |
+\ \ \ \(rA This table will have 9 lines:
+\ \ \ \(rA |  N | N^2 | sqrt(N) |
+\ \ \ \(rA |----|-----|---------|
+\ \ \ \(rA |  1 |   1 |  1.0000 |
+\ \ \ \(rA |  2 |   4 |  1.4142 |
+\ \ \ \(rA |  3 |   9 |  1.7321 |
+\ \ \ \(rA |  4 |  16 |  2.0000 |
+\ \ \ \(rA |  5 |  25 |  2.2361 |
+\ \ \ \(rA |  6 |  36 |  2.4495 |
+\ \ \ \(rA |  7 |  49 |  2.6458 |
+\ \ \ \(rA |  8 |  64 |  2.8284 |
+\ \ \ \(rA |  9 |  81 |  3.0000 |
 .Ed
 .Sh IMPLEMENTATION NOTES
 .Nm
@@ -2838,7 +3282,7 @@ to abend.
 .It Li 77
 Security violation caused by attempting an operation forbidden
 at current
-.Va __SECURITY__
+.Va __SEC_LEVEL__
 value.
 .El
 .Sh EXAMPLES
@@ -3021,7 +3465,12 @@ preprocessor, although it was later replaced with m4.
 .%D 1976
 .Re
 .It M4
-From Unix V7, a macro processor
+From
+.At v7 ,
+.\" Doug McIlroy confirms m4(1) appearance with 7th Edition UNIX
+.\" on p.5 of "A Research UNIX Reader", retrieved from
+.\"     https://www.cs.dartmouth.edu/~doug/reader.pdf
+a macro processor
 .Dq "intended as a front end for Ratfor, C, and other languages" .
 .Rs
 .%A B. W. Kernighan
@@ -3141,6 +3590,7 @@ response string.
 .It Lk https://github.com/octobanana/m8
 .El
 .El
+.\" .Sh STANDARDS
 .\" .Sh HISTORY
 .Sh AUTHORS
 .An Jon Bentley ,
@@ -3170,7 +3620,7 @@ This is especially noticeable if
 is used in complex ways.
 .Sh SECURITY CONSIDERATIONS
 The symbol
-.Va __SECURITY__
+.Va __SEC_LEVEL__
 contains an integer storing the security level, which controls how
 .Nm
 may invoke subprocesses.

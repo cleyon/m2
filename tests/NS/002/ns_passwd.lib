@@ -34,12 +34,12 @@ But, you have to use @echo to print stuff
 @endcmd
 
 
-@newcmd m2::getpwnam{name}
+@newcmd m2::getpwnam {name}
 @Init
 @Byname[@{name}]@
 @endcmd
 
-@newcmd m2::getpwuid{uid}
+@newcmd m2::getpwuid {uid}
 @Init
 @Byuid[@{uid}]@
 @endcmd

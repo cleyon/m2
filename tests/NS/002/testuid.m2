@@ -1,2 +1,2 @@
 @import passwd ns_passwd.lib
-@getpwuid{2849}@
+@getpwuid{2849}

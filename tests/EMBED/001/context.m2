@@ -1,5 +1,5 @@
-@newcmd greet{who}
-@newcmd private{name}
+@newcmd greet {who}
+@newcmd private {name}
 Hello, @name@
 @endcmd
 @private{@{who}}

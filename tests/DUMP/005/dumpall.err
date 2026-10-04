@@ -35,6 +35,7 @@ __m2__::endif	Command<System,Immediate>
 __m2__::endlong	Command<System,Immediate>
 __m2__::endlongdef	Command<System,Immediate>
 __m2__::endwhile	Command<System,Immediate>
+__m2__::ensure	Command<System,Immediate>
 __m2__::eod	Command<System>
 __m2__::epoch	Function<System>
 __m2__::error	Command<System>
@@ -68,7 +69,7 @@ __m2__::include	Command<System>
 __m2__::incr	Command<System>
 __m2__::index	Function<System>
 __m2__::initialize	Command<System>
-__m2__::input	Command<System>
+__m2__::input	Command<System,Immediate>
 __m2__::join	Function<System>
 __m2__::lc	Function<System>
 __m2__::left	Function<System>
@@ -114,6 +115,7 @@ __m2__::sfiledata	Command<System>
 __m2__::sfiledef	Command<System>
 __m2__::sfiledefine	Command<System>
 __m2__::shell	Command<System>
+__m2__::sig	Function<System>
 __m2__::simport	Command<System>
 __m2__::sinclude	Command<System>
 __m2__::sjoin	Function<System>
@@ -165,7 +167,7 @@ __m2__::__DIVNUM__	Symbol<System,Read_Only,Integer>
 __m2__::__DOW__	Symbol<System,Read_Only>
 __m2__::__EPOCH__	Symbol<System,Read_Only,Integer>
 __m2__::__EXIT__	Symbol<System,Read_Only,Integer>
-__m2__::__EXPR__	Symbol<System,Read_Only,Numeric>
+__m2__::__EXPR__	Symbol<System,Read_Only,Float>
 __m2__::__FILE_UUID__	Symbol<System,Read_Only>
 __m2__::__FILE__	Symbol<System,Read_Only>
 __m2__::__FMT__	Array<System,Writable>
@@ -186,7 +188,7 @@ __m2__::__NSPATH__	Symbol<System,Read_Only>
 __m2__::__OSNAME__	Symbol<System,Read_Only,Deferred>
 __m2__::__PID__	Symbol<System,Read_Only,Integer,Deferred>
 __m2__::__PROG__	Array<Read_Only,System>
-__m2__::__SECURITY__	Symbol<System,Writable,Integer>
+__m2__::__SEC_LEVEL__	Symbol<System,Writable,Integer>
 __m2__::__STRICT__	Array<System,Writable,Boolean>
 __m2__::__SYNC__	Symbol<System,Writable,Integer>
 __m2__::__SYSVAL__	Symbol<System,Read_Only,Integer>

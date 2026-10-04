@@ -1,5 +1,5 @@
 @sequence h1count
-@newcmd h1{h1_text}
+@newcmd h1 {h1_text}
 @divert 9
 @sequence h1count next
 <li><a href="#H1_@h1count@">@h1_text@</a></li>

@@ -1,10 +1,10 @@
-@newcmd m2::FOO
+@newcmd m2::FOO { :void }
 Foo on you!
 @endcmd
-@newcmd m2::greet{name}
+@newcmd m2::greet { name:string }
 Hello, @m2::name@!
 @endcmd
-@newcmd m2::pronounce{who}{judgment}
+@newcmd m2::pronounce { who:string judgment:string }
 @__m2__::for i 1 4 1
 That's @m2::judgment@, @m2::who@, @m2::judgment@!
 @next i

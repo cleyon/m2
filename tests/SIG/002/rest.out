@@ -1,0 +1,3 @@
+In rest1, r='{This is the first argument}'
+In rest1, r='I am large, I contain multitudes'
+In rest1, r='{first}{second}'

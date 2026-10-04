@@ -1,5 +1,5 @@
 @sequence count
-@newcmd header{text}
+@newcmd header {text}
 @divert 9
 @sequence count next
 (in stream 9) count=@count@, text=@text@

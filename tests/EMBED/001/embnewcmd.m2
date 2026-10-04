@@ -2,7 +2,7 @@
 Quux!
 @endcmd
 @@ @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-@newcmd foo{x}
+@newcmd foo {x}
 @newcmd bar
 Bar: x=@x@
 @endcmd

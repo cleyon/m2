@@ -137,3 +137,17 @@ function dbg_message(key, lev, text, file, line)
 #     }
 #     nsym_store(sym, append_flag ? nsym_fetch(sym) str : str)
 # }
+
+
+function min3(x, y, z,
+              nope)
+{
+    nope = 32767
+    # If they're all zero, return 0
+    if (x == 0 && y == 0 && z == 0) return 0
+    # At least one is non-zero, so retire any 0 values
+    if (x == 0) x = nope
+    if (y == 0) y = nope
+    if (z == 0) z = nope
+    return min(x, min(y, z))
+}

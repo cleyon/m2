@@ -1,6 +1,6 @@
-@newcmd m2::greet{who}
-@newcmd m2::private{name}
+@newcmd m2::greet { who:string }
+@newcmd m2::private { name:string }
 Hello, @m2::name@
 @endcmd
-@private{@{who}}
+@m2::private{@{who}}
 @endcmd

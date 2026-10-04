@@ -1,7 +1,7 @@
-@newcmd aaa{What}
+@newcmd aaa {What}
 You are likely to be eaten by a @What@.
 @endcmd
-@newcmd hello{name}
+@newcmd hello {name}
 Hello, @name@!
 @for i 1 3
 i=@i@

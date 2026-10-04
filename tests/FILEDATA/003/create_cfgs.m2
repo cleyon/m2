@@ -9,7 +9,7 @@
 @comment        User command to write a configuration file
 @comment        Required parameters: Host name, ID
 @@
-@newcmd    write_config_file{hostname}{hostid}
+@newcmd    write_config_file {hostname hostid}
 @comment                     ^^ These parameter names are referenced
 @comment                        in the template file
 @local     filename
@@ -24,7 +24,7 @@
 @comment        CHECK_CONFIG_FILE
 @comment        User command to check config file - compare with *.target
 @@
-@newcmd    check_config_file{hostname}
+@newcmd    check_config_file {hostname}
 @local     filename
 @define    filename     @cfgfile @{hostname}@
 @syscmd    cmp -s @filename@ @hostname@.target

@@ -1,7 +1,7 @@
-@newcmd m2::aaa{What}
+@newcmd m2::aaa { What:string }
 You are likely to be eaten by a @m2::What@.
 @endcmd
-@newcmd m2::hello{name}
+@newcmd m2::hello { name:string }
 Hello, @m2::name@!
 @__m2__::for i 1 3 1
 i=@m2::i@
@@ -10,7 +10,7 @@ Duple
 @else
 Non
 @endif
-@aaa{Quux}
+@m2::aaa{Quux}
 @next i
-@aaa{grue}
+@m2::aaa{grue}
 @endcmd

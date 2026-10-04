@@ -1,12 +1,11 @@
-@@ While with Namespaces
+@@ While with levels
 @define N 4
 @while N > 0
-@newcmd haha{x}
-Twice @x@ is equal to @expr 2*x@
+@newcmd twice {x}
+Twice @x@ = @expr 2*x@
 @endcmd
-@haha{@{N}}
+@twice{@{N}}
 @decr N
 @endwhile
-@@
-@@ @haha{42}
-@haha{42}
+@@  @twice should not be defined here, so should print literally:
+@twice{42}

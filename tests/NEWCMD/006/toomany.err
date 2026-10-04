@@ -1,1 +1,2 @@
-m2:toomany.m2:23: @foo: Insufficient parameters
+m2:toomany.m2:19: @foo{6}: Invocation error: Invocation not valid
+m2:toomany.m2:19: @m2::foo: Parameter 'b': Missing argument

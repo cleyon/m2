@@ -1,4 +1,4 @@
-@newcmd foo{x}{y}
+@newcmd foo {x y}
 x='@x@', y='@y@'
 @endcmd
 @foo{a}{b}

@@ -1,6 +1,6 @@
-@newcmd foo{x}
+@newcmd foo {x}
 Start foo, x=@x@
-@newcmd bar{x}
+@newcmd bar {x}
 In bar, x=@x@
 @endcmd
 @local xyzzy

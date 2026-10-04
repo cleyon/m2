@@ -1,13 +1,11 @@
-@newcmd m2::one
-@__m2__::define FOO 1
+@newcmd m2::one { :void }
+@define FOO 1
 Begin
 @case m2::FOO
-Preamble
-Of clauses may print in different order - that's okay
-@of 2
-Two
 @of 1
 One
+@of 2
+Two
 @of 3
 Three
 @otherwise

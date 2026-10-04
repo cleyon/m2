@@ -1,1 +1,2 @@
-m2:defs.m2:7: @foo: Insufficient parameters
+m2:defs.m2:7: @foo: Invocation error: Invocation not valid
+m2:defs.m2:7: @m2::foo: Parameter 'a': Missing argument

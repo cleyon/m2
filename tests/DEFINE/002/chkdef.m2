@@ -6,7 +6,7 @@
 Line 1
 @eod
 @@
-@newcmd doit{foo}
+@newcmd doit {foo}
 Inside doit, foo=@foo@
 @endcmd
 @@

@@ -1,0 +1,81 @@
+Escape Sequences
+================
+
+\a       7 Alert (bell)
+\b	 8 Backspace
+\f	12 Form feed
+\n	10 Newline
+\r	13 Carriage return
+\t	 9 Tab
+\v	11 Vertical tab
+\\	92 Backslash
+\"	34 Double quote         Only valid in "strings"
+\}     125 Right brace          Only valid in {elements}
+\NNN       Octal code           1, 2, or 3 numerals
+           Example: \033 is the code for the ASCII ESC (escape) character
+
+NOTE 1: The "\xHH" notation for hexadecimal value escapes is not supported.
+
+NOTE 2: Do not use backslash before any other character.  Different Awk
+implmentations handle this inconsistently.  Consider:
+
+$ echo 'BEGIN { print "a\qc" }' | /usr/local/bin/nawk -f -
+aqc
+$ echo 'BEGIN { print "a\qc" }' | /usr/local/bin/gawk -f -
+gawk: -:1: warning: escape sequence `\q' treated as plain `q'
+aqc
+$ echo 'BEGIN { print "a\qc" }' | /usr/local/bin/mawk -f -
+a\qc
+
+
+================================================================
+gawk
+================================================================
+
+In a regexp, a backslash before any character that is not in the
+previous list and not listed in gawk-Specific Regexp Operators means
+that the next character should be taken literally, even if it would
+normally be a regexp operator. For example, /a\+b/ matches the three
+characters `a+b'.
+
+For complete portability, do not use a backslash before any character
+not shown in the previous list or that is not a regular expression
+operator. (The 2024 POSIX standard explicitly lists the operators that
+can be escaped, leaving it undefined as to what happens for any other
+escaped character. But the bottom line is as described previously.)
+
+Backslash Before Regular Characters:
+If you place a backslash in a string constant before something that is
+not one of the characters previously listed, POSIX awk purposely leaves
+what happens as undefined. There are two choices:
+
+Strip the backslash out:
+This is what BWK awk and gawk both do. For example, "a\qc" is the same
+as "aqc". (Because this is such an easy bug both to introduce and to
+miss, gawk warns you about it.) Consider `FS = "[ \t]+\|[ \t]+"' to use
+vertical bars surrounded by whitespace as the field separator. There
+should be two backslashes in the string: `FS = "[ \t]+\\|[ \t]+"'.
+
+Leave the backslash alone:
+Some other awk implementations do this. In such implementations, typing
+"a\qc" is the same as typing "a\\qc".
+
+To summarize:
+- The escape sequences in the preceding list are always processed first,
+  for both string constants and regexp constants. This happens very
+  early, as soon as awk reads your program.
+- gawk processes both regexp constants and dynamic regexps (see Using
+  Dynamic Regexps), for the special operators listed in gawk-Specific
+  Regexp Operators.
+- A backslash before any other character means to treat that character literally.
+- Escape Sequences for Metacharacters
+- Suppose you use an octal or hexadecimal (\x or \u) escape to represent
+  a regexp metacharacter. (See Regular Expression Operators.) Does awk
+  treat the character as a literal character or as a regexp operator?
+
+Historically, such characters were taken literally. (d.c.) However, the
+POSIX standard indicates that they should be treated as real
+metacharacters, which is what gawk does. In compatibility mode (see
+Command-Line Options), gawk treats the characters represented by octal
+and hexadecimal escape sequences literally when used in regexp
+constants. Thus, /a\52b/ is equivalent to /a\*b/.

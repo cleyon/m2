@@ -1,4 +1,4 @@
-@newcmd foo{a}{b}
+@newcmd foo {a b}
 @local product
 @define product @expr a*b@
 Product is @product@

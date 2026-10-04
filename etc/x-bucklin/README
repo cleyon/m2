@@ -1,0 +1,16 @@
+# m1 macro processor
+
+The m1 macro processor, originally by Jon Bentley.
+Bentley is also the author of Programming Pearls
+and many other books about programming.
+
+The m1 macro processor appears in 
+Sed & Awk, 2nd Edition
+by Dougherty and Robbins.
+
+Bentley also wrote 
+[an article about m1](https://www.drdobbs.com/open-source/m1-a-mini-macro-processor/200001791)
+that appears in Dr. Dobb's.
+
+I have enhanced my version of m1 with the suggested `@longdefine` and `@undefine` macros,
+and a `@calc` macro that incorporates functionality from my Awk-based emulation of dc.

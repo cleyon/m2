@@ -1,4 +1,4 @@
-@newcmd foo{A}{B}{C}{D}
+@newcmd foo {A B C D}
 D=>@D@<
 C=>@C@<
 B=>@B@<

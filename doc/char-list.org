@@ -1,28 +1,28 @@
-|   | ID                     |   | ID                   |   | ID                      |
-|---+------------------------+---+----------------------+---+-------------------------|
-| A | TYPE_"ARRAY"           | a | BLK_"AGG"            | 0 | <reserved>              |
-| B | FLAG_"BOOLEAN"         | b | MODE_"XEQ_BREAK"     | 1 | OP_"CREATE"             |
-| C | TYPE_"COMMAND"         | c | "OBJ_CMD"            | 2 | OP_"READ"               |
-| D | FLAG_"DEFERRED"        | d | BLK_"LONGDEF"        | 3 | OP_"UPDATE"             |
-| E | PTYPE_"ENV_VAR"        | e | BLK_"CASE"           | 4 | OP_"DELETE"             |
-| F | TYPE_"FUNCTION"        | f | BLK_"FILE"           | 5 | OP_"PRINT"              |
-| G | "SORT_NATURAL"         | g |                      | 6 |                         |
-| H | "SORT_INTEGER"         | h | MODE_"HOOKS_ENABLED" | 7 |                         |
-| I | FLAG_"INTEGER"         | i | BLK_"IF"             | 8 |                         |
-| J | PTYPE_"IDXABLE"        | j | "OBJ_USER"           | 9 |                         |
-| K | "OBJ_BLKNUM"           | k | PTYPE_"KEY"          | ? | <reserved>              |
-| L | TYPE_"LIST"            | l | PTYPE_"SCALAR"       | ! | FLAG_"IMMEDIATE"        |
-| M | PTYPE_"NAME"           | m | FLAG_"NUMERIC"       | @ | MODE_"AT_PROCESS"       |
-| N | PTYPE_NS "NAMESPACE"   | n | PTYPE_"NUMBER"       | _ | TYPE_"INTERNAL"         |
-| O | BLK_"FOR"              | o | MODE_"XEQ_CONTINUE"  | ~ | PTYPE_"UNDEF"           |
-| P | PTYPE_"PARAM"          | p | MODE_"TEXT_PRINT"    | * | PTYPE_"ANY"             |
-| Q | TYPE_"SEQUENCE"        | q | BLK_"STRING"         | > | MODE_"STREAMS_SHIP_OUT" |
-| R | FLAG_"READONLY"        | r | MODE_"XEQ_RETURN"    | ' | MODE_"AT_LITERAL"       |
-| S | TYPE_"SYMBOL"          | s | MODE_"TEXT_STRING"   | . | INIT_"DOTFILES"         |
-| T | BLK_"TERMINAL"         | t | "OBJ_TEXT"           | # | INIT_"ORD"              |
-| U | TYPE_"USER"            | u | BLK_"USER"           | < | INIT_"ROT13"            |
-| V |                        | v | MODE_"IO_CAPTURE"    |   |                         |
-| W | FLAG_"WRITABLE"        | w | "BLK_WHILE"          |   |                         |
-| X | MODE_"STREAMS_DISCARD" | x | MODE_"XEQ_NORMAL"    |   |                         |
-| Y | FLAG_"SYSTEM"          | y |                      |   |                         |
-| Z |                        | z | MODE_"IO_SILENT"     |   |                         |
+|   | ID                   |   | ID                     |   | ID                      |
+|---+----------------------+---+------------------------+---+-------------------------|
+| a | BLK_"AGG"            | A | TYPE_"ARRAY"           | 0 | "RESERVED"              |
+| b | MODE_"XEQ_BREAK"     | B | FLAG_"BOOLEAN"         | 1 | OP_"CREATE"             |
+| c |                      | C | TYPE_"COMMAND"         | 2 | OP_"READ"               |
+| d | BLK_"LONGDEF"        | D | FLAG_"DEFERRED"        | 3 | OP_"UPDATE"             |
+| e | BLK_"CASE"           | E | PTYPE_"ENV_VAR"        | 4 | OP_"DELETE"             |
+| f | BLK_"FILE"           | F | TYPE_"FUNCTION"        | 5 | OP_"PRINT"              |
+| g | BLK_"SIGNATURE"      | G | "SORT_NATURAL"         | 6 |                         |
+| h | MODE_"HOOKS_ENABLED" | H | "SORT_INTEGER"         | 7 |                         |
+| i | BLK_"IF"             | I | FLAG_"INTEGER"         | 8 |                         |
+| j |                      | J | PTYPE_"IDXABLE"        | 9 |                         |
+| k | PTYPE_"KEY"          | K | "obj_BLKNUM"           | ? | "RESERVED"              |
+| l | PTYPE_"SCALAR"       | L | TYPE_"LIST"            | ! | FLAG_"IMMEDIATE"        |
+| m | FLAG_"FLOAT"         | M | PTYPE_"NAME"           | @ | MODE_"AT_PROCESS"       |
+| n | PTYPE_"NUMBER"       | N | PTYPE_NS "NAMESPACE"   | _ | TYPE_"INTERNAL"         |
+| o | MODE_"XEQ_CONTINUE"  | O | BLK_"FOR"              | ~ | PTYPE_"UNDEF"           |
+| p | MODE_"TEXT_PRINT"    | P | PTYPE_"PARAM"          | * | PTYPE_"ANY"             |
+| q | BLK_"STRING"         | Q | TYPE_"SEQUENCE"        | > | MODE_"STREAMS_SHIP_OUT" |
+| r | MODE_"XEQ_RETURN"    | R | FLAG_"READONLY"        | ' | MODE_"AT_LITERAL"       |
+| s | MODE_"TEXT_STRING"   | S | TYPE_"SYMBOL"          | . | INIT_"DOTFILES"         |
+| t | BLK_"TERMINAL"       | T | "obj_TEXT"             | # | INIT_"ORD"              |
+| u | BLK_"USER"           | U | TYPE_"USER"            | < | INIT_"ROT13"            |
+| v | MODE_"IO_CAPTURE"    | V | BLK_"INVOC"            | = | FLAG_"OPTIONAL"         |
+| w | "BLK_WHILE"          | W | FLAG_"WRITABLE"        |   |                         |
+| x | MODE_"XEQ_NORMAL"    | X | MODE_"STREAMS_DISCARD" |   |                         |
+| y | MODE_"IO_SILENT"     | Y | FLAG_"SYSTEM"          |   |                         |
+| z | BLK_"PARAMETER"      | Z | "obj_INVOC"            |   |                         |

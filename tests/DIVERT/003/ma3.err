@@ -1,1 +1,3 @@
-m2:ma3.m2:5: (scan_user_cmd_call) Could not find closing brace: {333
+m2:ma3.m2:5: @C{111}{2222}{333: Invocation error: Invocation not valid
+m2:ma3.m2:5: @m2::C: Parameter 'cc': Missing argument
+m2:ma3.m2:5: Could not find closing brace in '{333'

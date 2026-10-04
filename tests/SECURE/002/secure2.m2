@@ -1,5 +1,5 @@
-@define __SECURITY__ 2
-Secure level is @__SECURITY__@
+@define __SEC_LEVEL__ 2
+Secure level is @__SEC_LEVEL__@
 @if exists(/etc/passwd)
 Password file exists
 @else
@@ -9,6 +9,6 @@ Password file does not exist
 date
 EOD
 It is @time@
-@define __SECURITY__ 0
-Secure level is @__SECURITY__@
+@define __SEC_LEVEL__ 0
+Secure level is @__SEC_LEVEL__@
 All done

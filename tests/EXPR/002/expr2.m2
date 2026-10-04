@@ -1,4 +1,4 @@
-@newcmd double{x}
+@newcmd double {x}
 Double @x@ is @expr 2*x@
 @endcmd
 @for i 1 3

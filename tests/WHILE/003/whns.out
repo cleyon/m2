@@ -1,5 +1,5 @@
-Twice 4 is equal to 8
-Twice 3 is equal to 6
-Twice 2 is equal to 4
-Twice 1 is equal to 2
-@haha{42}
+Twice 4 = 8
+Twice 3 = 6
+Twice 2 = 4
+Twice 1 = 2
+@twice{42}

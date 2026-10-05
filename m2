@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-10-02 23:55:04 cleyon>
+#  Time-stamp:  <2026-10-04 22:54:47 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -2474,6 +2474,7 @@ function blk_new(block_type,
         blktab[new_blknum, 0, "line"]  = LINE()
     } else if (block_type == BLK_CASE) {
         blktab[new_blknum, 0, "terminator"] = "^@__m2__::(endcase|esac)"
+        blktab[new_blknum, 0, "line"]  = LINE()
     } else if (block_type == BLK_FILE) {
         blktab[new_blknum, 0, "open"] = FALSE
         blktab[new_blknum, 0, "ever_opened"] = FALSE
@@ -2834,7 +2835,6 @@ function blk_walk_FILE(opcode, blknum, seen, indent)
             delete blktab[blknum, 0, "old.buffer"]
             delete blktab[blknum, 0, "old.file"]
             delete blktab[blknum, 0, "old.file_uuid"]
-            delete blktab[blknum, 0, "old.line"]
             delete blktab[blknum, 0, "old.ns"]
         }
         delete blktab[blknum, 0, "atmode"]
@@ -3106,28 +3106,19 @@ function execute__block(blknum,
 
 
 function xeq__BLK_AGG(agg_block,
-                      i, lim, slot_type, value, block_type, name,
-                      reset_LINE, line, old_line)
+                      i, slot_type, value, block_type)
 {
     block_type = blk_type(agg_block)
     dbg__print("xeq", 3, sprintf("(xeq__BLK_AGG) START dstblk=%d, agg_block=%d, type=%s",
                                 DSTBLK(), agg_block, ppf__1flag(block_type)))
     dbg__print_block("xeq", 7, agg_block, "(xeq__BLK_AGG) agg_block")
 
-    lim = blktab[agg_block, 0, "count"]
-
     # Maintain relative __LINE__ during execution,
     # then restore to original value.
-    reset_LINE = FALSE
-    if ((agg_block, 0, "line") in blktab) {
-        reset_LINE = TRUE
-        line = blktab[agg_block, 0, "line"]
-        #print_stderr(sprintf("(xeq__BLK_AGG) Block %d had 'line' = %d", agg_block, line))
-        old_line = LINE()
-        sys__write("__LINE__", line)
-    }
+    stk_push(__line_stack, LINE())
+    sys__write("__LINE__", blktab[agg_block, 0, "line"])
 
-    for (i = 1; i <= lim; i++) {
+    for (i = 1; i <= blktab[agg_block, 0, "count"]; i++) {
         slot_type = blk_ll_slot_type(agg_block, i)
         value = blk_ll_slot_value(agg_block, i)
         dbg__print("xeq", 7, sprintf("(xeq__BLK_AGG) LOOP; dstblk=%d, agg_block=%d, slot=%d, slot_type=%s, value='%s'",
@@ -3135,16 +3126,16 @@ function xeq__BLK_AGG(agg_block,
         dbg__print("xeq", 3, sprintf("(xeq__BLK_AGG) TOP OF LOOP: ________ BLOCK %d  SLOT %d ________",
                                      agg_block, i))
 
-        if (reset_LINE)
-            sys__incr("__LINE__", 1)
+        sys__incr("__LINE__", 1)
         dbg__print("xeq", 3, sprintf("(xeq__BLK_AGG) CALLING ship_out(%s, '%s')", ppf__1flag(slot_type), value))
         # print_stderr(sprintf("(xeq__BLK_AGG) i=%d, __LINE__=%d, source='%s'",
         #                      i, sys__read("__LINE__", NOKEY), value))
         ship_out(slot_type, value)
         dbg__print("xeq", 3, "(xeq__BLK_AGG) RETURNED FROM ship_out()")
     }
-    if (reset_LINE)
-        sys__write("__LINE__", old_line)
+
+    # Restore original __LINE__
+    sys__write("__LINE__", stk_pop(__line_stack))
 }
 
 
@@ -3519,8 +3510,8 @@ function parse__file(default_ns,
     blktab[file_block, 0, "old.buffer"]    = __buffer
     blktab[file_block, 0, "old.file"]      = FILE()
     blktab[file_block, 0, "old.file_uuid"] = sys__read("__FILE_UUID__", NOKEY)
-    blktab[file_block, 0, "old.line"]      = LINE()
     blktab[file_block, 0, "old.ns"]        = NS()
+    stk_push(__line_stack, LINE())
     dbg__print_block("ship_out", 7, file_block, "(parse__file) file_block")
 
     # Set up new file context
@@ -3555,7 +3546,7 @@ function parse__file(default_ns,
     sys__incr( "__DEPTH__",     -1);
     sys__write("__FILE__",      blktab[file_block, 0, "old.file"])
     sys__write("__FILE_UUID__", blktab[file_block, 0, "old.file_uuid"])
-    sys__write("__LINE__",      blktab[file_block, 0, "old.line"])
+    sys__write("__LINE__",      stk_pop(__line_stack))
     blk_master_delete(file_block)
 
     if (sys__read("__DEPTH__", NOKEY) > 0)
@@ -5175,7 +5166,7 @@ function ppf__BLK_SIGNATURE(blknum,
 
 function execute__invoc_user(invoc_block,
                              info, ns, name, level, code, user_block,
-                             invoc_code, invoc_level, old_level)
+                             invoc_code, invoc_level, old_level, invoc_line)
 {
     dbg__print("xeq", 3, sprintf("(execute__invoc_user) START invoc_block=%d", invoc_block))
     if (flag_1false_p(__m2_config_flags, MODE_XEQ_NORMAL)) {
@@ -5187,6 +5178,7 @@ function execute__invoc_user(invoc_block,
     name        = blktab[invoc_block, 0, "name"]
     invoc_level = blktab[invoc_block, 0, "level"]
     invoc_code  = blktab[invoc_block, 0, "code"]
+    invoc_line  = blktab[invoc_block, 0, "line"]
 
     # See if it's a user command.  It may have been @undefine'd between
     # the time when the command was recorded (and findable) and now,
@@ -5195,7 +5187,8 @@ function execute__invoc_user(invoc_block,
     code = nam_ll_read_ns(ns, name, level)
     info__gate(OP_READ, TYPE_USER, info, NS(), level, TOK_AT name, TRUE)
     if (flag_1false_p(code, TYPE_USER) || first(code) != first(invoc_code) || level != invoc_level)
-        panic("(execute__invoc_user) '" ns TOK_NS_QUAL name "' seems to no longer be a user command")
+        panic("(execute__invoc_user) '" ns TOK_NS_QUAL name "' seems to no longer be a user command",
+              EMPTY, invoc_line)
 
     user_block = cmd_ll_read_ns(ns, name, level)
     dbg__print_block("xeq", 7, user_block, "(execute__invoc_user) user_block")
@@ -5209,20 +5202,23 @@ function execute__invoc_user(invoc_block,
     stk_pop(__me_stack)
     if (LEVEL() != old_level)
         panic(sprintf("(execute__invoc_user) [%s] user_block=%d: Level mismatch; old_level=%d, LEVEL()=%d",
-                      ME(), user_block, old_level, LEVEL()))
+                      ME(), user_block, old_level, LEVEL()),
+              EMPTY, invoc_line)
 }
 
 function execute__invoc_user_body(user_block, invoc_block,
                                   block_type, new_level, i, j, pns, pname, body_block,
-                                  ns, nparam, xval, pcode, tag, type, agg_block)
+                                  ns, nparam, xval, pcode, tag, type, agg_block, user_line)
 {
     block_type = blk_type(user_block)
+    user_line  = blktab[user_block, 0, "line"]
     dbg__print("sig", 3, sprintf("(execute__invoc_user_body) START dstblk=%d, user_block=%d, invoc_block=%d, type=%s",
                                  DSTBLK(), user_block, invoc_block, ppf__1flag(block_type)))
     # dbg__print_block("cmd", 7, user_block, "(execute__invoc_user_body) user_block")
     if ((block_type != BLK_USER) ||
         (blktab[user_block, 0, "blkvalid"] != TRUE))
-        panic("(execute__invoc_user_body) Bad user_block config")
+        panic("(execute__invoc_user_body) Bad user_block config",
+              EMPTY, user_line)
     body_block = blktab[user_block, 0, "body_block"]
     # dbg__print_block("cmd", 7, body_block, "(execute__invoc_user_body) body_block")
     # dbg__print_block("sig", 6, invoc_block, "(execute__invoc_user_body) invoc_block")
@@ -5274,7 +5270,8 @@ function execute__invoc_user_body(user_block, invoc_block,
                 blk_append(agg_block, OBJ_TEXT, xval[i, j])
             }
         } else
-            panic("(execute__invoc_user_body) Very bad code '" pcode "'")
+            panic("(execute__invoc_user_body) Very bad code '" pcode "'",
+                  EMPTY, user_line)
     }
 
     dbg__print("sig", 5, sprintf("(execute__invoc_user_body) CALLING execute__block(%d)", body_block))
@@ -5293,7 +5290,7 @@ function execute__invoc_user_body(user_block, invoc_block,
     }
     # If things are still not normal, that's a problem
     if (flag_1false_p(__m2_config_flags, MODE_XEQ_NORMAL))
-        panic("(execute__invoc_user_body) !MODE_XEQ_NORMAL")
+        panic("(execute__invoc_user_body) !MODE_XEQ_NORMAL", EMPTY, user_line)
 
     dbg__print("sig", 2, "(execute__invoc_user_body) END")
 }
@@ -7732,23 +7729,26 @@ function parse__endcase(                case_block) # OK
 
 
 function xeq__BLK_CASE(case_block,
-                       block_type, casevar, caseval, preamble_block, syminfo, ensure)
+                       block_type, casevar, caseval, preamble_block, syminfo, ensure, case_line)
 {
     block_type = blk_type(case_block)
+    case_line = blktab[case_block, 0, "line"]
     dbg__print("case", 3, sprintf("(xeq__BLK_CASE) START dstblk=%d, case_block=%d, type=%s",
                                  DSTBLK(), case_block, ppf__1flag(block_type)))
 
     dbg__print_block("case", 7, case_block, "(xeq__BLK_CASE) case_block")
     if ((blk_type(case_block) != BLK_CASE) ||  \
         (blktab[case_block, 0, "blkvalid"] != TRUE))
-        panic("(xeq__BLK_CASE) Bad case_block config")
+        panic("(xeq__BLK_CASE) Bad case_block config",
+              EMPTY, case_line)
 
     # Check if the case variable value matches any @of values
     casevar = blktab[case_block, 0, "casevar"]
     dbg__print("case", 5, sprintf("(xeq__BLK_CASE) casevar '%s'", casevar))
     info__create_from_text(casevar, syminfo)
     if (! info__get(syminfo, "defined"))
-        error("@case: Symbol '" casevar "' not defined")
+        error("@case: Symbol '" casevar "' not defined",
+              EMPTY, case_line)
     caseval = info__get(syminfo, "value")
     dbg__print("case", 5, sprintf("(xeq__BLK_CASE) caseval '%s'", caseval))
     ensure = FALSE
@@ -8976,7 +8976,7 @@ function xeq__BLK_FOR(for_block,
     dbg__print_block("for", 7, for_block, "(xeq__BLK_FOR) for_block")
     if ((block_type != BLK_FOR) || \
         (blktab[for_block, 0, "blkvalid"] != TRUE))
-        panic("(xeq__BLK_FOR) Bad for_block config")
+        panic("(xeq__BLK_FOR) Bad for_block config", EMPTY, blktab[for_block, 0, "line"])
 
     if (blktab[for_block, 0, "loop_type"] == "@__m2__::for" )
         execute__for(for_block)
@@ -9282,16 +9282,17 @@ function parse__endif(                    if_block)
 
 
 function xeq__BLK_IF(if_block,
-                     block_type, condition, condval, negate)
+                     block_type, condition, condval, negate, if_line)
 {
     block_type = blk_type(if_block)
+    if_line = blktab[if_block, 0, "line"]
     dbg__print("if", 3, sprintf("(xeq__BLK_IF) START dstblk=%d, if_block=%d, type=%s",
                                DSTBLK(), if_block, ppf__1flag(block_type)))
 
     dbg__print_block("if", 7, if_block, "(xeq__BLK_IF) if_block")
     if ((block_type != BLK_IF) || \
         (blktab[if_block, 0, "blkvalid"] != TRUE))
-        panic("(xeq__BLK_IF) Bad if_block config")
+        panic("(xeq__BLK_IF) Bad if_block config", EMPTY, if_line)
 
     # Evaluate condition, determine if TRUE/FALSE and also
     # which block to follow.  For now, always take TRUE path
@@ -9300,7 +9301,7 @@ function xeq__BLK_IF(if_block,
     condval = evaluate_boolean(condition, negate)
     dbg__print("if", 2, sprintf("(xeq__BLK_IF) evaluate_boolean('%s') => %s", condition, ppf__bool(condval)))
     if (condval == ERROR)
-        error("@if: Error evaluating condition '" condition "'")
+        error("@if: Error evaluating condition '" condition "'", EMPTY, if_line)
 
     raise_level()
     if (condval) {
@@ -9911,7 +9912,8 @@ function xeq__BLK_LONGDEF(longdef_block,
     dbg__print_block("sym", 7, longdef_block, "(xeq__BLK_LONGDEF) longdef_block")
     if ((block_type != BLK_LONGDEF) ||
         (blktab[longdef_block, 0, "blkvalid"] != TRUE))
-        panic("(xeq__BLK_LONGDEF) Bad longdef_block config")
+        panic("(xeq__BLK_LONGDEF) Bad longdef_block config",
+              EMPTY, blktab[longdef_block, 0, "line"])
 
     name = blktab[longdef_block, 0, "name"]
     info__create_from_text(name, info)
@@ -10276,7 +10278,8 @@ function xeq__BLK_USER(newcmd_block,
     dbg__print_block("cmd", 7, newcmd_block, "(xeq__BLK_USER) newcmd_block")
     if ((block_type != BLK_USER) ||
         (blktab[newcmd_block, 0, "blkvalid"] != TRUE))
-        panic("(xeq__BLK_USER) Bad newcmd_block config")
+        panic("(xeq__BLK_USER) Bad newcmd_block config",
+              EMPTY, blktab[newcmd_block, 0, "line"])
 
     # Instantiate command, but do not run.  "@newcmd FOO" is just declaring FOO.
     # @FOO{...} actually ships it out (and is done under ship_out/xeq_user).
@@ -11054,16 +11057,18 @@ function parse__endwhile(                    while_block)
 
 
 function xeq__BLK_WHILE(while_block,
-                        block_type, body_block, condition, condval, negate, want_break)
+                        block_type, body_block, condition, condval, negate, want_break,
+                        while_line)
 {
     block_type = blk_type(while_block)
+    while_line = blktab[while_block, 0, "line"]
     dbg__print("while", 3, sprintf("(xeq__BLK_WHILE) START dstblk=%d, while_block=%d, type=%s",
                                DSTBLK(), while_block, ppf__1flag(block_type)))
 
     dbg__print_block("while", 7, while_block, "(xeq__BLK_WHILE) while_block")
     if ((block_type != BLK_WHILE) || \
         (blktab[while_block, 0, "blkvalid"] != TRUE))
-        panic("(xeq__BLK_WHILE) Bad while_block config")
+        panic("(xeq__BLK_WHILE) Bad while_block config", EMPTY, while_line)
 
     # Evaluate condition, determine if TRUE/FALSE and also
     # which block to follow.  For now, always take TRUE path
@@ -11074,7 +11079,8 @@ function xeq__BLK_WHILE(while_block,
     dbg__print("while", 2, sprintf("(xeq__BLK_WHILE) Initial evaluate_boolean('%s') => %s", condition, ppf__bool(condval)))
     if (condval == ERROR)
         error(sprintf("@while: Error evaluating condition '%s'%s",
-                      condition, VERBOSE() ? TOK_NEWLINE $0 : EMPTY))
+                      condition, VERBOSE() ? TOK_NEWLINE $0 : EMPTY),
+              EMPTY, while_line)
 
     while (condval) {
         raise_level()
@@ -11088,7 +11094,8 @@ function xeq__BLK_WHILE(while_block,
         dbg__print("while", 3, sprintf("(xeq__BLK_WHILE) Repeat evaluate_boolean('%s') => %s", condition, ppf__bool(condval)))
         if (condval == ERROR)
             error(sprintf("@while: Error evaluating condition '%s'%s",
-                          condition, VERBOSE() ? TOK_NEWLINE $0 : EMPTY))
+                          condition, VERBOSE() ? TOK_NEWLINE $0 : EMPTY),
+                  EMPTY, while_line)
 
         # Check for break or continue
         if (flag_anytrue_p(__m2_config_flags, MODE_XEQ_BREAK MODE_XEQ_CONTINUE)) {
@@ -13887,6 +13894,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     __regexp[":rest"]    = __regexp[":string"]   = ".*"
 
     # Various stacks
+    __line_stack[0]       = 0;    __line_stack["name"]   = "line_stack"
     __me_stack[0]         = 0;    __me_stack["name"]     = "me_stack"  # :-)
     __msg_stack[0]        = 0;    __msg_stack["name"]    = "msg_stack"
     __ns_stack[0]         = 0;    __ns_stack["name"]     = "ns_stack"

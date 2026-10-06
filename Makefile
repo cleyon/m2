@@ -1,10 +1,11 @@
-.PHONY:	all man manview callgraph callgraph-full callgraph-sane callgraph-io clean distclean lint tags \
+.PHONY:	all man manview callgraph callgraph-full clean distclean lint tags \
 	bat funcs vars \
 	debug check test \
 	check-quiet   test-quiet   quiet-check   quiet-test \
 	check-verbose test-verbose verbose-check verbose-test \
 	testlog testlog-verbose testlog-quiet
 
+IGNORE=.callgraph_grex
 GOOD_M2=/Users/cleyon/bin-n.yuuko/m2
 AWK=/usr/bin/awk
 GAWK=/usr/local/bin/gawk
@@ -14,19 +15,24 @@ CALLGRAPH=~/repos.cp/github.com/koknat/callGraph/callGraph
 TAGS=ctags -e
 
 all:
-	@echo "Say what now?"
+	@sh -c 'echo "Say what now?"; exit 1'
 
 man: m2.cat1
 
 manview: m2.cat1
 	less m2.cat1
 
-callgraph-full:
-	$(CALLGRAPH) m2 -language awk
+$(IGNORE): callgraph.ignore
+	grex -g --file $^ | sed 's/^.\(.*\).$$/\1/' > $@
 
-callgraph callgraph-sane:
-	grex -g --file cg.ignore | sed 's/^.\(.*\).$$/\1/' > ignore.funcs
-	$(CALLGRAPH) m2 -language awk -ignore "`cat ignore.funcs`"
+m2.png: m2 $(IGNORE)
+	$(CALLGRAPH) m2 -language awk -output $@ -noShow -ignore "`cat $(IGNORE)`"
+
+callgraph: m2.png
+	open $^
+
+callgraph-full:
+	$(CALLGRAPH) m2 -language awk -output m2-full.png
 
 debug:
 	$(GAWK) -D -f m2
@@ -41,24 +47,28 @@ m2.pdf: m2.ps
 	pstopdf $^ -o $@
 
 gm2: m2
-	sed '1s,$(AWK),$(GAWK),' m2 > $@
+	sed '1s,$(AWK),$(GAWK),' $^ > $@
 	chmod +x $@
 
 mm2: m2
-	sed '1s,$(AWK),$(MAWK),' m2 > $@
+	sed '1s,$(AWK),$(MAWK),' $^ > $@
 	chmod +x $@
 
 nm2: m2
-	sed '1s,$(AWK),$(NAWK),' m2 > $@
+	sed '1s,$(AWK),$(NAWK),' $^ > $@
 	chmod +x $@
 
-funcs awkfuncs.out: m2
-	@rm -f awkfuncs.out
-	grep '^function' m2 | sed 's/(.*//' | awk '{print $$2}' | sort >awkfuncs.out
+awkfuncs.out: m2
+	@rm -f $@
+	grep '^function' $^ | sed 's/(.*//' | awk '{print $$2}' | sort > $@
 
-vars awkvars.out: m2
-	@rm -f awkvars.out
-	$(GAWK) -d -f m2 /dev/null >/dev/null
+funcs: awkfuncs.out
+
+awkvars.out: m2
+	@rm -f $@
+	$(GAWK) -d -f $^ /dev/null >/dev/null
+
+vars: awkvars.out
 
 bat:
 	bat -S  --language awk --theme ansi m2

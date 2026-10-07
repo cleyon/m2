@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-10-04 22:54:47 cleyon>
+#  Time-stamp:  <2026-10-07 13:30:07 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -44,7 +44,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "6.0.0"
+    M2_VERSION = "6.0.1"
 
     # Specify a shell for m2 to use for running utility programs.
     # It is expected to be compatible with Bourne shell syntax:
@@ -3689,34 +3689,13 @@ function parse(    code, terminator, rstat, cmd, retval, new_block, fc,
                 # XXX This (and User below) looks like it would be a
                 # good candidate for a TRACE_PARSE trace message...
                 #print_stderr("(parse:3851) <top of loop> parse_invocation('" $0 "', @info)")
-                if ((invoc_block = zig__2parse_invocation($0, info)) == FALSE) {
+                if ((invoc_block = zig__2parse_invocation($0, info)) == FALSE)
                     # I need a better mechanism for reporting parse/signature errors
                     # Perhaps something like info["errmsg"] or ... ??
                     # FIXME I need to use the msg__*() api but I forget atm
                     panic("(parse) [CMD] Bad signature: " $0) # XXX Keep this around to remind me, but eventually remove
-
-                    # However, NB at this point in time, LINE() is still
-                    # the real line number for reporting purposes.  In
-                    # the following example, the condition for @if is
-                    # intentionally omitted.
-                    #      m2:foo.m2:1: bad parse: @__m2__::if
-                    #      m2:foo.m2:3: @if: Condition cannot be empty
-                    # The "bad parse" demonstrates parse() catching a
-                    # signature mismatch error on line 1.
-                    # The "condition cannot be empty" message does not
-                    # appear until line 3, when @fi is detected and the
-                    # entire "if" structure is evaluated.
-                    #
-                    # Also, there is nothing to clean up: both invoc[]
-                    # and sig[] arrays were local variables, now presumably
-                    # garbage-collected, and the FALSE return value
-                    # indicates no new blktab[] entry was created.
-                }
-                else {
-                    ;
-                    dbg__print("sig", 4, "(parse) [CMD] Good signature")
-                    dbg__print_block("sig", 4, invoc_block, "(parse) invoc_block from zig__2parse_invocation('" $0 "',@info)")
-                }
+                dbg__print("sig", 4, "(parse) [CMD] Good signature")
+                dbg__print_block("sig", 4, invoc_block, "(parse) invoc_block from zig__2parse_invocation('" $0 "',@info)")
 
                 # See if it's immediate
                 if (flag_1true_p(code, FLAG_IMMEDIATE)) {
@@ -3724,55 +3703,232 @@ function parse(    code, terminator, rstat, cmd, retval, new_block, fc,
                     # Some are known to create and return new blocks,
                     # which must be shipped out.
 
-                    if (cmd == "break" || cmd == "continue") {
-                        # @break and @continue are hybrid commands, with
-                        # both immediate and regular components.  The
-                        # parse_stack check for a FOR or WHILE must be
-                        # done immediately because the parse_stack is
-                        # gone by the time the command is shipped out.
-                        # But the actual effect of @break or @continue
-                        # is not seen until run-time, so the command
-                        # must also be shipped out like a normal command
-                        # would have been.
-                        found = FALSE
-                        for (i = stk_depth(__parse_stack); i > 0; i--) {
-                            scnt = blk_type(__parse_stack[i])
-                            if (scnt == BLK_FOR || scnt == BLK_WHILE) {
-                                found = TRUE
-                                break
-                            }
-                        }
-                        if (! found)
-                            error(sprintf("%s: Parse error: FOR or WHILE loop not found %s",
-                                          TOK_AT cmd, parser_label))
-                        dbg__print("parse", 3, sprintf("(parse) [%s] CALLING ship_out(OBJ_INVOC, '%s')", parser_label, $0))
-                        ship_out(OBJ_INVOC, invoc_block)
-                        dbg__print("parse", 3, "(parse) [" parser_label "] RETURNED FROM ship_out()")
+                    # These commands create and ship out a new_block
+                    # resulting from recursively parsing a new object.
+                    if (cmd == "case"   || cmd == "for"    || cmd == "foreach" ||
+                        cmd == "if"     || cmd == "newcmd" || cmd == "longdef" ||
+                        cmd == "unless" || cmd == "until"  || cmd == "while") {
 
-                    } else if (cmd == "case") {
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__case(dstblk=" DSTBLK() ")"))
-                        new_block = parse__case()
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__case() : new_block => " new_block))
+                        dbg__print("parse", 5, sprintf("(parse) [%s] DSTBLK()=%d CALLING parse__%s()", parser_label, DSTBLK(), cmd))
+                        new_block = (cmd == "case")                    ? parse__case()    \
+                                  : (cmd == "for" || cmd == "foreach") ? parse__for()     \
+                                  : (cmd == "if"  || cmd == "unless")  ? parse__if()      \
+                                  : (cmd == "longdef")                 ? parse__longdef() \
+                                  : (cmd == "newcmd")                  ? parse__newcmd()  \
+                                  : (cmd == "while" || cmd == "until") ? parse__while()   \
+                                  : panic("(parse) Can't happen!")
+                        dbg__print("parse", 5, sprintf("(parse) [%s] RETURNED FROM parse__%s() : new_block => %d", parser_label, cmd, new_block))
+
+                        # Ship out new_block just created
                         dbg__print("parse", 5, sprintf("(parse) [" parser_label "] CALLING ship_out(OBJ_BLKNUM, %d)", new_block))
                         ship_out(OBJ_BLKNUM, new_block)
                         dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM ship_out()"))
 
-                    } else if (cmd == "else") {
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__else(dstblk=" DSTBLK() ")"))
-                        _ = parse__else()
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__else() : dstblk => " DSTBLK()))
+                    # Recursively parse target object; then check for a
+                    # matching terminator.  True if found, else error.
+                    } else if (cmd == "endcase"  || cmd == "esac"       ||
+                               cmd == "endif"    || cmd == "fi"         ||
+                               cmd == "endlong"  || cmd == "endlongdef" ||
+                               cmd == "endwhile" || cmd == "wend"       ||
+                               cmd == "next") {
+                        dbg__print("parse", 5, sprintf("(parse) [%s] dstblk=%d, CALLING parse__%s()",
+                                                       parser_label, DSTBLK(), cmd))
+                        _ = (cmd == "endcase"  || cmd == "esac")       ? parse__endcase()    \
+                          : (cmd == "endif"    || cmd == "fi")         ? parse__endif()      \
+                          : (cmd == "endlong"  || cmd == "endlongdef") ? parse__endlongdef() \
+                          : (cmd == "endwhile" || cmd == "wend")       ? parse__endwhile()   \
+                          : (cmd == "next")                            ? parse__next()       \
+                          : panic("(parse) Can't happen!")
+                        dbg__print("parse", 5, sprintf("(parse) [%s] RETURNED FROM parse__%s()",
+                                                       parser_label, cmd))
+                        if (! match($1, terminator))
+                            error(sprintf("%s: Parse error: Missing terminator; expected '%s' but found '@%s'",
+                                          TOK_AT cmd, terminator, cmd))
+                        dbg__print("parse", 5, sprintf("(parse) [%s] END; @%s matched terminator => TRUE",
+                                                       parser_label, cmd))
+                        return TRUE
 
-                    } else if (cmd == "endcase" || cmd == "esac") {
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__endcase(dstblk=" DSTBLK() ")"))
-                        _ = parse__endcase()
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__endcase() : dstblk => " DSTBLK()))
-                        if (match($1, terminator)) {
-                            dbg__print("parse", 5, "(parse) [" parser_label "] END; @endcase matched terminator => TRUE")
-                            return TRUE
+                    # After some checks and processing, these commands
+                    # ship out the invoc_block.
+                    } else if (cmd == "array"  || cmd == "break"  || cmd == "continue" ||
+                               cmd == "define" || cmd == "input"  || cmd == "list"     ||
+                               cmd == "local"  || cmd == "return" || cmd == "set") {
+
+                        if (cmd == "break" || cmd == "continue") {
+                            # @break and @continue are hybrid commands, with
+                            # both immediate and regular components.  The
+                            # parse_stack check for a FOR or WHILE must be
+                            # done immediately because the parse_stack is
+                            # gone by the time the command is shipped out.
+                            # But the actual effect of @break or @continue
+                            # is not seen until run-time, so the command
+                            # must also be shipped out like a normal command
+                            # would have been.
+                            found = FALSE
+                            for (i = stk_depth(__parse_stack); i > 0; i--) {
+                                scnt = blk_type(__parse_stack[i])
+                                if (scnt == BLK_FOR || scnt == BLK_WHILE) {
+                                    found = TRUE
+                                    break
+                                }
+                            }
+                            if (! found)
+                                error(sprintf("%s: Parse error: FOR or WHILE loop not found %s",
+                                              TOK_AT cmd, parser_label))
+
+                        } else if (cmd == "return") {
+                            found = FALSE
+                            for (i = stk_depth(__parse_stack); i > 0; i--) {
+                                dbg__print("parse", 2, sprintf("i=%d, __parse_stack[i])=%d", i, __parse_stack[i]))
+                                dbg__print_block("parse", 2, __parse_stack[i], "Parsing @return:")
+                                scnt = blk_type(__parse_stack[i])
+                                if (scnt == BLK_USER) {
+                                    found = TRUE
+                                    break
+                                }
+                            }
+                            if (! found)
+                                error("@return: Not executing a user command")
+
+                        } else if (cmd == "array" || cmd == "list"  || cmd == "local") {
+                            # PRELUDE STUFF
+                            # qualify stuff not needed -- all names should be unqualified non-system symbols.
+                            #print_stderr("(parse) found @" cmd "; NF=" NF "; $0='" $0 "'")
+                            # array, list, or local - These commands all
+                            # define local variables and cannot be qualified.
+                            for (i = 2; i <= NF; i++) {
+                                #print_stderr("(parse) Examining " $i)
+                                # Check for plain sym name - no namespace allowed
+                                if (index($i, TOK_NS_QUAL) > 0)
+                                    error(sprintf("%s: Parameter '%s' must not be qualified%s",
+                                                  TOK_AT cmd, $i, VERBOSE() ? " [parse:K]" TOK_NEWLINE $0 : EMPTY))
+                                # Check for validity
+                                if (! nam__valid_p($i, PTYPE_PARAM, TRUE))
+                                    error(sprintf("%s: Name '%s' is not valid%s",
+                                                  TOK_AT cmd, $i, VERBOSE() ? " [parse:B]" TOK_NEWLINE $0 : EMPTY))
+
+                                level2 = info__create_from_text(NS() TOK_NS_QUAL $i, info2)
+                                #print_stderr(sprintf("parse: qname='%s', code=%s", $i, info__get(info2, "code")))
+                                if (level2 == ERR_SCAN_INVALID_NAME)
+                                    error(sprintf("%s: Invalid name '%s'%s",
+                                                  TOK_AT cmd, $i, VERBOSE() ? TOK_NEWLINE $0 : EMPTY))
+                                if (info__get(info2, "protected") ||
+                                    level2 == ROOT_LEVEL && LEVEL() != level2 &&
+                                      flag_1true_p(info__get(info2, "code"), FLAG_SYSTEM))
+                                    error(sprintf("%s: Name '%s' is protected%s",
+                                                  TOK_AT cmd, $i, VERBOSE() ? " [parse:X]" TOK_NEWLINE $0 : EMPTY))
+
+                                # All these declare new names in namtab.
+                                # Regardless of type, names must be unique
+                                # at this (current) level, but it's okay if
+                                # same name is declared at a lower level.
+                                # if (LEVEL() >= ROOT_LEVEL && LEVEL() != level2)
+                                #     error($0 ": '" $2 "' already defined")
+                                new_type = (cmd == "array") ? TYPE_ARRAY  \
+                                         : (cmd == "list")  ? TYPE_LIST   \
+                                         : (cmd == "local") ? TYPE_SYMBOL \
+                                         : panic("Can't happen")
+                                if (dbg__sys_level_p("nam", 5) ||
+                                    dbg__sys_level_p("parse", 3))
+                                    print_debugfile(sprintf("m2debug:(parse) [%s] Declaring '%s'::'%s' (lev=%d) as type %s",
+                                                            parser_label,
+                                                            info__get(info2, "ns"), info__get(info2, "name"),
+                                                            LEVEL(), ppf__1flag(new_type)))
+                                # if (new_type == TYPE_ARRAY)
+                                #     print_stderr(sprintf(">> Array +namtab/parse: %s::%s [lev %d]",
+                                #                          info__get(info2, "ns"), info__get(info2, "name"), LEVEL()))
+                                nam_ll_write_ns(info__get(info2, "ns"), info__get(info2, "name"), LEVEL(), new_type)
+                            }
+
+                        } else if (cmd == "define" || cmd == "input" || cmd == "set") {
+                            # PRELUDE STUFF
+                            if (cmd == "input" && emptyp($2))
+                                # @input w/no args uses "__INPUT__" implicitly
+                                $2 = "__m2__::__INPUT__"
+                            # if (index($2, TOK_NS_QUAL) > 0)
+                            #     new_scan_name = $2
+                            # else {
+                            #     new_scan_name = (double_underscores_p($2) ? M2_SYSNS : NS()) TOK_NS_QUAL $2
+                            # }
+                            new_scan_name = (index($2, TOK_NS_QUAL) > 0) ? $2 \
+                                : (double_underscores_p($2) ? M2_SYSNS : NS()) TOK_NS_QUAL $2
+                            qname = nam__qualify(new_scan_name)
+                            #print_stderr(sprintf("qname='%s'", qname))
+
+                            level2 = info__create_from_text(qname, info2)
+                            #print_stderr(sprintf("parse: qname='%s', code=%s", qname, info__get(info2, "code")))
+                            if (level2 == ERR_SCAN_INVALID_NAME)
+                                error(sprintf("%s: Invalid name '%s'%s",
+                                              TOK_AT cmd, qname, VERBOSE() ? TOK_NEWLINE $0 : EMPTY))
+                            if (info__get(info2, "protected"))
+                                error(sprintf("%s: Name '%s' is protected%s",
+                                              TOK_AT cmd, qname, VERBOSE() ? " [parse:X]" TOK_NEWLINE $0 : EMPTY))
+
+
+                            # These commands will auto-vivify Symbols, but not Arrays or Lists.
+                            dbg__print(sprintf("parse", 8, "(parse) Found @%s: ns='%s', cmd='%s', code='%s'\n   $0='%s'",
+                                               cmd, info__get(info2, "ns"), info__get(info2, "name"), ppf__allflags(info__get(info2, "code")), $0))
+                            if (! nam__valid_p($2, PTYPE_SCALAR, TRUE))
+                                error(sprintf("%s: Name '%s' is not valid%s",
+                                              TOK_AT cmd, $2, VERBOSE() ? " [parse:A]" TOK_NEWLINE $0 : EMPTY))
+
+                            code2 = info__get(info2, "code")
+                            dbg__print("parse", 7, "(parse) from qname '" qname "', code2=" ppf__1flag(code2))
+                            type2 = first(code2)
+                            if (type2 == PTYPE_UNDEF)
+                                if (info__get(info2, "has_bracket")) # undeclared Array or List
+                                    error(sprintf("%s: Name '%s' has not been declared%s", TOK_AT cmd, info__get(info2, "name"),
+                                                  VERBOSE() ? TOK_NEWLINE $0 : EMPTY))
+                                else
+                                    new_type = TYPE_SYMBOL
+                            else if (type2 == TYPE_SYMBOL)
+                                if (info__get(info2, "has_bracket")) # undeclared Array or List
+                                    error(sprintf("%s: Cannot use brackets on %s '%s'",
+                                                  TOK_AT cmd, ppf__1flag(code2), $2))
+                                else
+                                    new_type = code2
+                            else if (type2 == TYPE_ARRAY || type2 == TYPE_LIST)
+                                if (! info__get(info2, "has_bracket")) # missing required bracket
+                                    error(sprintf("%s: Must use brackets on %s '%s'", TOK_AT cmd, ppf__1flag(code2), $2))
+                                else
+                                    new_type = code2
+                            else
+                                panic(sprintf("(parse) Cannot handle '%s' of type %s", $2, ppf__1flag(code2)))
+
+                            new_level = nam_system_p(info__get(info2, "name")) ? ROOT_LEVEL : LEVEL()
+                            if (! nam_ll_in_ns(info__get(info2, "ns"),
+                                               info__get(info2, "name"),
+                                               new_level)) {
+                                if (dbg__sys_level_p("nam", 5) ||
+                                    dbg__sys_level_p("parse", 3))
+                                    print_debugfile(sprintf("m2debug:(parse) [%s] Declaring '%s'::'%s' (lev=%d) as type %s",
+                                                            parser_label,
+                                                            info__get(info2, "ns"), info__get(info2, "name"),
+                                                            new_level, ppf__1flag(new_type)))
+
+                                nam_ll_write_ns(info__get(info2, "ns"), info__get(info2, "name"),
+                                                new_level, new_type)
+                            }
                         }
-                        error(sprintf("%s: Parse error: Missing terminator; expected '%s' but found '@endcase'",
-                                      TOK_AT cmd, terminator))
 
+                        # Ship out invoc_block
+                        dbg__print("parse", 3, sprintf("(parse) [%s] CALLING ship_out(OBJ_INVOC, '%s')", parser_label, $0))
+                        ship_out(OBJ_INVOC, invoc_block)
+                        dbg__print("parse", 3, "(parse) [" parser_label "] RETURNED FROM ship_out()")
+
+                    # These commands just simply call their parsers.
+                    } else if (cmd == "else" || cmd == "ensure" ||
+                               cmd == "of"   || cmd == "otherwise") {
+                        dbg__print("parse", 5, sprintf("(parse) [%s] dstblk=%d, CALLING parse__%s()",
+                                                       parser_label, DSTBLK(), cmd))
+                        _ = (cmd == "else")      ? parse__else()      \
+                          : (cmd == "ensure")    ? parse__ensure()    \
+                          : (cmd == "of")        ? parse__of()        \
+                          : (cmd == "otherwise") ? parse__otherwise() \
+                          : panic("(parse) Can't happen!")
+                        dbg__print("parse", 5, sprintf("(parse) [%s] RETURNED FROM parse__%s()", parser_label, cmd))
+
+                    # @endcmd is a hybrid
                     } else if (cmd == "endcmd") {
                         dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__endcmd(dstblk=" DSTBLK() ")"))
                         new_block = parse__endcmd()
@@ -3822,66 +3978,6 @@ function parse(    code, terminator, rstat, cmd, retval, new_block, fc,
                         error(sprintf("%s: Parse error: Missing terminator; expected '%s' but found '@endcmd'",
                                       TOK_AT cmd, terminator))
 
-                    } else if (cmd == "endif" || cmd == "fi") {
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__endif(dstblk=" DSTBLK() ")"))
-                        _ = parse__endif()
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__endif() : dstblk => " DSTBLK()))
-                        if (match($1, terminator)) {
-                            dbg__print("parse", 5, "(parse) [" parser_label "] END; @endif matched terminator => TRUE")
-                            return TRUE
-                        }
-                        error("(parse) [" parser_label "] Found @" cmd " but expecting '" terminator "'")
-
-                    } else if (cmd == "endlong" || cmd == "endlongdef") {
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__endlongdef(dstblk=" DSTBLK() ")"))
-                        _ = parse__endlongdef()
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__endlongdef() : dstblk => " DSTBLK()))
-                        if (match($1, terminator)) {
-                            dbg__print("parse", 5, "(parse) [" parser_label "] END; @endlongdef matched terminator => TRUE")
-                            return TRUE
-                        }
-                        error("(parse) [" parser_label "] Found @" cmd " but expecting '" terminator "'")
-
-                    } else if (cmd == "endwhile" || cmd == "wend") {
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__endwhile(dstblk=" DSTBLK() ")"))
-                        _ = parse__endwhile()
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__endwhile() : dstblk => " DSTBLK()))
-                        if (match($1, terminator)) {
-                            dbg__print("parse", 5, "(parse) [" parser_label "] END; @endwhile matched terminator => TRUE")
-                            return TRUE
-                        }
-                        error("(parse) [" parser_label "] Found @" cmd " but expecting '" terminator "'")
-
-                    } else if (cmd == "ensure") {
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__ensure(dstblk=" DSTBLK() ")"))
-                        _ = parse__ensure()
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__ensure() : dstblk => " DSTBLK()))
-
-                    } else if (cmd == "for" || cmd == "foreach") {
-                        dbg__print("parse", 5, sprintf("(parse) [%s] DSTBLK()=%d CALLING parse__for()",
-                                                     parser_label, DSTBLK()))
-                        new_block = parse__for()
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__for() : new_block is " new_block))
-                        dbg__print("parse", 5, sprintf("(parse) [" parser_label "] CALLING ship_out(OBJ_BLKNUM, %d)", new_block))
-                        ship_out(OBJ_BLKNUM, new_block)
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM ship_out()"))
-
-                    } else if (cmd == "if" || cmd == "unless") {
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__if(dstblk=" DSTBLK() ")"))
-                        new_block = parse__if()
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__if() : new_block => " new_block))
-                        dbg__print("parse", 5, sprintf("(parse) [" parser_label "] CALLING ship_out(OBJ_BLKNUM, %d)", new_block))
-                        ship_out(OBJ_BLKNUM, new_block)
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM ship_out()"))
-
-                    } else if (cmd == "longdef") {
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__longdef(dstblk=" DSTBLK() ")"))
-                        new_block = parse__longdef()
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__longdef() : new_block => " new_block))
-                        dbg__print("parse", 5, sprintf("(parse) [" parser_label "] CALLING ship_out(OBJ_BLKNUM, %d)", new_block))
-                        ship_out(OBJ_BLKNUM, new_block)
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM ship_out()"))
-
                     } else if (cmd == "sm2ctl") { # Undocumented: @sm2ctl is an immediate version of @m2ctl
                         #print_stderr("(parse) [@sm2ctl] I see '" $0 "'")
                         if ($1 == "dump_parse_stack") {
@@ -3889,173 +3985,6 @@ function parse(    code, terminator, rstat, cmd, retval, new_block, fc,
 
                         } else
                             error("@sm2ctl: Unrecognized parameter: " $1)
-
-                    } else if (cmd == "newcmd") {
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__newcmd(dstblk=" DSTBLK() ")"))
-                        new_block = parse__newcmd()
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__newcmd() : new_block => " new_block))
-                        dbg__print("parse", 5, sprintf("(parse) [" parser_label "] CALLING ship_out(OBJ_BLKNUM, %d)", new_block))
-                        ship_out(OBJ_BLKNUM, new_block)
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM ship_out()"))
-
-                    } else if (cmd == "next") {
-                        dbg__print("parse", 5, sprintf("(parse) [%s] dstblk=%d; CALLING parse__next()",
-                                                     parser_label, DSTBLK()))
-                        _ = parse__next()
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__next() : dstblk => " DSTBLK()))
-                        if (match($1, terminator)) {
-                            dbg__print("parse", 5, "(parse) [" parser_label "] END Matched terminator => TRUE")
-                            return TRUE
-                        }
-                        error("(parse) [" parser_label "] Found @" cmd " but expecting '" terminator "'")
-
-                    } else if (cmd == "of") {
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__of(dstblk=" DSTBLK() ")"))
-                        _ = parse__of()
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__of() : dstblk => " DSTBLK()))
-
-                    } else if (cmd == "otherwise") {
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__otherwise(dstblk=" DSTBLK() ")"))
-                        _ = parse__otherwise()
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__otherwise() : dstblk => " DSTBLK()))
-
-                    } else if (cmd == "return") {
-                        found = FALSE
-                        for (i = stk_depth(__parse_stack); i > 0; i--) {
-                            dbg__print("parse", 2, sprintf("i=%d, __parse_stack[i])=%d", i, __parse_stack[i]))
-                            dbg__print_block("parse", 2, __parse_stack[i], "Parsing @return:")
-                            scnt = blk_type(__parse_stack[i])
-                            if (scnt == BLK_USER) {
-                                found = TRUE
-                                break
-                            }
-                        }
-                        if (! found)
-                            error("@return: Not executing a user command")
-                        dbg__print("parse", 3, sprintf("(parse) [%s] CALLING ship_out(OBJ_INVOC, '%s')", parser_label, $0))
-                        ship_out(OBJ_INVOC, invoc_block)
-                        dbg__print("parse", 3, "(parse) [" parser_label "] RETURNED FROM ship_out()")
-
-                    } else if (cmd == "while" || cmd == "until") {
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] CALLING parse__while(dstblk=" DSTBLK() ")"))
-                        new_block = parse__while()
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM parse__while() : new_block => " new_block))
-                        dbg__print("parse", 5, sprintf("(parse) [" parser_label "] CALLING ship_out(OBJ_BLKNUM, %d)", new_block))
-                        ship_out(OBJ_BLKNUM, new_block)
-                        dbg__print("parse", 5, ("(parse) [" parser_label "] RETURNED FROM ship_out()"))
-
-                    } else if (cmd == "array" || cmd == "define" || cmd == "input" ||
-                               cmd == "list"  || cmd == "local"  || cmd == "set") {
-                        #print_stderr(sprintf("(parse) before, $0='%s'", $0))
-                        if (cmd == "input" && emptyp($2))
-                            # @input w/no args uses "__INPUT__" implicitly
-                            $2 = "__m2__::__INPUT__"
-                        if (index($2, TOK_NS_QUAL) > 0)
-                            new_scan_name = $2
-                        else {
-                            new_scan_name = (double_underscores_p($2) ? M2_SYSNS : NS()) TOK_NS_QUAL $2
-                        }
-                        qname = nam__qualify(new_scan_name)
-                        #print_stderr(sprintf("qname='%s'", qname))
-
-                        level2 = info__create_from_text(qname, info2)
-                        #print_stderr(sprintf("parse: qname='%s', code=%s", qname, info__get(info2, "code")))
-                        if (level2 == ERR_SCAN_INVALID_NAME)
-                            error(sprintf("%s: Invalid name '%s'%s",
-                                          TOK_AT cmd, qname, VERBOSE() ? TOK_NEWLINE $0 : EMPTY))
-                        if (info__get(info2, "protected"))
-                            error(sprintf("%s: Name '%s' is protected%s",
-                                          TOK_AT cmd, qname, VERBOSE() ? " [parse:X]" TOK_NEWLINE $0 : EMPTY))
-
-                        if (cmd == "define" || cmd == "input" || cmd == "set" ) {
-                            # These commands will auto-vivify Symbols, but not Arrays or Lists.
-                            dbg__print(sprintf("parse", 8, "(parse) Found @%s: ns='%s', cmd='%s', code='%s'\n   $0='%s'",
-                                               cmd, info__get(info2, "ns"), info__get(info2, "name"), ppf__allflags(info__get(info2, "code")), $0))
-                            if (! nam__valid_p($2, PTYPE_SCALAR, TRUE))
-                                error(sprintf("%s: Name '%s' is not valid%s",
-                                              TOK_AT cmd, $2, VERBOSE() ? " [parse:A]" TOK_NEWLINE $0 : EMPTY))
-
-                            code2 = info__get(info2, "code")
-                            dbg__print("parse", 7, "(parse) from qname '" qname "', code2=" ppf__1flag(code2))
-                            type2 = first(code2)
-                            if (type2 == PTYPE_UNDEF)
-                                if (info__get(info2, "has_bracket")) # undeclared Array or List
-                                    error(sprintf("%s: Name '%s' has not been declared%s", TOK_AT cmd, info__get(info2, "name"),
-                                                  VERBOSE() ? TOK_NEWLINE $0 : EMPTY))
-                                else
-                                    new_type = TYPE_SYMBOL
-                            else if (type2 == TYPE_SYMBOL)
-                                if (info__get(info2, "has_bracket")) # undeclared Array or List
-                                    error(sprintf("%s: Cannot use brackets on %s '%s'",
-                                                  TOK_AT cmd, ppf__1flag(code2), $2))
-                                else
-                                    new_type = code2
-                            else if (type2 == TYPE_ARRAY || type2 == TYPE_LIST)
-                                if (! info__get(info2, "has_bracket")) # missing required bracket
-                                    error(sprintf("%s: Must use brackets on %s '%s'",
-                                                  TOK_AT cmd, ppf__1flag(code2), $2))
-                                else
-                                    new_type = code2
-                            else
-                                panic(sprintf("(parse) Cannot handle '%s' of type %s",
-                                              $2, ppf__1flag(code2)))
-
-                            new_level = nam_system_p(info__get(info2, "name")) ? ROOT_LEVEL : LEVEL()
-                            if (! nam_ll_in_ns(info__get(info2, "ns"),
-                                               info__get(info2, "name"),
-                                               new_level)) {
-                                if (dbg__sys_level_p("nam", 5) ||
-                                    dbg__sys_level_p("parse", 3))
-                                    print_debugfile(sprintf("m2debug:(parse) [%s] Declaring '%s'::'%s' (lev=%d) as type %s",
-                                                            parser_label,
-                                                            info__get(info2, "ns"), info__get(info2, "name"),
-                                                            new_level, ppf__1flag(new_type)))
-
-                                nam_ll_write_ns(info__get(info2, "ns"), info__get(info2, "name"),
-                                                new_level, new_type)
-                            }
-                        } else {
-                            # ARRAY, LIST, LOCAL
-                            if (index($2, TOK_NS_QUAL) > 0)
-                                error(sprintf("%s: Parameter '%s' must not be qualified%s",
-                                              TOK_AT cmd, $2, VERBOSE() ? " [parse:K]" TOK_NEWLINE $0 : EMPTY))
-
-                            # array, list, or local - These commands all
-                            # define local variables and cannot be qualified.
-                            if (! nam__valid_p($2, PTYPE_PARAM, TRUE))
-                                error(sprintf("%s: Name '%s' is not valid%s",
-                                              TOK_AT cmd, $2, VERBOSE() ? " [parse:B]" TOK_NEWLINE $0 : EMPTY))
-
-                            if (level2 == ROOT_LEVEL && LEVEL() != level2 &&
-                                flag_1true_p(info__get(info2, "code"), FLAG_SYSTEM))
-                                error(sprintf("%s: Cannot shadow '%s'%s",
-                                              TOK_AT cmd, $2, VERBOSE() ? TOK_NEWLINE $0 : EMPTY))
-                            # All these declare new names in namtab.
-                            # Regardless of type, names must be unique
-                            # at this (current) level, but it's okay if
-                            # same name is declared at a lower level.
-                            # if (LEVEL() >= ROOT_LEVEL && LEVEL() != level2)
-                            #     error($0 ": '" $2 "' already defined")
-
-                            if      (cmd == "array") new_type = TYPE_ARRAY
-                            else if (cmd == "list")  new_type = TYPE_LIST
-                            else if (cmd == "local") new_type = TYPE_SYMBOL
-
-                            if (dbg__sys_level_p("nam", 5) ||
-                                dbg__sys_level_p("parse", 3))
-                                print_debugfile(sprintf("m2debug:(parse) [%s] Declaring '%s'::'%s' (lev=%d) as type %s",
-                                                        parser_label,
-                                                        info__get(info2, "ns"), info__get(info2, "name"),
-                                                        LEVEL(), ppf__1flag(new_type)))
-                            # if (new_type == TYPE_ARRAY)
-                            #     print_stderr(sprintf(">> Array +namtab/parse: %s::%s [lev %d]",
-                            #                          info__get(info2, "ns"), info__get(info2, "name"), LEVEL()))
-                            nam_ll_write_ns(info__get(info2, "ns"), info__get(info2, "name"),
-                                            LEVEL(), new_type)
-                        }
-                        dbg__print("parse", 3, sprintf("(parse) [%s] CALLING ship_out(OBJ_INVOC, '%s')", parser_label, $0))
-                        ship_out(OBJ_INVOC, invoc_block)
-                        dbg__print("parse", 3, "(parse) [" parser_label "] RETURNED FROM ship_out()")
 
                     } else
                         panic("(parse) [" parser_label "] Found immediate command " cmd " but no handler")
@@ -4091,7 +4020,7 @@ function parse(    code, terminator, rstat, cmd, retval, new_block, fc,
                     if (flag_1true_p(code, TYPE_USER)) {
                         info["code"] = code
                         info["level"] = level
-                        #print_stderr("(parse<User>:4271 parse_invocation('" $0 "', @info)")
+                        #print_stderr("(parse<User>:4094 parse_invocation('" $0 "', @info)")
                         if ((invoc_block = zig__2parse_invocation($0, info)) <= 0)
                             error(sprintf("%s: Invocation error: %s%s", $1, ppf__msg(),
                                           VERBOSE() ? TOK_NEWLINE $0 : EMPTY))
@@ -4102,13 +4031,14 @@ function parse(    code, terminator, rstat, cmd, retval, new_block, fc,
                         dbg__print("parse", 3, "(parse) [" parser_label "] RETURNED FROM ship_out()")
                         continue
                     }
-                } else
-                    ; # No need to print any warnings yet if something isn't found...
+                }
             }
-            # It's okay to reach here with no actions taken.  In this
-            # case, just process the line as normal text.
         }
-        # doesn't look like a command - ship it out as text
+
+        # It's okay to reach here with no actions taken.  It's not a
+        # command, it's just a line that happened to start with an "@".
+        # Qualify any references (this is parse() after all), but do not
+        # invoke dosubs() yet.  Ship the line out as normal text.
         s = $0
         if (!emptyp($0)) {
             dbg__print("parse", 3, sprintf("(parse) [%s] CALLING qualify('%s')",
@@ -4122,6 +4052,7 @@ function parse(    code, terminator, rstat, cmd, retval, new_block, fc,
         ship_out(OBJ_TEXT, s)
         dbg__print("parse", 3, "(parse) [" parser_label "] RETURNED FROM ship_out()")
     } # continue loop again, reading next line
+
     dbg__print("parse", 5, "(parse) END => " ppf__bool(retval))
     return retval
 }

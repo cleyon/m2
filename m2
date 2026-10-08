@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-10-07 13:30:07 cleyon>
+#  Time-stamp:  <2026-10-08 14:16:49 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -11851,62 +11851,62 @@ function macro_expand(macro,
 
         # ----------------------------------------------------------------
         expand \
-            = (fnname == "basename") ? xeq_fn__basename(fnargs) \
-            : (fnname == "boolval")  ? xeq_fn__boolval(fnargs) \
+            = (fnname == "basename") ? exp_fn__basename(fnargs) \
+            : (fnname == "boolval")  ? exp_fn__boolval(fnargs) \
             : (fnname == "center"  || fnname == "ljust"  || fnname == "rjust" || \
                fnname == "scenter" || fnname == "sljust" || fnname == "srjust") \
-                                     ? xeq_fn__lrc(fnargs) \
-            : (fnname == "chr")      ? xeq_fn__chr(fnargs) \
+                                     ? exp_fn__lrc(fnargs) \
+            : (fnname == "chr")      ? exp_fn__chr(fnargs) \
             : (fnname == "comma" || fnname == "scomma") \
-                                     ? xeq_fn__comma(fnargs) \
+                                     ? exp_fn__comma(fnargs) \
             : (fnname == "date" || fnname == "epoch" || fnname == "time" || \
                fnname == "tz"   || fnname == "utc") \
-                                     ? xeq_fn__date(fnargs) \
-            : (fnname == "dirname")  ? xeq_fn__dirname(fnargs) \
-            : (fnname == "divnl")    ? xeq_fn__divnl(fnargs) \
-            : (fnname == "dow")      ? xeq_fn__dow(fnargs) \
-            : (fnname == "empty")    ? xeq_fn__empty(fnargs) \
+                                     ? exp_fn__date(fnargs) \
+            : (fnname == "dirname")  ? exp_fn__dirname(fnargs) \
+            : (fnname == "divnl")    ? exp_fn__divnl(fnargs) \
+            : (fnname == "dow")      ? exp_fn__dow(fnargs) \
+            : (fnname == "empty")    ? exp_fn__empty(fnargs) \
             : (fnname == "execpath" || fnname == "sexecpath") \
-                                     ? xeq_fn__execpath(fnargs) \
+                                     ? exp_fn__execpath(fnargs) \
             : (fnname == "expr" || fnname == "sexpr") \
-                                     ? xeq_fn__expr(fnargs) \
+                                     ? exp_fn__expr(fnargs) \
             : (fnname == "format" || fnname == "sprintf") \
-                                     ? xeq_fn__format(fnargs) \
-            : (fnname == "geodist")  ? xeq_fn__geodist(fnargs) \
-            : (fnname == "gregdate") ? xeq_fn__gregdate(fnargs) \
-            : (fnname == "hex")      ? xeq_fn__hex(fnargs) \
-            : (fnname == "hms")      ? xeq_fn__hms(fnargs) \
-            : (fnname == "hr")       ? xeq_fn__hr(fnargs) \
+                                     ? exp_fn__format(fnargs) \
+            : (fnname == "geodist")  ? exp_fn__geodist(fnargs) \
+            : (fnname == "gregdate") ? exp_fn__gregdate(fnargs) \
+            : (fnname == "hex")      ? exp_fn__hex(fnargs) \
+            : (fnname == "hms")      ? exp_fn__hms(fnargs) \
+            : (fnname == "hr")       ? exp_fn__hr(fnargs) \
             : (fnname == "ifdef" || fnname == "ifndef") \
-                                     ? xeq_fn__ifdef(fnargs) \
-            : (fnname == "ifelse")   ? xeq_fn__ifelse(fnargs) \
-            : (fnname == "ifx")      ? xeq_fn__ifx(fnargs) \
-            : (fnname == "index")    ? xeq_fn__index(fnargs) \
+                                     ? exp_fn__ifdef(fnargs) \
+            : (fnname == "ifelse")   ? exp_fn__ifelse(fnargs) \
+            : (fnname == "ifx")      ? exp_fn__ifx(fnargs) \
+            : (fnname == "index")    ? exp_fn__index(fnargs) \
             : (fnname == "join" || fnname == "sjoin") \
-                                     ? xeq_fn__join(fnargs) \
+                                     ? exp_fn__join(fnargs) \
             : (fnname == "lc" || fnname == "len" || fnname == "uc") \
-                                     ? xeq_fn__string_misc(fnargs) \
-            : (fnname == "left")     ? xeq_fn__left(fnargs) \
+                                     ? exp_fn__string_misc(fnargs) \
+            : (fnname == "left")     ? exp_fn__left(fnargs) \
             : (fnname == "mid" || fnname == "substr") \
-                                     ? xeq_fn__mid(fnargs) \
-            : (fnname == "mjd")      ? xeq_fn__mjd(fnargs) \
-            : (fnname == "mktemp")   ? xeq_fn__mktemp(fnargs) \
+                                     ? exp_fn__mid(fnargs) \
+            : (fnname == "mjd")      ? exp_fn__mjd(fnargs) \
+            : (fnname == "mktemp")   ? exp_fn__mktemp(fnargs) \
             : (fnname == "ns")       ? NS() \
-            : (fnname == "ord")      ? xeq_fn__ord(fnargs) \
+            : (fnname == "ord")      ? exp_fn__ord(fnargs) \
             : (fnname == "rem" || fnname == "srem") ? EMPTY \
-            : (fnname == "right")    ? xeq_fn__right(fnargs) \
-            : (fnname == "rot13")    ? xeq_fn__rot13(fnargs) \
-            : (fnname == "sig")      ? xeq_fn__sig(fnargs) \
+            : (fnname == "right")    ? exp_fn__right(fnargs) \
+            : (fnname == "rot13")    ? exp_fn__rot13(fnargs) \
+            : (fnname == "sig")      ? exp_fn__sig(fnargs) \
             : (fnname == "space" || fnname == "spaces" || \
                fnname ==  "tab"  || fnname == "tabs") \
-                                     ? xeq_fn__spaces(fnargs) \
-            : (fnname == "strftime") ? xeq_fn__strftime(fnargs) \
+                                     ? exp_fn__spaces(fnargs) \
+            : (fnname == "strftime") ? exp_fn__strftime(fnargs) \
             : (fnname == "tmpdir")   ? tmpdir() \
             : (fnname == "trim" || fnname == "ltrim" || fnname == "rtrim") \
-                                     ? xeq_fn__trim(fnargs) \
+                                     ? exp_fn__trim(fnargs) \
             : (fnname == "uuid")     ? uuid() \
             : (fnname == "xbasename" || fnname == "xdirname") \
-                                     ? xeq_fn__xname(fnargs) \
+                                     ? exp_fn__xname(fnargs) \
             : error(ME() ": Function '" fnname "' not handled")
 
         macro_set_expansion(macro, expand)
@@ -12280,7 +12280,7 @@ function awk_basename(s)
 #
 #*****************************************************************************
 # @basename SYM@
-function xeq_fn__basename(args,
+function exp_fn__basename(args,
                           p, path, syminfo)
 {
     p = args["SYM"]
@@ -12306,7 +12306,7 @@ function xeq_fn__basename(args,
 #
 #*****************************************************************************
 # @boolval SYM@
-function xeq_fn__boolval(args,
+function exp_fn__boolval(args,
                          p, result, syminfo)
 {
     do {
@@ -12362,7 +12362,7 @@ function xeq_fn__boolval(args,
 #         @chr 65@ => A
 #
 #*****************************************************************************
-function xeq_fn__chr(args,
+function exp_fn__chr(args,
                      p, syminfo)
 {
     p = args["N"]
@@ -12389,7 +12389,7 @@ function xeq_fn__chr(args,
 #
 #*****************************************************************************
 # @comma     VAL@
-function xeq_fn__comma(args,
+function exp_fn__comma(args,
                        p, silent, val, syminfo)
 {
     # S variant actually *removes* commas
@@ -12439,7 +12439,7 @@ function rmcomma(x)
 #
 #*****************************************************************************
 # @date@
-function xeq_fn__date(args,
+function exp_fn__date(args,
                       fn, y, cmdline, output)
 {
     if (SEC_LEVEL() >= SEC_PARANOID)
@@ -12476,13 +12476,13 @@ function xeq_fn__date(args,
 #
 #*****************************************************************************
 # @dirname SYM@
-function xeq_fn__dirname(args,
+function exp_fn__dirname(args,
                          p, x, syminfo)
 {
     p = args["SYM"]
     info__create_from_text(p, syminfo)
     # if (! info__get(syminfo, "defined"))
-    #     error("(xeq_fn__dirname) '" p "' not defined")
+    #     error("(exp_fn__dirname) '" p "' not defined")
     info__gate(OP_READ, PTYPE_SCALAR, syminfo, NS(), LEVEL(), ME(), TRUE)
     x = rm_quotes(info__get(syminfo, "value"))
     return sub(/\/[^\/]*$/, "", x) ? x : "."
@@ -12503,7 +12503,7 @@ function xeq_fn__dirname(args,
 #
 #*****************************************************************************
 # @divnl STREAM@
-function xeq_fn__divnl(args,
+function exp_fn__divnl(args,
                        stream)
 {
     stream = (args[0, "narg"] == 0) ? DIVNUM() : args["STREAM"]
@@ -12527,7 +12527,7 @@ function xeq_fn__divnl(args,
 #
 #*****************************************************************************
 # @dow SYM@
-function xeq_fn__dow(args,
+function exp_fn__dow(args,
                      nparam, MJD, date, year, month, day)
 {
     nparam = args[0, "narg"]
@@ -12570,7 +12570,7 @@ function xeq_fn__dow(args,
 #
 #*****************************************************************************
 # @empty SYM@
-function xeq_fn__empty(args,
+function exp_fn__empty(args,
                        p, syminfo)
 {
     p = args["SYM"]
@@ -12596,7 +12596,7 @@ function xeq_fn__empty(args,
 #
 #*****************************************************************************
 # @execpath PROG@
-function xeq_fn__execpath(args,
+function exp_fn__execpath(args,
                           p, silent, cmdline, output)
 {
     if (SEC_LEVEL() >= SEC_SECURE)
@@ -12628,13 +12628,13 @@ function xeq_fn__execpath(args,
 #
 #*****************************************************************************
 # @expr ...@
-function xeq_fn__expr(args,
+function exp_fn__expr(args,
                       silent, result)
 {
     # S variant won't automatically print result
     silent = first(args[0, "name"]) == "s"
     result = calc3_eval(args["MATH"])
-    dbg__print("expr", 3, sprintf("(xeq_fn__expr) expr{%s} = %s", args["MATH"], result))
+    dbg__print("expr", 3, sprintf("(exp_fn__expr) expr{%s} = %s", args["MATH"], result))
     sys__write("__EXPR__", result+0)
     return silent ? EMPTY : result
 }
@@ -12654,7 +12654,7 @@ function xeq_fn__expr(args,
 #
 #*****************************************************************************
 # @format, @sprintf     FMT SYM...@
-function xeq_fn__format(args,
+function exp_fn__format(args,
                         fmt, i, arg, result, narg, nelem)
 {
     narg  = args[0, "narg"]
@@ -12695,7 +12695,7 @@ function xeq_fn__format(args,
 #
 #*****************************************************************************
 # @geodist LAT1 LON1 LAT2 LON2@
-function xeq_fn__geodist(args,
+function exp_fn__geodist(args,
                          d, s)
 {
     d = vincenty_distance(args["LAT1"], args["LON1"],
@@ -12719,7 +12719,7 @@ function xeq_fn__geodist(args,
 #
 #*****************************************************************************
 # @gregdate MJD@
-function xeq_fn__gregdate(args,
+function exp_fn__gregdate(args,
                           p, JD)
 {
     return greg(args["MJD"] + JD_MJD_DIFF)
@@ -12740,7 +12740,7 @@ function xeq_fn__gregdate(args,
 #
 #*****************************************************************************
 # @hex SYM...@
-function xeq_fn__hex(args,
+function exp_fn__hex(args,
                      p, syminfo)
 {
     p = args["VAL"]
@@ -12769,7 +12769,7 @@ function xeq_fn__hex(args,
 #
 #*****************************************************************************
 # @hms HR.DDDD@
-function xeq_fn__hms(args,
+function exp_fn__hms(args,
                      hr, hours, mn, mins, secs, sgn, retval, frc_s)
 {
     hr = args["HR"]
@@ -12803,7 +12803,7 @@ function xeq_fn__hms(args,
 #*****************************************************************************
 # @hr HOUR MIN SEC.sss@
 # @hr HOUR.MMSSsssss@
-function xeq_fn__hr(args,
+function exp_fn__hr(args,
                     hours, mins, secs, sgn, retval,
                     h, dot, nelem)
 {
@@ -12864,7 +12864,7 @@ function xeq_fn__hr(args,
 #
 #*****************************************************************************
 # @ifdef{FOO}{True text}{False text}@
-function xeq_fn__ifdef(args,
+function exp_fn__ifdef(args,
                        x, ifcond, init_negate, true_text, false_text, result,
                        syminfo)
 {
@@ -12885,7 +12885,7 @@ function xeq_fn__ifdef(args,
     dbg__print("dosubs", 7, "(ifdef) if_false='" false_text "'")
 
     result = evaluate_boolean(ifcond, init_negate) ? true_text : false_text
-    dbg__print("dosubs", 7, "(xeq_fn__ifdef) Calling dosubs('" result "')")
+    dbg__print("dosubs", 7, "(exp_fn__ifdef) Calling dosubs('" result "')")
     return dosubs(result)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
@@ -12935,7 +12935,7 @@ function xeq_fn__ifdef(args,
 #
 #*****************************************************************************
 # @ifelse{S1}{S2}{True text}{False text}...@
-function xeq_fn__ifelse(args,
+function exp_fn__ifelse(args,
                         j, result,
                         nelem, base)
 {
@@ -12970,7 +12970,7 @@ function xeq_fn__ifelse(args,
             base += 3
     }
 
-    dbg__print("dosubs", 7, "(xeq_fn__ifelse) Calling dosubs('" result "')")
+    dbg__print("dosubs", 7, "(exp_fn__ifelse) Calling dosubs('" result "')")
     return dosubs(result)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
@@ -12991,7 +12991,7 @@ function xeq_fn__ifelse(args,
 #*****************************************************************************
 # @ifx{Boolean expr}{True text}{False text}@
 
-function xeq_fn__ifx(args,
+function exp_fn__ifx(args,
                      ifcond, init_negate, true_text, false_text, result)
 {
     ifcond      = args["EXPR"]
@@ -13004,7 +13004,7 @@ function xeq_fn__ifx(args,
     dbg__print("dosubs", 7, "(ifx) if_false='" false_text "'")
 
     result = evaluate_boolean(ifcond, init_negate) ? true_text : false_text
-    dbg__print("dosubs", 7, "(xeq_fn__ifx) Calling dosubs('" result "')")
+    dbg__print("dosubs", 7, "(exp_fn__ifx) Calling dosubs('" result "')")
     return dosubs(result)
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
@@ -13025,7 +13025,7 @@ function xeq_fn__ifx(args,
 #
 #*****************************************************************************
 # @index SYM STRING@
-function xeq_fn__index(args,
+function exp_fn__index(args,
                        p, syminfo)
 {
     p = args["SYM"]
@@ -13049,7 +13049,7 @@ function xeq_fn__index(args,
 #
 #*****************************************************************************
 # @join     LIST [FS]
-function xeq_fn__join(args,
+function exp_fn__join(args,
                       info, level, retval, lis, fs, fslen, silent,
                       code, size, s, f, k, keys, i, agg_block, ins, fsinfo)
 {
@@ -13094,14 +13094,14 @@ function xeq_fn__join(args,
         if (info__get(info, "type") == TYPE_LIST) {
             # It's a block array - Get its agg_block
             if (! ((ins, lis, NOKEY, level, "agg_block") in symtab))
-                panic(sprintf("(xeq_fn__join) Could not find [%s, '%s','%s',%d,'agg_block'] in symtab",
+                panic(sprintf("(exp_fn__join) Could not find [%s, '%s','%s',%d,'agg_block'] in symtab",
                               ins, lis, NOKEY, level))
             agg_block = symtab[ins, lis, NOKEY, level, "agg_block"]
             # Inject the values
             for (i = 1; i <= size; i++) {
                 # Make sure slot holds text
                 if (blk_ll_slot_type(agg_block, i) != OBJ_TEXT)
-                    panic(sprintf("(xeq_fn__join) Block # %d slot %d is not OBJ_TEXT", agg_block, i))
+                    panic(sprintf("(exp_fn__join) Block # %d slot %d is not OBJ_TEXT", agg_block, i))
                 retval = retval  blk_ll_slot_value(agg_block, i)  fs
             }
         } else {
@@ -13146,7 +13146,7 @@ function xeq_fn__join(args,
 #
 #*****************************************************************************
 # @left SYMBOL[, LENGTH]@
-function xeq_fn__left(args,
+function exp_fn__left(args,
                       p, x, syminfo)
 {
     p = args["SYM"]
@@ -13180,7 +13180,7 @@ function xeq_fn__left(args,
 # @ljust  SYM [WIDTH]@
 # @rjust  SYM [WIDTH]@
 # @center SYM [WIDTH]@
-function xeq_fn__lrc(args,
+function exp_fn__lrc(args,
                      fn, syminfo, silent, p, width, s, slen, x, sp, colinfo)
 {
     fn = args[0, "name"]
@@ -13248,7 +13248,7 @@ function xeq_fn__lrc(args,
 #
 #*****************************************************************************
 # @mid SYM, BEGIN[, LENGTH]
-function xeq_fn__mid(args,
+function exp_fn__mid(args,
                      sym, str, param_Begin, param_Length, result, syminfo,
                      B, L, symlen, altB, substr_Begin, substr_Length)
 {
@@ -13314,7 +13314,7 @@ function xeq_fn__mid(args,
 #
 #*****************************************************************************
 # @mjd [YYYY MM DD]@
-function xeq_fn__mjd(args,
+function exp_fn__mjd(args,
                      year, month, day, monthdays, i, n, date)
 {
     if (args[0, "narg"] == 0) {
@@ -13335,7 +13335,7 @@ function xeq_fn__mjd(args,
         error(sprintf("%s: Bad parameters in '%s'",
                       ME(), $0, VERBOSE() ? TOK_NEWLINE $0 : EMPTY))
 
-    dbg__print("dosubs", 7, "(xeq_fn__mjd) year=" year ", month=" month ", day=" day)
+    dbg__print("dosubs", 7, "(exp_fn__mjd) year=" year ", month=" month ", day=" day)
     if (! date_valid_p(year, month, day))
         error(sprintf("%s: Bad date; Year=%d, Month=%d, Day=%d%s",
                       ME(), year, month, day, VERBOSE() ? TOK_NEWLINE $0 : EMPTY))
@@ -13359,7 +13359,7 @@ function xeq_fn__mjd(args,
 #
 #*****************************************************************************
 # @mktemp SYM | templateXXXXXX
-function xeq_fn__mktemp(args,
+function exp_fn__mktemp(args,
                         p, template, info)
 {
     if (args[0, "narg"] == 0)
@@ -13395,7 +13395,7 @@ function xeq_fn__mktemp(args,
 #
 #*****************************************************************************
 # @ord SYM@
-function xeq_fn__ord(args,
+function exp_fn__ord(args,
                      p, syminfo)
 {
     if (flag_1false_p(__m2_config_flags, INIT_ORD))
@@ -13423,7 +13423,7 @@ function xeq_fn__ord(args,
 #
 #*****************************************************************************
 # @right SYM N@
-function xeq_fn__right(args,
+function exp_fn__right(args,
                        x, p, syminfo, val)
 {
     p = args["SYM"]
@@ -13455,7 +13455,7 @@ function xeq_fn__right(args,
 #
 #*****************************************************************************
 # @rot13 SYM | Text@
-function xeq_fn__rot13(args,
+function exp_fn__rot13(args,
                        p, i, c, result, info)
 {
     if (flag_1false_p(__m2_config_flags, INIT_ROT13))
@@ -13489,7 +13489,7 @@ function xeq_fn__rot13(args,
 #
 #*****************************************************************************
 # @sig CMD@
-function xeq_fn__sig(args,
+function exp_fn__sig(args,
                      sig_blk, info, type,
                      param_names, i, sigobj_nparam,
                      ns, name, level, user_block)
@@ -13542,7 +13542,7 @@ function xeq_fn__sig(args,
 #*****************************************************************************
 # @spaces COUNT@
 # @tabs COUNT@
-function xeq_fn__spaces(args,
+function exp_fn__spaces(args,
                         n, c)
 {
     n = args["COUNT"]
@@ -13571,7 +13571,7 @@ function xeq_fn__spaces(args,
 #         @len ALPHABET@ => 26
 #
 #*****************************************************************************
-function xeq_fn__string_misc(args,
+function exp_fn__string_misc(args,
                              fn, p, val, result, syminfo)
 {
     fn = args[0, "name"]
@@ -13610,7 +13610,7 @@ function xeq_fn__string_misc(args,
 #
 #*****************************************************************************
 # @strftime FORMAT@
-function xeq_fn__strftime(args,
+function exp_fn__strftime(args,
                           y, cmdline, output)
 {
     if (SEC_LEVEL() >= SEC_PARANOID)
@@ -13641,7 +13641,7 @@ function xeq_fn__strftime(args,
 #       rtrim SYM: Remove trailing whitespace
 #
 #*****************************************************************************
-function xeq_fn__trim(args,
+function exp_fn__trim(args,
                       p, fn, result, syminfo)
 {
     result = ""
@@ -13677,7 +13677,7 @@ function xeq_fn__trim(args,
 #*****************************************************************************
 # @xbasename SYM@
 # @xdirname SYM@
-function xeq_fn__xname(args,
+function exp_fn__xname(args,
                        p, syminfo, cmdline, output, fn)
 {
     if (SEC_LEVEL() >= SEC_PARANOID)

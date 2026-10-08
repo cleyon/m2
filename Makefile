@@ -11,8 +11,10 @@ AWK=/usr/bin/awk
 GAWK=/usr/local/bin/gawk
 MAWK=/usr/local/bin/mawk
 NAWK=/usr/bin/nawk
-CALLGRAPH=~/repos.cp/github.com/koknat/callGraph/callGraph
+MY_CALLGRAPH=~/repos.cp/github.com/koknat/callGraph/callGraph
 TAGS=ctags -e
+
+CALLGRAPH=$(MY_CALLGRAPH) m2 -language awk
 
 all:
 	@sh -c 'echo "Say what now?"; exit 1'
@@ -26,13 +28,16 @@ $(IGNORE): callgraph.ignore
 	grex -g --file $^ | sed 's/^.\(.*\).$$/\1/' > $@
 
 m2.png: m2 $(IGNORE)
-	$(CALLGRAPH) m2 -language awk -output $@ -noShow -ignore "`cat $(IGNORE)`"
+	$(CALLGRAPH) -output $@ -noShow -ignore "`cat $(IGNORE)`"
 
 callgraph: m2.png
 	open $^
 
 callgraph-full:
-	$(CALLGRAPH) m2 -language awk -output m2-full.png
+	$(CALLGRAPH) -output m2-full.png
+
+m2-callgraph.yml: m2 $(IGNORE)
+	$(CALLGRAPH) -ymlOut $@ -noShow -ignore "`cat $(IGNORE)`"
 
 debug:
 	$(GAWK) -D -f m2

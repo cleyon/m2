@@ -489,14 +489,16 @@ if [ $debug = "true" ]; then
 fi
 echo "!!! JOB BEGIN: $(date)"
 time_begin=$(date +%s)
-case $# in
-    0) echo "!!! TEST RUN: START"
-       test_all_categories ;;
-    1) echo "!!! TEST RUN: START"
-       test_something $1 ;;
-    *) framework_error "Invocation error: Bad # parameters" ;;
-esac
 
+echo "!!! TEST RUN: START"
+if [ $# -eq 0 ]; then
+    test_all_categories
+else
+    while [ $# -gt 0 ]; do
+        test_something $1
+        shift
+    done
+fi
 echo "!!! TEST RUN: STOP"
 
 if [ ${rc} -eq 0 ] ; then

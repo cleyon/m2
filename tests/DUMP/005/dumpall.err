@@ -94,6 +94,8 @@ __m2__::of	Command<System,Immediate>
 __m2__::ord	Function<System>
 __m2__::otherwise	Command<System,Immediate>
 __m2__::paste	Command<System>
+__m2__::pop	Command<System>
+__m2__::push	Command<System>
 __m2__::qualify	<Internal,System>
 __m2__::readonly	Command<System>
 __m2__::rem	Function<System>
@@ -115,6 +117,7 @@ __m2__::sfiledata	Command<System>
 __m2__::sfiledef	Command<System>
 __m2__::sfiledefine	Command<System>
 __m2__::shell	Command<System>
+__m2__::shift	Command<System>
 __m2__::sig	Function<System>
 __m2__::simport	Command<System>
 __m2__::sinclude	Command<System>
@@ -147,6 +150,7 @@ __m2__::undef	Command<System>
 __m2__::undefine	Command<System>
 __m2__::undivert	Command<System>
 __m2__::unless	Command<System,Immediate>
+__m2__::unshift	Command<System>
 __m2__::until	Command<System,Immediate>
 __m2__::utc	Function<System>
 __m2__::uuid	Function<System>

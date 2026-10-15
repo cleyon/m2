@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-10-08 14:16:49 cleyon>
+#  Time-stamp:  <2026-10-15 13:33:51 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -44,7 +44,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "6.0.1"
+    M2_VERSION = "6.1.0"
 
     # Specify a shell for m2 to use for running utility programs.
     # It is expected to be compatible with Bourne shell syntax:
@@ -152,9 +152,9 @@ BEGIN {
     # Pseudo-types
     PTYPE_ANY        = "*"; __label[PTYPE_ANY]      = "Any";       __base_type[PTYPE_ANY     ] = VALID_TYPES
     #
-    PTYPE_IDXABLE    = "J"; __label[PTYPE_IDXABLE]  = "Idxable";   __base_type[PTYPE_IDXABLE ] = TYPE_ARRAY  TYPE_LIST
-    PTYPE_SCALAR     = "l"; __label[PTYPE_SCALAR]   = "Scalar";    __base_type[PTYPE_SCALAR  ] = PTYPE_IDXABLE   TYPE_SYMBOL
-    PTYPE_NUMBER     = "n"; __label[PTYPE_NUMBER]   = "Number";    __base_type[PTYPE_NUMBER  ] = PTYPE_SCALAR    TYPE_SEQUENCE
+    PTYPE_GROUP      = "J"; __label[PTYPE_GROUP]    = "Group";     __base_type[PTYPE_GROUP   ] = TYPE_ARRAY    TYPE_LIST
+    PTYPE_SCALAR     = "l"; __label[PTYPE_SCALAR]   = "Scalar";    __base_type[PTYPE_SCALAR  ] = PTYPE_GROUP   TYPE_SYMBOL
+    PTYPE_NUMBER     = "n"; __label[PTYPE_NUMBER]   = "Number";    __base_type[PTYPE_NUMBER  ] = PTYPE_SCALAR  TYPE_SEQUENCE
                             __label["0"]            = "RESERVED<0>"
                             __label["?"]            = "RESERVED<?>"
     #
@@ -956,6 +956,8 @@ function strictp(ssys)
 {
     if (ssys == EMPTY)
         panic("(strictp) ssys must not be empty")
+    if (! ((M2_SYSNS, "__STRICT__", ssys, ROOT_LEVEL, "symval") in symtab))
+        panic("(strictp) __STRICT__[" ssys "] not defined !?")
     return sys__read("__STRICT__", ssys) != FALSE
 }
 
@@ -1991,7 +1993,7 @@ function info__gate_1part(opcode, optype, info, opns, oplevel, caller, assert_tr
                                           sprintf("Name '%s' not defined%s", iname,
                                                   VERBOSE() ? " [(info__gate_1part) OP_READ]" : ""))
 
-            # # SCALAR must be checked before IDXABLE because the latter
+            # # SCALAR must be checked before GROUP because the latter
             # # is a subset of the former
             # # if (flag_alltrue_p(optype, PTYPE_SCALAR)) {
             # if (optype == PTYPE_SCALAR) {
@@ -2001,8 +2003,8 @@ function info__gate_1part(opcode, optype, info, opns, oplevel, caller, assert_tr
             #                                           iname, ppf__1flag(itype)))
             #     retval = TRUE; break
             #
-            # # } else if (flag_alltrue_p(optype, PTYPE_IDXABLE)) {
-            # } else if (optype == PTYPE_IDXABLE) {
+            # # } else if (flag_alltrue_p(optype, PTYPE_GROUP)) {
+            # } else if (optype == PTYPE_GROUP) {
             #     if (itype != TYPE_ARRAY && itype != TYPE_LIST)
             #         return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
             #                                   sprintf("B Name '%s' has type %s, not Array or List",
@@ -2122,12 +2124,12 @@ function info__gate_2parts(opcode, optype, info, opns, oplevel, caller, assert_t
             #                                   sprintf("Name '%s' is at a different level", iname))
             #     retval = TRUE; break
             # }
-            if (info__satisfies_type(info, PTYPE_IDXABLE)) {
+            if (info__satisfies_type(info, PTYPE_GROUP)) {
                 if (info__get(info, "protected"))
                     return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
                                               sprintf("Name '%s' is protected%s",
                                                       iname, VERBOSE() ? " [info__gate_2parts:G]" : ""))
-                if (idx__key_exists_p(info, ikey))
+                if (grp__key_exists_p(info, ikey))
                     return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
                                               sprintf("Key '%s' already found in %s '%s'",
                                                       ikey, ppf__1flag(itype), iname))
@@ -2144,7 +2146,7 @@ function info__gate_2parts(opcode, optype, info, opns, oplevel, caller, assert_t
         } else if (opcode == OP_READ) {
             #print_stderr("op_read; optype=" optype)
 
-            if (! idx__key_exists_p(info, ikey))
+            if (! grp__key_exists_p(info, ikey))
                     return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
                                               sprintf("Key '%s' not found in %s '%s'",
                                                       ikey, ppf__1flag(itype), iname))
@@ -2186,8 +2188,8 @@ function info__gate_2parts(opcode, optype, info, opns, oplevel, caller, assert_t
             #     retval = TRUE; break
             # }
 
-            if (info__satisfies_type(info, PTYPE_IDXABLE)) {
-                if (! idx__key_exists_p(info, ikey))
+            if (info__satisfies_type(info, PTYPE_GROUP)) {
+                if (! grp__key_exists_p(info, ikey))
                     return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
                                               sprintf("Key '%s' not found in %s '%s'",
                                                       ikey, ppf__1flag(itype), iname))
@@ -2230,7 +2232,7 @@ function info__satisfies_type(info, type_target,
                  info__get(info, "has_bracket") == TRUE &&
                  info__get(info, "key_valid") == TRUE)
 
-    # split(PTYPE_IDXABLE VALID_TYPES, type_array, TOK_SPACE)
+    # split(PTYPE_GROUP VALID_TYPES, type_array, TOK_SPACE)
     # for (tentry in type_array)
     #     if (index(base_types, type_array[tentry]))
     #         return TRUE
@@ -2259,14 +2261,14 @@ function info__gate_resolve(retval, caller, info, assert_true_or_exit, errtext)
 #       A R R A Y   A P I
 #
 #*****************************************************************************
-function arr__deref_info(info, caller)
+function grp__deref_info(info, caller)
 {
     if (info__get(info, "type") == TYPE_ARRAY)
         return arr__fetch_info(info, caller)
     else if (info__get(info, "type") == TYPE_LIST)
         return lis__fetch_info(info, caller)
     else
-        panic("(arr__deref_info) Bad info")
+        panic("(grp__deref_info) Bad info")
 }
 
 
@@ -2324,7 +2326,7 @@ function lis__fetch_info(info, caller,
 
 
 function lis__clear(ns, lis, level,
-                    agg_block, count, i)
+                    agg_block, count, offset, i)
 {
     # Clear List
     if (! ((ns, lis, NOKEY, level, "agg_block") in symtab))
@@ -2333,15 +2335,17 @@ function lis__clear(ns, lis, level,
     agg_block = symtab[ns, lis, NOKEY, level, "agg_block"]
     count = blktab[agg_block, 0, "count"]+0
     if (count > 0) {
+        offset = blktab[agg_block, 0, "offset"] + 0
         for (i = 1; i <= count; i++) {
-            delete blktab[agg_block, i, "slot_type"]
-            delete blktab[agg_block, i, "slot_value"]
+            delete blktab[agg_block, i+offset, "slot_type"]
+            delete blktab[agg_block, i+offset, "slot_value"]
         }
         blktab[agg_block, 0, "count"] = 0
+        blktab[agg_block, 0, "offset"] = 0
     }
 }
 
-function idx__key_exists_p(info, key,
+function grp__key_exists_p(info, key,
                            itype, iname, ins, ilevel)
 {
     itype  = info__get(info, "type")
@@ -2353,7 +2357,7 @@ function idx__key_exists_p(info, key,
     else if (itype == TYPE_LIST)
         return lis__key_exists_p(ins, iname, key, ilevel)
     else
-        panic("(idx__key_exists_p) Cannot handle type " ppf__1flag(itype))
+        panic("(grp__key_exists_p) Cannot handle type " ppf__1flag(itype))
 }
 
 
@@ -2372,6 +2376,26 @@ function lis__key_exists_p(ns, lis, key, level)
 {
     key = 0 + key
     return key > 0 && key <= lis__size(ns, lis, level)
+}
+
+function lis__prepend(ns, name, level, app_val,
+                      agg_block)
+{
+    if (! ((ns, name, NOKEY, level, "agg_block") in symtab))
+        panic(sprintf("(lis__prepend) Could not find [%s, '%s','%s',%d,'agg_block'] in symtab",
+                      ns, name, NOKEY, level))
+    agg_block = symtab[ns, name, NOKEY, level, "agg_block"]
+    blk_prepend(agg_block, OBJ_TEXT, app_val)
+}
+
+function lis__append(ns, name, level, app_val,
+                     agg_block)
+{
+    if (! ((ns, name, NOKEY, level, "agg_block") in symtab))
+        panic(sprintf("(lis__append) Could not find [%s, '%s','%s',%d,'agg_block'] in symtab",
+                      ns, name, NOKEY, level))
+    agg_block = symtab[ns, name, NOKEY, level, "agg_block"]
+    blk_append(agg_block, OBJ_TEXT, app_val)
 }
 
 function lis__assign(ns, name, key, level, new_val,
@@ -2412,35 +2436,20 @@ function arr__size(ns, arr, level,
     return count
 }
 
-function idx__size(info, # arr, level, code,
+function grp__size(info,
                    icode, ilevel, iname, ins, agg_block, count, k, x)
 {
     if ((ins = info__get(info, "ns")) == EMPTY)
-        panic("(idx__size) 'ns' must not be empty")
+        panic("(grp__size) 'ns' must not be empty")
     if ((icode = info__get(info, "code")) == EMPTY)
-        panic("(idx__size) 'code' must not be empty")
+        panic("(grp__size) 'code' must not be empty")
 
     iname  = info__get(info, "name")
     ilevel = info__get(info, "level")
-    count = 0
-    if (flag_1true_p(icode, TYPE_LIST)) {
-        # # Size block array
-        # if (! ((M2_NS, arr, NOKEY, level, "agg_block") in symtab))
-        #     panic(sprintf("(idx__size) Could not find [%s, '%s','%s',%d,'agg_block'] in symtab",
-        #                   M2_NS, arr, NOKEY, level))
-        # agg_block = symtab[M2_NS, arr, NOKEY, level, "agg_block"]
-        # count = blktab[agg_block, 0, "count"]+0
-        count = lis__size(ins, iname, ilevel)
-    } else {
-        # Size regular array
-        # for (k in symtab) {
-        #     split(k, x, SUBSEP)
-        #     if (x[SFN_NAME] == arr && x[SFN_LEVEL]+0 == level)
-        #         count++
-        # }
-        count = arr__size(ins, iname, ilevel)
-    }
-    dbg__print("sym", 7, sprintf("(idx__size) arr='%s', level=%d, RETURNING %d",
+    count = (flag_1true_p(icode, TYPE_LIST)) \
+        ? lis__size(ins, iname, ilevel) \
+        : arr__size(ins, iname, ilevel)
+    dbg__print("sym", 7, sprintf("(grp__size) arr='%s', level=%d, RETURNING %d",
                                 iname, ilevel, count))
     return count
 }
@@ -2471,6 +2480,7 @@ function blk_new(block_type,
 
     if (block_type == BLK_AGG) {
         blktab[new_blknum, 0, "count"] = 0
+        blktab[new_blknum, 0, "offset"] = 0
         blktab[new_blknum, 0, "line"]  = LINE()
     } else if (block_type == BLK_CASE) {
         blktab[new_blknum, 0, "terminator"] = "^@__m2__::(endcase|esac)"
@@ -2623,49 +2633,75 @@ function blk_type(blknum,
 }
 
 
-function blk_ll_slot_type(blknum, slot)
+function blk_ll_slot_type(blknum, slot,
+                          offset)
 {
-    if ((blknum, slot, "slot_type") in blktab)
-        return blktab[blknum, slot, "slot_type"]
+    offset = blktab[blknum, 0, "offset"]+0
+    if ((blknum, slot+offset, "slot_type") in blktab)
+        return blktab[blknum, slot+offset, "slot_type"]
     panic("(blk_ll_slot_type) Not found: blknum=" blknum ", slot=" slot)
 }
 
 
-function blk_ll_slot_value(blknum, slot)
+function blk_ll_slot_value(blknum, slot,
+                           offset)
 {
-    if ((blknum, slot, "slot_value") in blktab)
-        return blktab[blknum, slot, "slot_value"]
+    offset = blktab[blknum, 0, "offset"]+0
+    if ((blknum, slot+offset, "slot_value") in blktab)
+        return blktab[blknum, slot+offset, "slot_value"]
     panic("(blk_ll_slot_value) Not found: blknum=" blknum ", slot=" slot)
 }
 
 
-function blk_ll_write(blknum, slot, type, new_val)
+function blk_ll_write(blknum, slot, type, new_val,
+                      offset)
 {
-    # print_stderr(sprintf("(blk_ll_write) blktab[%d, %d]; slot_type=%s, slot_value=%s",
-    #                      blknum, slot, type, new_val))
-    blktab[blknum, slot, "slot_type"]  = type
-    blktab[blknum, slot, "slot_value"] = new_val
+    offset = blktab[blknum, 0, "offset"]+0
+    # print_stderr(sprintf("(blk_ll_write) blktab[%d, %d],offset=%d; slot_type=%s, slot_value=%s",
+    #                      blknum, slot, offset, type, new_val))
+    blktab[blknum, slot+offset, "slot_type"]  = type
+    blktab[blknum, slot+offset, "slot_value"] = new_val
     return new_val
 }
 
 
+function blk_prepend(blknum, slot_type, value,
+                     slot, offset)
+{
+    if (!integerp(blknum))
+        panic(sprintf("(blk_prepend) Block '%s' is not an integer", blknum))
+    if (blk_type(blknum) != BLK_AGG)
+        panic(sprintf("(blk_prepend) Block %d has type %s, not AGG",
+                      blknum, ppf__1flag(blk_type(blknum))))
+    if (slot_type != OBJ_BLKNUM && slot_type != OBJ_TEXT && slot_type != OBJ_INVOC)
+        panic(sprintf("(blk_prepend) Argument has bad type %s; should be OBJ_{BLKNUM,INVOC,TEXT}", ppf__1flag(slot_type)))
+
+    slot = 0
+    dbg__print("ship_out", 3,
+              sprintf("(blk_prepend) blknum=%d, slot=%d, offset=%d, slot_type=%s, value='%s'",
+                      blknum, slot, offset, ppf__1flag(slot_type), value))
+    blk_ll_write(blknum, slot, slot_type, value)
+    blktab[blknum, 0, "offset"]--
+    blktab[blknum, 0, "count"]++
+}
+
 function blk_append(blknum, slot_type, value,
-                    slot)
+                    slot, offset)
 {
     if (!integerp(blknum))
         panic(sprintf("(blk_append) Block '%s' is not an integer", blknum))
     if (blk_type(blknum) != BLK_AGG)
         panic(sprintf("(blk_append) Block %d has type %s, not AGG",
                       blknum, ppf__1flag(blk_type(blknum))))
-
     if (slot_type != OBJ_BLKNUM && slot_type != OBJ_TEXT && slot_type != OBJ_INVOC)
         panic(sprintf("(blk_append) Argument has bad type %s; should be OBJ_{BLKNUM,INVOC,TEXT}", ppf__1flag(slot_type)))
 
-    slot = ++blktab[blknum, 0, "count"]
+    slot = blktab[blknum, 0, "count"] + 1
     dbg__print("ship_out", 3,
-              sprintf("(blk_append) blknum=%d, slot=%d, slot_type=%s, value='%s'",
-                      blknum, slot, ppf__1flag(slot_type), value))
+              sprintf("(blk_append) blknum=%d, slot=%d, offset=%d, slot_type=%s, value='%s'",
+                      blknum, slot, offset, ppf__1flag(slot_type), value))
     blk_ll_write(blknum, slot, slot_type, value)
+    blktab[blknum, 0, "count"]++
 }
 
 
@@ -2692,7 +2728,7 @@ function blk_dump_blktab(    f, b, blknum, seen, type)
 #     cnt = 0
 #     for (k in blktab) {
 #         split(k, x, SUBSEP)
-#         blks[++cnt] = x[1]+0  # block #
+#         blks[++cnt] = x[BFN_BNUM]+0  # block #
 #     }
 #     qsort(SORT_INTEGER, blks, 1, cnt)
 #
@@ -2728,28 +2764,30 @@ function blk_nicer_print_block(blknum, seen, indent,
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 function blk_walk_AGG(opcode, blknum, seen, indent,
-                      i, count, slot_type, slot_value)
+                      i, count, slot_type, slot_value, offset)
 {
-    count = blktab[blknum, 0, "count"] + 0
+    count  = blktab[blknum, 0, "count"] + 0
+    offset = blktab[blknum, 0, "offset"] + 0
     if (opcode == OP_PRINT)
         print_debugfile(sprintf("%s%2d %s[%d]:",
                                 spaces(3*indent), blknum,
                                 "AGG", count))
     for (i = 1; i <= count; i++)
         if (opcode == OP_PRINT)
-            blk_nicer_print__obj(blknum, i, seen, indent)
+            blk_nicer_print__obj(blknum, i+offset, seen, indent)
         else if (opcode == OP_DELETE) {
-            slot_type   = blktab[blknum, i, "slot_type"]
-            slot_value = blktab[blknum, i, "slot_value"]
+            slot_type  = blktab[blknum, i+offset, "slot_type"]
+            slot_value = blktab[blknum, i+offset, "slot_value"]
             if (slot_type == OBJ_BLKNUM) {
                 #print_stderr("(blk_walk_AGG) Slot " i " is type AGG, recursively deleting block " slot_value)
-                blk_walk_delete(slot_value, seen)
+                blk_walk_delete(slot_value, seen) # slot_value is block #
             }
-            delete blktab[blknum, i, "slot_type"]
-            delete blktab[blknum, i, "slot_value"]
+            delete blktab[blknum, i+offset, "slot_type"]
+            delete blktab[blknum, i+offset, "slot_value"]
         }
     if (opcode == OP_DELETE) {
         delete blktab[blknum, 0, "count"]
+        delete blktab[blknum, 0, "offset"]
         delete blktab[blknum, 0, "line"]
         if ((blknum, 0, "dstblk") in blktab)
             delete blktab[blknum, 0, "dstblk"]
@@ -2986,11 +3024,11 @@ function blk_dump_block_raw(blknum,
             dbg__print("xeq", 9, "(blk_dump_block_raw) b=" b)
             slot_type_str = ""
             if (f[BFN_TAG] == "slot_type")
-                slot_type_str = " (" ppf__1flag(blktab[f[1], f[2], f[3]]) ")"
+                slot_type_str = sprintf(" (%s)", ppf__1flag(blk_ll_slot_type(f[BFN_BNUM], f[BFN_SLOT])))
             print_debugfile("m2debug:blknum=" f[BFN_BNUM] \
                             ", slot=" f[BFN_SLOT] \
                             ", tag=" f[BFN_TAG] \
-                            " => '" blktab[f[1], f[2], f[3]] "'" slot_type_str)
+                            " => '" blktab[f[BFN_BNUM], f[BFN_SLOT], f[BFN_TAG]] "'" slot_type_str)
         }
     }
 }
@@ -3365,11 +3403,14 @@ function execute__invoc_command(invoc_block,
     else if (name ==   "namespace")      xeq_cmd__namespace(args)
     else if (name ==   "nextfile")       xeq_cmd__nextfile(args)
     else if (name ~ /^s?paste$/)         xeq_cmd__include(args)
+    else if (name ==   "pop")            xeq_cmd__pop(args)
+    else if (name ==   "push")           xeq_cmd__push(args)
     else if (name ==   "readonly")       xeq_cmd__readonly(args)
     else if (name ==   "return")         xeq_cmd__return(args)
     else if (name ==   "sequence")       xeq_cmd__sequence(args)
     else if (name ==   "set")            xeq_cmd__define(args)
     else if (name ==   "shell")          xeq_cmd__shell(args)
+    else if (name ==   "shift")          xeq_cmd__shift(args)
     else if (name ==   "split")          xeq_cmd__split(args)
     else if (name ==   "syscmd")         xeq_cmd__syscmd(args)
     else if (name ==   "tracemode")      xeq_cmd__tracemode(args)
@@ -3378,6 +3419,7 @@ function execute__invoc_command(invoc_block,
     else if (name ==   "typeout")        xeq_cmd__typeout(args)
     else if (name ~   /^undef(ine)?$/)   xeq_cmd__undefine(args)
     else if (name ==   "undivert")       xeq_cmd__undivert(args)
+    else if (name ==   "unshift")        xeq_cmd__unshift(args)
     else if (name ==   "warn")           xeq_cmd__error(args)
     else if (name ==   "wrap")           xeq_cmd__wrap(args)
     else
@@ -3689,11 +3731,12 @@ function parse(    code, terminator, rstat, cmd, retval, new_block, fc,
                 # XXX This (and User below) looks like it would be a
                 # good candidate for a TRACE_PARSE trace message...
                 #print_stderr("(parse:3851) <top of loop> parse_invocation('" $0 "', @info)")
-                if ((invoc_block = zig__2parse_invocation($0, info)) == FALSE)
+                if ((invoc_block = zig__2parse_invocation($0, info)) == ERROR)
                     # I need a better mechanism for reporting parse/signature errors
                     # Perhaps something like info["errmsg"] or ... ??
                     # FIXME I need to use the msg__*() api but I forget atm
-                    panic("(parse) [CMD] Bad signature: " $0) # XXX Keep this around to remind me, but eventually remove
+                    error(sprintf("Bad signature: %s%s",
+                                  ppf__msg(), VERBOSE() ? TOK_NEWLINE $0 : EMPTY))
                 dbg__print("sig", 4, "(parse) [CMD] Good signature")
                 dbg__print_block("sig", 4, invoc_block, "(parse) invoc_block from zig__2parse_invocation('" $0 "',@info)")
 
@@ -4295,9 +4338,9 @@ function ppf__msg(    x)
 #       After a successful nam__lookup(), the following entries are added:
 #       (assuming TYPE_SYMBOL).
 #             code        : String holding the type and any flags (from namtab)
-#             idxable     : TRUE if type == TYPE_ARRAY or TYPE_LIST.
+#             group       : TRUE if type == TYPE_ARRAY or TYPE_LIST.
 #                           Means this incantation can support NAME[KEY].
-#                           Useful for PTYPE_IDXABLE.
+#                           Useful for PTYPE_GROUP.
 #             level       : Level number where this object was found.
 #                           0 => ROOT_LEVEL; NAME_NOT_FOUND => symbol not found
 #             type        : Char encoding obj type, also in code; one of TYPE_*
@@ -4495,7 +4538,7 @@ function nam__lookup(info,
         }
         info["declared"] = info["_defined"] = TRUE
         info["code"] = PTYPE_ENV_VAR
-        info["idxable"] = FALSE
+        info["group"] = FALSE
         info["level"] = ROOT_LEVEL
         return ROOT_LEVEL
     }
@@ -4508,7 +4551,7 @@ function nam__lookup(info,
     # 1. found == TRUE
     # 2. level is correct
     # 3. info__lookup_found_p() has the side effect, if found, of setting
-    #    info[]: code, idxable, level, agg_block (List)
+    #    info[]: code, group, level, agg_block (List)
 
     # Name resolution / cases:
     # - User specified a namespace ("ns::foo"):
@@ -4541,7 +4584,7 @@ function nam__lookup(info,
         return NAME_NOT_FOUND
     }
 
-    if (info["has_bracket"] && !info["idxable"]) {
+    if (info["has_bracket"] && !info["group"]) {
         info["errorp"] = TRUE
         msg__add(info["errtext"] = sprintf("Cannot use brackets with %s '%s'",
                                            ppf__1flag(info__get(info, "type")), name))
@@ -4562,7 +4605,7 @@ function info__lookup_found_p(info, ns, name, level,
     info["declared"] = TRUE
     info["code"] = code = nam_ll_read_ns(ns, name, level)
     type = first(code)
-    info["idxable"] = (type == TYPE_ARRAY || type == TYPE_LIST)
+    info["group"] = (type == TYPE_ARRAY || type == TYPE_LIST)
     info["level"] = level
 
     if (type == TYPE_ARRAY) {
@@ -4635,7 +4678,7 @@ function nam_purge(ns, level,
     for (n in namtab) {
         split(n, f, SUBSEP)
         if (f[NFN_NS] == ns && f[NFN_LEVEL]+0 >= level)
-            del_list[f[1], f[2], f[3], f[4]] = TRUE
+            del_list[f[NFN_NS], f[NFN_NAME], f[NFN_LEVEL], f[NFN_TAG]] = TRUE
     }
 
     for (d in del_list) {
@@ -4660,6 +4703,7 @@ function nam_purge(ns, level,
                 blk_master_delete(agg_block)
             }
             delete blktab[agg_block, 0, "count"]
+            delete blktab[agg_block, 0, "offset"]
             delete blktab[agg_block, 0, "line"]
             delete symtab[pns, pname, NOKEY, plevel, "agg_block"]
         }
@@ -4717,7 +4761,7 @@ function dump__names(target_namespace, filter_flags, include_sys,
     buf = EMPTY
     for (i = 1; i <= cnt; i++) {
         split(keys[i], f, TOK_NS_QUAL)
-        buf = buf  nam_ppf_name_level(f[1], f[2], f[3])  TOK_NEWLINE
+        buf = buf  nam_ppf_name_level(f[NFN_NS], f[NFN_NAME], f[NFN_LEVEL])  TOK_NEWLINE
     }
     return chop(buf)
 }
@@ -4792,13 +4836,6 @@ function info__dump(info,
 {
     for (k in info) {
         print sprintf("info[%s] = %s", k, info[k])
-
-        # n = split(k, x, SUBSEP)
-        # print n
-        # #dbg__print("sym", 8, sprintf("(dump__symbtab) ['%s','%s',%d,%s]",
-        # print sprintf("(dump__symbtab) ['%s','%s',%d,%s]",
-        #                             x[1], x[2], x[3], x[4])
-        # #)
     }
 }
 
@@ -4878,11 +4915,13 @@ function info__get(info, elem,
 #       TK
 #
 #*****************************************************************************
-function NS()
+function NS(    retval)
 {
     if (stk_empty_p(__ns_stack))
         panic("(NS) Empty __ns_stack")
-    return stk_top(__ns_stack)
+    #return stk_top(__ns_stack)
+    retval = stk_top(__ns_stack)
+    return retval
 }
 
 # Sequence names must always match strict symbol name syntax:
@@ -6219,7 +6258,7 @@ function undivert_to_file(stream, file,
 
 # Remove all slots from an AGG block and return its count to zero.
 function cleardivert(stream,
-                     count, i, divblk)
+                     count, i, divblk, offset)
 {
     dbg__print("divert", 2, sprintf("(cleardivert) START dstblk=%d, stream=%d",
                                     DSTBLK(), stream, divblk))
@@ -6235,11 +6274,13 @@ function cleardivert(stream,
         panic(sprintf("(cleardivert) Block %d has type %s, not AGG",
                       divblk, ppf__1flag(blk_type(divblk))))
     if ((count = blktab[divblk, 0, "count"]) > 0) {
+        offset = blktab[divblk, 0, "offset"]
         for (i = 1; i <= count; i++) {
-            delete blktab[divblk, i, "slot_type"]
-            delete blktab[divblk, i, "slot_value"]
+            delete blktab[divblk, i+offset, "slot_type"]
+            delete blktab[divblk, i+offset, "slot_value"]
         }
         blktab[divblk, 0, "count"] = 0
+        blktab[divblk, 0, "offset"] = 0
     }
 }
 
@@ -6276,17 +6317,15 @@ function cleardivert_all(    stream, keys, cnt, i)
 # This is only for internal use, to easily create and define symbols at
 # program start.  Code must be correctly formatted.  No error checking is done.
 # This function only creates symbols at the root level.
-function sym_ll_fiat(name, key, code, new_val,
-                      level)
+function sym_ll_fiat(name, key, code, new_val)
 {
-    level = ROOT_LEVEL
-
     # Create an entry in the m2 (only) namespace table.
-    if (! nam_ll_in_ns(M2_SYSNS, name, level))
-        nam_ll_write_ns(M2_SYSNS, name, level, code)
+    if (! nam_ll_in_ns(M2_SYSNS, name, ROOT_LEVEL))
+        nam_ll_write_ns(M2_SYSNS, name, ROOT_LEVEL, code)
 
     # Set its value in the symbol table
-    sym_ll_write_ns(M2_SYSNS, name, key, level, new_val)
+    if (first(code) == TYPE_SYMBOL)
+        sym_ll_write_ns(M2_SYSNS, name, key, ROOT_LEVEL, new_val)
 }
 
 
@@ -6382,8 +6421,8 @@ function sym_purge(ns, level,
     for (d in sym_del_list) {
         split(d, f, SUBSEP)
         dbg__print("sym", 3, sprintf("(sym_purge) Delete symtab[%s, '%s', '%s', %d, %s]",
-                                     f[1], f[2], f[3], f[4], f[5]))
-        delete symtab[f[1], f[2], f[3], f[4], f[5]]
+                                     f[SFN_NS], f[SFN_NAME], f[SFN_KEY], f[SFN_LEVEL], f[SFN_TAG]))
+        delete symtab[f[SFN_NS], f[SFN_NAME], f[SFN_KEY], f[SFN_LEVEL], f[SFN_TAG]]
     }
     dbg__print("sym", 7, "(sym_purge) END")
 }
@@ -6492,7 +6531,7 @@ function _syminfo_defined_p(info,
             sym_deferred_define_now(iname)
         return info__defined_lev_p(info, ilevel, itype)
     } else if (itype == TYPE_ARRAY || itype == TYPE_LIST)
-        return idx__key_exists_p(info, info__get(info, "key"))
+        return grp__key_exists_p(info, info__get(info, "key"))
     else if (itype == TYPE_SEQUENCE)
         #return seq_defined_p(info__get(info, "name"))
         return info__get(info, "defined")
@@ -6551,7 +6590,7 @@ function info__defined_lev_p(info, level, type,
 #*****************************************************************************
 function syminfo_store(info, new_val,
                        iname, ikey, ilevel, good, ihasbracket, itype, icode, dbg5,
-                       idxable, ins)
+                       group, ins)
 {
     dbg5 = dbg__sys_level_p("sym", 5)
 
@@ -6602,13 +6641,13 @@ function syminfo_store(info, new_val,
                           iname, ppf__1flag(itype)))
 
         icode = info__get(info, "code")
-        idxable = info__satisfies_type(info, PTYPE_IDXABLE)
+        group = info__satisfies_type(info, PTYPE_GROUP)
 
         # Error if we found an array without key,
         # or a plain symbol with a subscript.
-        if (idxable && !ihasbracket)
+        if (group && !ihasbracket)
             error(sprintf("(syminfo_store) '%s' is indexable, so brackets are required", iname))
-        if (!idxable && ihasbracket)
+        if (!group && ihasbracket)
             error(sprintf("(syminfo_store) '%s' is not indexable; cannot use brackets here", iname))
 
         if (itype == TYPE_SYMBOL &&
@@ -6621,7 +6660,7 @@ function syminfo_store(info, new_val,
             break # - - - - - - - - - - - - - - - - - - - - - - - - - -
         }
 
-        if (idxable &&
+        if (group &&
             # !sym_ll_protected(iname, icode) &&
             ! info__get(info, "protected") &&
             ihasbracket &&
@@ -6865,7 +6904,7 @@ function lis__ll_incr_ns(ns, lis, idx, level, incr,
     if (! integerp(val) && !floatp(val))
         error(sprintf("(lis__ll_incr) Value '%s' is not numeric and cannot be incremented"))
 
-    val = 0 + val + incr
+    val = val + incr
     blk_ll_write(agg_block, idx, OBJ_TEXT, val)
     return val
 }
@@ -6873,7 +6912,7 @@ function lis__ll_incr_ns(ns, lis, idx, level, incr,
 
 function _syminfo_fetch(syminfo,
                         sym, nparts, info, iname, ikey, icode, level, val, good,
-                        idxable, agg_block, count, has_bracket, ins)
+                        group, agg_block, count, has_bracket, ins)
 {
     iname = info__get(syminfo, "name")
     ikey  = info__get(syminfo, "key")
@@ -6903,25 +6942,24 @@ function _syminfo_fetch(syminfo,
     }
 
     # 1. Fetching @ARRAY@ without key returns number elements in ARRAY.
-    idxable = info__get(syminfo, "idxable") # 'idxable' means Array or List.
+    group = info__get(syminfo, "group") # 'group' means Array or List.
     has_bracket = info__get(syminfo, "has_bracket")
-    if (idxable == TRUE && has_bracket == FALSE) {
-        #val = idx__size(iname, level, icode)
-        val = idx__size(syminfo)
+    if (group == TRUE && has_bracket == FALSE) {
+        val = grp__size(syminfo)
         dbg__print("sym", 2, sprintf("(_syminfo_fetch) END sym='%s', level=%d RETURNING %d",
                                     iname, level, val))
         return val
     }
 
     # 2. Error if symbol is not an Array or List but sym has array[key] syntax
-    if (idxable == FALSE && has_bracket == TRUE)
+    if (group == FALSE && has_bracket == TRUE)
         error("(_syminfo_fetch) Name is not an Array or List but has array[key] syntax")
 
-    # Now, either both idxable and has_bracket are TRUE
+    # Now, either both group and has_bracket are TRUE
     # or both are FALSE.
     do {
         # 3. Check code for TYPE_SYMBOL
-        if (idxable == FALSE &&
+        if (group == FALSE &&
             has_bracket == FALSE &&
             flag_1true_p(icode, TYPE_SYMBOL) &&
             emptyp(ikey)) {
@@ -6929,9 +6967,9 @@ function _syminfo_fetch(syminfo,
             break # - - - - - - - - - - - - - - - - - - - - - - - - - -
         }
         # 4. Check code for TYPE_ARRAY
-        if (idxable == TRUE &&
+        if (group == TRUE &&
             has_bracket == TRUE &&
-            flag_anytrue_p(icode, __base_type[PTYPE_IDXABLE]) &&
+            flag_anytrue_p(icode, __base_type[PTYPE_GROUP]) &&
             ikey != EMPTY) {
             good = TRUE
             break # - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -6956,13 +6994,12 @@ function _syminfo_fetch(syminfo,
 
         agg_block = symtab[ins, iname, NOKEY, level, "agg_block"]
         count = blktab[agg_block, 0, "count"]+0
-        if (ikey >= 1 && ikey <= count) {
-            # Make sure slot holds text
-            if (blk_ll_slot_type(agg_block, ikey) != OBJ_TEXT)
-                panic(sprintf("(_syminfo_fetch) Block # %d slot %d is not OBJ_TEXT", agg_block, ikey))
-            val = blk_ll_slot_value(agg_block, ikey)
-        } else
+        if (ikey < 1 || ikey > count)
             error(sprintf("(_syminfo_fetch) Out of bounds"))
+        # Make sure slot holds text
+        if (blk_ll_slot_type(agg_block, ikey) != OBJ_TEXT)
+            panic(sprintf("(_syminfo_fetch) Block # %d slot %d is not OBJ_TEXT", agg_block, ikey))
+        val = blk_ll_slot_value(agg_block, ikey)
     } else {
         # It's a normal symbol
         if (! sym_ll_in_ns(ins, iname, ikey, level))
@@ -7823,12 +7860,12 @@ function xeq_cmd__continue(args)
 #
 #       @  D A T A
 #
-#       { LIS:name! }
+#       { LIST:name! }
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
 #*****************************************************************************
-# @data         LIS
+# @data         LIST
 function xeq_cmd__data(args,
                        save_line, save_lineno, agg_block, readstat,
                        lis, info, key, level, ins)
@@ -7836,7 +7873,7 @@ function xeq_cmd__data(args,
     dbg__print("parse", 5, sprintf("(xeq_cmd__data) START dstblk=%d, mode=%s, $0='%s'",
                                 DSTBLK(), ppf__1flag(ATMODE()), $0))
 
-    lis = args["LIS"]
+    lis = args["LIST"]
     save_line = $0
     save_lineno = LINE()
 
@@ -8382,12 +8419,12 @@ function dump__commands(target_namespace, type, include_sys,
     cnt = 0
     for (s in symtab) {
         split(s, f, SUBSEP)
-        # print_debugfile("m2debug:f[1]=" f[1])
-        # print_debugfile("m2debug:f[2]=" f[2])
-        # print_debugfile("m2debug:f[3]=" f[3])
-        # print_debugfile("m2debug:f[4]=" f[4])
-        # print_debugfile("m2debug:f[5]=" f[5])
-        # print_debugfile("m2debug:value => " symtab[f[1], f[2], f[3], f[4], f[5]a])
+        # print_debugfile("m2debug:f[1]=" f[SFN_NS])
+        # print_debugfile("m2debug:f[2]=" f[SFN_NAME])
+        # print_debugfile("m2debug:f[3]=" f[SFN_KEY])
+        # print_debugfile("m2debug:f[4]=" f[SFN_LEVEL])
+        # print_debugfile("m2debug:f[5]=" f[SFN_TAG])
+        # print_debugfile("m2debug:value => " symtab[f[SFN_NS], f[SFN_NAME], f[SFN_KEY], f[SFN_LEVEL], f[SFN_TAG]a])
 
         if (f[SFN_TAG] != "user_block") continue      # Q&D
         code = nam_ll_read_ns(f[SFN_NS], f[SFN_NAME], f[SFN_LEVEL])
@@ -8678,13 +8715,13 @@ function xeq_cmd__exit(args,
 #
 #       @  F I L E D A T A
 #
-#       { LIS:name! FILE:filename }
+#       { LIST:name! FILE:filename }
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
 #*****************************************************************************
-# @filedata            LIS FILE
-# LIS must be known to be an array (regular or block).
+# @filedata            LIST FILE
+# LIST must be known to be an array (regular or block).
 # Any existing array entries are deleted before reading file contents.
 # Yes, this implies that user code must say
 #     @list A
@@ -8702,7 +8739,7 @@ function xeq_cmd__filedata(args,
 
     # S variant mutes file errors
     silent = first(args[0, "name"]) == "s"
-    lis = args["LIS"]
+    lis = args["LIST"]
     filename = args["FILE"]
 
     level = info__create_from_text(lis, info)
@@ -8841,8 +8878,8 @@ function parse__for(                  for_block, body_block, pstat, incr, info, 
     } else if (cmd == "@__m2__::foreach") {
         dbg__print("for", 9, "(parse__for) Found FOREACH: " $0)
         level = info__create_from_text($3, info)
-        info__gate(OP_READ, PTYPE_IDXABLE, info, NS(), level, "@foreach", TRUE)
-        # if (! info__get(info, "idxable"))
+        info__gate(OP_READ, PTYPE_GROUP, info, NS(), level, "@foreach", TRUE)
+        # if (! info__get(info, "group"))
         #     error(sprintf("%s: Name '%s' has type %s, not an Array or List",
         #                   cmd, info__get(info, "type"), info__get(info, "name")))
         blktab[for_block, 0, "array_name"] = $3
@@ -8993,7 +9030,8 @@ function execute__foreach_array(for_block,
     # Find the keys
     for (s in symtab) {
         split(s, f, SUBSEP)
-        dbg__print("for", 7, sprintf("symtab[%s,%s,%s,%d,%s]", f[1], f[2], f[3], f[4], f[5]))
+        dbg__print("for", 7, sprintf("symtab[%s,%s,%s,%d,%s]",
+                                     f[SFN_NS], f[SFN_NAME], f[SFN_KEY], f[SFN_LEVEL], f[SFN_TAG]))
         if (f[SFN_NS]    == ns &&
             f[SFN_NAME]  == arrname &&
             f[SFN_LEVEL] == level &&
@@ -9311,8 +9349,8 @@ function evaluate_condition(cond, negate,
         dbg__print("if", 5, sprintf("key='%s', op='%s', arr='%s'", key, "IN", arr))
 
         level = info__create_from_text(arr, info)
-        info__gate(OP_READ, PTYPE_IDXABLE, info, NS(), level, "(evaluate_condition) [IN]", TRUE)
-        retval = idx__key_exists_p(info, key)
+        info__gate(OP_READ, PTYPE_GROUP, info, NS(), level, "(evaluate_condition) [IN]", TRUE)
+        retval = grp__key_exists_p(info, key)
 
     } else if (match(cond, "[^ ]+ *(<|<=|=|==|!=|>=|>) *[^ ]+")) { # poor regexp, fragile
         # This whole section is pretty easy to confound....
@@ -9337,12 +9375,11 @@ function evaluate_condition(cond, negate,
         # else if (ltype == TYPE_SEQUENCE && info__get(linfo, "defined"))
         #     lval = seq_ll_read_ns(info__get(info, "ns"), lhs)
 
-        # XXX What about Arrays and Lists?
         if ((ltype == TYPE_SYMBOL || ltype == TYPE_SEQUENCE) &&
             info__get(linfo, "defined") == TRUE)
             lval = info__get(linfo, "value")
         else if (ltype == TYPE_LIST || ltype == TYPE_ARRAY)
-            lval = idx__size(linfo)
+            lval = grp__size(linfo)
         else
             lval = lhs
 
@@ -9353,7 +9390,7 @@ function evaluate_condition(cond, negate,
         else if (rtype == TYPE_SEQUENCE && info__get(rinfo, "defined") == TRUE)
             rval = seq_ll_read_ns(info__get(info, "ns"), rhs)
         else if (rtype == TYPE_LIST || rtype == TYPE_ARRAY)
-            rval = idx__size(rinfo)
+            rval = grp__size(rinfo)
         else
             rval = rhs
 
@@ -9541,8 +9578,7 @@ function doinclude(ns, raw_file, atmode,
 function search_file(f,
                      pe, icount, paths, p, i)
 {
-    #f = rm_quotes(dosubs(f))
-    f = rm_quotes(f)            # not with new invocs
+    f = rm_quotes(f)
     if (f == "-")
         f = "/dev/stdin"
     if ((pe = path_exists_p(f)) == TRUE)
@@ -9657,7 +9693,7 @@ function xeq_cmd__input(args,
 #
 #       @  L I S T
 #
-#       { :repeat LIS:name! }
+#       { :repeat LIST:name! }
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
@@ -9667,7 +9703,7 @@ function xeq_cmd__list(args,
                        i, name, info, agg_block, ins)
 {
     for (i = 1; i <= args[0, "nelem"]; i++) {
-        name = args["LIS", i]
+        name = args["LIST", i]
         info__create_from_text(name, info)
         # FIXME must be local? Perhaps ":name" prevents ns qual
         if ((ins = info__get(info, "ns")) == EMPTY)
@@ -10282,6 +10318,103 @@ function xeq_cmd__nextfile(args,
 
 #*****************************************************************************
 #
+#       @  P O P
+#
+#       { LIST:name! }
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#*****************************************************************************
+# @pop          LIST
+function xeq_cmd__pop(args,
+                      lis, level, info, ins, agg_block, count, slot, offset,
+                      i, tmpip, icount, paths)
+{
+    dbg__print("parse", 5, sprintf("(xeq_cmd__pop) START dstblk=%d, mode=%s, $0='%s'",
+                                DSTBLK(), ppf__1flag(ATMODE()), $0))
+    lis = args["LIST"]
+    level = info__create_from_text(lis, info)
+    if ((ins = info__get(info, "ns")) == EMPTY)
+        ins = info["ns"] = NS()
+    if (lis == "__NSPATH__")
+        error(ME() ": Name '__NSPATH__' is protected")
+    else if (lis == "__INCPATH__") {
+        tmpip = EMPTY
+        icount = split(sys__read("__INCPATH__", NOKEY),
+                       paths, TOK_COLON)
+        if (icount > 1)
+            for (i = 1; i <= icount - 1; i++)
+                tmpip = tmpip paths[i] TOK_COLON
+        sys__write("__INCPATH__", chop(tmpip))
+        return
+    }
+
+    # Handle normal List
+    info__gate(OP_UPDATE, TYPE_LIST, info, ins, level, ME(), TRUE)
+    if (! ((ins, lis, NOKEY, level, "agg_block") in symtab))
+        panic(sprintf("(xeq_cmd__pop) Could not find [%s, '%s','%s',%d,'agg_block'] in symtab",
+                      ins, lis, NOKEY, level))
+    agg_block = symtab[ins, lis, NOKEY, level, "agg_block"]
+    count  = blktab[agg_block, 0, "count"]+0
+    offset = blktab[agg_block, 0, "offset"]+0
+    if (count <= 0)
+        error(ME() ": Insufficient elements in List '" lis "'")
+    else if (count == 1)
+        lis__clear(ins, lis, level)
+    else {
+        # Delete one (last) element from right side
+        slot = count
+        delete blktab[agg_block, slot+offset, "slot_type"]
+        delete blktab[agg_block, slot+offset, "slot_value"]
+        blktab[agg_block, 0, "count"]--
+    }
+    dbg__print("parse", 5, "(xeq_cmd__pop) END")
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  P U S H
+#
+#       { LIST:name! :repeat ITEM:string }
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#       Add ITEM(s) to end of LIST
+#
+#*****************************************************************************
+# @push                 NAME  ITEM...
+function xeq_cmd__push(args,
+                       list, item, info, i, ins, iname, ilevel, oldip)
+{
+    list = args["LIST"]
+    info__create_from_text(list, info)
+    if ((ins = info__get(info, "ns")) == EMPTY)
+        ins = info["ns"] = NS()
+    if (list == "__NSPATH__")
+        error(ME() ": Name '__NSPATH__' is protected")
+    else if (list != "__INCPATH__")
+        info__gate(OP_UPDATE, TYPE_LIST, info, ins, LEVEL(), ME(), TRUE)
+    ins    = info__get(info, "ns")
+    iname  = info__get(info, "name")
+    ilevel = info__get(info, "level")
+    
+    for (i = 1; i <= args[0, "nelem"]; i++)
+        if (list == "__INCPATH__") {
+            # __INCPATH__ isn't a real list (it's a :-separated Symbol), so fake it
+            oldip = sys__read("__INCPATH__", NOKEY)
+            sys__write("__INCPATH__", oldip (!emptyp(oldip) ? TOK_COLON : EMPTY) args["ITEM", i])
+        } else
+            lis__append(ins, iname, ilevel, args["ITEM", i])
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
 #       @  R E A D O N L Y
 #
 #       { NAME:name! }
@@ -10559,14 +10692,76 @@ function xeq_cmd__shell(args,
 
 #*****************************************************************************
 #
-#       @  S P L I T
+#       @  S H I F T
 #
-#       { NAME:lval LIS:name! :optional FS:string }
+#       { LIST:name! }
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
 #*****************************************************************************
-# @split        SYM LIS [FS]
+# @shift        LIST
+function xeq_cmd__shift(args,
+                        lis, level, info, ins, agg_block, count, slot, offset,
+                        i, tmpip, icount, paths)
+{
+    lis = args["LIST"]
+    level = info__create_from_text(lis, info)
+    if ((ins = info__get(info, "ns")) == EMPTY)
+        ins = info["ns"] = NS()
+    if (lis != "__INCPATH__" && lis != "__NSPATH__")
+        info__gate(OP_UPDATE, TYPE_LIST, info, ins, level, ME(), TRUE)
+
+    if (lis == "__INCPATH__") {
+        tmpip = EMPTY
+        icount = split(sys__read("__INCPATH__", NOKEY),
+                       paths, TOK_COLON)
+        if (icount > 1)
+            for (i = 2; i <= icount; i++)
+                tmpip = tmpip paths[i] TOK_COLON
+        sys__write("__INCPATH__", chop(tmpip))
+        return
+    } else if (lis == "__NSPATH__") {
+        if (stk_depth(__ns_stack) == 1)
+            error(ME() ": Refusing to remove __m2__ from __NSPATH__")
+        stk_pop(__ns_stack)
+        return
+    }
+
+    # Handle normal List
+    if (! ((ins, lis, NOKEY, level, "agg_block") in symtab))
+        panic(sprintf("(xeq_cmd__shift) Could not find [%s, '%s','%s',%d,'agg_block'] in symtab",
+                      ins, lis, NOKEY, level))
+    agg_block = symtab[ins, lis, NOKEY, level, "agg_block"]
+    count = blktab[agg_block, 0, "count"]+0
+    offset = blktab[agg_block, 0, "offset"]+0
+    if (count <= 0)
+        error(ME() ": Insufficient elements in List '" lis "'")
+    else if (count == 1)
+        lis__clear(ins, lis, level)
+    else {
+        # Delete one (first) element from left side
+        slot = 1
+        delete blktab[agg_block, slot+offset, "slot_type"]
+        delete blktab[agg_block, slot+offset, "slot_value"]
+        blktab[agg_block, 0, "count"]--
+        blktab[agg_block, 0, "offset"]++
+    }
+    dbg__print("parse", 5, "(xeq_cmd__shift) END")
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  S P L I T
+#
+#       { NAME:lval LIST:name! :optional FS:string }
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#*****************************************************************************
+# @split        SYM LIST [FS]
 function xeq_cmd__split(args,
                         sym, lis, count, lisinfo, level,
                         val, k, tmparr, agg_block,
@@ -10574,7 +10769,7 @@ function xeq_cmd__split(args,
 {
     dbg__print("cmd", 3, sprintf("(xeq_cmd__split) START"))
     sym = args["NAME"]
-    lis = args["LIS"]
+    lis = args["LIST"]
 
     info__create_from_text(M2_SYSNS TOK_NS_QUAL "__FS__", fsinfo)
     # See if there's an (optional) FS
@@ -10587,18 +10782,12 @@ function xeq_cmd__split(args,
     } else
         wantfs = FALSE
 
-    # Check array LIS.
+    # Check array LIST.
     level = info__create_from_text(lis, lisinfo)
     ins = info__get(lisinfo, "ns")
     info__gate(OP_UPDATE, TYPE_LIST, lisinfo, ins, LEVEL(), ME(), TRUE)
     lis__clear(ins, lis, level)
-
-    # Create a new Agg block
-    agg_block = blk_new(BLK_AGG)
-    dbg__print("parse", 5, sprintf("(xeq_cmd__split) symtab[%s, '%s','%s',%d,'agg_block'] = %d",
-                                 ins, lis, NOKEY, level, agg_block))
-    symtab[ins, lis, NOKEY, level, "agg_block"] = agg_block
-    blktab[agg_block, 0, "count"] = 0
+    agg_block = symtab[ins, lis, NOKEY, level, "agg_block"]
 
     # Do split
     info__create_from_text(sym, syminfo)
@@ -10615,7 +10804,7 @@ function xeq_cmd__split(args,
                        : split(val, tmparr)
         for (k = 1; k <= count; k++)
             blk_append(agg_block, OBJ_TEXT, tmparr[k])
-        blktab[agg_block, 0, "count"] = count
+        #blktab[agg_block, 0, "count"] = count
     }
 
     dbg__print("cmd", 3, sprintf("(xeq_cmd__split) END"))
@@ -10848,13 +11037,13 @@ function xeq_cmd__undefine(args,
         for (s in symtab) {
             split(s, f, SUBSEP)
             if (f[SFN_NS] == ins && f[SFN_NAME] == name && f[SFN_LEVEL]+0 == info["level"])
-                del_list[f[1], f[2], f[3], f[4], f[5]] = TRUE
+                del_list[f[SFN_NS], f[SFN_NAME], f[SFN_KEY], f[SFN_LEVEL], f[SFN_TAG]] = TRUE
         }
         for (d in del_list) {
             split(d, f, SUBSEP)
             dbg__print("sym", 3, sprintf("(xeq_cmd__undefine) Delete symtab[%s, '%s', '%s', %d, %s]",
-                                         f[1], f[2], f[3], f[4], f[5]))
-            delete symtab[f[1], f[2], f[3], f[4], f[5]]
+                                         f[SFN_NS], f[SFN_NAME], f[SFN_KEY], f[SFN_LEVEL], f[SFN_TAG]))
+            delete symtab[f[SFN_NS], f[SFN_NAME], f[SFN_KEY], f[SFN_LEVEL], f[SFN_TAG]]
         }
 
     } else if (type == TYPE_SEQUENCE)
@@ -10913,6 +11102,44 @@ function xeq_cmd__undivert(args,
             undivert_to_file(stream, args["REST"])
         }
     }
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  U N S H I F T
+#
+#       { LIST:name! :repeat ITEM:string }
+#
+#       Add ITEM(s) on left side of List
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#*****************************************************************************
+# @unshift              LIST  ITEM...
+function xeq_cmd__unshift(args,
+                          list, item, info, i, ins, iname, ilevel, oldip)
+{
+    list = args["LIST"]
+    info__create_from_text(list, info)
+    if ((ins = info__get(info, "ns")) == EMPTY)
+        ins = info["ns"] = NS()
+    if (list != "__INCPATH__" && list != "__NSPATH__")
+        info__gate(OP_UPDATE, TYPE_LIST, info, ins, LEVEL(), ME(), TRUE)
+    ins    = info__get(info, "ns")
+    iname  = info__get(info, "name")
+    ilevel = info__get(info, "level")
+    
+    for (i = 1; i <= args[0, "nelem"]; i++)
+        if (list == "__INCPATH__") {
+            oldip = sys__read("__INCPATH__", NOKEY)
+            sys__write("__INCPATH__", args["ITEM", i] (!emptyp(oldip) ? TOK_COLON : EMPTY) oldip)
+        } else if (list == "__NSPATH__") {
+            stk_push(__ns_stack, args["ITEM", i])
+        } else
+            lis__prepend(ins, iname, ilevel, args["ITEM", i])
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -11302,7 +11529,7 @@ function _c3_factor3(    e, fun, e2,
         return _c3_advance()
     }
 
-    # function()
+    # function"()", i.e., zero arguments
     if (match(e, /^([A-Za-z#_][A-Za-z#_0-9]+)?\(\)/)) {
         fun = _c3_advance()
         if (fun ~ /^srand()/) return srand()
@@ -12012,7 +12239,7 @@ function macro_expand(macro,
         length(info__get(fninfo, "key")) > 0 &&
         info__get(fninfo, "level") != NAME_NOT_FOUND) {
 
-        macro_set_expansion(macro, arr__deref_info(fninfo, "@" M "@"))
+        macro_set_expansion(macro, grp__deref_info(fninfo, "@" M "@"))
 
     # Check fninfo for ARRAY or LIST
     } else if ( \
@@ -12022,8 +12249,7 @@ function macro_expand(macro,
         length(info__get(fninfo, "key")) == 0 &&
         info__get(fninfo, "level") != NAME_NOT_FOUND) {
 
-        #macro_set_expansion(macro, idx__size(fnname, level, info__get(fninfo, "code")))
-        macro_set_expansion(macro, idx__size(fninfo))
+        macro_set_expansion(macro, grp__size(fninfo))
     }
 }
 
@@ -12334,7 +12560,7 @@ function exp_fn__boolval(args,
                 result = sys__read("__FMT__", info__get(syminfo, "truep"))
             else if (strictp("bool"))
                 error(sprintf("%s: Name '%s' not defined%s",
-                              ME(), p, VERBOSE() ? TOK_NEWLINE $0 TOK_NEWLINE "Hint: __STRICT__[bool is True" : EMPTY))
+                              ME(), p, VERBOSE() ? TOK_NEWLINE $0 TOK_NEWLINE "Hint: __STRICT__[bool] is True" : EMPTY))
             else
                 result = sys__read("__FMT__", FALSE)
             break
@@ -13051,7 +13277,8 @@ function exp_fn__index(args,
 # @join     LIST [FS]
 function exp_fn__join(args,
                       info, level, retval, lis, fs, fslen, silent,
-                      code, size, s, f, k, keys, i, agg_block, ins, fsinfo)
+                      code, size, s, f, k, keys, i, agg_block, ins, fsinfo,
+                      offset)
 {
     # S variant appends a final separator as a terminator
     silent = first(args[0, "name"]) == "s"
@@ -13059,7 +13286,7 @@ function exp_fn__join(args,
 
     level = info__create_from_text(lis, info)
     ins = info__get(info, "ns")
-    info__gate(OP_READ, PTYPE_IDXABLE, info, ins, level, ME(), TRUE)
+    info__gate(OP_READ, PTYPE_GROUP, info, ins, level, ME(), TRUE)
 
     info__create_from_text("__m2__::__FS__", fsinfo)
     if (args[0, "narg"] == 2)
@@ -13082,11 +13309,11 @@ function exp_fn__join(args,
     # Now call nam__lookup(info).  Must be TYPE_ARRAY && !FLAG_SYSTEM
     # if (level == NAME_NOT_FOUND)
     #     error(sprintf("%s: Name '%s' not found", "@" M "@", lis))
-    # if (info__get(info, "idxable") == FALSE)
+    # if (info__get(info, "group") == FALSE)
     #     error(sprintf("%s: Name '%s' has type %s, not Array or List", "@" M "@", lis, info__get(info, "type")))
-    info__gate(OP_READ, PTYPE_IDXABLE, info, ins, level, ME(), TRUE)
+    info__gate(OP_READ, PTYPE_GROUP, info, ins, level, ME(), TRUE)
     code = info__get(info, "code")
-    size = idx__size(info)
+    size = grp__size(info)
 
     retval = ""
     if (size > 0) {
@@ -13708,7 +13935,7 @@ function exp_fn__xname(args,
 #
 #*****************************************************************************
 function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
-                        monthdays, month, leap, offset, cmd, nsig, sig, my_sigs,
+                        monthdays, month, leap, cmd, nsig, sig, my_sigs,
                         void_sig_blk, t, _tag_array, ntag, _tag, _cons, nam_sig, sp, type, br,
                         param, nparam, p, signature, sig_block, fn)
 {
@@ -13923,9 +14150,6 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
             sym_ll_fiat("__USER__", NOKEY, PTYPE_READONLY_SYMBOL, ENVIRON["LOGNAME"])
     }
 
-    nam_ll_write_ns(M2_SYSNS, "__FMT__",    ROOT_LEVEL, TYPE_ARRAY FLAG_SYSTEM FLAG_WRITABLE)
-    nam_ll_write_ns(M2_SYSNS, "__STRICT__", ROOT_LEVEL, TYPE_ARRAY FLAG_SYSTEM FLAG_WRITABLE FLAG_BOOLEAN)
-
     if ("COLUMNS" in ENVIRON)
       sym_ll_fiat("__COLUMNS__",    NOKEY, PTYPE_WRITABLE_INTEGER, ENVIRON["COLUMNS"])
     else if (SEC_LEVEL() < SEC_PARANOID && ("tput" in PROG))
@@ -13942,15 +14166,16 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     sym_ll_fiat("__EXPR__",         NOKEY, PTYPE_READONLY_FLOAT,   0.0)
     sym_ll_fiat("__FILE__",         NOKEY, PTYPE_READONLY_SYMBOL,  "")
     sym_ll_fiat("__FILE_UUID__",    NOKEY, PTYPE_READONLY_SYMBOL,  "")
-    sym_ll_fiat("__FMT__",         "1", "",                     "1") # True
-    sym_ll_fiat("__FMT__",         "0", "",                     "0") # False
-    sym_ll_fiat("__FMT__",      "date", "",                     "%Y-%m-%d")
-    sym_ll_fiat("__FMT__",     "epoch", "",                     "%s")
-    sym_ll_fiat("__FMT__",    "number", "",                     CONVFMT)
-    sym_ll_fiat("__FMT__",       "seq", "",                     "%d")
-    sym_ll_fiat("__FMT__",      "time", "",                     "%H:%M:%S")
-    sym_ll_fiat("__FMT__",        "tz", "",                     "%Z")
-    sym_ll_fiat("__FMT__",       "utc", "",                     "%Y-%m-%dT%H:%M:%S%z") # ISO 8601
+    nam_ll_write_ns(M2_SYSNS, "__FMT__", ROOT_LEVEL, TYPE_ARRAY FLAG_SYSTEM FLAG_WRITABLE)
+    sym_ll_write_ns(M2_SYSNS, "__FMT__",         "1", ROOT_LEVEL, "1") # True
+    sym_ll_write_ns(M2_SYSNS, "__FMT__",         "0", ROOT_LEVEL, "0") # False
+    sym_ll_write_ns(M2_SYSNS, "__FMT__",      "date", ROOT_LEVEL, "%Y-%m-%d")
+    sym_ll_write_ns(M2_SYSNS, "__FMT__",     "epoch", ROOT_LEVEL, "%s")
+    sym_ll_write_ns(M2_SYSNS, "__FMT__",    "number", ROOT_LEVEL, CONVFMT)
+    sym_ll_write_ns(M2_SYSNS, "__FMT__",       "seq", ROOT_LEVEL, "%d")
+    sym_ll_write_ns(M2_SYSNS, "__FMT__",      "time", ROOT_LEVEL, "%H:%M:%S")
+    sym_ll_write_ns(M2_SYSNS, "__FMT__",        "tz", ROOT_LEVEL, "%Z")
+    sym_ll_write_ns(M2_SYSNS, "__FMT__",       "utc", ROOT_LEVEL, "%Y-%m-%dT%H:%M:%S%z") # ISO 8601
     nam_ll_write_ns(M2_SYSNS, "__FS__", ROOT_LEVEL, PTYPE_WRITABLE_SYMBOL) # NB - *not* in sync with real FS
     if ("HOME" in ENVIRON)
       sym_ll_fiat("__HOME__",       NOKEY, PTYPE_READONLY_SYMBOL,  with_trailing_slash(ENVIRON["HOME"]))
@@ -13965,11 +14190,12 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     sym_ll_fiat("__NFILE__",        NOKEY, PTYPE_READONLY_INTEGER, 0); __rnf = 0
     sym_ll_fiat("__NLINE__",        NOKEY, PTYPE_READONLY_INTEGER, 0)
     sym_ll_fiat("__NSPATH__",       NOKEY, PTYPE_READONLY_SYMBOL,  EMPTY)
-    sym_ll_fiat("__STRICT__",   "bool", "",                     TRUE)
-    sym_ll_fiat("__STRICT__",    "def", "",                     TRUE)
-    sym_ll_fiat("__STRICT__",    "env", "",                     TRUE)
-    sym_ll_fiat("__STRICT__",   "file", "",                     TRUE)
-    sym_ll_fiat("__STRICT__",    "key", "",                     TRUE)
+    nam_ll_write_ns(M2_SYSNS, "__STRICT__", ROOT_LEVEL, TYPE_ARRAY FLAG_SYSTEM FLAG_WRITABLE FLAG_BOOLEAN)
+    sym_ll_write_ns(M2_SYSNS, "__STRICT__",   "bool", ROOT_LEVEL, TRUE)
+    sym_ll_write_ns(M2_SYSNS, "__STRICT__",    "def", ROOT_LEVEL, TRUE)
+    sym_ll_write_ns(M2_SYSNS, "__STRICT__",    "env", ROOT_LEVEL, TRUE)
+    sym_ll_write_ns(M2_SYSNS, "__STRICT__",   "file", ROOT_LEVEL, TRUE)
+    sym_ll_write_ns(M2_SYSNS, "__STRICT__",    "key", ROOT_LEVEL, TRUE)
     sym_ll_fiat("__SYNC__",         NOKEY, PTYPE_WRITABLE_INTEGER, SYNC_FILE)
     sym_ll_fiat("__SYSVAL__",       NOKEY, PTYPE_READONLY_INTEGER, 0)
     sym_ll_fiat("__VERBOSE__",      NOKEY, PTYPE_WRITABLE_INTEGER, FALSE)
@@ -14008,7 +14234,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
         "case!       { NAME:lval }"                                         SUBSEP \
         "cleardivert { :optional :repeat STREAM:integer }"                  SUBSEP \
         "continue!   { :void }"                                             SUBSEP \
-        "data        { LIS:name! }"                                         SUBSEP \
+        "data        { LIST:name! }"                                        SUBSEP \
         "debug       { :optional TEXT:rest! }"                              SUBSEP \
         "decr        { NAME:lval :optional N:integer=1 }"                   SUBSEP \
         "default     { NAME:lval TEXT:rest }"                               SUBSEP \
@@ -14037,7 +14263,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
         "eval        { TEXT:rest }"                                         SUBSEP \
         "exit        { :optional N:integer=@__EXIT__@ }"                    SUBSEP \
         "fi!         { :void }"                                             SUBSEP \
-        "filedata    { LIS:name! FILE:filename }"                           SUBSEP \
+        "filedata    { LIST:name! FILE:filename }"                          SUBSEP \
         "filedef     { NAME:lval FILE:filename }"                           SUBSEP \
         "filedefine  { NAME:lval FILE:filename }"                           SUBSEP \
         "for!        { VAR:name! START:int END:int :optional INCR:int=1 }"  SUBSEP \
@@ -14049,7 +14275,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
         "incr        { NAME:lval :optional N:integer=1 }"                   SUBSEP \
         "initialize  { NAME:lval TEXT:rest }"                               SUBSEP \
         "input!      { :optional NAME:name!=__INPUT__ }"                    SUBSEP \
-        "list!       { :repeat LIS:name! }"                                 SUBSEP \
+        "list!       { :repeat LIST:name! }"                                SUBSEP \
         "literal     { PATTERN:rest }"                                      SUBSEP \
         "local!      { :repeat NAME:name! }"                                SUBSEP \
         "longdef!    { NAME:name! }"                                        SUBSEP \
@@ -14062,6 +14288,8 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
         "of!         { TEXT:rest! }"                                        SUBSEP \
         "otherwise!  { :void }"                                             SUBSEP \
         "paste       { FILE:filename }"                                     SUBSEP \
+        "pop         { LIST:name! }"                                         SUBSEP \
+        "push        { LIST:name! :repeat ITEM:string }"                    SUBSEP \
         "readonly    { NAME:name! }"                                        SUBSEP \
         "return!     { :optional VALUE:rest }"                              SUBSEP \
         "secho       { :optional TEXT:rest }"                               SUBSEP \
@@ -14069,16 +14297,17 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
         "serror      { :optional TEXT:rest }"                               SUBSEP \
         "set!        { NAME:lval :optional TEXT:rest }"                     SUBSEP \
         "sexit       { :optional N:integer=@__EXIT__@ }"                    SUBSEP \
-        "sfiledata   { LIS:name! FILE:filename }"                           SUBSEP \
+        "sfiledata   { LIST:name! FILE:filename }"                          SUBSEP \
         "sfiledef    { NAME:lval FILE:filename }"                           SUBSEP \
         "sfiledefine { NAME:lval FILE:filename }"                           SUBSEP \
         "shell       { DELIM:string :optional PROG:rest }"                  SUBSEP \
+        "shift       { LIST:name! }"                                        SUBSEP \
         "simport     { LIB:name! FILE:filename }"                           SUBSEP \
         "sinclude    { FILE:filename }"                                     SUBSEP \
         "sm2ctl!     { TEXT:rest! }"                                        SUBSEP \
         "snsinclude  { FILE:filename }"                                     SUBSEP \
         "spaste      { FILE:filename }"                                     SUBSEP \
-        "split       { NAME:lval LIS:name! :optional FS:string }"           SUBSEP \
+        "split       { NAME:lval LIST:name! :optional FS:string }"          SUBSEP \
         "syscmd      { CMDLINE:rest }"                                      SUBSEP \
         "tracemode   { :optional FLAG:string! }"                            SUBSEP \
         "traceoff    { :optional :repeat SYM:name! }"                       SUBSEP \
@@ -14088,6 +14317,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
         "undefine    { NAME:name! }"                                        SUBSEP \
         "undivert    { :optional N:integer REST:rest }"                     SUBSEP \
         "unless!     { EXPR:rest }"                                         SUBSEP \
+        "unshift     { LIST:name! :repeat ITEM:string }"                    SUBSEP \
         "until!      { EXPR:rest }"                                         SUBSEP \
         "warn        { :optional TEXT:rest }"                               SUBSEP \
         "wend!       { :void }"                                             SUBSEP \
@@ -14398,14 +14628,20 @@ function process_command_line_arguments(    nfile, arg, i, eq, name, val, file,
             # harder-to-type symbol names.  They just get re-written.
             # Other args like init or U trigger actions which are executed
             # immediately, and then the loop continues with the next arg.
-            if (name == "debug") {
+            if (name == "A") {             # A=<path> -> __INCPATH__:<path>
+                if (!emptyp(val)) {
+                    oldip = sys__read("__INCPATH__", NOKEY)
+                    sys__write("__INCPATH__", oldip (!emptyp(oldip) ? TOK_COLON : EMPTY) val)
+                }
+                continue
+            } else if (name == "debug") {
                 name = "__DEBUG__"
             } else if (name == "fs") {
                 name = "__FS__"
-            } else if (name == "I") {      # I=<path>
+            } else if (name == "I") {      # I=<path> -> <path>:__INCPATH__
                 if (!emptyp(val)) {
                     oldip = sys__read("__INCPATH__", NOKEY)
-                    sys__write("__INCPATH__", val (!emptyp(oldip) ? TOK_COLON : "") oldip)
+                    sys__write("__INCPATH__", val (!emptyp(oldip) ? TOK_COLON : EMPTY) oldip)
                 }
                 continue
             } else if (name == "init") {   # init=<VAL>

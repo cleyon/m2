@@ -314,9 +314,8 @@ for further details.
 .It Em Lists and Arrays :
 Lists are ordered collections with integer keys.
 Arrays are unordered collections with arbitrary text keys.
-Elements of both arrays and lists are accessed
-by appending
-.Bq Ar key
+Elements of both arrays and lists are accessed by affixing
+.Dq Bq Ar key
 to the array or list name.
 Lists and arrays must be declared before use.
 See section
@@ -548,20 +547,20 @@ is only valid inside a
 or
 .Ic @while
 block.
-.It Ic @data No "" Bro Ar LIS Ns No :name! Brc
+.It Ic @data No "" Bro Ar LIST Ns No :name! Brc
 Store all lines until
 .Ic @enddata
 into list
-.Va LIS .
+.Va LIST .
 Any previously existing list entries are deleted.
-.Va LIS
+.Va LIST
 must declared with
 .Ic @list .
 See also
 .Ic @filedata .
 Command format:
 .Bd -unfilled -offset indent -compact
-.Ic @data Ar LIS
+.Ic @data Ar LIST
 .No "   ..."
 .Ic @enddata
 .Ed
@@ -756,20 +755,20 @@ are processed regardless of
 value.
 See also
 .Va __EXIT__ .
-.It Ic @filedata No "" Bro Ar LIS Ns No :name! Ar FILE Ns No :filename Brc
+.It Ic @filedata No "" Bro Ar LIST Ns No :name! Ar FILE Ns No :filename Brc
 Read each line from
 .Va FILE
 into list
-.Va LIS .
+.Va LIST .
 Any previously existing list entries are deleted before reading file contents.
 Variant
 .Ic @sfiledata
 does not print an error message if
 .Va FILE
 does not exist.
-.Va LIS
+.Va LIST
 must be declared as a list, therefore user code must say
-.Ql @list LIS
+.Ql @list LIST
 before
 .Ic @filedata
 can be used.
@@ -855,7 +854,7 @@ is found.
 .It Ic @import No "" Bro Ar LIB Ns No :name! Ar FILE Ns No :filename Brc
 Like
 .Ic @include
-but the library name
+but additionally the library name
 .Va LIB
 is added to the namespace search list.
 See also
@@ -906,9 +905,9 @@ If
 .Va NAME
 is omitted, value is stored in symbol
 .Va __INPUT__ .
-.It Ic @list No "" Bro :repeat Ar LIS Ns No :name! Brc
+.It Ic @list No "" Bro :repeat Ar LIST Ns No :name! Brc
 Declare
-.Va LIS
+.Va LIST
 to be a list.
 The name must not be qualified.
 See also
@@ -998,6 +997,20 @@ Variant
 does not print an error message if
 .Va FILE
 does not exist.
+.It Ic @pop No "" Bro Ar LIST Ns No :name! Brc
+Remove and discard the last (rightmost) item from
+.Va LIST .
+See also
+.Ic @push ,
+.Ic @shift .
+.It Ic @push No "" Bro Ar LIST Ns No :name! :repeat Ar ITEM Ns :string Brc
+Append one or more
+.Va ITEM Ns No s
+onto end (right side) of
+.Va LIST .
+See also
+.Ic @pop ,
+.Ic @unshift .
 .It Ic @readonly No "" Bro Ar NAME Ns No :name! Brc
 Make
 .Va NAME
@@ -1048,14 +1061,20 @@ reader, or
 It must be a program that functions as a filter (in the Unix sense,
 i.e., reading from standard input and writing to standard output).
 Standard error is not redirected, so any errors will appear on the terminal.
-.It Ic @split No "" Bro Ar NAME Ns No :lval Ar LIS Ns No :name! :optional Ar FS Ns No :string Brc
+.It Ic @shift No "" Bro Ar LIST Ns No :name! Brc
+Remove and discard the first (leftmost) item from
+.Va LIST .
+See also
+.Ic @pop ,
+.Ic @unshift .
+.It Ic @split No "" Bro Ar NAME Ns No :lval Ar LIST Ns No :name! :optional Ar FS Ns No :string Brc
 Split value of
 .Va NAME
 into N individual fields, storing them in
-.Va LIS
+.Va LIST
 elements 1..N.
 Any previous entries in
-.Va LIS
+.Va LIST
 are deleted.
 If
 .Va FS
@@ -1142,6 +1161,14 @@ Command format:
 .Ic @endif
 .Ed
 .Pp
+.It Ic @unshift No "" Bro Ar LIST Ns No :name! :repeat Ar ITEM Ns :string Brc
+Insert one or more
+.Va ITEM Ns No s
+onto beginning (left side) of
+.Va LIST .
+See also
+.Ic @push ,
+.Ic @shift .
 .It Ic @until No "" Bro Ar EXPR Ns No :rest Brc
 Repeatedly evaluate input lines while boolean expression
 .Va EXPR
@@ -1754,7 +1781,9 @@ it will consult the include path found in
 .Va __INCPATH__ .
 Directories can be inserted into the include path by specifying
 .Dl I=<directory>
-on the command line.
+on the command line or by using the
+.Ic @unshift
+command.
 Paths specified this way are examined before entries from
 .Ev M2PATH ,
 to allow run-specific overrides.
@@ -1803,6 +1832,46 @@ accessing the bare name, without brackets,
 as in
 .Ql @ Ns Ar ARRAY Ns @
 will return the number of elements in the array or list.
+.Pp
+Since Lists are ordered, there are familiar commands to manipulate them.
+.Ic @push
+and
+.Ic @pop
+append and remove elements from the
+.Em end
+of the list.
+.Ic @unshift
+and
+.Ic @shift
+insert and remove elements from the
+.Em beginning
+of the list.
+Any removed element is discarded.
+.\" This seems very unfortunate since it would be incredibly useful
+.\" to iterate through List elements this way ... or use a List as
+.\" an ersatz Stack.  Sadly, this runs into the problem of how to
+.\" return values from *commands* -- actual values, not merely expanding
+.\" text into the output stream.  Additional work is needed here.
+.Bd -literal -offset indent-two
+@unshift                          @push
+   |     ...+---+---+---+---+...    |
+   +----->  | 1 | 2 |...| N |  <----+
+         ...+---+---+---+---+...
+              |           |
+              v           v
+           @shift       @pop
+.Ed
+.Pp
+These functions can be used on system symbols
+.Va __INCPATH__
+and
+.Va __NSPATH__ ,
+although
+.Ic @push
+and
+.Ic @pop
+are prohibited on
+.Va __NSPATH__ .
 .Ss Mathematical Expressions
 The
 .Ic @expr No ... Ns Ic @
@@ -2232,6 +2301,13 @@ trigger actions which are executed immediately.
 Arguments beginning with
 .Qq @
 characters are interpreted as commands to evaluate.
+.It Cm A= Ns Ar PATH
+Append
+.Va PATH
+to the end of
+.Va __INCPATH__ .
+See also
+.Ic @push .
 .It Cm debug
 Alias for
 .Va __DEBUG__ .
@@ -2241,11 +2317,13 @@ Alias for
 .It Cm I= Ns Ar PATH
 Add
 .Va PATH
-to include path
+to the beginning of 
 .Va __INCPATH__ .
 Elements are prepended, so they override
 .Ev M2PATH
 environment variable values.
+See also
+.Ic @unshift .
 .It Cm init Ns = Ns Ar VALUE
 Control loading of initialization files.
 With a positive
@@ -2728,9 +2806,12 @@ The data read by
 user modifiable.
 .It Va __NSPATH__
 Colon-separated list of namespaces to be searched during unqualfied name resolution.
-Can be modified with
+Modifiable with the
+.Ic @shift ,
+.Ic @unshift ,
+or
 .Ic @import
-and by other means.
+commands.
 .It Va __LINE__
 Current line number inside current
 .Va __FILE__ .

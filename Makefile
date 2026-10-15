@@ -39,6 +39,9 @@ callgraph-full:
 m2-callgraph.yml: m2 $(IGNORE)
 	$(CALLGRAPH) -ymlOut $@ -noShow -ignore "`cat $(IGNORE)`"
 
+m2-callgraph.json: m2 $(IGNORE)
+	$(CALLGRAPH) -jsnOut $@ -noShow -ignore "`cat $(IGNORE)`"
+
 debug:
 	$(GAWK) -D -f m2
 

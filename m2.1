@@ -1827,12 +1827,6 @@ keys from 1 to the number records.
 Lists can also be loaded with
 .Ic @split .
 .Pp
-For both arrays and lists,
-accessing the bare name, without brackets,
-as in
-.Ql @ Ns Ar ARRAY Ns @
-will return the number of elements in the array or list.
-.Pp
 Since Lists are ordered, there are familiar commands to manipulate them.
 .Ic @push
 and
@@ -1847,19 +1841,19 @@ insert and remove elements from the
 .Em beginning
 of the list.
 Any removed element is discarded.
-.\" This seems very unfortunate since it would be incredibly useful
+.\" This is very unfortunate, since it would be incredibly useful
 .\" to iterate through List elements this way ... or use a List as
 .\" an ersatz Stack.  Sadly, this runs into the problem of how to
 .\" return values from *commands* -- actual values, not merely expanding
 .\" text into the output stream.  Additional work is needed here.
 .Bd -literal -offset indent-two
-@unshift                          @push
-   |     ...+---+---+---+---+...    |
-   +----->  | 1 | 2 |...| N |  <----+
-         ...+---+---+---+---+...
-              |           |
-              v           v
-           @shift       @pop
+@unshift                               @push
+   |     ...+---+---+-- // -+---+...     |
+   +----->  | 1 | 2 | ..... | n |  <-----+
+         ...+---+---+- // --+---+...
+              |               |
+              v               v
+            @shift          @pop
 .Ed
 .Pp
 These functions can be used on system symbols
@@ -1872,6 +1866,30 @@ and
 .Ic @pop
 are prohibited on
 .Va __NSPATH__ .
+.Ic @push
+and
+.Ic @unshift
+can accept multiple arguments \(em they will be added to the List in order.
+.Em Note :
+Since the inserting of items into a List is performed individually,
+.Ql @unshift List A B C
+results in
+.Ql C:B:A:<List> .
+After an
+.Ic @unshift ,
+the newly inserted item is now at index 1.
+The previous first item is moved forward to position 2, and
+all other list elements are advanced similarly.
+.\" Not really true since we merely adjust the offset, but no matter...
+Similarly, after a
+.Ic @shift ,
+the element formerly at index 2 will now be found at index 1.
+.Pp
+For both arrays and lists,
+accessing the bare name, without brackets,
+as in
+.Ql @ Ns Ar ARRAY Ns @
+will return the number of elements in the array or list.
 .Ss Mathematical Expressions
 The
 .Ic @expr No ... Ns Ic @
@@ -2308,6 +2326,9 @@ to the end of
 .Va __INCPATH__ .
 See also
 .Ic @push .
+Consider using
+.Qq Cm I= Ns Ar PATH
+instead.
 .It Cm debug
 Alias for
 .Va __DEBUG__ .
@@ -2420,6 +2441,8 @@ following
 the
 .Ql = .
 This value will be used if the parameter is omitted.
+.\" Default value support is currently fragile, and
+.\" does not yet support ="...." quoted values.  :-(
 .Pp
 The following table lists the valid tag types.
 Tags marked

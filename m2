@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-10-15 13:33:51 cleyon>
+#  Time-stamp:  <2026-10-16 18:09:27 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -44,7 +44,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "6.1.0"
+    M2_VERSION = "6.1.1"
 
     # Specify a shell for m2 to use for running utility programs.
     # It is expected to be compatible with Bourne shell syntax:
@@ -1129,16 +1129,26 @@ function check_parse_stack(expected_block_type,
 function run_hook(hook_event,
                   hook_func, user_block, info)
 {
-    if (flag_anyfalse_p(__m2_config_flags, INIT_DOTFILES MODE_HOOKS_ENABLED)) {
-        dbg__print("hook", 7, "(run_hook) Hooks are disabled")
-        return
-    }
-
     if (hook_event != "m2_begin" &&
         hook_event != "file_open"    && hook_event != "file_close" &&
         hook_event != "file_suspend" && hook_event != "file_resume" &&
         hook_event != "m2_end"       && hook_event != "m2_exit")
           panic("(run_hook) Invalid hook '" hook_event "'")
+
+    if (flag_anyfalse_p(__m2_config_flags, INIT_DOTFILES MODE_HOOKS_ENABLED)) {
+        dbg__print("hook", 7, "(run_hook) Hooks are disabled")
+        return
+    }
+    if (hook_event == "m2_end")
+        if (flag_1true_p(__m2_config_flags, RAN_END_HOOK))
+            return
+        else
+            __m2_config_flags = flag_set_clear(__m2_config_flags, RAN_END_HOOK, EMPTY)
+    if (hook_event == "m2_exit")
+        if (flag_1true_p(__m2_config_flags, RAN_EXIT_HOOK))
+            return
+        else
+            __m2_config_flags = flag_set_clear(__m2_config_flags, RAN_EXIT_HOOK, EMPTY)
 
     hook_func = "__" hook_event "_hook"
     info__create_from_text(hook_func, info)
@@ -13950,8 +13960,8 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     MAX_PARAM             = 20
     NOT_FOUND             = 0   # index() when search fails
     PI                    = atan2(0, -1)
-    SEQ_DEFAULT_INCR      = 1
     SEQ_DEFAULT_INIT      = 0
+    SEQ_DEFAULT_INCR      = 1
     TAU                   = 8 * atan2(1, 1) # 2 * PI
       DEG_RADIANS         = TAU / 360
     TERMINAL              = 0   # Block zero means standard output
@@ -14002,9 +14012,11 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     SORT_INTEGER          = "H"; __label[SORT_INTEGER]          = "SortInteger"
 
     # Initialization status
-    INIT_DOTFILES         = "."; __label[INIT_DOTFILES  ]       = "Dotfiles" # load_init_files()
-    INIT_ORD              = "#"; __label[INIT_ORD       ]       = "Ord"      # initialize_ord()
-    INIT_ROT13            = "<"; __label[INIT_ROT13     ]       = "Rot13"    # initialize_rot13()
+    INIT_DOTFILES         = "."; __label[INIT_DOTFILES]         = "Dotfiles" # load_init_files()
+    INIT_ORD              = "#"; __label[INIT_ORD]              = "Ord"      # initialize_ord()
+    INIT_ROT13            = "<"; __label[INIT_ROT13]            = "Rot13"    # initialize_rot13()
+    RAN_END_HOOK          = "$"; __label[RAN_END_HOOK]          = "EndHook"  # __m2_end_hook
+    RAN_EXIT_HOOK         = "%"; __label[RAN_EXIT_HOOK]         = "ExitHook" # __m2_exit_hook
 
     # When to flush standard output
     SYNC_FORCE            = 0 # only on request or end of job
@@ -14214,6 +14226,8 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     # string   : Any series of characters
     # void     : No parameters are permitted
     #
+    # The 0 or 1 in the following table indicates whether that sig is
+    # "consuming" or not.
     ntag = split(":boolean 1  :filename 1  :float 1     :integer 1" \
                 " :lval 1     :name 1      :optional 0  :repeat  0"  \
                 " :rest 1     :string 1    :void 0", _tag_array, TOK_SPACE)
@@ -14288,7 +14302,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
         "of!         { TEXT:rest! }"                                        SUBSEP \
         "otherwise!  { :void }"                                             SUBSEP \
         "paste       { FILE:filename }"                                     SUBSEP \
-        "pop         { LIST:name! }"                                         SUBSEP \
+        "pop         { LIST:name! }"                                        SUBSEP \
         "push        { LIST:name! :repeat ITEM:string }"                    SUBSEP \
         "readonly    { NAME:name! }"                                        SUBSEP \
         "return!     { :optional VALUE:rest }"                              SUBSEP \

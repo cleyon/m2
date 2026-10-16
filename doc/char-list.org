@@ -22,7 +22,7 @@
 | t | BLK_"TERMINAL"       | T | "obj_TEXT"             | # | INIT_"ORD"              |
 | u | BLK_"USER"           | U | TYPE_"USER"            | < | INIT_"ROT13"            |
 | v | MODE_"IO_CAPTURE"    | V | BLK_"INVOC"            | = | FLAG_"OPTIONAL"         |
-| w | "BLK_WHILE"          | W | FLAG_"WRITABLE"        |   |                         |
-| x | MODE_"XEQ_NORMAL"    | X | MODE_"STREAMS_DISCARD" |   |                         |
+| w | "BLK_WHILE"          | W | FLAG_"WRITABLE"        | $ | RAN_"END_HOOK"          |
+| x | MODE_"XEQ_NORMAL"    | X | MODE_"STREAMS_DISCARD" | % | RAN_"EXIT_HOOK"         |
 | y | MODE_"IO_SILENT"     | Y | FLAG_"SYSTEM"          |   |                         |
 | z | BLK_"PARAMETER"      | Z | "obj_INVOC"            |   |                         |

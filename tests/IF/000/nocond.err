@@ -1,1 +1,2 @@
-m2:nocond.m2:3: @if: Condition cannot be empty
+m2:nocond.m2:1: Bad signature: Invocation not valid
+m2:nocond.m2:1: @__m2__::if: Parameter 'EXPR': Missing argument

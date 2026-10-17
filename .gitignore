@@ -13,3 +13,4 @@ test.log.*
 .gawk_history
 .gawkrc
 BRANCHES
+.callgraph_grex

@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-10-16 18:09:27 cleyon>
+#  Time-stamp:  <2026-10-17 08:02:58 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -2556,16 +2556,17 @@ function blk_walk_delete(blknum, seen,
         warn("(blk_walk_delete) Block " blknum " has refcnt " blktab[blknum, 0, "refcnt"] ", continuing...")
 
     block_type = blk_type(blknum)
-    if      (block_type == BLK_AGG)      blk_walk_AGG(OP_DELETE, blknum, seen, 0)
-    else if (block_type == BLK_CASE)     blk_walk_CASE(OP_DELETE, blknum, seen, 0)
-    else if (block_type == BLK_FILE)     blk_walk_FILE(OP_DELETE, blknum, seen, 0)
-    else if (block_type == BLK_FOR)      blk_walk_FOR(OP_DELETE, blknum, seen, 0)
-    else if (block_type == BLK_IF)       blk_walk_IF(OP_DELETE, blknum, seen, 0)
-    else if (block_type == BLK_LONGDEF)  blk_walk_LONGDEF(OP_DELETE, blknum, seen, 0)
-    else if (block_type == BLK_STRING)   blk_walk_STRING(OP_DELETE, blknum, seen, 0)
-    else if (block_type == BLK_TERMINAL) blk_walk_TERMINAL(OP_DELETE, blknum, seen, 0)
-    else if (block_type == BLK_USER)     blk_walk_USER(OP_DELETE, blknum, seen, 0)
-    else if (block_type == BLK_WHILE)    blk_walk_WHILE(OP_DELETE, blknum, seen, 0)
+    if      (block_type == BLK_AGG)       blk_walk_AGG(      OP_DELETE, blknum, seen, 0)
+    else if (block_type == BLK_CASE)      blk_walk_CASE(     OP_DELETE, blknum, seen, 0)
+    else if (block_type == BLK_FILE)      blk_walk_FILE(     OP_DELETE, blknum, seen, 0)
+    else if (block_type == BLK_FOR)       blk_walk_FOR(      OP_DELETE, blknum, seen, 0)
+    else if (block_type == BLK_IF)        blk_walk_IF(       OP_DELETE, blknum, seen, 0)
+    else if (block_type == BLK_LONGDEF)   blk_walk_LONGDEF(  OP_DELETE, blknum, seen, 0)
+    else if (block_type == BLK_SIGNATURE) blk_walk_SIGNATURE(OP_DELETE, blknum, seen, 0)
+    else if (block_type == BLK_STRING)    blk_walk_STRING(   OP_DELETE, blknum, seen, 0)
+    else if (block_type == BLK_TERMINAL)  blk_walk_TERMINAL( OP_DELETE, blknum, seen, 0)
+    else if (block_type == BLK_USER)      blk_walk_USER(     OP_DELETE, blknum, seen, 0)
+    else if (block_type == BLK_WHILE)     blk_walk_WHILE(    OP_DELETE, blknum, seen, 0)
     else
         panic(sprintf("(blk_walk_delete) Can't handle type '%s' for block %d",
                       ppf__1flag(block_type), blknum))
@@ -2963,6 +2964,29 @@ function blk_walk_LONGDEF(opcode, blknum, seen, indent)
         delete blktab[blknum, 0, "name"]
         delete blktab[blknum, 0, "ns"]
         delete blktab[blknum, 0, "blkvalid"]
+    }
+    seen[0 + blknum] = 1
+}
+function blk_walk_SIGNATURE(opcode, blknum, seen, indent,
+                            nsig, i)
+{
+    nsig = blktab[blknum, 0, "nsig"]
+    if (opcode == OP_DELETE) {
+        for (i = 1; i <= nsig; i++) {
+            delete blktab[blknum, i, "tag"]
+            delete blktab[blknum, i, "pcode"]
+            delete blktab[blknum, i, "optional"]
+            delete blktab[blknum, i, "haseq"]
+            delete blktab[blknum, i, "defvalue"]
+        }
+        delete blktab[blknum, nsig+1, "tag"]
+        delete blktab[blknum, 0, "nsig"]
+        delete blktab[blknum, 0, "blkvalid"]
+    }
+    if (opcode == OP_PRINT) {
+        print_debugfile(sprintf("%s%2d %s[%d]:",
+                                spaces(3*indent), blknum,
+                                "SIGNATURE", nsig))
     }
     seen[0 + blknum] = 1
 }
@@ -5372,7 +5396,7 @@ function ppf__BLK_INVOC(blknum,
 # zig__1compile_signature(SIGNATURE, param[])
 #
 # DESCRIPTION
-#       Create and return a block number of type BLK_PARAMETER.  There
+#       Create and return a block number of type BLK_SIGNATURE.  There
 #       is no "validity testing" (because there are no invocation
 #       arguments yet to test against) aside from very basic things like
 #       invalid tag, etc.  If an signature error is encountered, return
@@ -5425,7 +5449,11 @@ function zig__1compile_signature(signature, param,
     # 1. Create sig and param local-arrays in parallel.
     #    On error, return ERROR
     for (i = 1; i <= nsig; i++) {
-        # alters elements of sig[]
+        # 4. In parallel, go through sig[] and param[], creating
+        #    blktab[] entries to store sig_block data.
+        #    Alters elements of sig[].
+        #    The data retained in param[] should be sufficient to describe
+        #    each parameter without needing to re-examine the signature.
         if (! zig__11process_element(sig, param, i, sig_elements[i]))
             # If something is not valid, we can just return FALSE now
             # and the local arrays sig and param will just go away...
@@ -5477,13 +5505,6 @@ function zig__1compile_signature(signature, param,
     #    blocks) because sig blocks are nameless, whereas parameter
     #    blocks have differing parameters names for the same sig.
     param[0, "nparam"] = sig[0, "nparam"]
-    #
-    # [WE ARE COMMITTED]
-    # 4. In parallel, go through sig[] and param[], creating
-    #    blktab[] entries to store sig_block data.
-    #    The data retained in param[] should be sufficient to describe
-    #    each parameter without needing to re-examine the signature.
-    #
     param[0, "sig_block"] = sig_block
     return sig_block
 }
@@ -5547,7 +5568,7 @@ function zig__11process_element(sig, param, e, elem,
         return FALSE
     }
 
-    if (tag ~ /:opt(ional)?/) {
+    if (tag == ":optional") {
         # Relax
         # if (sig[0, "optional"] == TRUE) {
         #     msg__add(":optional cannot be repeated")
@@ -5565,10 +5586,8 @@ function zig__11process_element(sig, param, e, elem,
     }
 
     sig[e, "tag"]  = tag
-    # TODO Also create param[] entry!
-    #   ... well, only if it's a consuming sig
-    #
-    # Compute the sig "code", a TYPE and optional FLAGs which describe
+
+    # Compute the sig "code", a TYPE and optional FLAG(s) which describe
     # the sig.  There may be combinations here that would not be valid
     # codes for normal entries in namtab[].  (Symbols are not normally
     # immediate, for example.)
@@ -5581,7 +5600,7 @@ function zig__11process_element(sig, param, e, elem,
                ? (sig[0, "repeating"] ? TYPE_LIST : TYPE_SYMBOL) \
                : EMPTY
 
-    if (tag ~ /:bool(ean)?/) {
+    if (tag == ":boolean") {
         code = code FLAG_BOOLEAN
         type_defvalue = FALSE
     } else if (tag == ":integer") {
@@ -6300,7 +6319,6 @@ function cleardivert_all(    stream, keys, cnt, i)
     cnt = 0
     for (stream in div2blktab)
         keys[++cnt] = stream
-    qsort(SORT_INTEGER, keys, 1, cnt)
 
     for (i = 1; i <= cnt; i++) {
         stream = keys[i]
@@ -6329,7 +6347,7 @@ function cleardivert_all(    stream, keys, cnt, i)
 # This function only creates symbols at the root level.
 function sym_ll_fiat(name, key, code, new_val)
 {
-    # Create an entry in the m2 (only) namespace table.
+    # Create an entry in the __m2__ (only) namespace table.
     if (! nam_ll_in_ns(M2_SYSNS, name, ROOT_LEVEL))
         nam_ll_write_ns(M2_SYSNS, name, ROOT_LEVEL, code)
 
@@ -6346,7 +6364,7 @@ function sym_deferred_symbol(name, code, deferred_prog, deferred_arg,
     level = ROOT_LEVEL
 
     # Create an entry in the name table.  Deferred symbols can
-    # only be created by the system and are in the M2 namespace.
+    # only be created by the system and are in the __m2__ namespace.
     if (nam_ll_in_ns(M2_SYSNS, name, level))
         panic("Cannot create deferred symbol when it already exists")
 
@@ -9501,7 +9519,7 @@ function xeq_cmd__ignore(args,
 #*****************************************************************************
 # @import               LIB     FILE
 function xeq_cmd__import(args,
-                         silent, rc)
+                         silent, rc, top)
 {
     dbg__print("parse", 5, sprintf("(xeq_cmd__import) FILE='%s'",
                                    args["FILE"]))
@@ -9511,7 +9529,11 @@ function xeq_cmd__import(args,
     stk_push_2nd(__ns_stack, args["LIB"])
     rc = doinclude(M2_NS, args["FILE"], MODE_AT_PROCESS)
     if (!rc) {
-        # TODO Should probably remove LIB from ns_stack ... someday
+        # FILE failed to load - remove LIB from ns_stack.
+        top = stk_pop(__ns_stack)
+        stk_pop(__ns_stack)     # bye bye LIB
+        stk_push(__ns_stack, top)
+
         if (!silent) {
             if (strictp("file"))
                 error(__m2_msg)
@@ -10410,7 +10432,7 @@ function xeq_cmd__push(args,
     ins    = info__get(info, "ns")
     iname  = info__get(info, "name")
     ilevel = info__get(info, "level")
-    
+
     for (i = 1; i <= args[0, "nelem"]; i++)
         if (list == "__INCPATH__") {
             # __INCPATH__ isn't a real list (it's a :-separated Symbol), so fake it
@@ -11141,7 +11163,7 @@ function xeq_cmd__unshift(args,
     ins    = info__get(info, "ns")
     iname  = info__get(info, "name")
     ilevel = info__get(info, "level")
-    
+
     for (i = 1; i <= args[0, "nelem"]; i++)
         if (list == "__INCPATH__") {
             oldip = sys__read("__INCPATH__", NOKEY)
@@ -13394,7 +13416,7 @@ function exp_fn__left(args,
     if (args["LENGTH"] < 0)
         error(sprintf("%s: Length may not be negative%s",
                       ME(), VERBOSE() ? TOK_NEWLINE $0 : EMPTY))
-        
+
     return substr(info__get(syminfo, "value"), 1, args["LENGTH"])
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
@@ -14816,7 +14838,7 @@ function close_open_files(delete_blocks_p,
 # diverted data is dropped.  Standard output is always flushed, and
 # program exits with value from __EXIT__.
 function end_program(diverted_streams_final_disposition,
-                     i, timestamp, stream, exit_code)
+                     i, timestamp, stream, exit_code, b)
 {
     if (debugging_enabled_p())
         print_debugfile(sprintf("m2:%s %s%s", "END PROGRAM", "Cave closing soon",

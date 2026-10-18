@@ -6,10 +6,10 @@
 | d | BLK_"LONGDEF"        | D | FLAG_"DEFERRED"        | 3 | OP_"UPDATE"             |
 | e | BLK_"CASE"           | E | PTYPE_"ENV_VAR"        | 4 | OP_"DELETE"             |
 | f | BLK_"FILE"           | F | TYPE_"FUNCTION"        | 5 | OP_"PRINT"              |
-| g | BLK_"SIGNATURE"      | G | "SORT_NATURAL"         | 6 |                         |
-| h | MODE_"HOOKS_ENABLED" | H | "SORT_INTEGER"         | 7 |                         |
+| g | BLK_"SIGNATURE"      | G |                        | 6 |                         |
+| h | MODE_"HOOKS_ENABLED" | H |                        | 7 |                         |
 | i | BLK_"IF"             | I | FLAG_"INTEGER"         | 8 |                         |
-| j |                      | J | PTYPE_"IDXABLE"        | 9 |                         |
+| j | "SORT_NATURAL"       | J | PTYPE_"IDXABLE"        | 9 |                         |
 | k | PTYPE_"KEY"          | K | "obj_BLKNUM"           | ? | "RESERVED"              |
 | l | PTYPE_"SCALAR"       | L | TYPE_"LIST"            | ! | FLAG_"IMMEDIATE"        |
 | m | FLAG_"FLOAT"         | M | PTYPE_"NAME"           | @ | MODE_"AT_PROCESS"       |
@@ -24,5 +24,5 @@
 | v | MODE_"IO_CAPTURE"    | V | BLK_"INVOC"            | = | FLAG_"OPTIONAL"         |
 | w | "BLK_WHILE"          | W | FLAG_"WRITABLE"        | $ | RAN_"END_HOOK"          |
 | x | MODE_"XEQ_NORMAL"    | X | MODE_"STREAMS_DISCARD" | % | RAN_"EXIT_HOOK"         |
-| y | MODE_"IO_SILENT"     | Y | FLAG_"SYSTEM"          |   |                         |
-| z | BLK_"PARAMETER"      | Z | "obj_INVOC"            |   |                         |
+| y | MODE_"IO_SILENT"     | Y | FLAG_"SYSTEM"          | + | "SORT_INTEGER"          |
+| z | BLK_"PARAMETER"      | Z | "obj_INVOC"            | - | "SORT_REV_INT"          |

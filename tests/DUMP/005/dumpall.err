@@ -71,14 +71,17 @@ __m2__::index	Function<System>
 __m2__::initialize	Command<System>
 __m2__::input	Command<System,Immediate>
 __m2__::join	Function<System>
+__m2__::lappend	Command<System>
 __m2__::lc	Function<System>
 __m2__::left	Function<System>
 __m2__::len	Function<System>
+__m2__::linsert	Command<System>
 __m2__::list	Command<System,Immediate>
 __m2__::literal	Command<System>
 __m2__::ljust	Function<System>
 __m2__::local	Command<System,Immediate>
 __m2__::longdef	Command<System,Immediate>
+__m2__::lremove	Command<System>
 __m2__::ltrim	Function<System>
 __m2__::m2ctl	Command<System>
 __m2__::mid	Function<System>

@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-10-17 08:02:58 cleyon>
+#  Time-stamp:  <2026-10-18 01:04:37 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -44,7 +44,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "6.1.1"
+    M2_VERSION = "6.1.2"
 
     # Specify a shell for m2 to use for running utility programs.
     # It is expected to be compatible with Bourne shell syntax:
@@ -1896,7 +1896,7 @@ function info__gate(opcode,      # OP_xxx operation
 
     retval = info["nparts"] == 1 ? info__gate_1part(opcode, optype, info, opns, oplevel, caller, assert_true_or_exit) \
                                  : info__gate_2parts(opcode, optype, info, opns, oplevel, caller, assert_true_or_exit)
-    dbg__print("gate", 3, sprintf("(info__gate) (opcode=%s, optype=%s, text='%s', opns=%s, oplevel=%d, caller='%s' asrtTrue=%s) => %s",
+    dbg__print("gate", 3, sprintf("(info__gate) (opcode=%s, optype=%s, text='%s', opns=%s, oplevel=%d, caller='%s', asrtTrue=%s) => %s",
                                   ppf__1flag(opcode), ppf__1flag(optype), info__get(info, "urtext"),
                                   opns, oplevel, caller, ppf__bool(assert_true_or_exit), ppf__bool(retval)))
     return retval
@@ -2061,21 +2061,26 @@ function info__gate_1part(opcode, optype, info, opns, oplevel, caller, assert_tr
                 retval = TRUE; break
             }
         } else if (opcode == OP_DELETE) {
-            #print_stderr("OP_DELETE, optype=" optype)
-            if (ilevel == NAME_NOT_FOUND || !info__get(info, "defined"))
+            # print_stderr("OP_DELETE, optype=" optype)
+            if (ilevel == NAME_NOT_FOUND)
                 return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
                                           sprintf("Name '%s' not defined%s", iname,
                                                   VERBOSE() ? " [(info__gate_1part) OP_DELETE]" : ""))
-
-            if (optype == TYPE_USER || optype == TYPE_SYMBOL) {
-                if (info__get(info, "protected"))
-                    return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
-                                              sprintf("Name '%s' is protected%s",
-                                                      iname, VERBOSE() ? " [info__gate_1part:E]" : ""))
-                retval = TRUE; break
-            }
+            if (info__get(info, "protected"))
+                return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
+                                          sprintf("Name '%s' is protected%s",
+                                                  iname, VERBOSE() ? " [info__gate_1part:E]" : ""))
+            if (optype == PTYPE_GROUP && ! info__get(info, "declared"))
+                return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
+                                          sprintf("Name '%s' not defined%s", iname,
+                                                  VERBOSE() ? " [(info__gate_1part) OP_DELETE]" : ""))
+            if ((optype == TYPE_USER || optype == TYPE_SYMBOL) && ! info__get(info, "defined"))
+                return info__gate_resolve(FALSE, caller, info, assert_true_or_exit,
+                                          sprintf("Name '%s' not defined%s", iname,
+                                                  VERBOSE() ? " [(info__gate_1part) OP_DELETE]" : ""))
+            retval = TRUE; break
         }
-        panic(sprintf("(info__gate_1part) UNHANDLED (opcode=%s, optype=%s, name='%s', oplevel=%d, caller='%s' assert=%s) => %s",
+        panic(sprintf("(info__gate_1part) UNHANDLED (opcode=%s, optype=%s, name='%s', oplevel=%d, caller='%s', assert=%s) => %s",
                       ppf__1flag(opcode), ppf__1flag(optype), iname,
                       oplevel, caller, ppf__bool(assert_true_or_exit), ppf__bool(retval)))
     } while (FALSE)
@@ -2207,7 +2212,7 @@ function info__gate_2parts(opcode, optype, info, opns, oplevel, caller, assert_t
             }
         }
 
-        panic(sprintf("(info__gate_2parts) UNHANDLED (opcode=%s, optype=%s, name='%s', key='%s', oplevel=%d, caller='%s' assert=%s) => %s",
+        panic(sprintf("(info__gate_2parts) UNHANDLED (opcode=%s, optype=%s, name='%s', key='%s', oplevel=%d, caller='%s', assert=%s) => %s",
                       ppf__1flag(opcode), ppf__1flag(optype), iname, ikey,
                       oplevel, caller, ppf__bool(assert_true_or_exit), ppf__bool(retval)))
     } while (FALSE)
@@ -2406,6 +2411,16 @@ function lis__append(ns, name, level, app_val,
                       ns, name, NOKEY, level))
     agg_block = symtab[ns, name, NOKEY, level, "agg_block"]
     blk_append(agg_block, OBJ_TEXT, app_val)
+}
+
+function lis__remove(ns, name, level, idx,
+                     agg_block)
+{
+    if (! ((ns, name, NOKEY, level, "agg_block") in symtab))
+        panic(sprintf("(lis__append) Could not find [%s, '%s','%s',%d,'agg_block'] in symtab",
+                      ns, name, NOKEY, level))
+    agg_block = symtab[ns, name, NOKEY, level, "agg_block"]
+    blk_remove(agg_block, idx)
 }
 
 function lis__assign(ns, name, key, level, new_val,
@@ -2694,6 +2709,32 @@ function blk_prepend(blknum, slot_type, value,
     blk_ll_write(blknum, slot, slot_type, value)
     blktab[blknum, 0, "offset"]--
     blktab[blknum, 0, "count"]++
+}
+
+function blk_remove(blknum, idx,
+                    count, offset, i)
+{
+    if (!integerp(blknum))
+        panic(sprintf("(blk_remove) Block '%s' is not an integer", blknum))
+    if (blk_type(blknum) != BLK_AGG)
+        panic(sprintf("(blk_remove) Block %d has type %s, not AGG",
+                      blknum, ppf__1flag(blk_type(blknum))))
+
+    count = blktab[blknum, 0, "count"]
+    offset = blktab[blknum, 0, "offset"]+0
+
+    # Start at the index *after* the one we want to delete; then move it
+    # downward to the previous index, overwriting that one.  The first
+    # iteration deletes the index we asked for.  Now iterate through the
+    # rest of the list, moving down successive entries.  When you reach
+    # the end, delete the now-defunct last element the decrement the count.
+    for (i = idx + offset + 1; i <= count + offset; i++) {
+        blktab[blknum, i - 1, "slot_type"]  = blktab[blknum, i, "slot_type"]
+        blktab[blknum, i - 1, "slot_value"] = blktab[blknum, i, "slot_value"]
+    }
+    delete blktab[blknum, count + offset, "slot_type"]
+    delete blktab[blknum, count + offset, "slot_value"]
+    blktab[blknum, 0, "count"]--
 }
 
 function blk_append(blknum, slot_type, value,
@@ -3400,62 +3441,63 @@ function execute__invoc_command(invoc_block,
     # DISPATCH
     # Also need an array entry to initialize command name.  [search: CMDS] - may be obsolete
     # NB - immediate commands are not listed here; instead, [search: IMMEDS] - still true
-         if (name ==   "append")         xeq_cmd__define(args)
-    else if (name ==   "array")          xeq_cmd__array(args)
-    else if (name ==   "break")          xeq_cmd__break(args)
-    else if (name ==   "cleardivert")    xeq_cmd__cleardivert(args)
-    else if (name ==   "continue")       xeq_cmd__continue(args)
-    else if (name ==   "data")           xeq_cmd__data(args)
-    else if (name ==   "debug")          xeq_cmd__error(args)
-    else if (name ==   "decr")           xeq_cmd__incr(args)
-    else if (name ==   "default")        xeq_cmd__define(args)
-    else if (name ==   "define")         xeq_cmd__define(args)
-    else if (name ==   "divert")         xeq_cmd__divert(args)
-    else if (name ==   "divpop")         xeq_cmd__divpop(args)
-    else if (name ==   "divpush")        xeq_cmd__divpush(args)
-    else if (name ~   /^dump(all)?$/)    xeq_cmd__dump(args)
-    else if (name ==  "dumpdef")         xeq_cmd__dumpdef(args)
-    else if (name ~ /^s?echo$/)          xeq_cmd__error(args)
-    else if (name ~  /^(enddata|eod)$/)  error(sprintf("@%s: Parse error: Not in a @data block", name))
-    else if (name ~ /^s?error$/)         xeq_cmd__error(args)
-    else if (name ==   "errprint")       xeq_cmd__error(args)
-    else if (name ==   "esyscmd")        xeq_cmd__esyscmd(args)
-    else if (name ==   "eval")           xeq_cmd__eval(args)
-    else if (name ~ /^s?exit$/)          xeq_cmd__exit(args)
-    else if (name ~ /^s?filedata$/)      xeq_cmd__filedata(args)
-    else if (name ~ /^s?filedef(ine)?$/) xeq_cmd__filedefine(args)
-    else if (name ==   "ignore")         xeq_cmd__ignore(args)
-    else if (name ~ /^s?import$/)        xeq_cmd__import(args)
-    else if (name ~ /^s?(ns)?include$/)  xeq_cmd__include(args)
-    else if (name ==   "incr")           xeq_cmd__incr(args)
-    else if (name ==   "initialize")     xeq_cmd__define(args)
-    else if (name ==   "input")          xeq_cmd__input(args)
-    else if (name ==   "list")           xeq_cmd__list(args)
-    else if (name ==   "literal")        xeq_cmd__literal(args)
-    else if (name ==   "local")          xeq_cmd__local(args) # SUS
-    else if (name ==   "m2ctl")          xeq_cmd__m2ctl(args)
-    else if (name ==   "namespace")      xeq_cmd__namespace(args)
-    else if (name ==   "nextfile")       xeq_cmd__nextfile(args)
-    else if (name ~ /^s?paste$/)         xeq_cmd__include(args)
-    else if (name ==   "pop")            xeq_cmd__pop(args)
-    else if (name ==   "push")           xeq_cmd__push(args)
-    else if (name ==   "readonly")       xeq_cmd__readonly(args)
-    else if (name ==   "return")         xeq_cmd__return(args)
-    else if (name ==   "sequence")       xeq_cmd__sequence(args)
-    else if (name ==   "set")            xeq_cmd__define(args)
-    else if (name ==   "shell")          xeq_cmd__shell(args)
-    else if (name ==   "shift")          xeq_cmd__shift(args)
-    else if (name ==   "split")          xeq_cmd__split(args)
-    else if (name ==   "syscmd")         xeq_cmd__syscmd(args)
-    else if (name ==   "tracemode")      xeq_cmd__tracemode(args)
-    else if (name ==   "traceoff")       xeq_cmd__traceoff(args)
-    else if (name ==   "traceon")        xeq_cmd__traceon(args)
-    else if (name ==   "typeout")        xeq_cmd__typeout(args)
-    else if (name ~   /^undef(ine)?$/)   xeq_cmd__undefine(args)
-    else if (name ==   "undivert")       xeq_cmd__undivert(args)
-    else if (name ==   "unshift")        xeq_cmd__unshift(args)
-    else if (name ==   "warn")           xeq_cmd__error(args)
-    else if (name ==   "wrap")           xeq_cmd__wrap(args)
+         if (name ==   "append")            xeq_cmd__define(args)
+    else if (name ==   "array")             xeq_cmd__array(args)
+    else if (name ==   "break")             xeq_cmd__break(args)
+    else if (name ==   "cleardivert")       xeq_cmd__cleardivert(args)
+    else if (name ==   "continue")          xeq_cmd__continue(args)
+    else if (name ==   "data")              xeq_cmd__data(args)
+    else if (name ==   "debug")             xeq_cmd__error(args)
+    else if (name ==   "decr")              xeq_cmd__incr(args)
+    else if (name ==   "default")           xeq_cmd__define(args)
+    else if (name ==   "define")            xeq_cmd__define(args)
+    else if (name ==   "divert")            xeq_cmd__divert(args)
+    else if (name ==   "divpop")            xeq_cmd__divpop(args)
+    else if (name ==   "divpush")           xeq_cmd__divpush(args)
+    else if (name ~   /^dump(all)?$/)       xeq_cmd__dump(args)
+    else if (name ==  "dumpdef")            xeq_cmd__dumpdef(args)
+    else if (name ~ /^s?echo$/)             xeq_cmd__error(args)
+    else if (name ~  /^(enddata|eod)$/)     error(sprintf("@%s: Parse error: Not in a @data block", name))
+    else if (name ~ /^s?error$/)            xeq_cmd__error(args)
+    else if (name ==   "errprint")          xeq_cmd__error(args)
+    else if (name ==   "esyscmd")           xeq_cmd__esyscmd(args)
+    else if (name ==   "eval")              xeq_cmd__eval(args)
+    else if (name ~ /^s?exit$/)             xeq_cmd__exit(args)
+    else if (name ~ /^s?filedata$/)         xeq_cmd__filedata(args)
+    else if (name ~ /^s?filedef(ine)?$/)    xeq_cmd__filedefine(args)
+    else if (name ==   "ignore")            xeq_cmd__ignore(args)
+    else if (name ~ /^s?import$/)           xeq_cmd__import(args)
+    else if (name ~ /^s?(ns)?include$/)     xeq_cmd__include(args)
+    else if (name ==   "incr")              xeq_cmd__incr(args)
+    else if (name ==   "initialize")        xeq_cmd__define(args)
+    else if (name ==   "input")             xeq_cmd__input(args)
+    else if (name ==   "list")              xeq_cmd__list(args)
+    else if (name ==   "literal")           xeq_cmd__literal(args)
+    else if (name ==   "local")             xeq_cmd__local(args) # SUS
+    else if (name ==   "lremove")           xeq_cmd__lremove(args)
+    else if (name ==   "m2ctl")             xeq_cmd__m2ctl(args)
+    else if (name ==   "namespace")         xeq_cmd__namespace(args)
+    else if (name ==   "nextfile")          xeq_cmd__nextfile(args)
+    else if (name ~ /^s?paste$/)            xeq_cmd__include(args)
+    else if (name ==   "pop")               xeq_cmd__pop(args)
+    else if (name ~  /^(push|lappend)$/)    xeq_cmd__push(args)
+    else if (name ==   "readonly")          xeq_cmd__readonly(args)
+    else if (name ==   "return")            xeq_cmd__return(args)
+    else if (name ==   "sequence")          xeq_cmd__sequence(args)
+    else if (name ==   "set")               xeq_cmd__define(args)
+    else if (name ==   "shell")             xeq_cmd__shell(args)
+    else if (name ==   "shift")             xeq_cmd__shift(args)
+    else if (name ==   "split")             xeq_cmd__split(args)
+    else if (name ==   "syscmd")            xeq_cmd__syscmd(args)
+    else if (name ==   "tracemode")         xeq_cmd__tracemode(args)
+    else if (name ==   "traceoff")          xeq_cmd__traceoff(args)
+    else if (name ==   "traceon")           xeq_cmd__traceon(args)
+    else if (name ==   "typeout")           xeq_cmd__typeout(args)
+    else if (name ~   /^undef(ine)?$/)      xeq_cmd__undefine(args)
+    else if (name ==   "undivert")          xeq_cmd__undivert(args)
+    else if (name ~  /^(unshift|linsert)$/) xeq_cmd__unshift(args)
+    else if (name ==   "warn")              xeq_cmd__error(args)
+    else if (name ==   "wrap")              xeq_cmd__wrap(args)
     else
         panic("(execute__invoc_command) Unrecognized command '" name "'")
 
@@ -8193,8 +8235,9 @@ function qsort(strategy, A, left, right,    i, lastpos)
     _swap(A, left, left + int((right-left+1)*rand()))
     lastpos = left              # A[left] is now partition element
     for (i = left+1; i <= right; i++)
-        if (strategy == SORT_NATURAL && _nat_less_than(A[i], A[left])      ||
-            strategy == SORT_INTEGER && (A[i]+0 < A[left]+0))
+        if (strategy == SORT_NATURAL && _nat_less_than(A[i], A[left])  ||
+            strategy == SORT_INTEGER && (A[i]+0 < A[left]+0)           ||
+            strategy == SORT_REV_INT && (A[i]+0 > A[left]+0))
           _swap(A, ++lastpos, i)
     _swap(A, left, lastpos)
     qsort(strategy, A, left,   lastpos-1)
@@ -9952,6 +9995,77 @@ function ppf__BLK_LONGDEF(longdef_block)
 
 #*****************************************************************************
 #
+#       @  L R E M O V E
+#
+#       { LIST:name! :repeat ITEM:string }
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#*****************************************************************************
+# @lremove              LIST ITEM...
+function xeq_cmd__lremove(args,
+                          list, info, ins, iname, ilevel, icode, itype,
+                          i, j, top, item, tmp_stack, del_list, cnt)
+{
+    list = args["LIST"]
+    info__create_from_text(list, info)
+    if ((ins = info__get(info, "ns")) == EMPTY)
+        ins = info["ns"] = NS()
+    if (list != "__INCPATH__" && list != "__NSPATH__")
+        info__gate(OP_DELETE, PTYPE_GROUP, info, ins, LEVEL(), ME(), TRUE)
+    ins    = info__get(info, "ns")
+    iname  = info__get(info, "name")
+    ilevel = info__get(info, "level")
+    icode  = info__get(info, "code")
+    itype  = first(icode)
+    cnt = 0
+
+    for (i = 1; i <= args[0, "nelem"]; i++) {
+        item = args["ITEM", i]
+        if (list == "__INCPATH__") {
+            rm_INCPATH(item)
+        } else if (list == "__NSPATH__") {
+            if (item == M2_SYSNS)
+                error(ME() ": Refusing to remove __m2__ from __NSPATH__")
+            tmp_stack[0] = 0
+            for (j = 1; j <= stk_depth(__ns_stack); j++)
+                if ((top = stk_pop(__ns_stack)) != item)
+                    stk_push(tmp_stack, top)
+            for (j = 1; j <= stk_depth(tmp_stack); j++)
+                stk_push(__ns_stack, stk_pop(tmp_stack))
+        } else if (itype == TYPE_ARRAY) {
+            delete symtab[ins, iname, item, ilevel, "symval"]
+        } else if (itype == TYPE_LIST) {
+            if (! integerp(item))
+                error(ME() ": List index not an :integer")
+            # To keep things in sync, first batch up the list of indices
+            # we want to remove.
+            del_list[++cnt] = int(item)
+        } else
+            panic("(xeq_cmd__lremove) Condition fell through")
+    }
+
+    if (itype == TYPE_LIST) {
+        # The low-level removal function (blk_remove) ripples up from
+        # the removed item, moving items down to fill in the deleted
+        # space.  When it reaches the end of the list, it is deleted.
+        # Therefore, to maintain list integrity, deletions must be
+        # performed in order from greatest to least index.
+        qsort(SORT_REV_INT, del_list, 1, cnt)
+
+        for (i = 1; i <= cnt; i++) {
+            item = del_list[i]
+            #print_stderr(sprintf("Want to remove item %d", item))
+            lis__remove(ins, iname, ilevel, item)
+        }
+    }
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
 #       @  M 2 C T L
 #
 #       { TEXT:rest! }
@@ -10370,7 +10484,7 @@ function xeq_cmd__pop(args,
         ins = info["ns"] = NS()
     if (lis == "__NSPATH__")
         error(ME() ": Name '__NSPATH__' is protected")
-    else if (lis == "__INCPATH__") {
+    if (lis == "__INCPATH__") {
         tmpip = EMPTY
         icount = split(sys__read("__INCPATH__", NOKEY),
                        paths, TOK_COLON)
@@ -10427,7 +10541,7 @@ function xeq_cmd__push(args,
         ins = info["ns"] = NS()
     if (list == "__NSPATH__")
         error(ME() ": Name '__NSPATH__' is protected")
-    else if (list != "__INCPATH__")
+    if (list != "__INCPATH__")
         info__gate(OP_UPDATE, TYPE_LIST, info, ins, LEVEL(), ME(), TRUE)
     ins    = info__get(info, "ns")
     iname  = info__get(info, "name")
@@ -10752,7 +10866,8 @@ function xeq_cmd__shift(args,
                 tmpip = tmpip paths[i] TOK_COLON
         sys__write("__INCPATH__", chop(tmpip))
         return
-    } else if (lis == "__NSPATH__") {
+    }
+    if (lis == "__NSPATH__") {
         if (stk_depth(__ns_stack) == 1)
             error(ME() ": Refusing to remove __m2__ from __NSPATH__")
         stk_pop(__ns_stack)
@@ -14030,8 +14145,9 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     MODE_XEQ_BREAK        = "b"; __label[MODE_XEQ_BREAK]        = "XeqBreak"
     MODE_XEQ_CONTINUE     = "o"; __label[MODE_XEQ_CONTINUE]     = "XeqContinue"
     MODE_XEQ_RETURN       = "r"; __label[MODE_XEQ_RETURN]       = "XeqReturn"
-    SORT_NATURAL          = "G"; __label[SORT_NATURAL]          = "SortNatural"
-    SORT_INTEGER          = "H"; __label[SORT_INTEGER]          = "SortInteger"
+    SORT_NATURAL          = "j"; __label[SORT_NATURAL]          = "SortNatural"
+    SORT_INTEGER          = "+"; __label[SORT_INTEGER]          = "SortInteger"
+    SORT_REV_INT          = "-"; __label[SORT_REV_INT]          = "SortRevInt"
 
     # Initialization status
     INIT_DOTFILES         = "."; __label[INIT_DOTFILES]         = "Dotfiles" # load_init_files()
@@ -14311,10 +14427,13 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
         "incr        { NAME:lval :optional N:integer=1 }"                   SUBSEP \
         "initialize  { NAME:lval TEXT:rest }"                               SUBSEP \
         "input!      { :optional NAME:name!=__INPUT__ }"                    SUBSEP \
+        "lappend     { LIST:name! :repeat ITEM:string }"                    SUBSEP \
+        "linsert     { LIST:name! :repeat ITEM:string }"                    SUBSEP \
         "list!       { :repeat LIST:name! }"                                SUBSEP \
         "literal     { PATTERN:rest }"                                      SUBSEP \
         "local!      { :repeat NAME:name! }"                                SUBSEP \
         "longdef!    { NAME:name! }"                                        SUBSEP \
+        "lremove     { LIST:name! :repeat ITEM:string }"                    SUBSEP \
         "m2ctl       { TEXT:rest! }"                                        SUBSEP \
         "namespace   { NAMESPACE:name! }"                                   SUBSEP \
         "newcmd!     { NAME:name! :optional SIGNATURE:rest! }"              SUBSEP \

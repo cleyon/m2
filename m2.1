@@ -933,6 +933,29 @@ Format:
 .Ic @endlongdef
 .Ed
 .Pp
+.It Ic @lremove No "" Bro Ar LIST Ns No :name! :repeat Ar ITEM Ns No :string Brc
+Remove
+.Va ITEM Ns No (s)
+from
+.Va LIST .
+.Va ITEM
+should be the index number of the element you wish to remove.
+Multiple indices will be deleted atomically in order to preserve list integrity.
+.\" It's not like I have real transactions or anything - I just delete items in the correct order
+.Va LIST
+may be the system variables
+.Va __INCPATH__
+or
+.Va __NSPATH__ ;
+in this case
+.Va ITEM
+should be the name of the path or library you wish to remove.
+.Va LIST
+may also be an
+.Ic @array
+in which case
+.Va ITEM
+should be the array index key you wish to remove.
 .It Ic @namespace No "" Bro Ar NAMESPACE Ns No :name! Brc
 Make
 .Va NAMESPACE
@@ -1008,6 +1031,8 @@ Append one or more
 .Va ITEM Ns No s
 onto end (right side) of
 .Va LIST .
+Also called
+.Ic @lappend .
 See also
 .Ic @pop ,
 .Ic @unshift .
@@ -1166,6 +1191,8 @@ Insert one or more
 .Va ITEM Ns No s
 onto beginning (left side) of
 .Va LIST .
+Also called
+.Ic @linsert .
 See also
 .Ic @push ,
 .Ic @shift .
@@ -2310,32 +2337,29 @@ and
 are merely aliases for other, harder-to-type symbol names.
 They just get re-written.
 Others, like
-.Qq init=
+.Qq init
 or
-.Qq U=
+.Qq I
 trigger actions which are executed immediately.
 .Bl -tag -width VERBOSE=VALX -offset indent
 .It Cm @ Ns Ar cmd No ...
 Arguments beginning with
 .Qq @
 characters are interpreted as commands to evaluate.
-.It Cm A= Ns Ar PATH
+.It Cm A Ns = Ns Ar PATH
 Append
 .Va PATH
 to the end of
 .Va __INCPATH__ .
 See also
 .Ic @push .
-Consider using
-.Qq Cm I= Ns Ar PATH
-instead.
 .It Cm debug
 Alias for
 .Va __DEBUG__ .
 .It Cm fs
 Alias for
 .Va __FS__ .
-.It Cm I= Ns Ar PATH
+.It Cm I Ns = Ns Ar PATH
 Add
 .Va PATH
 to the beginning of 
@@ -2354,7 +2378,7 @@ file name.
 If
 .Va VALUE
 is zero or negative, prevent init files from loading in future.
-.It Cm R= Ns Ar PATH
+.It Cm R Ns = Ns Ar PATH
 Remove
 .Va PATH
 from include path
@@ -2365,7 +2389,7 @@ Alias for
 .It Cm strict
 Alias for
 .Va __STRICT__ .
-.It Cm T= Ns Ar NAME
+.It Cm T Ns = Ns Ar NAME
 Set
 .Va __TRACE__
 to True and begin tracing variable
@@ -2382,7 +2406,7 @@ If
 is omitted, set
 .Va __TRACE__
 to False.
-.It Cm U= Ns Ar NAME
+.It Cm U Ns = Ns Ar NAME
 Undefine
 .Va NAME .
 .It Cm verbose
@@ -2521,23 +2545,23 @@ and iterate through them with
 .Pp
 .Em Example :
 .Bd -literal -offset indent -compact
-@newcmd sigdemo { ACTION LUCKY:int :repeat :opt items }
-I see @items@ objects to @ACTION@@ifx{items > 0}{:}{.}@
-@foreach this items
-@format{#%d = '%s'}{@{this}}{@{items[@{this}]}}@
-@next this
+@newcmd sigdemo { ACTION LUCKY:int :repeat :optional ITEMS }
+I see @ITEMS@ objects to @ACTION@@ifx{ITEMS > 0}{:}{.}@
+@foreach itm ITEMS
+@format{#%d = '%s'}{@{itm}}{@{ITEMS[@{itm}]}}@
+@next itm
 Lucky number: @LUCKY@
 @endcmd
 
-@sigdemo{Contemplate the nothingness of}{7}
+@sigdemo{Contemplate the nothingness of}{42}
 \ \ \ \(rA I see 0 objects to Contemplate the nothingness of.
-\ \ \ \(rA Lucky number: 7
-@sigdemo{Beat}{42}{It}{The clock}{Your high score}
+\ \ \ \(rA Lucky number: 42
+@sigdemo{Beat}{7}{It}{The clock}{Your high score}
 \ \ \ \(rA I see 3 objects to Beat:
 \ \ \ \(rA #1 = 'It'
 \ \ \ \(rA #2 = 'The clock'
 \ \ \ \(rA #3 = 'Your high score'
-\ \ \ \(rA Lucky number: 42
+\ \ \ \(rA Lucky number: 7
 @sigdemo{Whoops}{BAD INT}{@{expr 1/0}}{Not evaluated}
 \ \ \ \(rA m2:<stdin>:11: @m2::sigdemo: Parameter LUCKY value 'BAD INT' is not an :integer
 .Ed
@@ -2711,14 +2735,14 @@ run start date as
 (eg: 19450716).
 See section
 .Sx Times and Dates .
+.It Va __DEBUG__
+Debugging enabled? (boolean, user modifiable, default False).
 .It Va __DEBUGFILE__
 File path for debug and trace output
 .Po
 user modifiable, default
 .Pa /dev/stderr
 .Pc .
-.It Va __DEBUG__
-Debugging enabled? (boolean, user modifiable, default False).
 .It Va __DEPTH__
 Depth of file inclusion.
 .It Va __DIVNUM__
@@ -2747,10 +2771,10 @@ See also
 Value from most recent
 .Ic @expr@
 result.
-.It Va __FILE_UUID__
-UUID unique to this file.
 .It Va __FILE__
 Current file name.
+.It Va __FILE_UUID__
+UUID unique to this file.
 .It Va __FMT__[date]
 Date format for
 .Ic @date@ .
@@ -2805,10 +2829,10 @@ User modifiable.
 Group id (effective gid).
 .It Va __HOME__
 User's home directory, including trailing slash.
-.It Va __HOSTNAME__
-FQDN host name (eg myhost.example.com).
 .It Va __HOST__
 Short host name (eg myhost).
+.It Va __HOSTNAME__
+FQDN host name (eg myhost.example.com).
 .It Va __INCPATH__
 The
 .Dq include path
@@ -2827,14 +2851,6 @@ Initialized from environment variable
 The data read by
 .Ic @input ;
 user modifiable.
-.It Va __NSPATH__
-Colon-separated list of namespaces to be searched during unqualified name resolution.
-Modifiable with the
-.Ic @shift ,
-.Ic @unshift ,
-or
-.Ic @import
-commands.
 .It Va __LINE__
 Current line number inside current
 .Va __FILE__ .
@@ -2849,6 +2865,14 @@ version.
 Number of files processed so far (e.g., 2).
 .It Va __NLINE__
 Number of lines read so far from all files.
+.It Va __NSPATH__
+Colon-separated list of namespaces to be searched during unqualified name resolution.
+Modifiable with the
+.Ic @shift ,
+.Ic @unshift ,
+or
+.Ic @import
+commands.
 .It Va __OSNAME__
 Operating system name.
 .It Va __PID__
@@ -2903,17 +2927,17 @@ Exit status of most recent
 or
 .Ic @syscmd
 command.
-.It Va __TIMESTAMP__
-ISO 8601 timestamp, with
-.Ql T
-separator.
-See section
-.Sx Times and Dates .
 .It Va __TIME__
 .Nm
 run start time as
 .Em HHMMSS
 (eg 053000).
+See section
+.Sx Times and Dates .
+.It Va __TIMESTAMP__
+ISO 8601 timestamp, with
+.Ql T
+separator.
 See section
 .Sx Times and Dates .
 .It Va __TMPDIR__
@@ -2929,16 +2953,16 @@ If symbol
 .Va M2_TMPDIR
 is defined, its value will override
 .Va __TMPDIR__ .
-.It Va __TRACEMODE__
-String containing trace control flags.
-Default is
-.Qq ae .
 .It Va __TRACE__
 If True, tracing is enabled.
 If False (the default), tracing messages are inhibited
 regardless of the settings in
 .Va __TRACEMODE__ .
 User modifiable.
+.It Va __TRACEMODE__
+String containing trace control flags.
+Default is
+.Qq ae .
 .It Va __TZ__
 Time zone numeric offset from UTC (\-0800).
 See section
@@ -3350,10 +3374,10 @@ If environment variable
 exists, its file is read instead of
 .Pa $HOME/.m2rc .
 To inhibit automatically loading these init files, specify
-.Ar init=0
+.Ql init=0
 on the command line.
 Specifying
-.Ar init=1
+.Ql init=1
 causes the init files to be loaded immediately (if not done so already)
 without the need to specify an input file.
 .It Xo

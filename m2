@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-10-18 01:04:37 cleyon>
+#  Time-stamp:  <2026-10-18 15:51:58 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -44,7 +44,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "6.1.2"
+    M2_VERSION = "6.1.3"
 
     # Specify a shell for m2 to use for running utility programs.
     # It is expected to be compatible with Bourne shell syntax:
@@ -62,7 +62,7 @@ BEGIN {
 
     # Customize these paths as needed for correct operation on your
     # system.  They are assumed to be safe to run even at security level
-    # 2 SECURE (but not PARANOID 3).  If a program is not available,
+    # SECURE[=2] (but not PARANOID[=3]).  If a program is not available,
     # simply remove the entry entirely.
     split(                    \
           "/usr/bin/basename" \
@@ -83,20 +83,21 @@ BEGIN {
             print_stderr("m2:External program '" _progs[_p] "' not found")
 
     # See the "SECURITY CONSIDERATIONS" section of the manual for more info:
-    SEC_STANDARD     = 0 # Default security level allows m2 to run normal
+    #
+    SEC_STANDARD     = 0 # Standard security level allows m2 to run normal
                          # programs for the user; this allows the @shell
-                         # command to function and @undivert to a file.
+                         # command to function, @undivert to a file, etc.
     SEC_SQUASHROOT   = 1 # Security level 1 is not a real level.  Rather,
-                         # for the root user (uid==0), security level 2 is
-                         # chosen.  For all other users/uids level 0
-                         # (standard) security is selected.
-    SEC_SECURE       = 2 # Security level 2 prevents this, but does allow
-                         # m2 to utilize the (presumably secure)
+                         # for the root user (uid==0), SECURE level 2 is
+                         # chosen.  For all other users/uids, STANDARD[=0]
+                         # security is selected.
+    SEC_SECURE       = 2 # Security level 2 prevents STANDARD operations, but
+                         # does allow m2 to utilize the (presumably secure)
                          # utilities specified in the PROG array.
     SEC_PARANOID     = 3 # Security level 3 prevents invoking any programs,
                          # and will terminate if any attempt is made.
-                         # At level 3, m2 does not know the current time
-                         # or date, host or user name, etc.
+                         # PARANOID m2 does not know the current time or date,
+                         # host or user name, etc.
     __security_level = SEC_STANDARD
 }
 
@@ -119,15 +120,8 @@ BEGIN {
     EX_SOFTWARE      = 70       # panic()
     EX_NOPERM        = 77       # security violation
 
-    # Master char list:  doc/char-list.org
-    #
-    #    Letters & Numerals (listed means available; all others taken):
-    #           c j 6 7 8 9
-    #
-    #    Symbols (listed means allocated; others may be available):
-    #           ! @ _ ~ * > ' . # < =           0 ?
-    #
-    # See also doc/char-list.org
+    #   Master char list:  doc/char-list.org
+
     FLAG_BOOLEAN     = "B"; __label[FLAG_BOOLEAN]   = "Boolean"
     FLAG_DEFERRED    = "D"; __label[FLAG_DEFERRED]  = "Deferred"
     FLAG_IMMEDIATE   = "!"; __label[FLAG_IMMEDIATE] = "Immediate"
@@ -10005,7 +9999,7 @@ function ppf__BLK_LONGDEF(longdef_block)
 # @lremove              LIST ITEM...
 function xeq_cmd__lremove(args,
                           list, info, ins, iname, ilevel, icode, itype,
-                          i, j, top, item, tmp_stack, del_list, cnt)
+                          i, j, top, item, tmp_stack, del_list, cnt, depth)
 {
     list = args["LIST"]
     info__create_from_text(list, info)
@@ -10028,10 +10022,14 @@ function xeq_cmd__lremove(args,
             if (item == M2_SYSNS)
                 error(ME() ": Refusing to remove __m2__ from __NSPATH__")
             tmp_stack[0] = 0
-            for (j = 1; j <= stk_depth(__ns_stack); j++)
+
+            depth = stk_depth(__ns_stack)
+            for (j = 1; j <= depth; j++)
                 if ((top = stk_pop(__ns_stack)) != item)
                     stk_push(tmp_stack, top)
-            for (j = 1; j <= stk_depth(tmp_stack); j++)
+
+            depth = stk_depth(tmp_stack)
+            for (j = 1; j <= depth; j++)
                 stk_push(__ns_stack, stk_pop(tmp_stack))
         } else if (itype == TYPE_ARRAY) {
             delete symtab[ins, iname, item, ilevel, "symval"]

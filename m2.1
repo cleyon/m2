@@ -583,7 +583,7 @@ Like
 but no\&-op if
 .Va NAME
 already defined.
-.It Ic @define No "" Bro Ar NAME Ns No :lval :optional Ar TEXT Ns No :rest Brc
+.It Ic @define No "" Bro Ar NAME Ns No :lval :optional Ar TEXT Ns No :rest=1 Brc
 Set value of
 .Va NAME
 to
@@ -593,7 +593,7 @@ If
 is missing, a value of 1 is assumed.
 See also
 .Ic @set .
-.It Ic @divert No "" Bro :optional Ar STREAM Ns No :integer Brc
+.It Ic @divert No "" Bro :optional Ar STREAM Ns No :integer=0 Brc
 Divert subsequent text to stream
 .Va N .
 Default 0 resets to standard output.
@@ -613,7 +613,7 @@ Create a new diversion to stream
 while saving the current one to be restored later.
 See also
 .Ic @divpop .
-.It Ic @dump No "" Bro :optional Ar WHAT Ns No :string! Ar FILE Ns No :filename Brc
+.It Ic @dump No "" Bro :optional Ar WHAT Ns No :string!=symbols Ar FILE Ns No :filename Brc
 Output names and definitions to
 .Va FILE .
 .Va WHAT
@@ -633,7 +633,7 @@ If
 .Va FILE
 is omitted, output is sent to
 .Va __DEBUGFILE__ .
-.It Ic @dumpall No "" Bro :optional Ar WHAT Ns No :string! Ar FILE Ns No :filename Brc
+.It Ic @dumpall No "" Bro :optional Ar WHAT Ns No :string!=symbols Ar FILE Ns No :filename Brc
 Like
 .Ic @dump
 but include System symbols.
@@ -968,11 +968,11 @@ Create a user command
 .Va NAME
 whose definition will be all lines until
 .Ic @endcmd .
-If
+If present,
 .Va SIGNATURE
-is omitted, it is assumed to be
+must be enclosed in braces; if omitted, it is assumed to be
 .Cm :void .
-Command format:
+Format:
 .Bd -unfilled -offset indent -compact
 .Ic @newcmd Ar NAME Op Ar SIGNATURE
 .No "   ..."
@@ -1292,7 +1292,7 @@ See system symbols
 .Va __FMT__[1] ,
 and
 .Va __STRICT__[bool] .
-.It Ic @center No "" Bro Ar SYM Ns No :name! :optional Ar WIDTH Ns No :integer Brc Ic @
+.It Ic @center No "" Bro Ar SYM Ns No :name! :optional Ar WIDTH Ns No :integer=@__COLUMNS__@ Brc Ic @
 Center the value of
 .Va SYM
 in a field of
@@ -1336,7 +1336,7 @@ Directory name of
 implemented in Awk, assuming Unix style path separators.
 See also
 .Ic @xdirname@ .
-.It Ic @divnl No "" Bro :optional Ar STREAM Ns No :integer Brc Ic @
+.It Ic @divnl No "" Bro :optional Ar STREAM Ns No :integer=@__DIVNUM__@ Brc Ic @
 Return the number of lines in
 .Va STREAM ,
 or 0 if empty.
@@ -1545,7 +1545,7 @@ character.
 Number of characters in
 .Va SYM Ap s
 value.
-.It Ic @ljust No "" Bro Ar SYM Ns No :name! :optional Ar WIDTH Ns No :integer Brc Ic @
+.It Ic @ljust No "" Bro Ar SYM Ns No :name! :optional Ar WIDTH Ns No :integer=@__COLUMNS__@ Brc Ic @
 Left-justify the value of
 .Va SYM
 in a field of
@@ -1633,7 +1633,7 @@ Substring of
 from
 .Va N Ap th
 to last character.
-.It Ic @rjust No "" Bro Ar SYM Ns No :name! :optional Ar WIDTH Ns No :integer Brc Ic @
+.It Ic @rjust No "" Bro Ar SYM Ns No :name! :optional Ar WIDTH Ns No :integer=@__COLUMNS__@ Brc Ic @
 Right-justify the value of
 .Va SYM
 in a field of

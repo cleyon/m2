@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-10-18 15:51:58 cleyon>
+#  Time-stamp:  <2026-10-19 08:42:31 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -44,7 +44,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "6.1.3"
+    M2_VERSION = "6.1.4"
 
     # Specify a shell for m2 to use for running utility programs.
     # It is expected to be compatible with Bourne shell syntax:
@@ -12670,7 +12670,7 @@ function exp_fn__basename(args,
 #
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
-#       { VAL:string }
+#       { :optional VAL:string }
 #
 #       boolval SYM: Print __FMT__[0 or 1], depending on SYM truthiness.
 #         @boolval SYM@ => <string>
@@ -14516,7 +14516,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     # Functions cannot be used as symbol or sequence names.
     nsig = split( \
         "basename       { SYM:name! }"                                        SUBSEP \
-        "boolval        { VAL:string }"                                       SUBSEP \
+        "boolval        { :optional VAL:string }"                             SUBSEP \
         "center         { SYM:name! :optional WIDTH:integer }"                SUBSEP \
         "chr            { N:int }"                                            SUBSEP \
         "comma          { VAL:string }"                                       SUBSEP \

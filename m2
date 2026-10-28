@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-10-19 08:42:31 cleyon>
+#  Time-stamp:  <2026-10-28 08:51:16 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -3616,6 +3616,7 @@ function parse__file(default_ns,
         run_hook("file_suspend")
 
     __active_files[filename] = file_block
+    __seen_files[filename] = TRUE
     sys__incr("__NFILE__", 1); __rnf++
     blktab[file_block, 0, "open"]          = TRUE
     blktab[file_block, 0, "ever_opened"]   = TRUE
@@ -6763,14 +6764,6 @@ function syminfo_store(info, new_val,
 }
 
 
-function sym_ll_depth_ns(ns, name, key, level,
-                         retval)
-{
-#    if (ns == M2_SYSNS)
-        return "symval"
-}
-
-
 function sym_ll_read_ns(ns, name, key, level,
                         retval, i, stackdepth)
 {
@@ -6807,10 +6800,7 @@ function sym_ll_read_ns(ns, name, key, level,
     if (! sym_ll_in_ns(ns, name, key, level))
         panic(sprintf("(sym_ll_read_ns) symtab[%s, '%s','%s',%d,'symval'] does not exist",
                       ns, name, key, level))
-    stackdepth = sym_ll_depth_ns(ns, name, key, level)
-    #print_stderr("depth=" stackdepth)
-    #retval = symtab[ns, name, key, level, "symval"]
-    retval = symtab[ns, name, key, level, stackdepth]
+    retval = symtab[ns, name, key, level, "symval"]
 
     #print_stderr("ll_read: name='" name "'")
     if (! double_underscores_p(name))
@@ -7293,7 +7283,7 @@ function evaluate_boolean(text, negate,
 function bool__known_predicate_p(str,
                                  retval)
 {
-    return str ~ /^(canrun|defined|exists)\(/
+    return str ~ /^(canrun|defined|exists|seen)\(/
 }
 
 
@@ -7521,6 +7511,15 @@ function bool__scan_factor(    e, r,         # ! factor | variable | ( expressio
         if (emptyp(name)) return ERROR
         r = path_exists_p(name)
         dbg__print("bool", 5, "(bool__scan_factor) EXISTS; name='" name "', RETURNING " ppf__bool(r))
+        __bf++
+        return r
+    }
+
+    if (__btoken[__bf] == TOK_SEEN_P) {
+        name = __btoken[++__bf]
+        if (emptyp(name)) return ERROR
+        r = name in __seen_files
+        dbg__print("bool", 5, "(bool__scan_factor) SEEN; name='" name "', RETURNING " ppf__bool(r))
         __bf++
         return r
     }
@@ -14179,6 +14178,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     TOK_RBRACE            = "}"
     TOK_RBRACKET          = "]"
     TOK_RPAREN            = ")"
+    TOK_SEEN_P            = "?S"; __predicate_token["seen"] = TOK_SEEN_P
     TOK_SLASH             = "/"
     TOK_TAB               = "\t"
 
@@ -14884,7 +14884,7 @@ function process_command_line_arguments(    nfile, arg, i, eq, name, val, file,
         # means to read standard input, so that is what we must now do.
         if (nfile == 0) {
             load_init_files()
-            sys__write("__EXIT__", dofile("-") ? EX_OK : EX_NOINPUT)
+            sys__write("__EXIT__", dofile("-") ? EX_OK : EX_M2_ERROR)
         } else {
             # User specified file(s) but not one of them existed.
             sys__write("__EXIT__", EX_NOINPUT)
@@ -14911,7 +14911,7 @@ BEGIN {
     # by ARGC being equal to 1.  If so, process standard input.
     if (ARGC == 1) {
         load_init_files()
-        sys__write("__EXIT__", dofile("-") ? EX_OK : EX_NOINPUT)
+        sys__write("__EXIT__", dofile("-") ? EX_OK : EX_M2_ERROR)
     } else
         # Otherwise, there must be at least one command line argument,
         # so process them all.  Args might be file names to parse, or

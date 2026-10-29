@@ -95,11 +95,11 @@ tags:
 
 check-verbose test-verbose verbose-check verbose-test:
 	@date
-	@/usr/bin/time ./check.sh
+	@/usr/bin/time nice ./check.sh
 	@date
 
 check test check-quiet test-quiet quiet-check quiet-test:
-	@/usr/bin/time ./check.sh </dev/null 2>&1 | grep -v 'PASSED \*\*\*$$'
+	@/usr/bin/time nice ./check.sh </dev/null 2>&1 | grep -v 'PASSED \*\*\*$$'
 	@date
 
 testlog-verbose:

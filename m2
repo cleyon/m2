@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-10-28 08:51:16 cleyon>
+#  Time-stamp:  <2026-10-29 09:38:54 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -44,7 +44,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "6.1.4"
+    M2_VERSION = "6.1.5"
 
     # Specify a shell for m2 to use for running utility programs.
     # It is expected to be compatible with Bourne shell syntax:
@@ -3584,10 +3584,13 @@ function dofile(filename,
 #
 # The high-level processing happens in the dofile() function, which
 # reads one line at a time, and decides what to do with each line.  The
-# __active_files array keeps track of open files.  The symbol __FILE__
-# stores the current file to read data from.  When an "@include"
-# directive is seen, dofile() is called recursively on the new file.
-# Interestingly, the included filename is first processed for macros.
+# __files array keeps track of all seen files.  The array key is the
+# file name, and the value (when active) is the BLK_FILE number.  When
+# the file is closed, this value is set to zero to indicate it is no
+# longer active.  However the array entry is retained for the "seen"
+# predicate to function.  The symbol __FILE__ stores the current file to
+# read data from.  When an "@include" directive is seen, dofile() is
+# called recursively on the new file.
 #
 # Caller is responsible for removing potential quotes from filename.
 function parse__file(default_ns,
@@ -3608,15 +3611,14 @@ function parse__file(default_ns,
         blk_master_delete(file_block)
         return FALSE
     }
-    if (filename in __active_files)
+    if (filename in __files && __files[filename] != 0)
         error(sprintf("Cannot recursively read '%s'%s",
                       filename, VERBOSE() ? TOK_NEWLINE $0 : EMPTY))
 
     if (sys__read("__DEPTH__", NOKEY) > 0)
         run_hook("file_suspend")
 
-    __active_files[filename] = file_block
-    __seen_files[filename] = TRUE
+    __files[filename] = file_block
     sys__incr("__NFILE__", 1); __rnf++
     blktab[file_block, 0, "open"]          = TRUE
     blktab[file_block, 0, "ever_opened"]   = TRUE
@@ -3651,7 +3653,7 @@ function parse__file(default_ns,
     if (filename != STDIN)
         close(filename)
     blktab[file_block, 0, "open"] = FALSE
-    delete __active_files[filename]
+    __files[filename] = 0
 
     if (stk_pop(__source_stack) != file_block)
         panic("(parse__file) File block mismatch")
@@ -7518,7 +7520,7 @@ function bool__scan_factor(    e, r,         # ! factor | variable | ( expressio
     if (__btoken[__bf] == TOK_SEEN_P) {
         name = __btoken[++__bf]
         if (emptyp(name)) return ERROR
-        r = name in __seen_files
+        r = name in __files
         dbg__print("bool", 5, "(bool__scan_factor) SEEN; name='" name "', RETURNING " ppf__bool(r))
         __bf++
         return r
@@ -11718,6 +11720,7 @@ function _c3_factor3(    e, fun, e2,
         level = info__create_from_text(e2, info)
         # print_stderr("e2 => " e2)
         if      (e2 == "e")   return EULER
+        else if (e2 == "phi") return PHI
         else if (e2 == "pi")  return PI
         else if (e2 == "tau") return TAU
         else if (info__get(info, "type") == TYPE_SYMBOL &&
@@ -14093,6 +14096,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     MAX_DBG_LEVEL         = 10
     MAX_PARAM             = 20
     NOT_FOUND             = 0   # index() when search fails
+    PHI                   = (1 + sqrt(5)) / 2
     PI                    = atan2(0, -1)
     SEQ_DEFAULT_INIT      = 0
     SEQ_DEFAULT_INCR      = 1
@@ -14938,13 +14942,15 @@ BEGIN {
 function close_open_files(delete_blocks_p,
                           filename)
 {
-    for (filename in __active_files) {
+    for (filename in __files) {
+        if (__files[filename] == 0)
+            continue
         #print_stderr("Attempting close of " filename)
         if (filename != STDIN)
             close(filename)
-        blktab[__active_files[filename], 0, "open"] = FALSE
+        blktab[__files[filename], 0, "open"] = FALSE
         if (delete_blocks_p)
-            blk_master_delete(__active_files[filename])
+            blk_master_delete(__files[filename])
     }
 }
 

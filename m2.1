@@ -1965,8 +1965,8 @@ Arc-sine of
 \-1 \*(Le x \*(Le 1
 .It Fn atan2 y x
 Arctangent of
-.Va y / x ;
-\-\*(Pi \*(Le atan2 \*(Le \*(Pi
+.Va y No / Va x ;
+\-\(*p \*(Le atan2 \*(Le \(*p
 .It Fn ceil x
 Ceiling of
 .Va x ,
@@ -2055,7 +2055,7 @@ in radians
 .It Fn sqrt x
 Square root of
 .Va x ;
-\(srx.
+\(srx
 .It Fn tan x
 Tangent of
 .Va x ,
@@ -2071,11 +2071,22 @@ with
 .Ql @
 characters to retrieve their values.
 .Ic @expr@
-also recognizes the predefined constants
-.Cm e ,
-.Cm pi ,
-and
-.Cm tau .
+also recognizes the following predefined constants:
+.Pp
+.Bl -tag -width defined(sym)____ -compact -offset indent
+.It Cm e
+Base of natural logarithms;
+e=2.71828...
+.It Cm phi
+.Dq "Golden ratio" ;
+\(*f=(1+\(sr5)/2=1.61803...
+.It Cm pi
+Number of radians in a semi-circle;
+\(*p=3.14159...
+.It Cm tau
+Number of radians in a full circle;
+\(*t=6.28318...
+.El
 .Pp
 The most recent expression value is automatically stored in
 .Va __EXPR__ .
@@ -2368,7 +2379,7 @@ Alias for
 .It Cm I Ns = Ns Ar PATH
 Add
 .Va PATH
-to the beginning of 
+to the beginning of
 .Va __INCPATH__ .
 Elements are prepended, so they override
 .Ev M2PATH

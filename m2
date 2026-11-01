@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-10-29 09:38:54 cleyon>
+#  Time-stamp:  <2026-11-01 09:40:27 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -44,7 +44,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "6.1.5"
+    M2_VERSION = "6.2.0"
 
     # Specify a shell for m2 to use for running utility programs.
     # It is expected to be compatible with Bourne shell syntax:
@@ -58,7 +58,7 @@ BEGIN {
         # ksh, etc), the PROG array key for the SHELL *must* be "sh".
         PROG[SHELL = "sh"] = _safe_shell
     else
-        print_stderr("m2:External program '" _safe_shell "' not found")
+        print("m2:External program '" _safe_shell "' not found") | "cat 1>&2"
 
     # Customize these paths as needed for correct operation on your
     # system.  They are assumed to be safe to run even at security level
@@ -80,7 +80,7 @@ BEGIN {
         if (awk_stat(_progs[_p]))
             PROG[awk_basename(_progs[_p])] = _progs[_p]
         else
-            print_stderr("m2:External program '" _progs[_p] "' not found")
+            print("m2:External program '" _progs[_p] "' not found") | "cat 1>&2"
 
     # See the "SECURITY CONSIDERATIONS" section of the manual for more info:
     #
@@ -99,11 +99,13 @@ BEGIN {
                          # PARANOID m2 does not know the current time or date,
                          # host or user name, etc.
     __security_level = SEC_STANDARD
-}
 
-# DO NOT CHANGE anything below this line
 
-BEGIN {
+#*****************************************************************************
+#
+#       DO NOT CHANGE anything below this line
+#
+#*****************************************************************************
     TRUE    = OKAY   =  1;              STDIN    = "/dev/stdin"
     FALSE   = EOF    =  0;              STDOUT   = "/dev/stdout"
     UNKNOWN = ERROR  = -1;              STDERR   = "/dev/stderr"
@@ -2502,7 +2504,7 @@ function blk_new(block_type,
         blktab[new_blknum, 0, "offset"] = 0
         blktab[new_blknum, 0, "line"]  = LINE()
     } else if (block_type == BLK_CASE) {
-        blktab[new_blknum, 0, "terminator"] = "^@__m2__::(endcase|esac)"
+        blktab[new_blknum, 0, "terminator"] = "^@__m2__::(endcase|esac)$"
         blktab[new_blknum, 0, "line"]  = LINE()
     } else if (block_type == BLK_FILE) {
         blktab[new_blknum, 0, "open"] = FALSE
@@ -2521,13 +2523,13 @@ function blk_new(block_type,
         # [0, "loop_start"]     @for
         # [0, "loop_type"]      *       @for, @foreach, @sforeach
         # [0, "loop_var"]       *
-        blktab[new_blknum, 0, "terminator"] = "^@__m2__::next"
+        blktab[new_blknum, 0, "terminator"] = "^@__m2__::next$"
     } else if (block_type == BLK_IF) {
-        blktab[new_blknum, 0, "terminator"] = "^@__m2__::(endif|fi)"
+        blktab[new_blknum, 0, "terminator"] = "^@__m2__::(endif|fi)$"
     } else if (block_type == BLK_INVOC) {
         blktab[new_blknum, 0, "line"]  = LINE()
     } else if (block_type == BLK_LONGDEF) {
-        blktab[new_blknum, 0, "terminator"] = "^@__m2__::endlong(def)?"
+        blktab[new_blknum, 0, "terminator"] = "^@__m2__::endlong(def)?$"
     } else if (block_type == BLK_SIGNATURE) {
         blktab[new_blknum, 0, "nsig"] = 0
     } else if (block_type == BLK_STRING) {
@@ -2543,9 +2545,9 @@ function blk_new(block_type,
         # [0, "name"]
         # [0, "nparam"]
         # [N, "name"]
-        blktab[new_blknum, 0, "terminator"] = "^@__m2__::endcmd"
+        blktab[new_blknum, 0, "terminator"] = "^@__m2__::endcmd$"
     } else if (block_type == BLK_WHILE) {
-        blktab[new_blknum, 0, "terminator"] = "^@__m2__::(endwhile|wend)"
+        blktab[new_blknum, 0, "terminator"] = "^@__m2__::(endwhile|wend)$"
     } else
         panic("(blk_new) Uncaught block_type '" ppf__1flag(block_type) "'")
 
@@ -3459,6 +3461,7 @@ function execute__invoc_command(invoc_block,
     else if (name ~ /^s?exit$/)             xeq_cmd__exit(args)
     else if (name ~ /^s?filedata$/)         xeq_cmd__filedata(args)
     else if (name ~ /^s?filedef(ine)?$/)    xeq_cmd__filedefine(args)
+    else if (name ==   "glob")              xeq_cmd__glob(args)
     else if (name ==   "ignore")            xeq_cmd__ignore(args)
     else if (name ~ /^s?import$/)           xeq_cmd__import(args)
     else if (name ~ /^s?(ns)?include$/)     xeq_cmd__include(args)
@@ -3568,7 +3571,7 @@ function dofile(filename,
 
     dbg__print("parse", 5, "(dofile) CALLING parse__file()")
     retval = parse__file(M2_NS)
-    # parse_file() pops the source stack and deletes the BLK_FILE block
+    # parse__file() pops the source stack and deletes the BLK_FILE block
     dbg__print("parse", 5, "(dofile) RETURNED FROM parse__file()")
 
     # Clean up
@@ -7489,10 +7492,10 @@ function bool__scan_factor(    e, r,         # ! factor | variable | ( expressio
     if (__btoken[__bf] == TOK_CANRUN_P) {
         name = __btoken[++__bf]
         if (emptyp(name)) return ERROR
-        if (SEC_LEVEL() >= SEC_SECURE)
+        if (SEC_LEVEL() >= SEC_PARANOID)
             security_violation("canrun(): Forbidden")
         # Check via "sh -c 'command -v ARG'"
-        r = exec_prog_cmdline(SHELL, sprintf("-c 'command -v %s'", name)) == EX_OK
+        r = exec_prog_cmdline(SHELL, sprintf("-c 'command -v %s' 2>%s", name, DEV_NULL)) == EX_OK
         dbg__print("bool", 5, "(bool__scan_factor) CANRUN; name='" name "', RETURNING " ppf__bool(r))
         __bf++
         return r
@@ -7956,7 +7959,7 @@ function xeq_cmd__data(args,
     blktab[agg_block, 0, "dstblk"] = agg_block
 
     dbg__print("parse", 5, "(xeq_cmd__data) CALLING read_lines_until()")
-    readstat = read_lines_until("^@(enddata|eod)", agg_block)
+    readstat = read_lines_until("^@(enddata|eod)$", agg_block)
     dbg__print("parse", 5, "(xeq_cmd__data) RETURNED FROM read_lines_until() => " ppf__bool(readstat))
     if (readstat != TRUE)
         error(sprintf("%s: Command '@enddata' not found%s",
@@ -9207,6 +9210,65 @@ function ppf__BLK_FOR(blknum)
                    blktab[blknum, 0, "loop_end"],
                    blktab[blknum, 0, "loop_incr"],
                    blktab[blknum, 0, "body_block"])
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  G L O B
+#
+#       { LIST:name! PATTERN:rest }
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#*****************************************************************************
+# @glob         LIST PATTERN
+function xeq_cmd__glob(args,
+                       shell_cmdline, output_file, getstat, line, info,
+                       lis, level, ins, agg_block)
+{
+    dbg__print("cmd", 3, sprintf("(xeq_cmd__glob) START; LIST=%s, PATTERN='%s'",
+                                 args["LIST"], args["PATTERN"]))
+    if (SEC_LEVEL() >= SEC_PARANOID)
+        security_violation(ME() ": Forbidden")
+    lis = args["LIST"]
+    level = info__create_from_text(lis, info)
+    ins   = info__get(info, "ns")
+    info__gate(OP_UPDATE, TYPE_LIST, info, ins, LEVEL(), ME(), TRUE)
+    lis__clear(ins, lis, level)
+    if (! ((ins, lis, NOKEY, level, "agg_block") in symtab))
+        panic(sprintf("(xeq_cmd__glob) Could not find [%s, '%s','%s',%d,'agg_block'] in symtab",
+                      ins, lis, NOKEY, level))
+    agg_block = symtab[ins, lis, NOKEY, level, "agg_block"]
+
+    output_file = mktemp(tmpdir() "m2GlobO.XXXXXX")
+    shell_cmdline = build_prog_cmdline(SHELL,
+                       sprintf("-c 'for f in %s; do echo \"$f\"; done' >%s 2>%s",
+                               args["PATTERN"], output_file, DEV_NULL),
+                       MODE_IO_CAPTURE)
+    flush_stdout(SYNC_FORCE)
+    system(shell_cmdline)
+
+    while (TRUE) {
+        getstat = getline line < output_file
+        if (getstat == ERROR)
+            warn(ME() ": Error reading file '" output_file "'")
+        if (getstat != OKAY)
+            break
+        if (line == args["PATTERN"])
+            break
+        #print_stderr("Glob => " line)
+        blk_append(agg_block, OBJ_TEXT, line)
+    }
+    close(output_file)
+    if ("rm" in PROG)
+        exec_prog_cmdline("rm", ("-f " output_file))
+    else if (debugging_enabled_p())
+        warn(ME() ": PROG[rm] not defined; '" output_file "' not deleted")
+
+    dbg__print("cmd", 3, sprintf("(xeq_cmd__glob) END"))
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -10777,13 +10839,6 @@ function xeq_cmd__shell(args,
     save_lineno = LINE()
     delim = args["DELIM"]
     sendto = (args[0, "narg"] == 1) ? user_shell() : rm_quotes(args["PROG"])
-    # if (NF == 1) {              # @shell DELIM
-    #     sendto =
-    # } else {                    # @shell DELIM /usr/ucb/mail
-    #     $1 = ""
-    #     sub("^[ \t]*", "")
-    #     sendto = rm_quotes(dosubs($0))
-    # }
 
     shell_data_blk = blk_new(BLK_AGG)
     readstat = read_lines_until(delim, shell_data_blk)
@@ -10807,7 +10862,7 @@ function xeq_cmd__shell(args,
 
     # Don't tell me how fragile this is, we're whistling past the graveyard
     # here.  But it suffices to run /bin/sh, which is enough for now.
-    shell_cmdline = sprintf("%s < %s > %s", sendto, input_file, output_file)
+    shell_cmdline = sprintf("%s <%s >%s", sendto, input_file, output_file)
     flush_stdout(SYNC_FORCE)    # force flush stdout
     sys__write("__SYSVAL__", system(shell_cmdline))
     agg_block = blk_new(BLK_AGG)
@@ -12972,7 +13027,7 @@ function exp_fn__empty(args,
 function exp_fn__execpath(args,
                           p, silent, cmdline, output)
 {
-    if (SEC_LEVEL() >= SEC_SECURE)
+    if (SEC_LEVEL() >= SEC_PARANOID)
         security_violation(sprintf(ME() ": Forbidden", args[0, "name"]))
     # S variant won't warn about not being found
     silent = first(args[0, "name"]) == "s"
@@ -14285,7 +14340,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
             sym_deferred_symbol("__OSNAME__",   PTYPE_READONLY_SYMBOL,  "uname", "-s")
         }
         if (SHELL in PROG) {
-            sym_deferred_symbol("__PID__", PTYPE_READONLY_INTEGER, SHELL, "-c 'echo $PPID'")
+            sym_deferred_symbol("__PID__", PTYPE_READONLY_INTEGER, SHELL, "-c 'echo $PPID' 2>" DEV_NULL)
         }
     } else {
         # Try to get some common identifiers through other means
@@ -14422,6 +14477,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
         "filedefine  { NAME:lval FILE:filename }"                           SUBSEP \
         "for!        { VAR:name! START:int END:int :optional INCR:int=1 }"  SUBSEP \
         "foreach!    { VAR:name! NAME:name! }"                              SUBSEP \
+        "glob        { LIST:name! PATTERN:rest }"                           SUBSEP \
         "if!         { EXPR:rest }"                                         SUBSEP \
         "ignore      { PATTERN:rest }"                                      SUBSEP \
         "import      { LIB:name! FILE:filename }"                           SUBSEP \

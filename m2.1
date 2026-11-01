@@ -396,7 +396,7 @@ True if
 .Va PROGRAM
 can be executed; checked with
 .Xr sh 1
-.Qq "command -v" .
+.Qq "command\ -v" .
 See also
 .Ic @execpath@ .
 .It Fn defined SYMBOL
@@ -834,7 +834,17 @@ Command format:
 .No "   ..."
 .Ic @next Ar VAR
 .Ed
-.Pp
+.Em Note :
+Since
+.Va VAR
+is the list or array index,
+you must write
+.Qq @ Ns Va NAME Ns No [@{ Ns Va VAR Ns No }]@
+to access the corresponding value.
+.It Ic @glob No "" Bro Ar LIST Ns No :name! Ar PATTERN Ns No :rest Brc
+Return a list of filenames matching shell glob
+.Va PATTERN .
+If no matching files are found, return an empty list.
 .It Ic @if No "" Bro Ar EXPR Ns No :rest Brc
 Include subsequent lines of text if boolean expression is True.
 If
@@ -850,7 +860,6 @@ Command format:
 .No "   ..."
 .Ic @endif
 .Ed
-.Pp
 .It Ic @ignore No "" Bro Ar PATTERN Ns No :rest Brc
 Discard input until a line that matches regular expression
 .Va PATTERN
@@ -936,7 +945,6 @@ Format:
 .No "   ..."
 .Ic @endlongdef
 .Ed
-.Pp
 .It Ic @lremove No "" Bro Ar LIST Ns No :name! :repeat Ar ITEM Ns No :string Brc
 Remove
 .Va ITEM Ns No (s)
@@ -982,7 +990,6 @@ Format:
 .No "   ..."
 .Ic @endcmd
 .Ed
-.Pp
 .It Ic @next No "" Bro Ar VAR Ns No :name! Brc
 Continue execution of next iteration of enclosing
 .Ic @for
@@ -1189,7 +1196,6 @@ Command format:
 .No "   ..."
 .Ic @endif
 .Ed
-.Pp
 .It Ic @unshift No "" Bro Ar LIST Ns No :name! :repeat Ar ITEM Ns :string Brc
 Insert one or more
 .Va ITEM Ns No s
@@ -1210,7 +1216,6 @@ Command format:
 .No "   ..."
 .Ic @endwhile
 .Ed
-.Pp
 .It Ic @while No "" Bro Ar EXPR Ns No :rest Brc
 Repeatedly evaluate input lines while boolean expression
 .Va EXPR
@@ -1221,7 +1226,6 @@ Command format:
 .No "   ..."
 .Ic @endwhile
 .Ed
-.Pp
 .It Ic @wrap No "" Bro Ar TEXT Ns No :rest! Brc
 Defer
 .Va TEXT

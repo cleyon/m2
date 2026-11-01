@@ -54,6 +54,7 @@ __m2__::for	Command<System,Immediate>
 __m2__::foreach	Command<System,Immediate>
 __m2__::format	Function<System>
 __m2__::geodist	Function<System>
+__m2__::glob	Command<System>
 __m2__::gregdate	Function<System>
 __m2__::hex	Function<System>
 __m2__::hms	Function<System>

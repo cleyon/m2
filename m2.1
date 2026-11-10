@@ -659,12 +659,25 @@ is similar, but adds the current file name and line number to output.
 Variant
 .Ic @secho
 does not automatically add a newline to output.
+.It Ic @elif No "" Bro Ar EXPR Ns No :rest Brc
+If execution of an
+.Ic @if
+command reaches this point, evaluate the following statements if
+.Va EXPR
+is True.
+Multiple
+.Ic @elif
+commands may be specified in a single
+.Ic @if
+statement; they are evaluated in order.
 .It Ic @else No "" Bro :void Brc
-Switch to the alternate condition branch of an
+Evaluate the following lines if no previous condition
+.Po
 .Ic @if
 or
-.Ic @unless
-block.
+.Ic @elif
+.Pc
+were True.
 Only one
 .Ic @else
 statement is allowed per
@@ -852,12 +865,23 @@ If
 is a simple NAME, check if NAME is True.
 See section
 .Sx Boolean Expressions .
+If
+.Va EXPR
+is False, evaluate
+.Ic @elif
+clauses, if any, in order until a True one is found.
+Failing that, any
+.Ic @else
+clause is executed if present.
 Command format:
 .Bd -unfilled -offset indent -compact
 .Ic @if Ar EXPR
 .No "   ..."
-.Oo Ic @else Oc
-.No "   ..."
+.Oo Ic @elif Ar EXPR
+.No "   ..." Oc
+.Oo Ic @elif ... Oc ...
+.Oo Ic @else
+.No "   ..." Oc
 .Ic @endif
 .Ed
 .It Ic @ignore No "" Bro Ar PATTERN Ns No :rest Brc

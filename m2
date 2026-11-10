@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-11-01 09:40:27 cleyon>
+#  Time-stamp:  <2026-11-10 02:04:00 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -44,7 +44,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "6.2.0"
+    M2_VERSION = "6.2.1"
 
     # Specify a shell for m2 to use for running utility programs.
     # It is expected to be compatible with Bourne shell syntax:
@@ -2525,7 +2525,10 @@ function blk_new(block_type,
         # [0, "loop_var"]       *
         blktab[new_blknum, 0, "terminator"] = "^@__m2__::next$"
     } else if (block_type == BLK_IF) {
+        blktab[new_blknum, 0, "seen_else"]  = FALSE
         blktab[new_blknum, 0, "terminator"] = "^@__m2__::(endif|fi)$"
+        blktab[new_blknum, 0, "blkvalid"]   = FALSE
+        blktab[new_blknum, 0, "nbranch"]    = 0
     } else if (block_type == BLK_INVOC) {
         blktab[new_blknum, 0, "line"]  = LINE()
     } else if (block_type == BLK_LONGDEF) {
@@ -2563,6 +2566,8 @@ function blk_new(block_type,
 function blk_walk_delete(blknum, seen,
                          block_type, msg)
 {
+    if (blknum == 0)
+        return
     if (--blktab[blknum, 0, "refcnt"] > 0)
         warn("(blk_walk_delete) Block " blknum " has refcnt " blktab[blknum, 0, "refcnt"] ", continuing...")
 
@@ -4036,11 +4041,13 @@ function parse(    code, terminator, rstat, cmd, retval, new_block, fc,
                         dbg__print("parse", 3, "(parse) [" parser_label "] RETURNED FROM ship_out()")
 
                     # These commands just simply call their parsers.
-                    } else if (cmd == "else" || cmd == "ensure" ||
-                               cmd == "of"   || cmd == "otherwise") {
+                    } else if (cmd == "elif"   || cmd == "else" ||
+                               cmd == "ensure" || cmd == "of"     ||
+                               cmd == "otherwise") {
                         dbg__print("parse", 5, sprintf("(parse) [%s] dstblk=%d, CALLING parse__%s()",
                                                        parser_label, DSTBLK(), cmd))
-                        _ = (cmd == "else")      ? parse__else()      \
+                        _ = (cmd == "elif")      ? parse__elif()      \
+                          : (cmd == "else")      ? parse__else()      \
                           : (cmd == "ensure")    ? parse__ensure()    \
                           : (cmd == "of")        ? parse__of()        \
                           : (cmd == "otherwise") ? parse__otherwise() \
@@ -7272,15 +7279,22 @@ function execute__text(text,
 #
 #*****************************************************************************
 function evaluate_boolean(text, negate,
-                          condval)
+                          condval, val)
 {
     if (negate == "")
         negate = FALSE
     bool__tokenize_string(text)
     __bf = 1
     condval = bool__scan_expr()
+    if (condval == ERROR) {
+        dbg__print("bool", 7, "(evaluate_boolean) bool__scan_expr() returned ERROR; trying math...")
+        val = calc3_eval(text)
+        dbg__print(sprintf("bool", 5, "(evaluate_boolean) calc3_eval{%s} => %s", text, val))
+        condval = val != 0
+    }
     if (negate)
         condval = !condval
+    dbg__print("bool", 3, "(evaluate_boolean) RETURN " condval)
     return condval
 }
 
@@ -7406,14 +7420,12 @@ function bool__tokenize_string(s,
 }
 
 
-function bool__scan_expr(    e, f, r)           # term   | term || term
+function bool__scan_expr(    e, f, r)           # term   | term "||" term
 {
     dbg__print("bool", 5, sprintf("(bool__scan_expr) __bf=%d, __btoken[]='%s', e='%s'", __bf, __btoken[__bf], e))
     e = bool__scan_term()
-    if (e == ERROR) {
-        warn("(bool__scan_expr) Initial e returned ERROR, propagating")
+    if (e == ERROR)
         return e
-    }
     dbg__print("bool", 7, sprintf("(bool__scan_expr) After bool__scan_term, __bf=%d, __btoken[%d]='%s', e='%s'(%s)", __bf, __bf, __btoken[__bf], e, ppf__bool(e)))
     while (__btoken[__bf] == TOK_OR) {
         __bf++
@@ -7430,13 +7442,11 @@ function bool__scan_expr(    e, f, r)           # term   | term || term
 }
 
 
-function bool__scan_term(    e, f, r)           # factor | factor && factor
+function bool__scan_term(    e, f, r)           # factor | factor "&&" factor
 {
     e = bool__scan_factor()
-    if (e == ERROR) {
-        warn("(bool__scan_term) Initial e returned ERROR, propagating")
+    if (e == ERROR)
         return e
-    }
     dbg__print("bool", 5, sprintf("(bool__scan_term) After bool__scan_factor, __bf=%d, __btoken[]='%s', e='%s'(%s)", __bf, __btoken[__bf], e, ppf__bool(e)))
     while (__btoken[__bf] == TOK_AND) {
         __bf++
@@ -7458,7 +7468,7 @@ function bool__scan_term(    e, f, r)           # factor | factor && factor
 }
 
 
-function bool__scan_factor(    e, r,         # ! factor | variable | ( expression )
+function bool__scan_factor(    e, r,         # "!" factor | variable | "(" expression ")"
                                name, rc, syminfo)
 {
     dbg__print("bool", 5, sprintf("(bool__scan_factor) __bf=%d, __btoken[]='%s', e='%s'", __bf, __btoken[__bf], e))
@@ -7542,10 +7552,7 @@ function bool__scan_factor(    e, r,         # ! factor | variable | ( expressio
     # along to evaluate_condition()
     dbg__print("bool", 5, sprintf("(bool__scan_factor) Did not match __bf=%d, __btoken[]='%s', e='%s'", __bf, __btoken[__bf], e))
     r = evaluate_condition(__btoken[__bf], FALSE)
-    if (r == ERROR)
-        warn("(bool__scan_factor) Evaluate_condition('" __btoken[__bf] "') returned ERROR")
-    else
-        dbg__print("bool", 5, "(bool__scan_factor) evaluate_condition('" __btoken[__bf] "') returned " ppf__bool(r))
+    dbg__print("bool", 5, "(bool__scan_factor) evaluate_condition('" __btoken[__bf] "') returned " ppf__bool(r))
     return r
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
@@ -7620,6 +7627,7 @@ function parse__case(                case_block, preamble_block, pstat)
     $2 = nam__qualify($2)
     blktab[case_block, 0, "casevar"]        = $2
     blktab[case_block, 0, "preamble_block"] = preamble_block
+    blktab[case_block, 0, "nof"]            = 0
     blktab[case_block, 0, "seen_otherwise"] = FALSE
     blktab[case_block, 0, "seen_ensure"]    = FALSE
     blktab[case_block, 0, "dstblk"]         = preamble_block
@@ -7647,7 +7655,7 @@ function parse__case(                case_block, preamble_block, pstat)
 #       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #
 #*****************************************************************************
-function parse__of(                case_block, of_block, of_val)
+function parse__of(                case_block, of_block, of_val, preamble_block)
 {
     dbg__print("case", 3, sprintf("(parse__of) START dstblk=%d, mode=%s, $0='%s'",
                                   DSTBLK(), ppf__1flag(ATMODE()), $0))
@@ -7658,8 +7666,16 @@ function parse__of(                case_block, of_block, of_val)
     lower_level()           # trigger name/symbol purge
     raise_level()
 
-    # Create a new block for the new Of branch and make it current
-    of_block = blk_new(BLK_AGG)
+    # If there's no preamble (common) then re-use its agg block
+    preamble_block = blktab[case_block, 0, "preamble_block"]
+    if (blktab[case_block, 0, "nof"]++ == 0 &&
+        blktab[preamble_block, 0, "count"] == 0) {
+        blktab[case_block, 0, "preamble_block"] = 0
+        of_block = preamble_block
+    } else
+        # Create a new block for the new Of branch and make it current
+        of_block = blk_new(BLK_AGG)
+
     sub(/^@__m2__::of[ \t]+/, "")
     of_val = $0
     if ((case_block, of_val, "of_block") in blktab)
@@ -7668,7 +7684,6 @@ function parse__of(                case_block, of_block, of_val)
 
     blktab[case_block, of_val, "of_block"] = of_block
     blktab[case_block, 0, "dstblk"]  = of_block
-    return of_block
 }
 
 
@@ -7701,7 +7716,6 @@ function parse__otherwise(                case_block, otherwise_block)
     otherwise_block = blk_new(BLK_AGG)
     blktab[case_block, 0, "otherwise_block"] = otherwise_block
     blktab[case_block, 0, "dstblk"]  = otherwise_block
-    return otherwise_block
 }
 
 
@@ -7735,7 +7749,6 @@ function parse__ensure(                case_block, ensure_block)
     ensure_block = blk_new(BLK_AGG)
     blktab[case_block, 0, "ensure_block"] = ensure_block
     blktab[case_block, 0, "dstblk"]  = ensure_block
-    return ensure_block
 }
 
 
@@ -7793,7 +7806,7 @@ function xeq__BLK_CASE(case_block,
         # See if there's a preamble which is non-empty.  Preambles get
         # their own execution levels.
         preamble_block = blktab[case_block, 0, "preamble_block"]
-        if (blktab[preamble_block, 0, "count"]+0 > 0) {
+        if (preamble_block > 0 && blktab[preamble_block, 0, "count"]+0 > 0) {
             dbg__print("case", 5, sprintf("(xeq__BLK_CASE) CALLING execute__block(%d)",
                                          blktab[case_block, 0, "preamble_block"]))
             raise_level()
@@ -7834,11 +7847,12 @@ function xeq__BLK_CASE(case_block,
 
 
 function ppf__case(case_block,
-                   buf, i, caseval, f, b)
+                   buf, i, caseval, f, b, preamble_block)
 {
     buf = "@case " blktab[case_block, 0, "casevar"] TOK_NEWLINE
     # Show preamble only if it has code (i.e., > 0 lines)
-    if (blktab[blktab[case_block, 0, "preamble_block"], 0, "count"] > 0)
+    preamble_block = blktab[case_block, 0, "preamble_block"]
+    if (preamble_block > 0 && blktab[preamble_block, 0, "count"] > 0)
         buf = buf ppf__block(blktab[case_block, 0, "preamble_block"]) TOK_NEWLINE
     for (b in blktab) {
         split(b, f, SUBSEP)
@@ -9284,27 +9298,21 @@ function xeq_cmd__glob(args,
 #
 #*****************************************************************************
 # @if CONDITION
-function parse__if(                 name, if_block, true_block, pstat)
+function parse__if(                 name, if_block, condition, pstat)
 {
     dbg__print("if", 3, sprintf("(parse__if) START dstblk=%d, $0='%s'", DSTBLK(), $0))
     name = $1
     $1 = ""
     sub("^[ \t]*", "")
+    condition = $0
 
-    raise_level()
-
-    # Create two new blocks: one for if_block, other for true branch
     if_block = blk_new(BLK_IF)
     dbg__print("if", 5, "(parse__if) New block # " if_block " type " ppf__1flag(blk_type(if_block)))
-    true_block = blk_new(BLK_AGG)
-    dbg__print("if", 5, "(parse__if) New block # " true_block " type " ppf__1flag(blk_type(true_block)))
 
-    blktab[if_block, 0, "condition"]   = $0
-    blktab[if_block, 0, "init_negate"] = (name == "@__m2__::unless")
-    blktab[if_block, 0, "seen_else"]   = FALSE
-    blktab[if_block, 0, "true_block"]  = true_block
-    blktab[if_block, 0, "dstblk"]      = true_block
-    blktab[if_block, 0, "blkvalid"]       = FALSE
+    # add_if_branch: sets dstblk, raises level
+    add_if_branch(if_block, condition)
+    blktab[if_block, 1, "negate"] = (name == "@__m2__::unless")
+
     dbg__print_block("if", 7, if_block, "(parse__if) if_block")
     stk_push(__parse_stack, if_block) # Push it on to the parse_stack
 
@@ -9321,6 +9329,31 @@ function parse__if(                 name, if_block, true_block, pstat)
 
 #*****************************************************************************
 #
+#       @  E L I F
+#
+#       { EXPR:rest }
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#*****************************************************************************
+# @elif                 CONDITION
+function parse__elif(                   if_block, condition)
+{
+    dbg__print("if", 3, sprintf("(parse__elif) START dstblk=%d, mode=%s",
+                               DSTBLK(), ppf__1flag(ATMODE())))
+    $1 = ""
+    sub("^[ \t]*", "")
+    condition = $0
+
+    if (check_parse_stack(BLK_IF) != ERR_OKAY)
+        error("@elif: Parse error: " ppf__msg())
+    if_block = stk_top(__parse_stack)
+    add_if_branch(if_block, condition)
+}
+
+
+#*****************************************************************************
+#
 #       @  E L S E
 #
 #       { :void }
@@ -9329,7 +9362,7 @@ function parse__if(                 name, if_block, true_block, pstat)
 #
 #*****************************************************************************
 # @else
-function parse__else(                   if_block, false_block)
+function parse__else(                   if_block)
 {
     dbg__print("if", 3, sprintf("(parse__else) START dstblk=%d, mode=%s",
                                DSTBLK(), ppf__1flag(ATMODE())))
@@ -9340,16 +9373,16 @@ function parse__else(                   if_block, false_block)
     # Check if already seen @else
     if (blktab[if_block, 0, "seen_else"] == TRUE)
         error("@else: Cannot have more than one @else")
-
-    lower_level()           # trigger name/symbol purge
-    raise_level()
-
-    # Create a new block for the False branch and make it current
     blktab[if_block, 0, "seen_else"] = TRUE
-    false_block = blk_new(BLK_AGG)
-    blktab[if_block, 0, "false_block"] = false_block
-    blktab[if_block, 0, "dstblk"]  = false_block
-    return false_block
+
+    # lower_level()           # trigger name/symbol purge
+    # raise_level()
+    # 
+    # # Create a new block for the False branch and make it current
+    # false_block = blk_new(BLK_AGG)
+    # blktab[if_block, 0, "false_block"] = false_block
+    # blktab[if_block, 0, "dstblk"]  = false_block
+    add_if_branch(if_block, "1==1")
 }
 
 
@@ -9377,9 +9410,25 @@ function parse__endif(                    if_block)
     return if_block
 }
 
+function add_if_branch(if_block, condition,
+                       new_block, nbranch)
+{
+    new_block = blk_new(BLK_AGG)
+    dbg__print("if", 5, "(add_if_branch) New block # " new_block " type " ppf__1flag(blk_type(new_block)))
+    if (blktab[if_block, 0, "nbranch"] > 0)
+        lower_level()
+    raise_level()
+    nbranch = ++blktab[if_block, 0, "nbranch"]
+    blktab[if_block, nbranch, "block_num"] = new_block
+    blktab[if_block, nbranch, "condition"] = condition
+    blktab[if_block, nbranch, "negate"]    = FALSE
+    blktab[if_block, 0, "dstblk"]          = new_block
+}
+
 
 function xeq__BLK_IF(if_block,
-                     block_type, condition, condval, negate, if_line)
+                     block_type, condition, condval, negate, if_line,
+                     nbranch, i, xblock)
 {
     block_type = blk_type(if_block)
     if_line = blktab[if_block, 0, "line"]
@@ -9391,41 +9440,45 @@ function xeq__BLK_IF(if_block,
         (blktab[if_block, 0, "blkvalid"] != TRUE))
         panic("(xeq__BLK_IF) Bad if_block config", EMPTY, if_line)
 
-    # Evaluate condition, determine if TRUE/FALSE and also
-    # which block to follow.  For now, always take TRUE path
-    condition = blktab[if_block, 0, "condition"]
-    negate = blktab[if_block, 0, "init_negate"]
-    condval = evaluate_boolean(condition, negate)
-    dbg__print("if", 2, sprintf("(xeq__BLK_IF) evaluate_boolean('%s') => %s", condition, ppf__bool(condval)))
-    if (condval == ERROR)
-        error("@if: Error evaluating condition '" condition "'", EMPTY, if_line)
+    # Evaluate condition(s), determine if TRUE/FALSE and also
+    # which block to follow.
+    nbranch = blktab[if_block, 0, "nbranch"]
+    for (i = 1; i <= nbranch; i++) {
+        # Check condition; is this the branch to execute?
+        condition = blktab[if_block, i, "condition"]
+        negate = blktab[if_block, i, "negate"]
+        condval = evaluate_boolean(condition, negate)
+        dbg__print("if", 2, sprintf("(xeq__BLK_IF) evaluate_boolean('%s') => %s", condition, ppf__bool(condval)))
+        if (condval == ERROR)
+            error("@if: Error evaluating condition '" condition "'", EMPTY, if_line)
+        if (! condval)
+            continue
 
-    raise_level()
-    if (condval) {
-        dbg__print("if", 5, sprintf("(xeq__BLK_IF) [true branch] CALLING execute__block(%d)",
-                                   blktab[if_block, 0, "true_block"]))
-        execute__block(blktab[if_block, 0, "true_block"])
+        # Yup - execute branch i
+        xblock = blktab[if_block, i, "block_num"]
+        raise_level()
+        dbg__print("if", 5, sprintf("(xeq__BLK_IF) CALLING execute__block(%d)", xblock))
+        execute__block(xblock)
         dbg__print("if", 5, sprintf("(xeq__BLK_IF) RETURNED FROM execute__block()"))
-    } else if (blktab[if_block, 0, "seen_else"] == TRUE) {
-        dbg__print("if", 5, sprintf("(xeq__BLK_IF) [false branch] CALLING execute__block(%d)",
-                                   blktab[if_block, 0, "false_block"]))
-        execute__block(blktab[if_block, 0, "false_block"])
-        dbg__print("if", 5, sprintf("(xeq__BLK_IF) RETURNED FROM execute__block()"))
+        lower_level()
+        break
     }
-    lower_level()
-
     dbg__print("if", 3, sprintf("(xeq__BLK_IF) END"))
 }
 
 
 function ppf__if(if_block,
-                 buf)
+                 buf, seen_else, b, nb)
 {
-    buf = "@if " blktab[if_block, 0, "condition"] TOK_NEWLINE \
-        ppf__block(blktab[if_block, 0, "true_block"]) TOK_NEWLINE
-    if (blktab[if_block, 0, "seen_else"])
-        buf = buf "@else" TOK_NEWLINE \
-              ppf__block(blktab[if_block, 0, "false_block"]) TOK_NEWLINE
+    nb = blktab[if_block, 0, "nbranch"]
+    if (nb <= 0)
+        panic("(ppf__if) Invalid nbranch blk # " if_block)
+    seen_else = blktab[if_block, 0, "seen_else"]
+    buf = "@if " blktab[if_block, 1, "condition"] TOK_NEWLINE \
+                 ppf__block(blktab[if_block, 1, "block_num"]) TOK_NEWLINE
+    for (b = 2; b <= nb; b++)
+        buf = buf ((seen_else && b == nb) ? "@else" : ("@elif " blktab[if_block, b, "condition"])) TOK_NEWLINE \
+              ppf__block(blktab[if_block, b, "block_num"]) TOK_NEWLINE
     return buf "@endif"
 }
 
@@ -9466,6 +9519,8 @@ function evaluate_condition(cond, negate,
 
     } else if (match(cond, ".* (in|IN) .*")) { # poor regexp, fragile
         # This whole section is pretty easy to confound....
+        # Since by the syntax 'IN' must be surrounded by whitespace,
+        # we are justified in using the space-based algorithm here.
         dbg__print("if", 5, sprintf("(evaluate_condition) Found IN expression"))
         # Find name
         sp = index(cond, TOK_SPACE)
@@ -9480,18 +9535,20 @@ function evaluate_condition(cond, negate,
         info__gate(OP_READ, PTYPE_GROUP, info, NS(), level, "(evaluate_condition) [IN]", TRUE)
         retval = grp__key_exists_p(info, key)
 
-    } else if (match(cond, "[^ ]+ *(<|<=|=|==|!=|>=|>) *[^ ]+")) { # poor regexp, fragile
+    } else if (match(cond, "[^ ] *(<|<=|=|==|!=|>=|>) *[^ ]")) { # poor regexp, fragile
         # This whole section is pretty easy to confound....
+        # 'A==B' is perfectly valid and should work properly.
         dbg__print("if", 6, sprintf("(evaluate_condition) Found comparison"))
-        # Find name
-        sp = index(cond, TOK_SPACE)
-        lhs = substr(cond, 1, sp-1)
-        cond = substr(cond, sp+1)
-        # Find the condition
-        match(cond, "[<>=!]*")
+        match(cond, __regexp[":hws"] "*(<|<=|=|==|!=|>=|>)" __regexp[":hws"] "*")
+        # Find LHS OP RHS
+        lhs = trim(substr(cond, 1, RSTART - 1))
         op = substr(cond, RSTART, RLENGTH)
-        rhs = substr(cond, RLENGTH+2)
-
+        rhs = trim(substr(cond, RSTART+RLENGTH))
+        dbg__print("if", 8, sprintf("(evaluate_condition)" \
+                         " cond='%s', RSTART=%d, RLENGTH=%d, lhs='%s', op='%s', rhs='%s'",
+                                 cond, RSTART, RLENGTH, lhs, op, rhs))
+        if (emptyp(lhs) || emptyp(op) || emptyp(rhs))
+            panic(sprintf("(evaluate_condition) Bad: lhs='%s', op='%s', rhs='%s'", lhs, op, rhs))
         info__create_from_text(lhs, linfo)
         ltype = info__get(linfo, "type")
         # if (sym_valid_p(lhs) && sym_deferred_p(lhs))
@@ -14251,12 +14308,13 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     ERR_SCAN_INVALID_NAME = -104
 
     # Useful regexps
-    __regexp[":boolean"] = __regexp[":filename"] = ".*"
-    __regexp[":float"]   = "^[-+]?([0-9]+(\\.[0-9]*)?([eE][-+]?[0-9]+)?|\\.[0-9]+)$"
-    __regexp[":integer"] = "^[-+]?[0-9]+$"
-    __regexp[":lval"]    = "^[A-Za-z#_:][A-Za-z#_0-9:]*(\\[.+)?$" # omit ] -- Byname[@{fields[1]}] is syntactically correct
-    __regexp[":name"]    = "^[A-Za-z#_:][A-Za-z#_0-9:]*$"
-    __regexp[":rest"]    = __regexp[":string"]   = ".*"
+    __regexp[":boolean"]  = __regexp[":filename"] = ".*"
+    __regexp[":float"]    = "^[-+]?([0-9]+(\\.[0-9]*)?([eE][-+]?[0-9]+)?|\\.[0-9]+)$"
+    __regexp[":hws"]      = TOK_LBRACKET TOK_SP TOK_TAB TOK_RBRACKET
+    __regexp[":integer"]  = "^[-+]?[0-9]+$"
+    __regexp[":lval"]     = "^[A-Za-z#_:][A-Za-z#_0-9:]*(\\[.+)?$" # omit ] -- Byname[@{fields[1]}] is syntactically correct
+    __regexp[":name"]     = "^[A-Za-z#_:][A-Za-z#_0-9:]*$"
+    __regexp[":rest"]     = __regexp[":string"] = ".*"
 
     # Various stacks
     __line_stack[0]       = 0;    __line_stack["name"]   = "line_stack"
@@ -14455,6 +14513,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
         "dumpall     { :optional WHAT:string! FILE:filename }"              SUBSEP \
         "dumpdef     { :optional :repeat SYM:name! }"                       SUBSEP \
         "echo        { :optional TEXT:rest }"                               SUBSEP \
+        "elif!       { EXPR:rest }"                                         SUBSEP \
         "else!       { :void }"                                             SUBSEP \
         "endcase!    { :void }"                                             SUBSEP \
         "endcmd!     { :void }"                                             SUBSEP \

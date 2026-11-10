@@ -26,6 +26,7 @@ __m2__::dump	Command<System>
 __m2__::dumpall	Command<System>
 __m2__::dumpdef	Command<System>
 __m2__::echo	Command<System>
+__m2__::elif	Command<System,Immediate>
 __m2__::else	Command<System,Immediate>
 __m2__::empty	Function<System>
 __m2__::endcase	Command<System,Immediate>

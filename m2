@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-11-10 02:04:00 cleyon>
+#  Time-stamp:  <2026-11-11 07:35:06 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -2968,7 +2968,7 @@ function blk_walk_IF(opcode, blknum, seen, indent)
     if (opcode == OP_PRINT) {
         print_debugfile(sprintf("%s%2d %s %s%s",
                                 spaces(3*indent), blknum,
-                                "IF" , (blktab[blknum, 0, "init_negate"] ? "! " : ""),
+                                "IF" , (blktab[blknum, 0, "inv_cond"] ? "! " : ""),
                                 blktab[blknum, 0, "condition"]))
         blk_nicer_print_block(blktab[blknum, 0, "true_block"], seen, indent+1)
     } else if (opcode == OP_DELETE)
@@ -2990,7 +2990,7 @@ function blk_walk_IF(opcode, blknum, seen, indent)
         delete blktab[blknum, 0, "condition"]
         delete blktab[blknum, 0, "dstblk"]
         delete blktab[blknum, 0, "false_block"]
-        delete blktab[blknum, 0, "init_negate"]
+        delete blktab[blknum, 0, "inv_cond"]
         delete blktab[blknum, 0, "seen_else"]
         delete blktab[blknum, 0, "true_block"]
         delete blktab[blknum, 0, "blkvalid"]
@@ -3078,7 +3078,7 @@ function blk_walk_WHILE(opcode, blknum, seen, indent)
         delete blktab[blknum, 0, "body_block"]
         delete blktab[blknum, 0, "condition"]
         delete blktab[blknum, 0, "dstblk"]
-        delete blktab[blknum, 0, "init_negate"]
+        delete blktab[blknum, 0, "inv_cond"]
         delete blktab[blknum, 0, "blkvalid"]
     }
     seen[0 + blknum] = 1
@@ -7552,7 +7552,8 @@ function bool__scan_factor(    e, r,         # "!" factor | variable | "(" expre
     # along to evaluate_condition()
     dbg__print("bool", 5, sprintf("(bool__scan_factor) Did not match __bf=%d, __btoken[]='%s', e='%s'", __bf, __btoken[__bf], e))
     r = evaluate_condition(__btoken[__bf], FALSE)
-    dbg__print("bool", 5, "(bool__scan_factor) evaluate_condition('" __btoken[__bf] "') returned " ppf__bool(r))
+    dbg__print("bool", 5, sprintf("(bool__scan_factor) evaluate_condition('%s') returned %s",
+                                  __btoken[__bf], r == ERROR ? "Error" : ppf__bool(r)))
     return r
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
@@ -9311,7 +9312,7 @@ function parse__if(                 name, if_block, condition, pstat)
 
     # add_if_branch: sets dstblk, raises level
     add_if_branch(if_block, condition)
-    blktab[if_block, 1, "negate"] = (name == "@__m2__::unless")
+    blktab[if_block, 1, "inv_cond"] = (name == "@__m2__::unless")
 
     dbg__print_block("if", 7, if_block, "(parse__if) if_block")
     stk_push(__parse_stack, if_block) # Push it on to the parse_stack
@@ -9421,7 +9422,7 @@ function add_if_branch(if_block, condition,
     nbranch = ++blktab[if_block, 0, "nbranch"]
     blktab[if_block, nbranch, "block_num"] = new_block
     blktab[if_block, nbranch, "condition"] = condition
-    blktab[if_block, nbranch, "negate"]    = FALSE
+    blktab[if_block, nbranch, "inv_cond"]  = FALSE
     blktab[if_block, 0, "dstblk"]          = new_block
 }
 
@@ -9446,8 +9447,8 @@ function xeq__BLK_IF(if_block,
     for (i = 1; i <= nbranch; i++) {
         # Check condition; is this the branch to execute?
         condition = blktab[if_block, i, "condition"]
-        negate = blktab[if_block, i, "negate"]
-        condval = evaluate_boolean(condition, negate)
+        negate    = blktab[if_block, i, "inv_cond"]
+        condval   = evaluate_boolean(condition, negate)
         dbg__print("if", 2, sprintf("(xeq__BLK_IF) evaluate_boolean('%s') => %s", condition, ppf__bool(condval)))
         if (condval == ERROR)
             error("@if: Error evaluating condition '" condition "'", EMPTY, if_line)
@@ -9474,12 +9475,14 @@ function ppf__if(if_block,
     if (nb <= 0)
         panic("(ppf__if) Invalid nbranch blk # " if_block)
     seen_else = blktab[if_block, 0, "seen_else"]
-    buf = "@if " blktab[if_block, 1, "condition"] TOK_NEWLINE \
-                 ppf__block(blktab[if_block, 1, "block_num"]) TOK_NEWLINE
+    buf = (blktab[if_block, 1, "inv_cond"] ? "@unless " : "@if ") \
+           blktab[if_block, 1, "condition"] TOK_NEWLINE \
+           ppf__block(blktab[if_block, 1, "block_num"]) TOK_NEWLINE
     for (b = 2; b <= nb; b++)
         buf = buf ((seen_else && b == nb) ? "@else" : ("@elif " blktab[if_block, b, "condition"])) TOK_NEWLINE \
-              ppf__block(blktab[if_block, b, "block_num"]) TOK_NEWLINE
-    return buf "@endif"
+              ppf__block(blktab[if_block, b, "block_num"]) TOK_NEWLINE \
+              "@endif"
+    return buf
 }
 
 
@@ -11429,11 +11432,11 @@ function parse__while(                 name, while_block, body_block, pstat)
     body_block = blk_new(BLK_AGG)
     dbg__print("while", 5, "(parse__while) New block # " body_block " type " ppf__1flag(blk_type(body_block)))
 
-    blktab[while_block, 0, "condition"] = $0
-    blktab[while_block, 0, "init_negate"] = (name == "@__m2__::until")
+    blktab[while_block, 0, "condition"]  = $0
+    blktab[while_block, 0, "inv_cond"]   = (name == "@__m2__::until")
     blktab[while_block, 0, "body_block"] = body_block
-    blktab[while_block, 0, "dstblk"] = body_block
-    blktab[while_block, 0, "blkvalid"]      = FALSE
+    blktab[while_block, 0, "dstblk"]     = body_block
+    blktab[while_block, 0, "blkvalid"]   = FALSE
     dbg__print_block("while", 7, while_block, "(parse__while) while_block")
     stk_push(__parse_stack, while_block) # Push it on to the parse_stack
 
@@ -11489,9 +11492,9 @@ function xeq__BLK_WHILE(while_block,
     # Evaluate condition, determine if TRUE/FALSE and also
     # which block to follow.  For now, always take TRUE path
     body_block = blktab[while_block, 0, "body_block"]
-    condition = blktab[while_block, 0, "condition"]
-    negate = blktab[while_block, 0, "init_negate"]
-    condval = evaluate_boolean(condition, negate)
+    condition  = blktab[while_block, 0, "condition"]
+    negate     = blktab[while_block, 0, "inv_cond"]
+    condval    = evaluate_boolean(condition, negate)
     dbg__print("while", 2, sprintf("(xeq__BLK_WHILE) Initial evaluate_boolean('%s') => %s", condition, ppf__bool(condval)))
     if (condval == ERROR)
         error(sprintf("@while: Error evaluating condition '%s'%s",
@@ -11531,7 +11534,8 @@ function xeq__BLK_WHILE(while_block,
 function ppf__while(while_block,
                     buf)
 {
-    buf = "@while " blktab[while_block, 0, "condition"] TOK_NEWLINE \
+    buf = (blktab[while_block, 0, "inv_cond"] ? "@until " : "@while ") \
+          blktab[while_block, 0, "condition"] TOK_NEWLINE \
           ppf__block(blktab[while_block, 0, "body_block"]) TOK_NEWLINE \
           "@endwhile"
     return buf
@@ -11542,9 +11546,11 @@ function ppf__BLK_WHILE(blknum)
 {
     return sprintf("  valid       : %s\n"       \
                    "  condition   : '%s'\n"     \
+                   "  inv_cond    : %s\n"       \
                    "  body_block  : %d",
                    ppf__bool(blktab[blknum, 0, "blkvalid"]),
                    blktab[blknum, 0, "condition"],
+                   blktab[blknum, 0, "inv_cond"],
                    blktab[blknum, 0, "body_block"])
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =

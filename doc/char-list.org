@@ -19,7 +19,7 @@
 | q | BLK_"STRING"         | Q | TYPE_"SEQUENCE"        | > | MODE_"STREAMS_SHIP_OUT" |
 | r | MODE_"XEQ_RETURN"    | R | FLAG_"READONLY"        | ' | MODE_"AT_LITERAL"       |
 | s | MODE_"TEXT_STRING"   | S | TYPE_"SYMBOL"          | . | INIT_"DOTFILES"         |
-| t | BLK_"TERMINAL"       | T | "obj_TEXT"             | # | INIT_"ORD"              |
+| t | BLK_"TERMINAL"       | T | "obj_TEXT"             |   |                         |
 | u | BLK_"USER"           | U | TYPE_"USER"            | < | INIT_"ROT13"            |
 | v | MODE_"IO_CAPTURE"    | V | BLK_"INVOC"            | = | FLAG_"OPTIONAL"         |
 | w | "BLK_WHILE"          | W | FLAG_"WRITABLE"        | $ | RAN_"END_HOOK"          |

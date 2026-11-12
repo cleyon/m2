@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-11-11 07:35:06 cleyon>
+#  Time-stamp:  <2026-11-12 08:21:47 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -44,7 +44,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "6.2.1"
+    M2_VERSION = "6.2.2"
 
     # Specify a shell for m2 to use for running utility programs.
     # It is expected to be compatible with Bourne shell syntax:
@@ -9480,9 +9480,8 @@ function ppf__if(if_block,
            ppf__block(blktab[if_block, 1, "block_num"]) TOK_NEWLINE
     for (b = 2; b <= nb; b++)
         buf = buf ((seen_else && b == nb) ? "@else" : ("@elif " blktab[if_block, b, "condition"])) TOK_NEWLINE \
-              ppf__block(blktab[if_block, b, "block_num"]) TOK_NEWLINE \
-              "@endif"
-    return buf
+              ppf__block(blktab[if_block, b, "block_num"]) TOK_NEWLINE
+    return buf "@endif"
 }
 
 
@@ -13890,8 +13889,6 @@ function exp_fn__mktemp(args,
 function exp_fn__ord(args,
                      p, syminfo)
 {
-    if (flag_1false_p(__m2_config_flags, INIT_ORD))
-        initialize_ord()
     p = args["VAL"]
     info__create_from_text(p, syminfo)
     if (info__get(syminfo, "defined"))
@@ -14270,7 +14267,6 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
 
     # Initialization status
     INIT_DOTFILES         = "."; __label[INIT_DOTFILES]         = "Dotfiles" # load_init_files()
-    INIT_ORD              = "#"; __label[INIT_ORD]              = "Ord"      # initialize_ord()
     INIT_ROT13            = "<"; __label[INIT_ROT13]            = "Rot13"    # initialize_rot13()
     RAN_END_HOOK          = "$"; __label[RAN_END_HOOK]          = "EndHook"  # __m2_end_hook
     RAN_EXIT_HOOK         = "%"; __label[RAN_EXIT_HOOK]         = "ExitHook" # __m2_exit_hook
@@ -14345,8 +14341,9 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
                                        MODE_HOOKS_ENABLED MODE_TEXT_PRINT  MODE_XEQ_NORMAL,
                                        # Clear these:
                                        MODE_TEXT_STRING   MODE_XEQ_BREAK   MODE_XEQ_CONTINUE  MODE_XEQ_RETURN \
-                                       INIT_DOTFILES      INIT_ORD         INIT_ROT13)
+                                       INIT_DOTFILES      INIT_ROT13)
     initialize_prog_paths()
+    initialize_ord()
 
     # Initialize days per month
     split("31 31 28 29 31 31 30 30 31 31 30 30 31 31 31 31 30 30 31 31 30 30 31 31", monthdays)
@@ -14744,7 +14741,8 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
 # Arnold Robbins, arnold@gnu.org, Public Domain
 # 16 January, 1992
 # 20 July, 1992, revised
-function initialize_ord(    low, high, i, t)
+# Also initializes symbol "char::<ASCII>"
+function initialize_ord(    low, high, i, t, char_ns, n, ascii_arr, name, acode)
 {
     low = sprintf("%c", 7)      # BEL is ascii 7
     if (low == "\a") {          # regular ascii
@@ -14757,13 +14755,27 @@ function initialize_ord(    low, high, i, t)
         low = 0
         high = 255
     }
-
+    char_ns = "char"
+    split("SOH STX ETX EOT ENQ ACK BEL BS "  \
+          "HT  LF  VT  FF  CR  SO  SI  DLE " \
+          "DC1 DC2 DC3 DC4 NAK SYN ETB CAN " \
+          "EM  SUB ESC FS  GS  RS  US  SP", ascii_arr, TOK_SPACE)
     for (i = low; i <= high; i++) {
         t = sprintf("%c", i)
         __ord[t] = i
+        if (i >= 1 && i <= 32) {
+            # print_stderr(sprintf("%s=%d", ascii_arr[i], i))
+            nam_ll_write_ns(char_ns, ascii_arr[i], ROOT_LEVEL, PTYPE_READONLY_SYMBOL)
+            sym_ll_write_ns(char_ns, ascii_arr[i], NOKEY, ROOT_LEVEL, t)
+        }
     }
-
-    __m2_config_flags = flag_set_clear(__m2_config_flags, INIT_ORD)
+    n = split("NUL 0  BELL 7  TAB 9  AT 64  DEL 127", ascii_arr, TOK_SPACE)
+    for (i = 0; i < n/2; i++) {
+        name  = ascii_arr[2*i+1]
+        acode = int(ascii_arr[2*i+2])
+        nam_ll_write_ns(char_ns, name, ROOT_LEVEL, PTYPE_READONLY_SYMBOL)
+        sym_ll_write_ns(char_ns, name, NOKEY, ROOT_LEVEL, sprintf("%c", acode))
+    }
 }
 
 

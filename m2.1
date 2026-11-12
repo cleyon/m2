@@ -1940,11 +1940,12 @@ After an
 .Ic @unshift ,
 the newly inserted item is now at index 1.
 The previous first item is moved forward to position 2, and
-all other list elements are advanced similarly.
+all other list elements are advanced by one.
 .\" Not really true since we merely adjust the offset, but no matter...
 Similarly, after a
 .Ic @shift ,
-the element formerly at index 2 will now be found at index 1.
+the element formerly at index 2 will now be found at index 1,
+and the previous index 1 item is lost.
 .Pp
 For both arrays and lists,
 accessing the bare name, without brackets,
@@ -3206,6 +3207,32 @@ is set to True; if flags are being removed, it is not changed.
 See also the
 .Sx Debugging
 section for additional information.
+.Ss Unprintable Characters
+To facilitate usage of normally unprintable characters,
+the following
+symbols corresponding to ASCII codes 1\(en32
+are defined in namespace
+.Qq char :
+.Bd -literal -offset indent
+.TS
+tab(&);
+l l l l l l.
+ACK & DC2 & FF  & HT  & SO  & US
+AT  & DC3 & ENQ & LF  & SOH & VT
+BEL & DC4 & EOT & NAK & SP
+BS  & DEL & ESC & NL  & STX
+CAN & DLE & ETB & NUL & SUB
+CR  & ETX & FS  & RS  & SYN
+DC1 & EM  & GS  & SI  & TAB
+.TE
+.Ed
+.Pp
+.Em Example :
+.Bd -literal -offset indent -compact
+@unshift __NSPATH__ char
+C1@HT@C2@TAB@C3
+\ \ \ \(rA C1      C2      C3
+.Ed
 .Ss User-Defined Commands
 What are the differences between
 .Ic @define
@@ -3616,7 +3643,6 @@ freely defined.
 Because of this flexibility it can emulate many of the existing macro
 processors.
 Emulation examples included are: M4, M6, and GPM.
-.Ed
 .Bl -hang -compact
 .It Lk http://www.mdebeurs.nl/m0.html/index.html
 .El

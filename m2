@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-11-12 08:21:47 cleyon>
+#  Time-stamp:  <2026-11-12 12:23:17 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -7536,6 +7536,13 @@ function bool__scan_factor(    e, r,         # "!" factor | variable | "(" expre
         r = name in __files
         dbg__print("bool", 5, "(bool__scan_factor) SEEN; name='" name "', RETURNING " ppf__bool(r))
         __bf++
+        return r
+    }
+
+    if (__btoken[__bf] == sys__read("__FMT__", TRUE) ||
+        __btoken[__bf] == sys__read("__FMT__", FALSE)) {
+        dbg__print("bool", 5, "(bool__scan_factor) Match __FMT__[0|1]")
+        r = __btoken[__bf++] == sys__read("__FMT__", TRUE)
         return r
     }
 

@@ -1715,6 +1715,22 @@ format as
 .Pc .
 See section
 .Sx Times and Dates .
+.It Ic @tmpdir@ No "" Bro :void Brc
+Directory used when utilizing temporary files.
+Its value is taken from:
+.Bl -enum -compact
+.It
+Symbol
+.Va M2_TMPDIR ,
+if defined
+.It
+Environment Variable
+.Ev TMPDIR ,
+if defined
+.It
+Default directory
+.Pa /tmp
+.El
 .It Ic @trim No "" Bro Ar SYM Ns :name! Brc Ic @
 Remove both leading and trailing whitespace.
 .It Ic @tz@ No "" Bro :void Brc
@@ -2986,19 +3002,6 @@ ISO 8601 timestamp, with
 separator.
 See section
 .Sx Times and Dates .
-.It Va __TMPDIR__
-Directory used when utilizing temporary files.
-Its initial value is taken from environment variable
-.Ev TMPDIR ;
-if this is not present, a default value of
-.Qq /tmp/
-is used.
-User modifiable.
-.Em Note :
-If symbol
-.Va M2_TMPDIR
-is defined, its value will override
-.Va __TMPDIR__ .
 .It Va __TRACE__
 If True, tracing is enabled.
 If False (the default), tracing messages are inhibited
@@ -3430,9 +3433,11 @@ Available through symbol
 .It Ev SHELL
 Used as a possible default shell.
 .It Ev TMPDIR
-Used as a possible temporary directory.
-Available through symbol
-.Va __TMPDIR__ .
+Used as a possible temporary directory, if
+.Va M2_TMPDIR
+is not defined.
+See also
+.Ic @tmpdir@ .
 .El
 .Sh FILES
 .Bl -tag -width indent

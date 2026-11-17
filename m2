@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-11-12 12:23:17 cleyon>
+#  Time-stamp:  <2026-11-17 10:55:24 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -44,7 +44,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "6.2.2"
+    M2_VERSION = "6.3.0"
 
     # Specify a shell for m2 to use for running utility programs.
     # It is expected to be compatible with Bourne shell syntax:
@@ -984,10 +984,13 @@ function exec_prog_cmdline(prog, arg,
 # This path is guaranteed to end with a "/" character.
 function tmpdir(    t)
 {
-    if (sym_ll_in_ns(M2_NS, "M2_TMPDIR", NOKEY, ROOT_LEVEL))
-        t = sym_ll_read_ns(M2_NS, "M2_TMPDIR", NOKEY, ROOT_LEVEL)
-    else
-        t = sys__read("__TMPDIR__", NOKEY)
+    t = (sym_ll_in_ns(      M2_NS, "M2_TMPDIR", NOKEY, ROOT_LEVEL)) ? \
+             sym_ll_read_ns(M2_NS, "M2_TMPDIR", NOKEY, ROOT_LEVEL) : \
+        (SEC_LEVEL() >= SEC_SECURE) ? \
+             "." : \
+        (sym_ll_in_ns(      M2_ENVNS, "TMPDIR", NOKEY, ROOT_LEVEL)) ? \
+             sym_ll_read_ns(M2_ENVNS, "TMPDIR", NOKEY, ROOT_LEVEL) : \
+          "/tmp"
     while (last(t) == TOK_NEWLINE)
         t = chop(t)
     return with_trailing_slash(t)
@@ -11286,7 +11289,11 @@ function xeq_cmd__undefine(args,
     type = info__get(info, "type")
     if ((ins = info__get(info, "ns")) == EMPTY)
         ins = info["ns"] = NS()
-    info__gate(OP_DELETE, type, info, ins, LEVEL(), ME(), TRUE)
+    # if (level != LEVEL())
+    #     print_stderr(sprintf("%s: level=%d, LEVEL()=%d, what to do?",
+    #                          ME(), level, LEVEL()))
+    # info__gate(OP_DELETE, type, info, ins, LEVEL(), ME(), TRUE)
+    info__gate(OP_DELETE, type, info, ins, level, ME(), TRUE)
 
     if (type == TYPE_SYMBOL) {
         name = info__get(info, "name")
@@ -11317,9 +11324,18 @@ function xeq_cmd__undefine(args,
         seq_destroy_ns(ins, name)
     else if (type == TYPE_USER)
         cmd_destroy(info)
-    else
+    else if (type == PTYPE_ENV_VAR) {
+        # Awk permits you to delete from ENVIRON so we do as well
+        name = nam__unqualify(name)
+        if (ins != M2_ENVNS ||
+            info__get(info, "key") != EMPTY ||
+            ! nam__valid_p(name, PTYPE_ENV_VAR, FALSE))
+            panic(sprintf("%s: '%s': How did you get a %s into %s?%s",
+                  ME(), name, ppf__1flag(type), ins, VERBOSE() ? TOK_NEWLINE $0 : EMPTY))
+        delete ENVIRON[name]
+    } else
         error(sprintf("%s: '%s' of type %s cannot be destroyed%s",
-                      ME(), name, type, VERBOSE() ? TOK_NEWLINE $0 : EMPTY))
+                      ME(), name, ppf__1flag(type), VERBOSE() ? TOK_NEWLINE $0 : EMPTY))
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -14806,8 +14822,6 @@ function initialize_rot13(    from, to, i)
 #       @include my_precious_file
 function initialize_prog_paths()
 {
-    sym_ll_fiat("__TMPDIR__", NOKEY, PTYPE_WRITABLE_SYMBOL,
-                "TMPDIR" in ENVIRON ? ENVIRON["TMPDIR"] : "/tmp/")
     nam_ll_write_ns(M2_SYSNS, "__PROG__", ROOT_LEVEL, TYPE_ARRAY FLAG_READONLY FLAG_SYSTEM)
     if (SEC_LEVEL() >= SEC_PARANOID)
         return

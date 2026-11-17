@@ -240,7 +240,6 @@ __m2__::__SYNC__	Symbol<System,Writable,Integer>
 __m2__::__SYSVAL__	Symbol<System,Read_Only,Integer>
 __m2__::__TIME__	Symbol<System,Read_Only>
 __m2__::__TIMESTAMP__	Symbol<System,Read_Only>
-__m2__::__TMPDIR__	Symbol<System,Writable>
 __m2__::__TRACE__	Symbol<System,Writable,Boolean>
 __m2__::__TRACEMODE__	Symbol<System,Read_Only>
 __m2__::__TZ__	Symbol<System,Read_Only>

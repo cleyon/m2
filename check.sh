@@ -350,13 +350,13 @@ run_test()
         # don't try to change them in TESTNAME.sh
         /bin/sh ${TESTNAME}.sh "$new_M2" "$M2_FILE" > ${TESTNAME}.actual_out 2> ${TESTNAME}.actual_err
     elif [ $busybox_awk = "true" ]; then
-        busybox awk -f $new_M2 $M2_FILE > ${TESTNAME}.actual_out 2> ${TESTNAME}.actual_err
+        busybox awk -f $new_M2 init=0 $M2_FILE > ${TESTNAME}.actual_out 2> ${TESTNAME}.actual_err
     elif [ $gawk_trad = "true" ]; then
-        gawk --traditional -f $new_M2 $M2_FILE > ${TESTNAME}.actual_out 2> ${TESTNAME}.actual_err
+        gawk --traditional -f $new_M2 init=0 $M2_FILE > ${TESTNAME}.actual_out 2> ${TESTNAME}.actual_err
     elif [ $mawk_trad = "true" ]; then
-        mawk -W traditional -f $new_M2 $M2_FILE > ${TESTNAME}.actual_out 2> ${TESTNAME}.actual_err
+        mawk -W traditional -f $new_M2 init=0 $M2_FILE > ${TESTNAME}.actual_out 2> ${TESTNAME}.actual_err
     else
-        $new_M2 $M2_FILE > ${TESTNAME}.actual_out 2> ${TESTNAME}.actual_err
+        $new_M2 init=0 $M2_FILE > ${TESTNAME}.actual_out 2> ${TESTNAME}.actual_err
     fi
     echo $? >${TESTNAME}.actual_exit
 

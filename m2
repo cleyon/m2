@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-11-17 10:55:24 cleyon>
+#  Time-stamp:  <2026-11-17 15:21:47 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -14957,14 +14957,18 @@ function process_command_line_arguments(    nfile, arg, i, eq, name, val, file,
                 continue
             } else if (name == "init") {   # init=<VAL>
                 # This may cause __m2_begin_hook to run either prematurely or not at all
-                if (val > 0)
+                if (val > 0) {
                     # Positive value loads init files immediately
                     # without needing to provide a command-line file.
+                    # In fact, it will load the init files whether it
+                    # thinks it needs to or not.
+                    __m2_config_flags = flag_set_clear(__m2_config_flags, EMPTY, INIT_DOTFILES)
                     load_init_files()
-                else
+                } else {
                     # Do not load the init files at all.  Inhibit init
                     # file loading by pretending we already did it.
                     __m2_config_flags = flag_set_clear(__m2_config_flags, INIT_DOTFILES, EMPTY)
+                }
                 continue
             } else if (name == "R") {      # R=<path>
                 # Remove element on command-line from Include-path

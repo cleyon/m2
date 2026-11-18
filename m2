@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-11-17 15:21:47 cleyon>
+#  Time-stamp:  <2026-11-17 20:42:04 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -136,8 +136,8 @@ BEGIN {
 
     # Real types
     TYPE_ARRAY       = "A"; __label[TYPE_ARRAY]     = "Array";     __base_type[TYPE_ARRAY    ] = TYPE_ARRAY
-    TYPE_COMMAND     = "C"; __label[TYPE_COMMAND]   = "Command";   __base_type[TYPE_COMMAND  ] = TYPE_COMMAND
-    TYPE_FUNCTION    = "F"; __label[TYPE_FUNCTION]  = "Function";  __base_type[TYPE_FUNCTION ] = TYPE_FUNCTION
+    TYPE_COMMAND     = "&"; __label[TYPE_COMMAND]   = "Command";   __base_type[TYPE_COMMAND  ] = TYPE_COMMAND
+    TYPE_FUNCTION    = "#"; __label[TYPE_FUNCTION]  = "Function";  __base_type[TYPE_FUNCTION ] = TYPE_FUNCTION
     TYPE_LIST        = "L"; __label[TYPE_LIST]      = "List";      __base_type[TYPE_LIST     ] = TYPE_LIST
     TYPE_SEQUENCE    = "Q"; __label[TYPE_SEQUENCE]  = "Sequence";  __base_type[TYPE_SEQUENCE ] = TYPE_SEQUENCE
     TYPE_SYMBOL      = "S"; __label[TYPE_SYMBOL]    = "Symbol";    __base_type[TYPE_SYMBOL   ] = TYPE_SYMBOL
@@ -14222,7 +14222,7 @@ function exp_fn__xname(args,
 function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
                         monthdays, month, leap, cmd, nsig, sig, my_sigs,
                         void_sig_blk, t, _tag_array, ntag, _tag, _cons, nam_sig, sp, type, br,
-                        param, nparam, p, signature, sig_block, fn)
+                        param, nparam, p, signature, sig_block, name, ind)
 {
     # Constants
     DISCARD               = -1  # Canonical block/stream to discard data
@@ -14516,240 +14516,209 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
         __tagtab[_tag_array[_tag]] = int(_tag_array[_cons])
     }
 
-    # CMDS
+    # BUILT-IN COMMANDS & FUNCTIONS // SIGNATURES
+    # They are similar to symbols but with optional parameter handling
+    # Also need to add handler in dosubs()  [search: SYMFUNC]
+    # Functions cannot be used as symbol or sequence names.
     split("", param)
     void_sig_blk = zig__1compile_signature(":void", param)
     dbg__print("zig", 8, ":void sig block = " void_sig_blk)
     nsig = split( \
-        "append      { NAME:lval TEXT:rest }"                               SUBSEP \
-        "array!      { :repeat ARR:name! }"                                 SUBSEP \
-        "break!      { :void }"                                             SUBSEP \
-        "case!       { NAME:lval }"                                         SUBSEP \
-        "cleardivert { :optional :repeat STREAM:integer }"                  SUBSEP \
-        "continue!   { :void }"                                             SUBSEP \
-        "data        { LIST:name! }"                                        SUBSEP \
-        "debug       { :optional TEXT:rest! }"                              SUBSEP \
-        "decr        { NAME:lval :optional N:integer=1 }"                   SUBSEP \
-        "default     { NAME:lval TEXT:rest }"                               SUBSEP \
-        "define!     { NAME:lval :optional TEXT:rest }"                     SUBSEP \
-        "divert      { :optional STREAM:integer }"                          SUBSEP \
-        "divpop      { :void }"                                             SUBSEP \
-        "divpush     { STREAM:integer }"                                    SUBSEP \
-        "dump        { :optional WHAT:string! FILE:filename }"              SUBSEP \
-        "dumpall     { :optional WHAT:string! FILE:filename }"              SUBSEP \
-        "dumpdef     { :optional :repeat SYM:name! }"                       SUBSEP \
-        "echo        { :optional TEXT:rest }"                               SUBSEP \
-        "elif!       { EXPR:rest }"                                         SUBSEP \
-        "else!       { :void }"                                             SUBSEP \
-        "endcase!    { :void }"                                             SUBSEP \
-        "endcmd!     { :void }"                                             SUBSEP \
-        "enddata     { :void }"                                             SUBSEP \
-        "endif!      { :void }"                                             SUBSEP \
-        "endlong!    { :void }"                                             SUBSEP \
-        "endlongdef! { :void }"                                             SUBSEP \
-        "endwhile!   { :void }"                                             SUBSEP \
-        "ensure!     { :void }"                                             SUBSEP \
-        "eod         { :void }"                                             SUBSEP \
-        "error       { :optional TEXT:rest }"                               SUBSEP \
-        "errprint    { :optional TEXT:rest }"                               SUBSEP \
-        "esac!       { :void }"                                             SUBSEP \
-        "esyscmd     { CMDLINE:rest }"                                      SUBSEP \
-        "eval        { TEXT:rest }"                                         SUBSEP \
-        "exit        { :optional N:integer=@__EXIT__@ }"                    SUBSEP \
-        "fi!         { :void }"                                             SUBSEP \
-        "filedata    { LIST:name! FILE:filename }"                          SUBSEP \
-        "filedef     { NAME:lval FILE:filename }"                           SUBSEP \
-        "filedefine  { NAME:lval FILE:filename }"                           SUBSEP \
-        "for!        { VAR:name! START:int END:int :optional INCR:int=1 }"  SUBSEP \
-        "foreach!    { VAR:name! NAME:name! }"                              SUBSEP \
-        "glob        { LIST:name! PATTERN:rest }"                           SUBSEP \
-        "if!         { EXPR:rest }"                                         SUBSEP \
-        "ignore      { PATTERN:rest }"                                      SUBSEP \
-        "import      { LIB:name! FILE:filename }"                           SUBSEP \
-        "include     { FILE:filename }"                                     SUBSEP \
-        "incr        { NAME:lval :optional N:integer=1 }"                   SUBSEP \
-        "initialize  { NAME:lval TEXT:rest }"                               SUBSEP \
-        "input!      { :optional NAME:name!=__INPUT__ }"                    SUBSEP \
-        "lappend     { LIST:name! :repeat ITEM:string }"                    SUBSEP \
-        "linsert     { LIST:name! :repeat ITEM:string }"                    SUBSEP \
-        "list!       { :repeat LIST:name! }"                                SUBSEP \
-        "literal     { PATTERN:rest }"                                      SUBSEP \
-        "local!      { :repeat NAME:name! }"                                SUBSEP \
-        "longdef!    { NAME:name! }"                                        SUBSEP \
-        "lremove     { LIST:name! :repeat ITEM:string }"                    SUBSEP \
-        "m2ctl       { TEXT:rest! }"                                        SUBSEP \
-        "namespace   { NAMESPACE:name! }"                                   SUBSEP \
-        "newcmd!     { NAME:name! :optional SIGNATURE:rest! }"              SUBSEP \
-        "next!       { VAR:name! }"                                         SUBSEP \
-        "nextfile    { :void }"                                             SUBSEP \
-        "nsinclude   { FILE:filename }"                                     SUBSEP \
-        "of!         { TEXT:rest! }"                                        SUBSEP \
-        "otherwise!  { :void }"                                             SUBSEP \
-        "paste       { FILE:filename }"                                     SUBSEP \
-        "pop         { LIST:name! }"                                        SUBSEP \
-        "push        { LIST:name! :repeat ITEM:string }"                    SUBSEP \
-        "readonly    { NAME:name! }"                                        SUBSEP \
-        "return!     { :optional VALUE:rest }"                              SUBSEP \
-        "secho       { :optional TEXT:rest }"                               SUBSEP \
-        "sequence    { ID:name! :optional ACTION:string!=create ARG:rest }" SUBSEP \
-        "serror      { :optional TEXT:rest }"                               SUBSEP \
-        "set!        { NAME:lval :optional TEXT:rest }"                     SUBSEP \
-        "sexit       { :optional N:integer=@__EXIT__@ }"                    SUBSEP \
-        "sfiledata   { LIST:name! FILE:filename }"                          SUBSEP \
-        "sfiledef    { NAME:lval FILE:filename }"                           SUBSEP \
-        "sfiledefine { NAME:lval FILE:filename }"                           SUBSEP \
-        "shell       { DELIM:string :optional PROG:rest }"                  SUBSEP \
-        "shift       { LIST:name! }"                                        SUBSEP \
-        "simport     { LIB:name! FILE:filename }"                           SUBSEP \
-        "sinclude    { FILE:filename }"                                     SUBSEP \
-        "sm2ctl!     { TEXT:rest! }"                                        SUBSEP \
-        "snsinclude  { FILE:filename }"                                     SUBSEP \
-        "spaste      { FILE:filename }"                                     SUBSEP \
-        "split       { NAME:lval LIST:name! :optional FS:string }"          SUBSEP \
-        "syscmd      { CMDLINE:rest }"                                      SUBSEP \
-        "tracemode   { :optional FLAG:string! }"                            SUBSEP \
-        "traceoff    { :optional :repeat SYM:name! }"                       SUBSEP \
-        "traceon     { :optional :repeat SYM:name! }"                       SUBSEP \
-        "typeout     { :void }"                                             SUBSEP \
-        "undef       { NAME:name! }"                                        SUBSEP \
-        "undefine    { NAME:name! }"                                        SUBSEP \
-        "undivert    { :optional N:integer REST:rest }"                     SUBSEP \
-        "unless!     { EXPR:rest }"                                         SUBSEP \
-        "unshift     { LIST:name! :repeat ITEM:string }"                    SUBSEP \
-        "until!      { EXPR:rest }"                                         SUBSEP \
-        "warn        { :optional TEXT:rest }"                               SUBSEP \
-        "wend!       { :void }"                                             SUBSEP \
-        "while!      { EXPR:rest }"                                         SUBSEP \
-        "wrap        { TEXT:rest! }",
+        TYPE_COMMAND   "append"      "{ NAME:lval TEXT:rest }"                               SUBSEP \
+        FLAG_IMMEDIATE "array"       "{ :repeat ARR:name! }"                                 SUBSEP \
+        TYPE_FUNCTION  "basename"    "{ SYM:name! }"                                         SUBSEP \
+        TYPE_FUNCTION  "boolval"     "{ :optional VAL:string }"                              SUBSEP \
+        FLAG_IMMEDIATE "break"       "{ :void }"                                             SUBSEP \
+        FLAG_IMMEDIATE "case"        "{ NAME:lval }"                                         SUBSEP \
+        TYPE_FUNCTION  "center"      "{ SYM:name! :optional WIDTH:integer }"                 SUBSEP \
+        TYPE_FUNCTION  "chr"         "{ N:int }"                                             SUBSEP \
+        TYPE_COMMAND   "cleardivert" "{ :optional :repeat STREAM:integer }"                  SUBSEP \
+        TYPE_FUNCTION  "comma"       "{ VAL:string }"                                        SUBSEP \
+        FLAG_IMMEDIATE "continue"    "{ :void }"                                             SUBSEP \
+        TYPE_COMMAND   "data"        "{ LIST:name! }"                                        SUBSEP \
+        TYPE_FUNCTION  "date"        "{ :void }"                                             SUBSEP \
+        TYPE_COMMAND   "debug"       "{ :optional TEXT:rest! }"                              SUBSEP \
+        TYPE_COMMAND   "decr"        "{ NAME:lval :optional N:integer=1 }"                   SUBSEP \
+        TYPE_COMMAND   "default"     "{ NAME:lval TEXT:rest }"                               SUBSEP \
+        FLAG_IMMEDIATE "define"      "{ NAME:lval :optional TEXT:rest }"                     SUBSEP \
+        TYPE_FUNCTION  "dirname"     "{ SYM:name! }"                                         SUBSEP \
+        TYPE_COMMAND   "divert"      "{ :optional STREAM:integer }"                          SUBSEP \
+        TYPE_FUNCTION  "divnl"       "{ :optional STREAM:integer }"                          SUBSEP \
+        TYPE_COMMAND   "divpop"      "{ :void }"                                             SUBSEP \
+        TYPE_COMMAND   "divpush"     "{ STREAM:integer }"                                    SUBSEP \
+        TYPE_FUNCTION  "dow"         "{ :optional :repeat N:integer }"                       SUBSEP \
+        TYPE_COMMAND   "dump"        "{ :optional WHAT:string! FILE:filename }"              SUBSEP \
+        TYPE_COMMAND   "dumpall"     "{ :optional WHAT:string! FILE:filename }"              SUBSEP \
+        TYPE_COMMAND   "dumpdef"     "{ :optional :repeat SYM:name! }"                       SUBSEP \
+        TYPE_COMMAND   "echo"        "{ :optional TEXT:rest }"                               SUBSEP \
+        FLAG_IMMEDIATE "elif"        "{ EXPR:rest }"                                         SUBSEP \
+        FLAG_IMMEDIATE "else"        "{ :void }"                                             SUBSEP \
+        TYPE_FUNCTION  "empty"       "{ SYM:name! }"                                         SUBSEP \
+        FLAG_IMMEDIATE "endcase"     "{ :void }"                                             SUBSEP \
+        FLAG_IMMEDIATE "endcmd"      "{ :void }"                                             SUBSEP \
+        TYPE_COMMAND   "enddata"     "{ :void }"                                             SUBSEP \
+        FLAG_IMMEDIATE "endif"       "{ :void }"                                             SUBSEP \
+        FLAG_IMMEDIATE "endlong"     "{ :void }"                                             SUBSEP \
+        FLAG_IMMEDIATE "endlongdef"  "{ :void }"                                             SUBSEP \
+        FLAG_IMMEDIATE "endwhile"    "{ :void }"                                             SUBSEP \
+        FLAG_IMMEDIATE "ensure"      "{ :void }"                                             SUBSEP \
+        TYPE_COMMAND   "eod"         "{ :void }"                                             SUBSEP \
+        TYPE_FUNCTION  "epoch"       "{ :void }"                                             SUBSEP \
+        TYPE_COMMAND   "error"       "{ :optional TEXT:rest }"                               SUBSEP \
+        TYPE_COMMAND   "errprint"    "{ :optional TEXT:rest }"                               SUBSEP \
+        FLAG_IMMEDIATE "esac"        "{ :void }"                                             SUBSEP \
+        TYPE_COMMAND   "esyscmd"     "{ CMDLINE:rest }"                                      SUBSEP \
+        TYPE_COMMAND   "eval"        "{ TEXT:rest }"                                         SUBSEP \
+        TYPE_FUNCTION  "execpath"    "{ PROGRAM:rest }"                                      SUBSEP \
+        TYPE_COMMAND   "exit"        "{ :optional N:integer=@__EXIT__@ }"                    SUBSEP \
+        TYPE_FUNCTION  "expr"        "{ MATH:rest }"                                         SUBSEP \
+        FLAG_IMMEDIATE "fi"          "{ :void }"                                             SUBSEP \
+        TYPE_COMMAND   "filedata"    "{ LIST:name! FILE:filename }"                          SUBSEP \
+        TYPE_COMMAND   "filedef"     "{ NAME:lval FILE:filename }"                           SUBSEP \
+        TYPE_COMMAND   "filedefine"  "{ NAME:lval FILE:filename }"                           SUBSEP \
+        FLAG_IMMEDIATE "for"         "{ VAR:name! START:int END:int :optional INCR:int=1 }"  SUBSEP \
+        FLAG_IMMEDIATE "foreach"     "{ VAR:name! NAME:name! }"                              SUBSEP \
+        TYPE_FUNCTION  "format"      "{ FMT:string :optional :repeat ARG:string }"           SUBSEP \
+        TYPE_FUNCTION  "geodist"     "{ LAT1:float LON1:float LAT2:float LON2:float }"       SUBSEP \
+        TYPE_COMMAND   "glob"        "{ LIST:name! PATTERN:rest }"                           SUBSEP \
+        TYPE_FUNCTION  "gregdate"    "{ MJD:integer }"                                       SUBSEP \
+        TYPE_FUNCTION  "hex"         "{ VAL:string }"                                        SUBSEP \
+        TYPE_FUNCTION  "hms"         "{ HR:float }"                                          SUBSEP \
+        TYPE_FUNCTION  "hr"          "{ :optional :repeat HR:string }"                       SUBSEP \
+        FLAG_IMMEDIATE "if"          "{ EXPR:rest }"                                         SUBSEP \
+        TYPE_FUNCTION  "ifdef"       "{ SYM:name! TRUE:string! :optional FALSE:string! }"    SUBSEP \
+        TYPE_FUNCTION  "ifelse"      "{ :repeat ARG:string! }"                               SUBSEP \
+        TYPE_FUNCTION  "ifndef"      "{ SYM:name! TRUE:string! :optional FALSE:string! }"    SUBSEP \
+        TYPE_FUNCTION  "ifx"         "{ EXPR:string TRUE:string! :optional FALSE:string! }"  SUBSEP \
+        TYPE_COMMAND   "ignore"      "{ PATTERN:rest }"                                      SUBSEP \
+        TYPE_COMMAND   "import"      "{ LIB:name! FILE:filename }"                           SUBSEP \
+        TYPE_COMMAND   "include"     "{ FILE:filename }"                                     SUBSEP \
+        TYPE_COMMAND   "incr"        "{ NAME:lval :optional N:integer=1 }"                   SUBSEP \
+        TYPE_FUNCTION  "index"       "{ SYM:name! STRING:string }"                           SUBSEP \
+        TYPE_COMMAND   "initialize"  "{ NAME:lval TEXT:rest }"                               SUBSEP \
+        FLAG_IMMEDIATE "input"       "{ :optional NAME:name!=__INPUT__ }"                    SUBSEP \
+        TYPE_FUNCTION  "join"        "{ LIST:name! :optional FS:string }"                    SUBSEP \
+        TYPE_COMMAND   "lappend"     "{ LIST:name! :repeat ITEM:string }"                    SUBSEP \
+        TYPE_FUNCTION  "lc"          "{ SYM:name! }"                                         SUBSEP \
+        TYPE_FUNCTION  "left"        "{ SYM:name! :optional LENGTH:integer=1 }"              SUBSEP \
+        TYPE_FUNCTION  "len"         "{ SYM:name! }"                                         SUBSEP \
+        TYPE_COMMAND   "linsert"     "{ LIST:name! :repeat ITEM:string }"                    SUBSEP \
+        FLAG_IMMEDIATE "list"        "{ :repeat LIST:name! }"                                SUBSEP \
+        TYPE_COMMAND   "literal"     "{ PATTERN:rest }"                                      SUBSEP \
+        TYPE_FUNCTION  "ljust"       "{ SYM:name! :optional WIDTH:integer }"                 SUBSEP \
+        FLAG_IMMEDIATE "local"       "{ :repeat NAME:name! }"                                SUBSEP \
+        FLAG_IMMEDIATE "longdef"     "{ NAME:name! }"                                        SUBSEP \
+        TYPE_COMMAND   "lremove"     "{ LIST:name! :repeat ITEM:string }"                    SUBSEP \
+        TYPE_FUNCTION  "ltrim"       "{ SYM:name! }"                                         SUBSEP \
+        TYPE_COMMAND   "m2ctl"       "{ TEXT:rest! }"                                        SUBSEP \
+        TYPE_FUNCTION  "mid"         "{ SYM:name! BEGIN:int :optional LENGTH:int }"          SUBSEP \
+        TYPE_FUNCTION  "mjd"         "{ :optional :repeat N:integer }"                       SUBSEP \
+        TYPE_FUNCTION  "mktemp"      "{ :optional TEMPLATE:string }"                         SUBSEP \
+        TYPE_COMMAND   "namespace"   "{ NAMESPACE:name! }"                                   SUBSEP \
+        FLAG_IMMEDIATE "newcmd"      "{ NAME:name! :optional SIGNATURE:rest! }"              SUBSEP \
+        FLAG_IMMEDIATE "next"        "{ VAR:name! }"                                         SUBSEP \
+        TYPE_COMMAND   "nextfile"    "{ :void }"                                             SUBSEP \
+        TYPE_FUNCTION  "ns"          "{ :void }"                                             SUBSEP \
+        TYPE_COMMAND   "nsinclude"   "{ FILE:filename }"                                     SUBSEP \
+        FLAG_IMMEDIATE "of"          "{ TEXT:rest! }"                                        SUBSEP \
+        TYPE_FUNCTION  "ord"         "{ VAL:string }"                                        SUBSEP \
+        FLAG_IMMEDIATE "otherwise"   "{ :void }"                                             SUBSEP \
+        TYPE_COMMAND   "paste"       "{ FILE:filename }"                                     SUBSEP \
+        TYPE_COMMAND   "pop"         "{ LIST:name! }"                                        SUBSEP \
+        TYPE_COMMAND   "push"        "{ LIST:name! :repeat ITEM:string }"                    SUBSEP \
+        TYPE_COMMAND   "readonly"    "{ NAME:name! }"                                        SUBSEP \
+        TYPE_FUNCTION  "rem"         "{ :optional COMMENT:rest }"                            SUBSEP \
+        FLAG_IMMEDIATE "return"      "{ :optional VALUE:rest }"                              SUBSEP \
+        TYPE_FUNCTION  "right"       "{ SYM:name! :optional LENGTH:integer }"                SUBSEP \
+        TYPE_FUNCTION  "rjust"       "{ SYM:name! :optional WIDTH:integer }"                 SUBSEP \
+        TYPE_FUNCTION  "rot13"       "{ VAL:rest }"                                          SUBSEP \
+        TYPE_FUNCTION  "rtrim"       "{ SYM:name! }"                                         SUBSEP \
+        TYPE_FUNCTION  "scenter"     "{ SYM:name! :optional WIDTH:integer }"                 SUBSEP \
+        TYPE_FUNCTION  "scomma"      "{ VAL:string }"                                        SUBSEP \
+        TYPE_COMMAND   "secho"       "{ :optional TEXT:rest }"                               SUBSEP \
+        TYPE_COMMAND   "sequence"    "{ ID:name! :optional ACTION:string!=create ARG:rest }" SUBSEP \
+        TYPE_COMMAND   "serror"      "{ :optional TEXT:rest }"                               SUBSEP \
+        FLAG_IMMEDIATE "set"         "{ NAME:lval :optional TEXT:rest }"                     SUBSEP \
+        TYPE_FUNCTION  "sexecpath"   "{ PROGRAM:rest }"                                      SUBSEP \
+        TYPE_COMMAND   "sexit"       "{ :optional N:integer=@__EXIT__@ }"                    SUBSEP \
+        TYPE_FUNCTION  "sexpr"       "{ MATH:rest }"                                         SUBSEP \
+        TYPE_COMMAND   "sfiledata"   "{ LIST:name! FILE:filename }"                          SUBSEP \
+        TYPE_COMMAND   "sfiledef"    "{ NAME:lval FILE:filename }"                           SUBSEP \
+        TYPE_COMMAND   "sfiledefine" "{ NAME:lval FILE:filename }"                           SUBSEP \
+        TYPE_COMMAND   "shell"       "{ DELIM:string :optional PROG:rest }"                  SUBSEP \
+        TYPE_COMMAND   "shift"       "{ LIST:name! }"                                        SUBSEP \
+        TYPE_FUNCTION  "sig"         "{ NAME:name! }"                                        SUBSEP \
+        TYPE_COMMAND   "simport"     "{ LIB:name! FILE:filename }"                           SUBSEP \
+        TYPE_COMMAND   "sinclude"    "{ FILE:filename }"                                     SUBSEP \
+        TYPE_FUNCTION  "sjoin"       "{ LIST:name! :optional FS:string }"                    SUBSEP \
+        TYPE_FUNCTION  "sljust"      "{ SYM:name! :optional WIDTH:integer }"                 SUBSEP \
+        FLAG_IMMEDIATE "sm2ctl"      "{ TEXT:rest! }"                                        SUBSEP \
+        TYPE_COMMAND   "snsinclude"  "{ FILE:filename }"                                     SUBSEP \
+        TYPE_FUNCTION  "space"       "{ :optional COUNT:integer=1 }"                         SUBSEP \
+        TYPE_FUNCTION  "spaces"      "{ :optional COUNT:integer=1 }"                         SUBSEP \
+        TYPE_COMMAND   "spaste"      "{ FILE:filename }"                                     SUBSEP \
+        TYPE_COMMAND   "split"       "{ NAME:lval LIST:name! :optional FS:string }"          SUBSEP \
+        TYPE_FUNCTION  "sprintf"     "{ FMT:string :optional :repeat ARG:string }"           SUBSEP \
+        TYPE_FUNCTION  "srem"        "{ :optional COMMENT:rest }"                            SUBSEP \
+        TYPE_FUNCTION  "srjust"      "{ SYM:name! :optional WIDTH:integer }"                 SUBSEP \
+        TYPE_FUNCTION  "strftime"    "{ FORMAT:rest }"                                       SUBSEP \
+        TYPE_FUNCTION  "substr"      "{ SYM:name! BEGIN:int :optional LENGTH:int }"          SUBSEP \
+        TYPE_COMMAND   "syscmd"      "{ CMDLINE:rest }"                                      SUBSEP \
+        TYPE_FUNCTION  "tab"         "{ :optional COUNT:integer=1 }"                         SUBSEP \
+        TYPE_FUNCTION  "tabs"        "{ :optional COUNT:integer=1 }"                         SUBSEP \
+        TYPE_FUNCTION  "time"        "{ :void }"                                             SUBSEP \
+        TYPE_FUNCTION  "tmpdir"      "{ :void }"                                             SUBSEP \
+        TYPE_COMMAND   "tracemode"   "{ :optional FLAG:string! }"                            SUBSEP \
+        TYPE_COMMAND   "traceoff"    "{ :optional :repeat SYM:name! }"                       SUBSEP \
+        TYPE_COMMAND   "traceon"     "{ :optional :repeat SYM:name! }"                       SUBSEP \
+        TYPE_FUNCTION  "trim"        "{ SYM:name! }"                                         SUBSEP \
+        TYPE_COMMAND   "typeout"     "{ :void }"                                             SUBSEP \
+        TYPE_FUNCTION  "tz"          "{ :void }"                                             SUBSEP \
+        TYPE_FUNCTION  "uc"          "{ SYM:name! }"                                         SUBSEP \
+        TYPE_COMMAND   "undef"       "{ NAME:name! }"                                        SUBSEP \
+        TYPE_COMMAND   "undefine"    "{ NAME:name! }"                                        SUBSEP \
+        TYPE_COMMAND   "undivert"    "{ :optional N:integer REST:rest }"                     SUBSEP \
+        FLAG_IMMEDIATE "unless"      "{ EXPR:rest }"                                         SUBSEP \
+        TYPE_COMMAND   "unshift"     "{ LIST:name! :repeat ITEM:string }"                    SUBSEP \
+        FLAG_IMMEDIATE "until"       "{ EXPR:rest }"                                         SUBSEP \
+        TYPE_FUNCTION  "utc"         "{ :void }"                                             SUBSEP \
+        TYPE_FUNCTION  "uuid"        "{ :void }"                                             SUBSEP \
+        TYPE_COMMAND   "warn"        "{ :optional TEXT:rest }"                               SUBSEP \
+        FLAG_IMMEDIATE "wend"        "{ :void }"                                             SUBSEP \
+        FLAG_IMMEDIATE "while"       "{ EXPR:rest }"                                         SUBSEP \
+        TYPE_COMMAND   "wrap"        "{ TEXT:rest! }"                                        SUBSEP \
+        TYPE_FUNCTION  "xbasename"   "{ SYM:name! }"                                         SUBSEP \
+        TYPE_FUNCTION  "xdirname"    "{ SYM:name! }",
         my_sigs, SUBSEP)
 
     for (i = 1; i <= nsig; i++) {
         nam_sig = my_sigs[i]
-        sp = index(nam_sig, TOK_SPACE)
-        cmd = substr(nam_sig, 1, sp - 1)
-        if (last(cmd) == "!") {
-            cmd = chop(cmd)
-            type = PTYPE_IMMED_CMD
-        } else
-            type = PTYPE_BLTIN_CMD
         br = index(nam_sig, TOK_LBRACE)
+        name = substr(nam_sig, 1, br - 1)
+        ind = first(name); name = rtrim(rest(name))
         sig = substr(nam_sig, br)
-        dbg__print("sig", 7, sprintf("(initialize) %d '%s' %s %s", i, cmd, ppf__allflags(type), sig))
+        type = (ind == TYPE_FUNCTION)  ? PTYPE_BLTIN_FUNC \
+             : (ind == TYPE_COMMAND)   ? PTYPE_BLTIN_CMD \
+             : (ind == FLAG_IMMEDIATE) ? PTYPE_IMMED_CMD \
+             : panic("Bad signature: " name)
+        dbg__print("sig", 7, sprintf("(initialize) %d '%s' %s %s", i, name, ppf__allflags(type), sig))
         split("", param)
         sig_block = zig__1compile_signature(sig, param)
         dbg__print("sig", 6, sprintf("(initialize) zig__1compile_signature(%s) => sig_block=%d",
                                      signature, sig_block))
         if (sig_block == FALSE)
-            panic("(initialize) Failed to compile " cmd " signature '" sig "'" TOK_NEWLINE ppf__msg())
-        # print_stderr("At compile time:" ppf__BLK(sig_block))
+            panic("(initialize) Failed to compile " name " signature '" sig "'" TOK_NEWLINE ppf__msg())
+        # print_stderr("(initialize) At compile time:" ppf__BLK(sig_block))
 
-        nam_ll_write_ns(M2_SYSNS, cmd, ROOT_LEVEL, type)
-        namtab[M2_SYSNS, cmd, ROOT_LEVEL, "nparam"] = nparam = param[0, "nparam"]
-        namtab[M2_SYSNS, cmd, ROOT_LEVEL, "sig_block"] = sig_block
+        nam_ll_write_ns(M2_SYSNS, name, ROOT_LEVEL, type)
+        namtab[M2_SYSNS, name, ROOT_LEVEL, "nparam"] = nparam = param[0, "nparam"]
+        namtab[M2_SYSNS, name, ROOT_LEVEL, "sig_block"] = sig_block
         for (p = 1; p <= nparam; p++) {
-            namtab[M2_SYSNS, cmd, ROOT_LEVEL, "P", p, "pname"]    = param[p, "pname"]
-            namtab[M2_SYSNS, cmd, ROOT_LEVEL, "P", p, "pcode"]    = param[p, "pcode"]
-            namtab[M2_SYSNS, cmd, ROOT_LEVEL, "P", p, "tag"]      = param[p, "tag"]
-            namtab[M2_SYSNS, cmd, ROOT_LEVEL, "P", p, "optional"] = param[p, "optional"]
-            namtab[M2_SYSNS, cmd, ROOT_LEVEL, "P", p, "defvalue"] = param[p, "defvalue"]
-        }
-    }
-
-    # FUNCS USING INVOC
-    # They are similar to symbols but with optional parameter handling
-    # Also need to add handler in dosubs()  [search: SYMFUNC]
-    # Functions cannot be used as symbol or sequence names.
-    nsig = split( \
-        "basename       { SYM:name! }"                                        SUBSEP \
-        "boolval        { :optional VAL:string }"                             SUBSEP \
-        "center         { SYM:name! :optional WIDTH:integer }"                SUBSEP \
-        "chr            { N:int }"                                            SUBSEP \
-        "comma          { VAL:string }"                                       SUBSEP \
-        "date           { :void }"                                            SUBSEP \
-        "dirname        { SYM:name! }"                                        SUBSEP \
-        "divnl          { :optional STREAM:integer }"                         SUBSEP \
-        "dow            { :optional :repeat N:integer }"                      SUBSEP \
-        "empty          { SYM:name! }"                                        SUBSEP \
-        "epoch          { :void }"                                            SUBSEP \
-        "execpath       { PROGRAM:rest }"                                     SUBSEP \
-        "expr           { MATH:rest }"                                        SUBSEP \
-        "format         { FMT:string :optional :repeat ARG:string }"          SUBSEP \
-        "geodist        { LAT1:float LON1:float LAT2:float LON2:float }"      SUBSEP \
-        "gregdate       { MJD:integer }"                                      SUBSEP \
-        "hex            { VAL:string }"                                       SUBSEP \
-        "hms            { HR:float }"                                         SUBSEP \
-        "hr             { :optional :repeat HR:string }"                      SUBSEP \
-        "ifdef          { SYM:name! TRUE:string! :optional FALSE:string! }"   SUBSEP \
-        "ifelse         { :repeat ARG:string! }"                              SUBSEP \
-        "ifndef         { SYM:name! TRUE:string! :optional FALSE:string! }"   SUBSEP \
-        "ifx            { EXPR:string TRUE:string! :optional FALSE:string! }" SUBSEP \
-        "index          { SYM:name! STRING:string }"                          SUBSEP \
-        "join           { LIST:name! :optional FS:string }"                   SUBSEP \
-        "lc             { SYM:name! }"                                        SUBSEP \
-        "left           { SYM:name! :optional LENGTH:integer=1 }"             SUBSEP \
-        "len            { SYM:name! }"                                        SUBSEP \
-        "ljust          { SYM:name! :optional WIDTH:integer }"                SUBSEP \
-        "ltrim          { SYM:name! }"                                        SUBSEP \
-        "mid            { SYM:name! BEGIN:int :optional LENGTH:int }"         SUBSEP \
-        "mjd            { :optional :repeat N:integer }"                      SUBSEP \
-        "mktemp         { :optional TEMPLATE:string }"                        SUBSEP \
-        "ns             { :void }"                                            SUBSEP \
-        "ord            { VAL:string }"                                       SUBSEP \
-        "rem            { :optional COMMENT:rest }"                           SUBSEP \
-        "right          { SYM:name! :optional LENGTH:integer }"               SUBSEP \
-        "rjust          { SYM:name! :optional WIDTH:integer }"                SUBSEP \
-        "rot13          { VAL:rest }"                                         SUBSEP \
-        "rtrim          { SYM:name! }"                                        SUBSEP \
-        "scenter        { SYM:name! :optional WIDTH:integer }"                SUBSEP \
-        "scomma         { VAL:string }"                                       SUBSEP \
-        "sexecpath      { PROGRAM:rest }"                                     SUBSEP \
-        "sexpr          { MATH:rest }"                                        SUBSEP \
-        "sig            { NAME:name! }"                                       SUBSEP \
-        "sjoin          { LIST:name! :optional FS:string }"                   SUBSEP \
-        "sljust         { SYM:name! :optional WIDTH:integer }"                SUBSEP \
-        "space          { :optional COUNT:integer=1 }"                        SUBSEP \
-        "spaces         { :optional COUNT:integer=1 }"                        SUBSEP \
-        "sprintf        { FMT:string :optional :repeat ARG:string }"          SUBSEP \
-        "srem           { :optional COMMENT:rest }"                           SUBSEP \
-        "srjust         { SYM:name! :optional WIDTH:integer }"                SUBSEP \
-        "strftime       { FORMAT:rest }"                                      SUBSEP \
-        "substr         { SYM:name! BEGIN:int :optional LENGTH:int }"         SUBSEP \
-        "tab            { :optional COUNT:integer=1 }"                        SUBSEP \
-        "tabs           { :optional COUNT:integer=1 }"                        SUBSEP \
-        "time           { :void }"                                            SUBSEP \
-        "tmpdir         { :void }"                                            SUBSEP \
-        "trim           { SYM:name! }"                                        SUBSEP \
-        "tz             { :void }"                                            SUBSEP \
-        "uc             { SYM:name! }"                                        SUBSEP \
-        "utc            { :void }"                                            SUBSEP \
-        "uuid           { :void }"                                            SUBSEP \
-        "xbasename      { SYM:name! }"                                        SUBSEP \
-        "xdirname       { SYM:name! }",
-        my_sigs, SUBSEP)
-    for (i = 1; i <= nsig; i++) {
-        nam_sig = my_sigs[i]
-        sp = index(nam_sig, TOK_SPACE)
-        fn = substr(nam_sig, 1, sp - 1)
-        br = index(nam_sig, TOK_LBRACE)
-        sig = substr(nam_sig, br)
-        dbg__print("sig", 7, sprintf("(initialize) %d '%s' %s %s", i, fn, ppf__allflags(PTYPE_BLTIN_FUNC), sig))
-        split("", param)
-        sig_block = zig__1compile_signature(sig, param)
-        dbg__print("sig", 6, sprintf("(initialize) zig__1compile_signature(%s) => sig_block=%d, nsig=%d, nparam=%d",
-                                      signature, sig_block, blktab[sig_block, 0, "nsig"], param[0, "nparam"]))
-        if (sig_block == FALSE)
-            panic("(initialize) Failed to compile " fn " signature '" sig "'" TOK_NEWLINE ppf__msg())
-        #print_stderr("(initialize) At compile time:" ppf__BLK(sig_block))
-
-        nam_ll_write_ns(M2_SYSNS, fn, ROOT_LEVEL, PTYPE_BLTIN_FUNC)
-        namtab[M2_SYSNS, fn, ROOT_LEVEL, "nparam"] = nparam = param[0, "nparam"]
-        namtab[M2_SYSNS, fn, ROOT_LEVEL, "sig_block"] = sig_block
-        for (p = 1; p <= nparam; p++) {
-            namtab[M2_SYSNS, fn, ROOT_LEVEL, "P", p, "pname"]    = param[p, "pname"]
-            namtab[M2_SYSNS, fn, ROOT_LEVEL, "P", p, "pcode"]    = param[p, "pcode"]
-            namtab[M2_SYSNS, fn, ROOT_LEVEL, "P", p, "tag"]      = param[p, "tag"]
-            namtab[M2_SYSNS, fn, ROOT_LEVEL, "P", p, "optional"] = param[p, "optional"]
-            namtab[M2_SYSNS, fn, ROOT_LEVEL, "P", p, "defvalue"] = param[p, "defvalue"]
+            namtab[M2_SYSNS, name, ROOT_LEVEL, "P", p, "pname"]    = param[p, "pname"]
+            namtab[M2_SYSNS, name, ROOT_LEVEL, "P", p, "pcode"]    = param[p, "pcode"]
+            namtab[M2_SYSNS, name, ROOT_LEVEL, "P", p, "tag"]      = param[p, "tag"]
+            namtab[M2_SYSNS, name, ROOT_LEVEL, "P", p, "optional"] = param[p, "optional"]
+            namtab[M2_SYSNS, name, ROOT_LEVEL, "P", p, "defvalue"] = param[p, "defvalue"]
         }
     }
 

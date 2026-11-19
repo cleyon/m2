@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-11-17 20:42:04 cleyon>
+#  Time-stamp:  <2026-11-19 12:05:05 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -2566,7 +2566,7 @@ function blk_new(block_type,
 }
 
 
-function blk_walk_delete(blknum, seen,
+function blk_walk_delete(blknum, seen_blk,
                          block_type, msg)
 {
     if (blknum == 0)
@@ -2575,17 +2575,17 @@ function blk_walk_delete(blknum, seen,
         warn("(blk_walk_delete) Block " blknum " has refcnt " blktab[blknum, 0, "refcnt"] ", continuing...")
 
     block_type = blk_type(blknum)
-    if      (block_type == BLK_AGG)       blk_walk_AGG(      OP_DELETE, blknum, seen, 0)
-    else if (block_type == BLK_CASE)      blk_walk_CASE(     OP_DELETE, blknum, seen, 0)
-    else if (block_type == BLK_FILE)      blk_walk_FILE(     OP_DELETE, blknum, seen, 0)
-    else if (block_type == BLK_FOR)       blk_walk_FOR(      OP_DELETE, blknum, seen, 0)
-    else if (block_type == BLK_IF)        blk_walk_IF(       OP_DELETE, blknum, seen, 0)
-    else if (block_type == BLK_LONGDEF)   blk_walk_LONGDEF(  OP_DELETE, blknum, seen, 0)
-    else if (block_type == BLK_SIGNATURE) blk_walk_SIGNATURE(OP_DELETE, blknum, seen, 0)
-    else if (block_type == BLK_STRING)    blk_walk_STRING(   OP_DELETE, blknum, seen, 0)
-    else if (block_type == BLK_TERMINAL)  blk_walk_TERMINAL( OP_DELETE, blknum, seen, 0)
-    else if (block_type == BLK_USER)      blk_walk_USER(     OP_DELETE, blknum, seen, 0)
-    else if (block_type == BLK_WHILE)     blk_walk_WHILE(    OP_DELETE, blknum, seen, 0)
+    if      (block_type == BLK_AGG)       blk_walk_AGG(      OP_DELETE, blknum, seen_blk, 0)
+    else if (block_type == BLK_CASE)      blk_walk_CASE(     OP_DELETE, blknum, seen_blk, 0)
+    else if (block_type == BLK_FILE)      blk_walk_FILE(     OP_DELETE, blknum, seen_blk, 0)
+    else if (block_type == BLK_FOR)       blk_walk_FOR(      OP_DELETE, blknum, seen_blk, 0)
+    else if (block_type == BLK_IF)        blk_walk_IF(       OP_DELETE, blknum, seen_blk, 0)
+    else if (block_type == BLK_LONGDEF)   blk_walk_LONGDEF(  OP_DELETE, blknum, seen_blk, 0)
+    else if (block_type == BLK_SIGNATURE) blk_walk_SIGNATURE(OP_DELETE, blknum, seen_blk, 0)
+    else if (block_type == BLK_STRING)    blk_walk_STRING(   OP_DELETE, blknum, seen_blk, 0)
+    else if (block_type == BLK_TERMINAL)  blk_walk_TERMINAL( OP_DELETE, blknum, seen_blk, 0)
+    else if (block_type == BLK_USER)      blk_walk_USER(     OP_DELETE, blknum, seen_blk, 0)
+    else if (block_type == BLK_WHILE)     blk_walk_WHILE(    OP_DELETE, blknum, seen_blk, 0)
     else
         panic(sprintf("(blk_walk_delete) Can't handle type '%s' for block %d",
                       ppf__1flag(block_type), blknum))
@@ -2600,11 +2600,11 @@ function blk_walk_delete(blknum, seen,
     delete blktab[blknum, 0, "terminator"]
     delete blktab[blknum, 0, "type"]
 
-    seen[blknum] = TRUE
+    seen_blk[blknum] = TRUE
     blk_lint(blknum)
 }
 function blk_master_delete(blknum,
-                           block_type, seen)
+                           block_type, seen_blk)
 {
     block_type = blk_type(blknum)
 
@@ -2618,8 +2618,8 @@ function blk_master_delete(blknum,
         warn("(blk_master_delete) Refusing to delete blk " blknum " refcnt > 0")
         return
     }
-    split("", seen)
-    blk_walk_delete(blknum, seen)
+    split("", seen_blk)
+    blk_walk_delete(blknum, seen_blk)
 }
 function blk_lint(blknum,
                   b, f, blk, val, foundp)
@@ -2703,8 +2703,9 @@ function blk_prepend(blknum, slot_type, value,
     if (blk_type(blknum) != BLK_AGG)
         panic(sprintf("(blk_prepend) Block %d has type %s, not AGG",
                       blknum, ppf__1flag(blk_type(blknum))))
-    if (slot_type != OBJ_BLKNUM && slot_type != OBJ_TEXT && slot_type != OBJ_INVOC)
-        panic(sprintf("(blk_prepend) Argument has bad type %s; should be OBJ_{BLKNUM,INVOC,TEXT}", ppf__1flag(slot_type)))
+    if (slot_type != OBJ_BLKNUM && slot_type != OBJ_TEXT &&
+        slot_type != OBJ_INVOC  && slot_type != OBJ_EVAL)
+        panic(sprintf("(blk_prepend) Argument has bad type %s; should be OBJ_{BLKNUM,EVAL,INVOC,TEXT}", ppf__1flag(slot_type)))
 
     slot = 0
     dbg__print("ship_out", 3,
@@ -2749,8 +2750,9 @@ function blk_append(blknum, slot_type, value,
     if (blk_type(blknum) != BLK_AGG)
         panic(sprintf("(blk_append) Block %d has type %s, not AGG",
                       blknum, ppf__1flag(blk_type(blknum))))
-    if (slot_type != OBJ_BLKNUM && slot_type != OBJ_TEXT && slot_type != OBJ_INVOC)
-        panic(sprintf("(blk_append) Argument has bad type %s; should be OBJ_{BLKNUM,INVOC,TEXT}", ppf__1flag(slot_type)))
+    if (slot_type != OBJ_BLKNUM && slot_type != OBJ_TEXT &&
+        slot_type != OBJ_INVOC  && slot_type != OBJ_EVAL)
+        panic(sprintf("(blk_append) Argument has bad type %s; should be OBJ_{BLKNUM,EVAL,INVOC,TEXT}", ppf__1flag(slot_type)))
 
     slot = blktab[blknum, 0, "count"] + 1
     dbg__print("ship_out", 3,
@@ -2761,24 +2763,24 @@ function blk_append(blknum, slot_type, value,
 }
 
 
-function blk_dump_blktab(    f, b, blknum, seen, type)
+function blk_dump_blktab(    f, b, blknum, seen_blk, type)
 {
     for (b in blktab) {
         split(b, f, SUBSEP)
         blknum = f[BFN_BNUM] + 0
-        if (! (blknum in seen)) {
+        if (! (blknum in seen_blk)) {
             type = blk_type(blknum)
             dbg__print("xeq", 5, "(blk_dump_blktab) type=" type)
             dbg__print_block("xeq", -1, blknum, "(blk_dump_blktab)")
         }
-        seen[blknum]++
+        seen_blk[blknum]++
     }
     return "(blk_dump_blktab)"
 }
 
 
 # function blk_nicer_dump_blktab( \
-#                                x, k, blknum, seen, type,
+#                                x, k, blknum, seen_blk, type,
 #                                cnt, blks, i)
 # {
 #     cnt = 0
@@ -2788,38 +2790,40 @@ function blk_dump_blktab(    f, b, blknum, seen, type)
 #     }
 #     qsort(SORT_INTEGER, blks, 1, cnt)
 #
-#     # seen[DISCARD] = TRUE
-#     # seen[TERMINAL] = TRUE
+#     # seen_blk[DISCARD] = TRUE
+#     # seen_blk[TERMINAL] = TRUE
 #     for (i = 1; i <= cnt; i++) {
 #         blknum = blks[i]
-#         if ((! (blknum in seen))) {
+#         if ((! (blknum in seen_blk))) {
 #             print_stderr("================================")
-#             blk_nicer_print_block(blknum, seen, 0) # 0 <-- indent level
+#             blk_nicer_print_block(blknum, seen_blk, 0) # 0 <-- indent level
 #             # print_stderr("Lint(" blknum "):")
 #             # blk_lint(blknum)
 #         }
 #     }
 # }
-function blk_nicer_print_block(blknum, seen, indent,
+function blk_nicer_print_block(blknum, seen_blk, indent,
                                block_type)
 {
     block_type = blk_type(blknum)
-    if      (block_type == BLK_AGG)      blk_walk_AGG(OP_PRINT, blknum, seen, indent)
-    else if (block_type == BLK_CASE)     blk_walk_CASE(OP_PRINT, blknum, seen, indent)
-    else if (block_type == BLK_FILE)     blk_walk_FILE(OP_PRINT, blknum, seen, indent)
-    else if (block_type == BLK_FOR)      blk_walk_FOR(OP_PRINT, blknum, seen, indent)
-    else if (block_type == BLK_IF)       blk_walk_IF(OP_PRINT, blknum, seen, indent)
-    else if (block_type == BLK_LONGDEF)  blk_walk_LONGDEF(OP_PRINT, blknum, seen, indent)
-    else if (block_type == BLK_STRING)   blk_walk_STRING(OP_PRINT, blknum, seen, indent)
-    else if (block_type == BLK_TERMINAL) blk_walk_TERMINAL(OP_PRINT, blknum, seen, indent)
-    else if (block_type == BLK_USER)     blk_walk_USER(OP_PRINT, blknum, seen, indent)
-    else if (block_type == BLK_WHILE)    blk_walk_WHILE(OP_PRINT, blknum, seen, indent)
+    if      (block_type == BLK_AGG)       blk_walk_AGG(OP_PRINT, blknum, seen_blk, indent)
+    else if (block_type == BLK_CASE)      blk_walk_CASE(OP_PRINT, blknum, seen_blk, indent)
+    else if (block_type == BLK_FILE)      blk_walk_FILE(OP_PRINT, blknum, seen_blk, indent)
+    else if (block_type == BLK_FOR)       blk_walk_FOR(OP_PRINT, blknum, seen_blk, indent)
+    else if (block_type == BLK_IF)        blk_walk_IF(OP_PRINT, blknum, seen_blk, indent)
+    else if (block_type == BLK_INVOC)     blk_walk_INVOC(OP_PRINT, blknum, seen_blk, indent)
+    else if (block_type == BLK_LONGDEF)   blk_walk_LONGDEF(OP_PRINT, blknum, seen_blk, indent)
+    else if (block_type == BLK_SIGNATURE) blk_walk_SIGNATURE(OP_PRINT, blknu, seen_blk, indent)
+    else if (block_type == BLK_STRING)    blk_walk_STRING(OP_PRINT, blknum, seen_blk, indent)
+    else if (block_type == BLK_TERMINAL)  blk_walk_TERMINAL(OP_PRINT, blknum, seen_blk, indent)
+    else if (block_type == BLK_USER)      blk_walk_USER(OP_PRINT, blknum, seen_blk, indent)
+    else if (block_type == BLK_WHILE)     blk_walk_WHILE(OP_PRINT, blknum, seen_blk, indent)
     else
         panic(sprintf("(blk_nicer_print_block) Can't handle type '%s' for block %d",
                       ppf__1flag(block_type), blknum))
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
-function blk_walk_AGG(opcode, blknum, seen, indent,
+function blk_walk_AGG(opcode, blknum, seen_blk, indent,
                       i, count, slot_type, slot_value, offset)
 {
     count  = blktab[blknum, 0, "count"] + 0
@@ -2830,13 +2834,13 @@ function blk_walk_AGG(opcode, blknum, seen, indent,
                                 "AGG", count))
     for (i = 1; i <= count; i++)
         if (opcode == OP_PRINT)
-            blk_nicer_print__obj(blknum, i+offset, seen, indent)
+            blk_nicer_print__obj(blknum, i+offset, seen_blk, indent)
         else if (opcode == OP_DELETE) {
             slot_type  = blktab[blknum, i+offset, "slot_type"]
             slot_value = blktab[blknum, i+offset, "slot_value"]
             if (slot_type == OBJ_BLKNUM) {
                 #print_stderr("(blk_walk_AGG) Slot " i " is type AGG, recursively deleting block " slot_value)
-                blk_walk_delete(slot_value, seen) # slot_value is block #
+                blk_walk_delete(slot_value, seen_blk) # slot_value is block #
             }
             delete blktab[blknum, i+offset, "slot_type"]
             delete blktab[blknum, i+offset, "slot_value"]
@@ -2848,9 +2852,9 @@ function blk_walk_AGG(opcode, blknum, seen, indent,
         if ((blknum, 0, "dstblk") in blktab)
             delete blktab[blknum, 0, "dstblk"]
     }
-    seen[blknum] = TRUE
+    seen_blk[blknum] = TRUE
 }
-function blk_nicer_print__obj(blknum, slot, seen, indent,
+function blk_nicer_print__obj(blknum, slot, seen_blk, indent,
                               slot_type, value)
 {
     if (blk_type(blknum) != BLK_AGG)
@@ -2862,26 +2866,21 @@ function blk_nicer_print__obj(blknum, slot, seen, indent,
                          blknum, slot, slot_type, value))
 
     if (slot_type == OBJ_BLKNUM)
-        blk_nicer_print_block(value, seen, indent)
-    else if (slot_type == OBJ_TEXT)
-        print_debugfile(sprintf("%s%2d [TEXT] %s",
-                                spaces(3*indent), blknum, value))
-    else if (slot_type == OBJ_INVOC)
-        print_debugfile(sprintf("%s%2d [INVOC] %s",
-                                spaces(3*indent), blknum, value))
-
+        blk_nicer_print_block(value, seen_blk, indent)
+    else if (slot_type == OBJ_EVAL || slot_type == OBJ_TEXT || slot_type == OBJ_INVOC)
+        print_debugfile(sprintf("%s%2d [%s] %s",
+                                spaces(3*indent), blknum, ppf__1flag(slot_type), value))
     else
-        # ? no other types?
         panic(sprintf("(blk_nicer_print__obj) Block # %d slot %d type %s not handled",
                       blknum, slot, slot_type))
 }
-function blk_walk_CASE(opcode, blknum, seen, indent,
+function blk_walk_CASE(opcode, blknum, seen_blk, indent,
                        b, d, f, del_list)
 {
     if (opcode == OP_DELETE) {
         #print_stderr("OP_DELETE CASE begin:")
         #print_stderr("Deleting PREAMBLE block " blktab[blknum, 0, "preamble_block"])
-        blk_walk_delete(blktab[blknum, 0, "preamble_block"], seen)
+        blk_walk_delete(blktab[blknum, 0, "preamble_block"], seen_blk)
 
         # Delete the OF cases
         for (b in blktab) {
@@ -2893,16 +2892,16 @@ function blk_walk_CASE(opcode, blknum, seen, indent,
         for (d in del_list) {
             split(d, f, SUBSEP)
             #print_stderr("Deleting OF '" f[BFN_SLOT] "' block " blktab[f[BFN_BNUM], f[BFN_SLOT], "of_block"])
-            blk_walk_delete(blktab[f[BFN_BNUM], f[BFN_SLOT], "of_block"], seen)
+            blk_walk_delete(blktab[f[BFN_BNUM], f[BFN_SLOT], "of_block"], seen_blk)
             delete blktab[f[BFN_BNUM], f[BFN_SLOT], "of_block"]
         }
         if (blktab[blknum, 0, "seen_otherwise"]) {
             #print_stderr("Deleting OTHERWISE block " blktab[blknum, 0, "otherwise_block"])
-            blk_walk_delete(blktab[blknum, 0, "otherwise_block"], seen)
+            blk_walk_delete(blktab[blknum, 0, "otherwise_block"], seen_blk)
         }
         if (blktab[blknum, 0, "seen_ensure"]) {
             #print_stderr("Deleting ENSURE block " blktab[blknum, 0, "ensure_block"])
-            blk_walk_delete(blktab[blknum, 0, "ensure_block"], seen)
+            blk_walk_delete(blktab[blknum, 0, "ensure_block"], seen_blk)
         }
 
         delete blktab[blknum, 0, "casevar"]
@@ -2915,9 +2914,9 @@ function blk_walk_CASE(opcode, blknum, seen, indent,
         delete blktab[blknum, 0, "blkvalid"]
         #print_stderr("OP_DELETE CASE end : Deleted CASE block " blknum)
     }
-    seen[0 + blknum] = 1
+    seen_blk[0 + blknum] = 1
 }
-function blk_walk_FILE(opcode, blknum, seen, indent)
+function blk_walk_FILE(opcode, blknum, seen_blk, indent)
 {
     if (opcode == OP_PRINT)
         print_debugfile(sprintf("%2d (%1d ref) %s%s %s",
@@ -2937,14 +2936,14 @@ function blk_walk_FILE(opcode, blknum, seen, indent)
         delete blktab[blknum, 0, "oob_terminator"]
         delete blktab[blknum, 0, "open"]
     }
-    seen[blknum] = TRUE
+    seen_blk[blknum] = TRUE
 }
 
-function blk_walk_FOR(opcode, blknum, seen, indent)
+function blk_walk_FOR(opcode, blknum, seen_blk, indent)
 {
     if (opcode == OP_DELETE) {
         #print_stderr("walk_FOR: type=" blktab[blknum, 0, "loop_type"])
-        blk_walk_delete(blktab[blknum, 0, "body_block"], seen)
+        blk_walk_delete(blktab[blknum, 0, "body_block"], seen_blk)
 
         if (blktab[blknum, 0, "loop_type"] == "@__m2__::for") {
             delete blktab[blknum, 0, "loop_end"]
@@ -2963,27 +2962,27 @@ function blk_walk_FOR(opcode, blknum, seen, indent)
         delete blktab[blknum, 0, "loop_var"]
         delete blktab[blknum, 0, "blkvalid"]
     }
-    seen[0 + blknum] = 1
+    seen_blk[0 + blknum] = 1
 }
 
-function blk_walk_IF(opcode, blknum, seen, indent)
+function blk_walk_IF(opcode, blknum, seen_blk, indent)
 {
     if (opcode == OP_PRINT) {
         print_debugfile(sprintf("%s%2d %s %s%s",
                                 spaces(3*indent), blknum,
                                 "IF" , (blktab[blknum, 0, "inv_cond"] ? "! " : ""),
                                 blktab[blknum, 0, "condition"]))
-        blk_nicer_print_block(blktab[blknum, 0, "true_block"], seen, indent+1)
+        blk_nicer_print_block(blktab[blknum, 0, "true_block"], seen_blk, indent+1)
     } else if (opcode == OP_DELETE)
-        blk_walk_delete(blktab[blknum, 0, "true_block"], seen)
+        blk_walk_delete(blktab[blknum, 0, "true_block"], seen_blk)
     if (blktab[blknum, 0, "seen_else"]) {
         if (opcode == OP_PRINT) {
             print_debugfile(sprintf("%s%2d %s",
                                     spaces(3*indent), blknum,
                                     "ELSE"))
-            blk_nicer_print_block(blktab[blknum, 0, "false_block"], seen, indent+1)
+            blk_nicer_print_block(blktab[blknum, 0, "false_block"], seen_blk, indent+1)
         } else if (opcode == OP_DELETE)
-            blk_walk_delete(blktab[blknum, 0, "false_block"], seen)
+            blk_walk_delete(blktab[blknum, 0, "false_block"], seen_blk)
     }
     if (opcode == OP_PRINT) {
         print_debugfile(sprintf("%s%2d %s",
@@ -2998,21 +2997,35 @@ function blk_walk_IF(opcode, blknum, seen, indent)
         delete blktab[blknum, 0, "true_block"]
         delete blktab[blknum, 0, "blkvalid"]
     }
-    seen[0 + blknum] = 1
+    seen_blk[0 + blknum] = 1
 }
-function blk_walk_LONGDEF(opcode, blknum, seen, indent)
+function blk_walk_INVOC(opcode, blknum, seen_blk, indent)
+{
+    if (opcode == OP_PRINT) {
+        print_debugfile(sprintf("%s%2d %s",
+                                spaces(3*indent), blknum,
+                                "INVOC"))
+    } else if (opcode == OP_DELETE) {
+        print_stderr(sprintf("(blk_walk_INVOC) DELETE %s%2d %s",
+                                spaces(3*indent), blknum,
+                                "INVOC"))
+
+        #blk_walk_delete(blktab[blknum, 0, "true_block"], seen_blk)
+    }
+}
+function blk_walk_LONGDEF(opcode, blknum, seen_blk, indent)
 {
     if (opcode == OP_DELETE) {
-        blk_walk_delete(blktab[blknum, 0, "body_block"], seen)
+        blk_walk_delete(blktab[blknum, 0, "body_block"], seen_blk)
         delete blktab[blknum, 0, "body_block"]
         delete blktab[blknum, 0, "dstblk"]
         delete blktab[blknum, 0, "name"]
         delete blktab[blknum, 0, "ns"]
         delete blktab[blknum, 0, "blkvalid"]
     }
-    seen[0 + blknum] = 1
+    seen_blk[0 + blknum] = 1
 }
-function blk_walk_SIGNATURE(opcode, blknum, seen, indent,
+function blk_walk_SIGNATURE(opcode, blknum, seen_blk, indent,
                             nsig, i)
 {
     nsig = blktab[blknum, 0, "nsig"]
@@ -3033,16 +3046,16 @@ function blk_walk_SIGNATURE(opcode, blknum, seen, indent,
                                 spaces(3*indent), blknum,
                                 "SIGNATURE", nsig))
     }
-    seen[0 + blknum] = 1
+    seen_blk[0 + blknum] = 1
 }
-function blk_walk_STRING(opcode, blknum, seen, indent)
+function blk_walk_STRING(opcode, blknum, seen_blk, indent)
 {
     if (opcode == OP_DELETE) {
         delete blktab[blknum, 0, "oob_terminator"]
     }
-    seen[0 + blknum] = 1
+    seen_blk[0 + blknum] = 1
 }
-function blk_walk_TERMINAL(opcode, blknum, seen, indent)
+function blk_walk_TERMINAL(opcode, blknum, seen_blk, indent)
 {
     if (opcode == OP_PRINT) {
         print_debugfile(sprintf("%s%2d %s",
@@ -3051,14 +3064,14 @@ function blk_walk_TERMINAL(opcode, blknum, seen, indent)
     } else if (opcode == OP_DELETE) {
         delete blktab[blknum, 0, "dstblk"]
     }
-    seen[0 + blknum] = 1
+    seen_blk[0 + blknum] = 1
 }
-function blk_walk_USER(opcode, blknum, seen, indent,
+function blk_walk_USER(opcode, blknum, seen_blk, indent,
                        i)
 {
     if (opcode == OP_DELETE) {
         # print_stderr("(blk_walk_USER) Recursively deleting body_block " blktab[blknum, 0, "body_block"])
-        blk_walk_delete(blktab[blknum, 0, "body_block"], seen)
+        blk_walk_delete(blktab[blknum, 0, "body_block"], seen_blk)
 
         for (i = 1; i <= blktab[blknum, 0, "nparam"]; i++)
             delete blktab[blknum, i, "pname"]
@@ -3070,13 +3083,13 @@ function blk_walk_USER(opcode, blknum, seen, indent,
         delete blktab[blknum, 0, "blkvalid"]
         # print_stderr("(blk_walk_USER) DONE Deleted USER " blknum)
     }
-    seen[0 + blknum] = 1
+    seen_blk[0 + blknum] = 1
 }
-function blk_walk_WHILE(opcode, blknum, seen, indent)
+function blk_walk_WHILE(opcode, blknum, seen_blk, indent)
 {
     if (opcode == OP_DELETE) {
         #print_stderr("(blk_walk_WHILE) Recursively deleting body_block " blktab[blknum, 0, "body_block"])
-        blk_walk_delete(blktab[blknum, 0, "body_block"], seen)
+        blk_walk_delete(blktab[blknum, 0, "body_block"], seen_blk)
 
         delete blktab[blknum, 0, "body_block"]
         delete blktab[blknum, 0, "condition"]
@@ -3084,7 +3097,7 @@ function blk_walk_WHILE(opcode, blknum, seen, indent)
         delete blktab[blknum, 0, "inv_cond"]
         delete blktab[blknum, 0, "blkvalid"]
     }
-    seen[0 + blknum] = 1
+    seen_blk[0 + blknum] = 1
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -3270,6 +3283,8 @@ function ppf__agg(agg_block,
 
         if (slot_type == OBJ_BLKNUM)
             buf = buf ppf__block(value) TOK_NEWLINE
+        else if (slot_type == OBJ_EVAL)
+            buf = buf value TOK_NEWLINE
         else if (slot_type == OBJ_INVOC)
             buf = buf ppf__invoc(value) TOK_NEWLINE
         else if (slot_type == OBJ_TEXT)
@@ -9388,7 +9403,7 @@ function parse__else(                   if_block)
 
     # lower_level()           # trigger name/symbol purge
     # raise_level()
-    # 
+    #
     # # Create a new block for the False branch and make it current
     # false_block = blk_new(BLK_AGG)
     # blktab[if_block, 0, "false_block"] = false_block
@@ -11593,7 +11608,7 @@ function xeq_cmd__wrap(args)
 {
     dbg__print("parse", 5, sprintf("(xeq_cmd__wrap) START dstblk=%d, mode=%s, $0='%s'",
                                 DSTBLK(), ppf__1flag(ATMODE()), $0))
-    __wrap_text[++__wrap_cnt] = args["TEXT"]
+    blk_append(__wrap_block, OBJ_EVAL, args["TEXT"])
     dbg__print("parse", 5, sprintf("(xeq_cmd__wrap) END; text='%s'", args["TEXT"]))
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
@@ -11626,6 +11641,11 @@ function ship_out(obj_type, obj,
         dbg__print("ship_out", 5, sprintf("(ship_out) CALLING execute__block(%d)", obj))
         execute__block(obj)
         dbg__print("ship_out", 5, sprintf("(ship_out) RETURNED FROM execute__block(%d)", obj))
+
+    } else if (obj_type == OBJ_EVAL) {
+        dbg__print("ship_out", 3, sprintf("(ship_out) CALLING dostring(%s)", obj))
+        dostring(obj)
+        dbg__print("ship_out", 3, sprintf("(ship_out) RETURNED FROM dostring()"))
 
     } else if (obj_type == OBJ_INVOC) {
         dbg__print("ship_out", 3, sprintf("(ship_out) CALLING execute__invoc(%d)", obj))
@@ -14245,6 +14265,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     # Block types and labels
     BLK_AGG               = "a"; __label[BLK_AGG]               = "AGG"
       OBJ_BLKNUM          = "K"; __label[OBJ_BLKNUM]            = "OBJ_BLKNUM"
+      OBJ_EVAL            = "H"; __label[OBJ_EVAL]              = "OBJ_EVAL"
       OBJ_INVOC           = "Z"; __label[OBJ_INVOC]             = "OBJ_INVOC"
       OBJ_TEXT            = "T"; __label[OBJ_TEXT]              = "OBJ_TEXT"
     BLK_CASE              = "e"; __label[BLK_CASE]              = "CASE"
@@ -14354,7 +14375,6 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     split("", __btoken)
     __buffer              = EMPTY
     __curr_level          = ROOT_LEVEL
-    __wrap_cnt            = 0
 
     srand()                     # Seed random number generator
     stk_push(__ns_stack, M2_SYSNS)
@@ -14389,6 +14409,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
     __block_cnt = -1                   # blk_new() increments first,
     __terminal = blk_new(BLK_TERMINAL) # so __terminal == block 0
     stk_push(__parse_stack, __terminal)
+    __wrap_block = blk_new(BLK_AGG)    # holds @wrap text
 
     # Set up some symbols that depend on external programs
     if (SEC_LEVEL() < SEC_PARANOID) {
@@ -14848,7 +14869,11 @@ function load_init_files(    old_debug, old_trace)
         dofile(ENVIRON["M2RC"])
     else if (sys__in("__HOME__", NOKEY))
         dofile(sys__read("__HOME__", NOKEY)  ".m2rc")
-    dofile("./.m2rc")
+    if (! (sys__in(  "__HOME__", NOKEY) && sys__in(  "__CWD__", NOKEY) &&
+           sys__read("__HOME__", NOKEY) == sys__read("__CWD__", NOKEY)))
+        # If __HOME__ == __CWD__, don't read ./.m2rc because we presumably
+        # just read the same file.  Otherwise, try current directory:
+        dofile("./.m2rc")
 
     # Don't count init files in total line/file tally - it's better to
     # keep them in sync with the files from the command line.
@@ -15038,8 +15063,9 @@ function process_command_line_arguments(    nfile, arg, i, eq, name, val, file,
 BEGIN {
     initialize()
 
-    # In Awk, ARGC is never zero; no command line arguments is indicated
-    # by ARGC being equal to 1.  If so, process standard input.
+    # In Awk, ARGC is never zero.  This is because ARGV[0] always refers
+    # to the Awk executable being run.  "No command line arguments" is
+    # indicated by ARGC being equal to 1.  If so, process standard input.
     if (ARGC == 1) {
         load_init_files()
         sys__write("__EXIT__", dofile("-") ? EX_OK : EX_M2_ERROR)
@@ -15114,9 +15140,8 @@ function end_program(diverted_streams_final_disposition,
     }
 
     # Regardless of exit status, execute any wrapped text/commands
-    if (__wrap_cnt > 0)
-        for (i = 1; i <= __wrap_cnt; i++)
-            dostring(__wrap_text[i])
+    if (blktab[__wrap_block, 0, "count"] > 0)
+        execute__block(__wrap_block)
 
     run_hook("m2_exit")
 

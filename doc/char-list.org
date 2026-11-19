@@ -7,10 +7,10 @@
 | e | BLK_"CASE"           | E | PTYPE_"ENV_VAR"        | 4 | OP_"DELETE"             |
 | f | BLK_"FILE"           | F |                        | 5 | OP_"PRINT"              |
 | g | BLK_"SIGNATURE"      | G |                        | 6 |                         |
-| h | MODE_"HOOKS_ENABLED" | H |                        | 7 |                         |
+| h | MODE_"HOOKS_ENABLED" | H | "OBJ_EVAL"             | 7 |                         |
 | i | BLK_"IF"             | I | FLAG_"INTEGER"         | 8 |                         |
 | j | "SORT_NATURAL"       | J | PTYPE_"IDXABLE"        | 9 |                         |
-| k | PTYPE_"KEY"          | K | "obj_BLKNUM"           | ? | "RESERVED"              |
+| k | PTYPE_"KEY"          | K | "OBJ_BLKNUM"           | ? | "RESERVED"              |
 | l | PTYPE_"SCALAR"       | L | TYPE_"LIST"            | ! | FLAG_"IMMEDIATE"        |
 | m | FLAG_"FLOAT"         | M | PTYPE_"NAME"           | @ | MODE_"AT_PROCESS"       |
 | n | PTYPE_"NUMBER"       | N | PTYPE_NS "NAMESPACE"   | _ | TYPE_"INTERNAL"         |
@@ -19,11 +19,11 @@
 | q | BLK_"STRING"         | Q | TYPE_"SEQUENCE"        | > | MODE_"STREAMS_SHIP_OUT" |
 | r | MODE_"XEQ_RETURN"    | R | FLAG_"READONLY"        | ' | MODE_"AT_LITERAL"       |
 | s | MODE_"TEXT_STRING"   | S | TYPE_"SYMBOL"          | . | INIT_"DOTFILES"         |
-| t | BLK_"TERMINAL"       | T | "obj_TEXT"             | # | TYPE_"FUNCTION"         |
+| t | BLK_"TERMINAL"       | T | "OBJ_TEXT"             | # | TYPE_"FUNCTION"         |
 | u | BLK_"USER"           | U | TYPE_"USER"            | < | INIT_"ROT13"            |
 | v | MODE_"IO_CAPTURE"    | V | BLK_"INVOC"            | = | FLAG_"OPTIONAL"         |
 | w | "BLK_WHILE"          | W | FLAG_"WRITABLE"        | $ | RAN_"END_HOOK"          |
 | x | MODE_"XEQ_NORMAL"    | X | MODE_"STREAMS_DISCARD" | % | RAN_"EXIT_HOOK"         |
 | y | MODE_"IO_SILENT"     | Y | FLAG_"SYSTEM"          | + | "SORT_INTEGER"          |
-| z | BLK_"PARAMETER"      | Z | "obj_INVOC"            | - | "SORT_REV_INT"          |
+| z | BLK_"PARAMETER"      | Z | "OBJ_INVOC"            | - | "SORT_REV_INT"          |
 |   |                      |   |                        | & | TYPE_"COMMAND"          |

@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-11-19 20:17:01 cleyon>
+#  Time-stamp:  <2026-11-20 16:34:18 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -44,7 +44,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "6.3.1"
+    M2_VERSION = "6.3.2"
 
     # Specify a shell for m2 to use for running utility programs.
     # It is expected to be compatible with Bourne shell syntax:
@@ -149,7 +149,7 @@ BEGIN {
     PTYPE_ANY        = "*"; __label[PTYPE_ANY]      = "Any";       __base_type[PTYPE_ANY     ] = VALID_TYPES
     #
     PTYPE_GROUP      = "J"; __label[PTYPE_GROUP]    = "Group";     __base_type[PTYPE_GROUP   ] = TYPE_ARRAY    TYPE_LIST
-    PTYPE_SCALAR     = "l"; __label[PTYPE_SCALAR]   = "Scalar";    __base_type[PTYPE_SCALAR  ] = PTYPE_GROUP   TYPE_SYMBOL
+    PTYPE_SCALAR     = "c"; __label[PTYPE_SCALAR]   = "Scalar";    __base_type[PTYPE_SCALAR  ] = PTYPE_GROUP   TYPE_SYMBOL
     PTYPE_NUMBER     = "n"; __label[PTYPE_NUMBER]   = "Number";    __base_type[PTYPE_NUMBER  ] = PTYPE_SCALAR  TYPE_SEQUENCE
                             __label["0"]            = "RESERVED<0>"
                             __label["?"]            = "RESERVED<?>"
@@ -1587,7 +1587,7 @@ function read_lines_until(regexp, dstblk,
         }
 
         if (dstblk > 0)
-            blk_append(dstblk, OBJ_TEXT, $0)
+            blk_append(dstblk, OBJ_LITERAL, $0)
     }
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
@@ -2311,7 +2311,7 @@ function arr__fetch_info(info,
 }
 
 function lis__fetch_info(info, caller,
-                         type, ins, iname, ikey, ilevel, agg_block, count, val)
+                         type, ins, iname, ikey, ilevel, agg_block, count, val, slot_type)
 {
     if (caller == EMPTY)
         panic("(lis__fetch_info) Empty caller!")
@@ -2332,9 +2332,11 @@ function lis__fetch_info(info, caller,
             return EMPTY
 
     # Make sure slot holds text
-    if (blk_ll_slot_type(agg_block, ikey) != OBJ_TEXT)
-        panic(sprintf("(lis__fetch_info) Block # %d slot %d is not OBJ_TEXT", agg_block, ikey))
+    slot_type = blk_ll_slot_type(agg_block, ikey)
+    if (slot_type != OBJ_TEXT && slot_type != OBJ_LITERAL)
+        panic(sprintf("(lis__fetch_info) Block # %d slot %d is not OBJ_{TEXT,LITERAL}", agg_block, ikey))
     val = blk_ll_slot_value(agg_block, ikey)
+    info["allow_expan"] = (slot_type == OBJ_TEXT)
     return val
 }
 
@@ -2751,8 +2753,9 @@ function blk_append(blknum, slot_type, value,
         panic(sprintf("(blk_append) Block %d has type %s, not AGG",
                       blknum, ppf__1flag(blk_type(blknum))))
     if (slot_type != OBJ_BLKNUM && slot_type != OBJ_TEXT &&
-        slot_type != OBJ_INVOC  && slot_type != OBJ_EVAL)
-        panic(sprintf("(blk_append) Argument has bad type %s; should be OBJ_{BLKNUM,EVAL,INVOC,TEXT}", ppf__1flag(slot_type)))
+        slot_type != OBJ_INVOC  && slot_type != OBJ_EVAL &&
+        slot_type != OBJ_LITERAL)
+        panic(sprintf("(blk_append) Argument has bad type %s; should be OBJ_{BLKNUM,EVAL,INVOC,LITERAL,TEXT}", ppf__1flag(slot_type)))
 
     slot = blktab[blknum, 0, "count"] + 1
     dbg__print("ship_out", 3,
@@ -6895,6 +6898,7 @@ function sym_ll_write_ns(ns, name, key, level, val)
             __m2_config_flags = flag_set_clear(__m2_config_flags, EMPTY, MODE_HOOKS_ENABLED)
             if (sys__read("__DEBUG__", NOKEY) == FALSE)
                 dbg__all_lev_standard()
+            sys__write("__SYNC__", SYNC_LINE)
         }
     } else if (name == "__SEC_LEVEL__") {
         val = max(SEC_LEVEL(), val) # Don't allow __SEC_LEVEL__ to decrease
@@ -7081,8 +7085,9 @@ function _syminfo_fetch(syminfo,
         if (ikey < 1 || ikey > count)
             error(sprintf("(_syminfo_fetch) Out of bounds"))
         # Make sure slot holds text
-        if (blk_ll_slot_type(agg_block, ikey) != OBJ_TEXT)
-            panic(sprintf("(_syminfo_fetch) Block # %d slot %d is not OBJ_TEXT", agg_block, ikey))
+        if (blk_ll_slot_type(agg_block, ikey) != OBJ_TEXT &&
+            blk_ll_slot_type(agg_block, ikey) != OBJ_LITERAL)
+            panic(sprintf("(_syminfo_fetch) Block # %d slot %d is not OBJ_{TEXT,LITERAL}", agg_block, ikey))
         val = blk_ll_slot_value(agg_block, ikey)
     } else {
         # It's a normal symbol
@@ -8869,45 +8874,26 @@ function xeq_cmd__filedata(args,
     # S variant mutes file errors
     silent = first(args[0, "name"]) == "s"
     lis = args["LIST"]
-    filename = args["FILE"]
+    filename = rm_quotes(args["FILE"])
 
     level = info__create_from_text(lis, info)
-    ins   = info__get(info, "ns")
-    info__gate(OP_UPDATE, TYPE_LIST, info, ins, LEVEL(), ME(), TRUE)
+    if ((ins = info__get(info, "ns")) == EMPTY)
+        ins = info["ns"] = NS()
+    info__gate(OP_UPDATE, TYPE_LIST, info, ins, level, ME(), TRUE)
     lis__clear(ins, lis, level)
 
     agg_block = symtab[ins, lis, NOKEY, level, "agg_block"]
-
-    # key = NOKEY
-    # dbg__print("parse", 5, sprintf("(xeq_cmd__filedata) symtab[%s, '%s','%s',%d,'agg_block'] = %d",
-    #                              M2_NS, lis, key, level, agg_block))
-    # not if this isn't new: symtab[M2_NS, lis, key, level, "agg_block"] = agg_block
     blktab[agg_block, 0, "dstblk"] = agg_block
 
-    # create a new literal file parser
-    stk_push(__parse_stack, agg_block)
-    file_block = prep_file(filename)
-    trace(TRACE_BLOCKS, EMPTY, sprintf("[Block Update] %d => %s '%s'",
-                                       file_block, "FILE", filename))
-    blktab[file_block, 0, "atmode"] = MODE_AT_LITERAL
-    # Push file block manually because prep_file doesn't do that
-    dbg__print("parse", 7, sprintf("(xeq_cmd__filedata) Pushing file block %d (%s) onto source_stack", file_block, filename))
-    stk_push(__source_stack, file_block)
-
-    dbg__print("parse", 5, "(xeq_cmd__filedata) CALLING parse__file()")
-    rc = parse__file(NS())
-    dbg__print("parse", 5, "(xeq_cmd__filedata) RETURNED FROM parse__file()")
-    # parse__file pops the source stack
-    p = stk_pop(__parse_stack)
-    dbg__print("parse", 7, "(xeq_cmd__filedata) popped parse_stack => " p)
-    if (!rc) {
-        if (silent) return
-        error_text = ME() ": File '" filename "' does not exist"
-        if (strictp("file"))
-            error(error_text)
-        else
-            warn(error_text)
+    while (TRUE) {
+        getstat = getline line < filename
+        if (getstat == ERROR && !silent)
+            warn(ME() ": Error reading file '" filename "'")
+        if (getstat != OKAY)
+            break
+        blk_append(agg_block, OBJ_LITERAL, line)
     }
+    close(filename)
 
     dbg__print("xeq", 2, sprintf("(xeq_cmd__filedata) END"))
 }
@@ -11641,7 +11627,7 @@ function xeq_cmd__wrap(args)
 #
 #*****************************************************************************
 function ship_out(obj_type, obj,
-                  dstblk, name)
+                  dstblk, name, src_block, atmode)
 {
     dstblk = DSTBLK()
     dbg__print("ship_out", 3, sprintf("(ship_out) START dstblk=%d, obj_type=%s, obj='%s'",
@@ -11671,6 +11657,15 @@ function ship_out(obj_type, obj,
         dbg__print("ship_out", 3, sprintf("(ship_out) CALLING execute__invoc(%d)", obj))
         execute__invoc(obj)
         dbg__print("ship_out", 3, sprintf("(ship_out) RETURNED FROM execute__invoc(%d)", obj))
+
+    } else if (obj_type == OBJ_LITERAL) {
+        src_block = stk_top(__source_stack)
+        atmode = blktab[src_block, 0, "atmode"]
+        blktab[src_block, 0, "atmode"] = MODE_AT_LITERAL
+        dbg__print("ship_out", 5, sprintf("(ship_out) CALLING execute__text(obj)"))
+        execute__text(obj)
+        dbg__print("ship_out", 5, sprintf("(ship_out) RETURNED FROM execute__text(obj)"))
+        blktab[src_block, 0, "atmode"] = atmode
 
     } else if (obj_type == OBJ_TEXT) {
         dbg__print("ship_out", 5, sprintf("(ship_out) CALLING execute__text(obj)"))
@@ -12082,10 +12077,14 @@ function dosubs(s,
     dbg__print("dosubs", 5, sprintf("(dosubs) START s='%s'", s))
     inc_dec = pre_post = 0      # track ++ or -- on sequences
     macro["okay"] = FALSE       # Make sure Awk knows macro is an array
+    macro["allow_expan"] = TRUE
 
     L = EMPTY                   # Left of current pos  - ready for output
     R = s                       # Right of current pos - as yet unexamined
     while (TRUE) {
+        if (! macro["allow_expan"])
+            break
+
         # Check entire string for recursive evaluation:  @{...}
         if (index(R, TOK_AT_BRACE) > 0)
             R = expand_braces(R)
@@ -12567,6 +12566,8 @@ function macro_expand(macro,
         info__get(fninfo, "level") != NAME_NOT_FOUND) {
 
         macro_set_expansion(macro, grp__deref_info(fninfo, "@" M "@"))
+        if ("allow_expan" in fninfo)
+            macro["allow_expan"] = fninfo["allow_expan"]
 
     # Check fninfo for ARRAY or LIST
     } else if ( \
@@ -13654,7 +13655,8 @@ function exp_fn__join(args,
             # Inject the values
             for (i = 1; i <= size; i++) {
                 # Make sure slot holds text
-                if (blk_ll_slot_type(agg_block, i) != OBJ_TEXT)
+                if (blk_ll_slot_type(agg_block, i) != OBJ_TEXT &&
+                    blk_ll_slot_type(agg_block, i) != OBJ_LITERAL)
                     panic(sprintf("(exp_fn__join) Block # %d slot %d is not OBJ_TEXT", agg_block, i))
                 retval = retval  blk_ll_slot_value(agg_block, i)  fs
             }
@@ -14287,6 +14289,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
       OBJ_BLKNUM          = "K"; __label[OBJ_BLKNUM]            = "OBJ_BLKNUM"
       OBJ_EVAL            = "H"; __label[OBJ_EVAL]              = "OBJ_EVAL"
       OBJ_INVOC           = "Z"; __label[OBJ_INVOC]             = "OBJ_INVOC"
+      OBJ_LITERAL         = "l"; __label[OBJ_LITERAL]           = "OBJ_LITERAL"
       OBJ_TEXT            = "T"; __label[OBJ_TEXT]              = "OBJ_TEXT"
     BLK_CASE              = "e"; __label[BLK_CASE]              = "CASE"
     BLK_FILE              = "f"; __label[BLK_FILE]              = "FILE"

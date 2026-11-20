@@ -2,7 +2,7 @@
 |---+----------------------+---+------------------------+---+-------------------------|
 | a | BLK_"AGG"            | A | TYPE_"ARRAY"           | 0 | "RESERVED"              |
 | b | MODE_"XEQ_BREAK"     | B | FLAG_"BOOLEAN"         | 1 | OP_"CREATE"             |
-| c |                      | C |                        | 2 | OP_"READ"               |
+| c | PTYPE_"SCALAR"       | C |                        | 2 | OP_"READ"               |
 | d | BLK_"LONGDEF"        | D | FLAG_"DEFERRED"        | 3 | OP_"UPDATE"             |
 | e | BLK_"CASE"           | E | PTYPE_"ENV_VAR"        | 4 | OP_"DELETE"             |
 | f | BLK_"FILE"           | F |                        | 5 | OP_"PRINT"              |
@@ -11,7 +11,7 @@
 | i | BLK_"IF"             | I | FLAG_"INTEGER"         | 8 |                         |
 | j | "SORT_NATURAL"       | J | PTYPE_"IDXABLE"        | 9 |                         |
 | k | PTYPE_"KEY"          | K | "OBJ_BLKNUM"           | ? | "RESERVED"              |
-| l | PTYPE_"SCALAR"       | L | TYPE_"LIST"            | ! | FLAG_"IMMEDIATE"        |
+| l | "OBJ_LITERAL"        | L | TYPE_"LIST"            | ! | FLAG_"IMMEDIATE"        |
 | m | FLAG_"FLOAT"         | M | PTYPE_"NAME"           | @ | MODE_"AT_PROCESS"       |
 | n | PTYPE_"NUMBER"       | N | PTYPE_NS "NAMESPACE"   | _ | TYPE_"INTERNAL"         |
 | o | MODE_"XEQ_CONTINUE"  | O | BLK_"FOR"              | ~ | PTYPE_"UNDEF"           |

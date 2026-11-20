@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-11-19 12:05:05 cleyon>
+#  Time-stamp:  <2026-11-19 20:17:01 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -44,7 +44,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "6.3.0"
+    M2_VERSION = "6.3.1"
 
     # Specify a shell for m2 to use for running utility programs.
     # It is expected to be compatible with Bourne shell syntax:
@@ -7653,7 +7653,7 @@ function parse__case(                case_block, preamble_block, pstat)
     $2 = nam__qualify($2)
     blktab[case_block, 0, "casevar"]        = $2
     blktab[case_block, 0, "preamble_block"] = preamble_block
-    blktab[case_block, 0, "nof"]            = 0
+    blktab[case_block, 0, "seen_of"]        = FALSE
     blktab[case_block, 0, "seen_otherwise"] = FALSE
     blktab[case_block, 0, "seen_ensure"]    = FALSE
     blktab[case_block, 0, "dstblk"]         = preamble_block
@@ -7688,19 +7688,41 @@ function parse__of(                case_block, of_block, of_val, preamble_block)
     if (check_parse_stack(BLK_CASE) != ERR_OKAY)
         error("@of: Parse error: " ppf__msg())
     case_block = stk_top(__parse_stack)
+    if (blktab[case_block, 0, "seen_otherwise"] ||
+        blktab[case_block, 0, "seen_ensure"])
+        error("@of: Unavailable after @otherwise or @ensure")
 
-    lower_level()           # trigger name/symbol purge
-    raise_level()
+    do {
+        # If this is the first @of, check if there's no preamble (common)
+        # then re-use its agg block.
+        if (blktab[case_block, 0, "seen_of"] == FALSE) {
+            blktab[case_block, 0, "seen_of"] = TRUE
+            preamble_block = blktab[case_block, 0, "preamble_block"]
+            if (blktab[preamble_block, 0, "count"] == 0) {
+                of_block = preamble_block
+                # dstblk remains the same, value of preamble_block
+                blktab[case_block, 0, "preamble_block"] = 0
+                break
+            }
+        }
 
-    # If there's no preamble (common) then re-use its agg block
-    preamble_block = blktab[case_block, 0, "preamble_block"]
-    if (blktab[case_block, 0, "nof"]++ == 0 &&
-        blktab[preamble_block, 0, "count"] == 0) {
-        blktab[case_block, 0, "preamble_block"] = 0
-        of_block = preamble_block
-    } else
-        # Create a new block for the new Of branch and make it current
-        of_block = blk_new(BLK_AGG)
+        # We have seen at least one @of already since "seen_of" is True
+        # at this point in execution time.  Its value (of_block) must be
+        # the current dstblk.
+        of_block = blktab[case_block, 0, "dstblk"]
+
+        # See if it has code.  If not, this is another @of block that
+        # wants to piggy-back, so *don't* change the of_block - just create
+        # a new value.  But if there is code, then we want to start a new
+        # @of branch entirely so we need to create a new block.
+        if (blktab[of_block, 0, "count"] > 0) {
+            # Create a new block for the new Of branch and make it current.
+            of_block = blk_new(BLK_AGG)
+            blktab[case_block, 0, "dstblk"] = of_block
+            lower_level()           # trigger name/symbol purge
+            raise_level()
+        }
+    } while (FALSE)
 
     sub(/^@__m2__::of[ \t]+/, "")
     of_val = $0
@@ -7709,7 +7731,6 @@ function parse__of(                case_block, of_block, of_val, preamble_block)
                       VERBOSE() ? TOK_NEWLINE $0 : EMPTY))
 
     blktab[case_block, of_val, "of_block"] = of_block
-    blktab[case_block, 0, "dstblk"]  = of_block
 }
 
 
@@ -7729,10 +7750,9 @@ function parse__otherwise(                case_block, otherwise_block)
     if (check_parse_stack(BLK_CASE) != ERR_OKAY)
         error("@otherwise: Parse error: " ppf__msg())
     case_block = stk_top(__parse_stack)
-
-    # Check if already seen @otherwise
-    if (blktab[case_block, 0, "seen_otherwise"] == TRUE)
-        error("@otherwise: Cannot have more than one @otherwise")
+    if (blktab[case_block, 0, "seen_ensure"] ||
+        blktab[case_block, 0, "seen_otherwise"])
+        error("@otherwise: Unavailable after @otherwise or @ensure")
 
     lower_level()           # trigger name/symbol purge
     raise_level()
@@ -7765,7 +7785,7 @@ function parse__ensure(                case_block, ensure_block)
 
     # Check if already seen @ensure
     if (blktab[case_block, 0, "seen_ensure"] == TRUE)
-        error("@ensure: Cannot have more than one @ensure")
+        error("@ensure: Unavailable after @ensure")
 
     lower_level()           # trigger name/symbol purge
     raise_level()

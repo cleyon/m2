@@ -482,6 +482,10 @@ branch is found, execute the
 .Va PREAMBLE
 (if any) and the
 of\&-branch text and commands.
+A series of
+.Ic @of
+commands with no intervening code provides alternative values for a
+single branch.
 If no
 .Ic @of
 text matches, use text from
@@ -1216,10 +1220,15 @@ Command format:
 .Bd -unfilled -offset indent -compact
 .Ic @unless Ar EXPR
 .No "   ..."
-.Oo Ic @else Oc
-.No "   ..."
+.Oo Ic @elif Ar EXPR
+.No "   ..." Oc
+.Oo Ic @elif ... Oc ...
+.Oo Ic @else
+.No "   ..." Oc
 .Ic @endif
 .Ed
+See also
+.Ic @if .
 .It Ic @unshift No "" Bro Ar LIST Ns No :name! :repeat Ar ITEM Ns :string Brc
 Insert one or more
 .Va ITEM Ns No s

@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-11-20 16:34:18 cleyon>
+#  Time-stamp:  <2026-11-20 20:23:49 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -2705,8 +2705,9 @@ function blk_prepend(blknum, slot_type, value,
     if (blk_type(blknum) != BLK_AGG)
         panic(sprintf("(blk_prepend) Block %d has type %s, not AGG",
                       blknum, ppf__1flag(blk_type(blknum))))
-    if (slot_type != OBJ_BLKNUM && slot_type != OBJ_TEXT &&
-        slot_type != OBJ_INVOC  && slot_type != OBJ_EVAL)
+    if (slot_type != OBJ_BLKNUM  && slot_type != OBJ_TEXT &&
+        slot_type != OBJ_LITERAL && slot_type != OBJ_INVOC &&
+        slot_type != OBJ_EVAL)
         panic(sprintf("(blk_prepend) Argument has bad type %s; should be OBJ_{BLKNUM,EVAL,INVOC,TEXT}", ppf__1flag(slot_type)))
 
     slot = 0
@@ -2870,7 +2871,8 @@ function blk_nicer_print__obj(blknum, slot, seen_blk, indent,
 
     if (slot_type == OBJ_BLKNUM)
         blk_nicer_print_block(value, seen_blk, indent)
-    else if (slot_type == OBJ_EVAL || slot_type == OBJ_TEXT || slot_type == OBJ_INVOC)
+    else if (slot_type == OBJ_EVAL    || slot_type == OBJ_TEXT ||
+             slot_type == OBJ_LITERAL || slot_type == OBJ_INVOC)
         print_debugfile(sprintf("%s%2d [%s] %s",
                                 spaces(3*indent), blknum, ppf__1flag(slot_type), value))
     else
@@ -3290,7 +3292,7 @@ function ppf__agg(agg_block,
             buf = buf value TOK_NEWLINE
         else if (slot_type == OBJ_INVOC)
             buf = buf ppf__invoc(value) TOK_NEWLINE
-        else if (slot_type == OBJ_TEXT)
+        else if (slot_type == OBJ_TEXT || slot_type == OBJ_LITERAL)
             buf = buf value TOK_NEWLINE
         else
             panic(sprintf("(ppf__agg) Bad slot type '%s' (%s)", slot_type, ppf__1flag(slot_type)))
@@ -8707,7 +8709,7 @@ function xeq_cmd__esyscmd(args,
             warn(ME() ": Error reading file '" output_file "'")
         if (getstat != OKAY)
             break
-        blk_append(agg_block, OBJ_TEXT, line)
+        blk_append(agg_block, OBJ_LITERAL, line)
     }
     close(output_file)
     if ("rm" in PROG)
@@ -9306,7 +9308,7 @@ function xeq_cmd__glob(args,
         if (line == args["PATTERN"])
             break
         #print_stderr("Glob => " line)
-        blk_append(agg_block, OBJ_TEXT, line)
+        blk_append(agg_block, OBJ_LITERAL, line)
     }
     close(output_file)
     if ("rm" in PROG)
@@ -10963,7 +10965,7 @@ function xeq_cmd__shell(args,
             warn(ME() ": Error reading file '" output_file "'")
         if (getstat != OKAY)
             break
-        blk_append(agg_block, OBJ_TEXT, line)
+        blk_append(agg_block, OBJ_LITERAL, line)
     }
     close(output_file)
     if ("rm" in PROG) {
@@ -11692,7 +11694,7 @@ function ship_out_to_file(block, file,
     lim = blktab[block, 0, "count"]
     for (i = 1; i <= lim; i++) {
         slot_type = blk_ll_slot_type(block, i)
-        if (slot_type != OBJ_TEXT)
+        if (slot_type != OBJ_TEXT && slot_type != OBJ_LITERAL)
             panic(sprintf("(ship_out_to_file) Block %d slot %d has type %s, not TEXT",
                           block, i, ppf__1flag(slot_type)))
 
@@ -13657,7 +13659,7 @@ function exp_fn__join(args,
                 # Make sure slot holds text
                 if (blk_ll_slot_type(agg_block, i) != OBJ_TEXT &&
                     blk_ll_slot_type(agg_block, i) != OBJ_LITERAL)
-                    panic(sprintf("(exp_fn__join) Block # %d slot %d is not OBJ_TEXT", agg_block, i))
+                    panic(sprintf("(exp_fn__join) Block # %d slot %d is not OBJ_{TEXT,LITERAL}", agg_block, i))
                 retval = retval  blk_ll_slot_value(agg_block, i)  fs
             }
         } else {

@@ -1509,6 +1509,18 @@ in-line with other text, whereas
 and
 .Ic @case
 cannot.
+.It Ic @ifndef No "" Bro Ar SYM Ns :name! Ar TRUE_TEXT Ns :string! No :optional Ar FALSE_TEXT Ns No :string! Brc Ic @
+If
+.Va SYMBOL
+is
+.Em not
+defined, return
+.Va TRUE_TEXT ,
+else return
+.Va FALSE_TEXT .
+The
+.Bro Va FALSE_TEXT Brc
+clause is optional, and defaults to the empty string.
 .It Ic @ifx No "" Bro Ar EXPR Ns :string Ar TRUE_TEXT Ns :string! :optional Ar FALSE_TEXT Ns :string! Brc Ic @
 Evaluate
 .Va EXPR ;
@@ -1523,18 +1535,6 @@ The resulting text is again processed for macro substitutions.
 .Ic @ifx
 stands for
 .Dq IF eXpression .
-.It Ic @ifndef No "" Bro Ar SYM Ns :name! Ar TRUE_TEXT Ns :string! No :optional Ar FALSE_TEXT Ns No :string! Brc Ic @
-If
-.Va SYMBOL
-is
-.Em not
-defined, return
-.Va TRUE_TEXT ,
-else return
-.Va FALSE_TEXT .
-The
-.Bro Va FALSE_TEXT Brc
-clause is optional, and defaults to the empty string.
 .It Ic @index No "" Bro Ar SYM Ns :name! Ar STRING Ns :string Brc Ic @
 Return the position of
 .Va STRING

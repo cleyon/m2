@@ -558,11 +558,11 @@ block.
 .It Ic @data No "" Bro Ar LIST Ns No :name! Brc
 Store all lines until
 .Ic @enddata
-into list
+into
 .Va LIST .
 Any previously existing list entries are deleted.
 .Va LIST
-must declared with
+must have been declared with
 .Ic @list .
 See also
 .Ic @filedata .
@@ -853,11 +853,21 @@ Command format:
 .Ed
 .Em Note :
 Since
+.Va NAME
+is the list or array name, and
 .Va VAR
-is the list or array index,
-you must write
+is the index (key), you must write
 .Qq @ Ns Va NAME Ns No [@{ Ns Va VAR Ns No }]@
 to access the corresponding value.
+To ease your burdens,
+.Nm
+defines a special symbol
+.Va _ Ns Va NAME Ns No _ Ns No VAL Ns _
+.\" NOTE Single underscore delimiters (not a system symbol);
+.\"      resides in m2 namespace (not __m2__).
+during
+.Ic @foreach
+execution which contains this value.
 .It Ic @glob No "" Bro Ar LIST Ns No :name! Ar PATTERN Ns No :rest Brc
 Return a list of filenames matching shell glob
 .Va PATTERN .
@@ -1404,6 +1414,23 @@ Unix epoch time, the number of non-leap seconds which
 have passed since 00:00:00\ UTC on Thursday, 1\ January\ 1970.
 See section
 .Sx Times and Dates .
+.It Ic @esc_html No "" Bro Ar TEXT Ns :rest Brc Ic @
+Escape (transform) certain characters in
+.Va TEXT
+to make it safe(r) for output in an HTML context:
+.Bd -literal -offset indent -compact
+.TS
+tab(!);
+lw(0.5in) l.
+&!&amp;\"       gsub(/&/, "&amp;",  str)
+<!&lt;\"        gsub(/</, "\\&lt;",   str)
+>!&gt;\"        gsub(/>/, "\\&gt;",   str)
+\(dq!&quot;\"   gsub(/"/, "\\&quot;", str)
+\(aq!&#39;\"    gsub(/'/, "\\&#39;", str)
+\(ga!&#96;\"    gsub(/`/, "\\&#96;", str)
+\(eq!&#61;\"    gsub(/=/, "\\&#61;", str)
+.TE
+.Ed
 .It Ic @execpath No "" Bro Ar PROGRAM Ns No :rest Brc Ic @
 Return expanded path to
 .Va PROGRAM ,
@@ -1932,14 +1959,15 @@ Any removed element is discarded.
 .\" an ersatz Stack.  Sadly, this runs into the problem of how to
 .\" return values from *commands* -- actual values, not merely expanding
 .\" text into the output stream.  Additional work is needed here.
-.Bd -literal -offset indent-two
-@unshift                               @push
-   |     ...+---+---+-- // -+---+...     |
-   +----->  | 1 | 2 | ..... | n |  <-----+
-         ...+---+---+- // --+---+...
-              |               |
-              v               v
-            @shift          @pop
+.Bd -literal -offset indent
+@linsert                                    @lappend
+@unshift                                    @push
+  |    ....+---+---+--  //  -+---+---+....    |
+  \(oq----->  | 1 | 2 |  .....  |N-1| N |  <-----\(cq
+       ....+---+---+-  //  --+---+---+....
+             |                     |
+             v                     v
+           @shift                @pop
 .Ed
 .Pp
 These functions can be used on system symbols

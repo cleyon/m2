@@ -79,6 +79,7 @@ __m2__::epoch	Function<System>
 __m2__::error	Command<System>
 __m2__::errprint	Command<System>
 __m2__::esac	Command<System,Immediate>
+__m2__::esc_html	Function<System>
 __m2__::esyscmd	Command<System>
 __m2__::eval	Command<System>
 __m2__::execpath	Function<System>

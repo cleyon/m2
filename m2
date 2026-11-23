@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-11-20 20:23:49 cleyon>
+#  Time-stamp:  <2026-11-23 08:38:49 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -44,7 +44,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "6.3.2"
+    M2_VERSION = "6.3.3"
 
     # Specify a shell for m2 to use for running utility programs.
     # It is expected to be compatible with Bourne shell syntax:
@@ -915,6 +915,22 @@ function vincenty_distance(lat1, lon1, lat2, lon2,
     # +PI [-180 deg to +180 deg] need to be converted to 0 to +2PI
     # [0-360]; this can be done by (bearing+2*PI)%2*PI [bearing+360)%360]
     # where % is the modulo operator.
+}
+
+
+# HTML-escape the following characters:
+#    In:    &       <       >       "       '       `       =
+#   Out:    &amp;   &lt;    &gt;    &quot;  &#x27;  &#x60;  &#x3D;
+function html_escape(str)
+{
+    gsub(/&/, "&amp;",  str)
+    gsub(/</, "\\&lt;",   str)
+    gsub(/>/, "\\&gt;",   str)
+    gsub(/"/, "\\&quot;", str)
+    gsub(/'/, "\\&#39;", str)
+    gsub(/`/, "\\&#96;", str)
+    gsub(/=/, "\\&#61;", str)
+    return str
 }
 
 
@@ -9135,7 +9151,7 @@ function execute__foreach(for_block,
 
 function execute__foreach_array(for_block,
                                 loopvar, arrname, level, keys, s, f, k, body_block, new_level, want_break,
-                                ns)
+                                ns, valvar)
 {
     loopvar = blktab[for_block, 0, "loop_var"]
     arrname = blktab[for_block, 0, "array_name"]
@@ -9161,6 +9177,10 @@ function execute__foreach_array(for_block,
         new_level = raise_level()
         nam_ll_write_ns(NS(), loopvar, new_level, TYPE_SYMBOL FLAG_READONLY)
         sym_ll_write_ns(NS(), loopvar, NOKEY, new_level, k)
+        valvar = "_" arrname "_VAL_"
+        nam_ll_write_ns(NS(), valvar, new_level, TYPE_SYMBOL FLAG_READONLY)
+        sym_ll_write_ns(NS(), valvar, NOKEY, new_level, symtab[ns, arrname, k, level, "symval"])
+        #
         dbg__print("for", 5, sprintf("(execute__foreach_array) CALLING execute__block(%d)", body_block))
         execute__block(body_block)
         dbg__print("for", 5, sprintf("(execute__foreach_array) RETURNED FROM execute__block()"))
@@ -9182,7 +9202,7 @@ function execute__foreach_array(for_block,
 function execute__foreach_list(for_block,
                                arrname, level, loopvar, start, count, done,
                                counter, body_block, new_level, agg_block, want_break,
-                               ns)
+                               ns, valvar, slot_type, val)
 {
     loopvar = blktab[for_block, 0, "loop_var"]
     arrname = blktab[for_block, 0, "array_name"]
@@ -9199,12 +9219,23 @@ function execute__foreach_list(for_block,
     if (count > 0 ) {
         # Run the loop
         while (!done) {
+            if (counter > count)
+                panic(sprintf("(execute__foreach_list) Index '%s' out of bounds", counter))
             new_level = raise_level()
             nam_ll_write_ns(NS(), loopvar, new_level, TYPE_SYMBOL FLAG_INTEGER FLAG_READONLY)
             sym_ll_write_ns(NS(), loopvar, NOKEY, new_level, counter)
-            dbg__print("for", 5, sprintf("(execute__for) CALLING execute__block(%d)", body_block))
+            valvar = "_" arrname "_VAL_"
+            # Make sure slot holds text
+            slot_type = blk_ll_slot_type(agg_block, counter)
+            if (slot_type != OBJ_TEXT && slot_type != OBJ_LITERAL)
+                panic(sprintf("(execute__foreach_list) Block # %d slot %d is not OBJ_{TEXT,LITERAL}", agg_block, counter))
+            val = blk_ll_slot_value(agg_block, counter)
+            nam_ll_write_ns(NS(), valvar, new_level, TYPE_SYMBOL FLAG_READONLY)
+            sym_ll_write_ns(NS(), valvar, NOKEY, new_level, val)
+            #
+            dbg__print("for", 5, sprintf("(execute__foreach_list) CALLING execute__block(%d)", body_block))
             execute__block(body_block)
-            dbg__print("for", 5, sprintf("(execute__for) RETURNED FROM execute__block()"))
+            dbg__print("for", 5, sprintf("(execute__foreach_list) RETURNED FROM execute__block()"))
             lower_level()
             done = (counter += 1) > count
 
@@ -11843,7 +11874,7 @@ function _c3_factor2(    e)
 
 # number | varname | (expr) | function(...)
 function _c3_factor3(    e, fun, e2,
-                         info, level)
+                         info, level, paren)
 {
     e = substr(_c3__Sexpr, _c3__f)
 
@@ -11870,6 +11901,8 @@ function _c3_factor3(    e, fun, e2,
             e = _c3_calculate_function(fun, e)
         } else if (fun ~ /^defined\(/) {
             e2 = substr(e, 9, length(e)-9)
+            if ((paren = index(e2, TOK_RPAREN)) > 0)
+                e2 = substr(e2, 1, paren - 1)
             dbg__print("expr", 7, sprintf("defined(): e2='%s'", e2))
             _c3__f += length(e2)
             info__create_from_text(e2, info)
@@ -12150,6 +12183,7 @@ function dosubs(s,
 
 
 # macro["brace"]     = TRUE if "{" seen in urtext
+# macro["errtext"]   = Any error message if !okay
 # macro["expansion"] = macro expansion text
 # macro["fn"]        = function name, 1st param, as in urtext, maybe qualified
 # macro["okay"]      = TRUE/FALSE
@@ -12171,6 +12205,7 @@ function macro_initialize(macro, urtext,
                           fn, param, br, q)
 {
     macro["brace"]     = index(urtext, TOK_LBRACE) > 0
+    macro["errtext"]   = EMPTY
     macro["expansion"] = EMPTY
     macro["okay"]      = FALSE
     macro["urtext"]    = urtext
@@ -12303,6 +12338,10 @@ function macro_expand(macro,
 
     # Check if it's a known function (formerly SYMFUNC)
     level = info__create_from_text(fn, fninfo)
+    if (info__get(fninfo, "errorp")) {
+        macro["errtext"] = info__get(fninfo, "errtext")
+        return
+    }
     fntype = info__get(fninfo, "type")
     fncode = info__get(fninfo, "code")
     fnns   = info__get(fninfo, "ns")
@@ -12421,6 +12460,7 @@ function macro_expand(macro,
             : (fnname == "divnl")    ? exp_fn__divnl(fnargs) \
             : (fnname == "dow")      ? exp_fn__dow(fnargs) \
             : (fnname == "empty")    ? exp_fn__empty(fnargs) \
+            : (fnname == "esc_html") ? exp_fn__esc_html(fnargs) \
             : (fnname == "execpath" || fnname == "sexecpath") \
                                      ? exp_fn__execpath(fnargs) \
             : (fnname == "expr" || fnname == "sexpr") \
@@ -12565,7 +12605,7 @@ function macro_expand(macro,
         (fntype == TYPE_ARRAY || fntype == TYPE_LIST) &&
         info__get(fninfo, "nparts") == 2 &&
         length(info__get(fninfo, "key")) > 0 &&
-        info__get(fninfo, "level") != NAME_NOT_FOUND) {
+        level != NAME_NOT_FOUND) {
 
         macro_set_expansion(macro, grp__deref_info(fninfo, "@" M "@"))
         if ("allow_expan" in fninfo)
@@ -12577,7 +12617,7 @@ function macro_expand(macro,
         (fntype == TYPE_ARRAY || fntype == TYPE_LIST) &&
         info__get(fninfo, "nparts") == 1 &&
         length(info__get(fninfo, "key")) == 0 &&
-        info__get(fninfo, "level") != NAME_NOT_FOUND) {
+        level != NAME_NOT_FOUND) {
 
         macro_set_expansion(macro, grp__size(fninfo))
     }
@@ -13135,6 +13175,27 @@ function exp_fn__empty(args,
         error(sprintf("%s: Symbol '%s' not defined%s",
                       ME(), p, VERBOSE() ? TOK_NEWLINE $0 : EMPTY))
     return to_bool(info__get(syminfo, "value") == EMPTY)
+}
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+
+
+#*****************************************************************************
+#
+#       @  E S C  _  H T M L
+#
+#       { TEXT:rest }
+#
+#       - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+#
+#       esc_html : HTML escape
+#
+#*****************************************************************************
+# @esc_html TEXT@
+function exp_fn__esc_html(args,
+                          p, syminfo)
+{
+    return html_escape(args["TEXT"])
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
@@ -14613,6 +14674,7 @@ function initialize(    get_date_cmd, d, dateout, array, elem, i, date_ok,
         TYPE_COMMAND   "error"       "{ :optional TEXT:rest }"                               SUBSEP \
         TYPE_COMMAND   "errprint"    "{ :optional TEXT:rest }"                               SUBSEP \
         FLAG_IMMEDIATE "esac"        "{ :void }"                                             SUBSEP \
+        TYPE_FUNCTION  "esc_html"    "{ TEXT:rest }"                                         SUBSEP \
         TYPE_COMMAND   "esyscmd"     "{ CMDLINE:rest }"                                      SUBSEP \
         TYPE_COMMAND   "eval"        "{ TEXT:rest }"                                         SUBSEP \
         TYPE_FUNCTION  "execpath"    "{ PROGRAM:rest }"                                      SUBSEP \

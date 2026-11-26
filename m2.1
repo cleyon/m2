@@ -1396,7 +1396,7 @@ If
 is omitted, the current stream is assumed.
 If
 .Va STREAM
-is negative or zero, return 0.
+is negative or zero, return\ 0.
 .It Ic @dow No "" Bro :void | Ar MJD Ns No :integer | Ar YYYY Ns No :integer Ar MM Ns No :integer Ar DD Ns No :integer Brc Ic @
 Return the ISO day number corresponding to the date specified,
 where 1=Monday, 2=Tuesday, ..., 7=Sunday.
@@ -1575,7 +1575,7 @@ this is different from
 which is zero-based.
 If
 .Va STRING
-is not found, the returned value is 0.
+is not found, the returned value is\ 0.
 .It Ic @join No "" Bro Ar LIST Ns :name! :optional Ar FS Ns :string Brc Ic @
 Concatenate each element of
 .Va LIST
@@ -2012,27 +2012,35 @@ function evaluates mathematical expressions and
 inserts their results.
 .Ic @expr@
 supports the standard arithmetic operators:
-.Dl (\ \ )\ \ +\ \ \-\ \ *\ \ /\ \ %\ \ ^
+.Dl (\ \ )\ \ ^\ \ *\ \ /\ \ %\ \ +\ \ \-
 and the comparison operators:
 .Dl <\ \ <=\ \ ==\ \ !=\ \ >=\ \ >
-and return 0 or 1 as per Awk.
-Logical negation is available with
-.Ql \&! .
+which return\ 0 or\ 1 as per Awk.
+Logical negation is available with the
+.Ql \&!
+operator.
 No other boolean operators are valid.
 .Ql &&
 and
 .Ql ||
 are
 .Sy not supported !
-.Po
-However, see section
-.Sx Boolean Expressions .
-.Pc
+.Fn and
+and
+.Fn or
+are valid as functions in expressions; and
+see also section
+.Sx Boolean Expressions
+where
+.Ql &&
+and
+.Ql ||
+are available.
 .Pp
 .Ic @expr@
 supports the following functions:
 .Pp
-.Bl -tag -width defined(sym)____ -compact -offset indent
+.Bl -tag -width defined(sym)_____ -compact -offset indent
 .It Fn abs x
 Absolute value of
 .Va x ;
@@ -2041,6 +2049,10 @@ Absolute value of
 Arc-cosine of
 .Va x ;
 \-1 \*(Le x \*(Le 1
+.It Fn and e1 e2 ...
+Evaluate args until one of them yields zero, then return\ 0.
+If no arg is zero, return the last arg.
+If no args, return\ 1.
 .It Fn asin x
 Arc-sine of
 .Va x ;
@@ -2053,6 +2065,11 @@ Arctangent of
 Ceiling of
 .Va x ,
 smallest integer \*(Ge x; \(lcx\(rc
+.It Fn comb n r
+.Va r
+Combinations of
+.Va n
+objects; nCr = n!/(r!\(pc(n-r)!)
 .It Fn cos x
 Cosine of
 .Va x ,
@@ -2067,6 +2084,11 @@ Convert radians to degrees
 Exponential (anti-logarithm) of
 .Va x ;
 e^x
+.It Fn fact x
+Factorial of
+.Va x ,
+x\(pc(x\-1)\(pc(x\-2)...;
+x!
 .It Fn floor x
 Floor of
 .Va x ,
@@ -2112,6 +2134,14 @@ and
 Return 1 if
 .Va x
 is odd, 0 if even
+.It Fn or e1 e2 ...
+Evaluate args until one is non-zero, then return that value.
+If all args are zero, or if no args, return\ 0.
+.It Fn perm n r
+.Va r
+Permutations of
+.Va n
+objects; nPr = n!/(n-r)!
 .It Fn pow x y
 Raise
 .Va x
@@ -2126,6 +2156,13 @@ Random float; 0 \*(Le rand \*(Lt 1
 Random integer; 1 \*(Le randint \*(Le x
 .It Fn round x
 Normal rounding to nearest integer
+.It Fn select t e1 e2
+If
+.Va t
+\(!= 0 then return value of
+.Va e1 ,
+else
+.Va e2
 .It Fn sign x
 Signum of
 .Va x ;
@@ -2143,6 +2180,22 @@ Tangent of
 .Va x ,
 in radians
 .El
+.Pp
+The logical functions
+.Fn and
+and
+.Fn or
+will
+.Dq short-circuit
+and not evaluate parameters unnecessarily.
+Similarly, the
+.Fn select
+function will evaluate only one of
+.Va e1
+or
+.Va e2 ,
+depending on the value of
+.Va t .
 .Pp
 .Ic @expr@
 will automatically use symbols' and sequences' values in expressions.

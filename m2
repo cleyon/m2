@@ -5,7 +5,7 @@
 #*********************************************************** -*- mode: Awk -*-
 #
 #  File:        m2
-#  Time-stamp:  <2026-11-23 08:38:49 cleyon>
+#  Time-stamp:  <2026-11-25 20:03:05 cleyon>
 #  Author:      Christopher Leyon <cleyon@gmail.com>
 #  Created:     <2020-10-22 09:32:23 cleyon>
 #
@@ -44,7 +44,7 @@
 #*****************************************************************************
 
 BEGIN {
-    M2_VERSION = "6.3.3"
+    M2_VERSION = "6.3.4"
 
     # Specify a shell for m2 to use for running utility programs.
     # It is expected to be compatible with Bourne shell syntax:
@@ -11750,8 +11750,7 @@ function ship_out_to_file(block, file,
 #       are for internal use and should not be called by the user.
 #
 #*****************************************************************************
-function calc3_eval(s,
-                    e)
+function calc3_eval(s)
 {
     _c3__Sexpr = s
     gsub(/[ \t]+/, "", _c3__Sexpr)
@@ -11761,22 +11760,30 @@ function calc3_eval(s,
         return sys__read("__EXPR__", NOKEY)
 
     _c3__f = 1
-    e = _c3_expr()
+    return _c3_eval(TRUE)
+}
+
+
+function _c3_eval(evalp,
+                  e)
+{
+    # _c3__Sexpr set in calc3_eval()
+    e = _c3_expr(evalp)
     if (_c3__f <= length(_c3__Sexpr))
         error(sprintf("Math expression error at '%s'%s",
                       substr(_c3__Sexpr, _c3__f),
                       VERBOSE() ? TOK_NEWLINE $0 : EMPTY))
     else if (match(e, /^[-+]?(nan|inf)/))
         error(sprintf("Math expression error: '%s' returned '%s'%s",
-                      s, e, VERBOSE() ? TOK_NEWLINE $0 : EMPTY))
+                      _c3__Sexpr, e, VERBOSE() ? TOK_NEWLINE $0 : EMPTY))
     else
         return e
 }
 
 
 # rel | rel relop rel
-function _c3_expr(    var, e, op1, op2, m2,
-                      info)
+function _c3_expr(evalp,
+                  var, e, op1, op2, m2, info, e2, r)
 {
     if (match(substr(_c3__Sexpr, _c3__f), /^[A-Za-z#_][A-Za-z#_0-9]*=[^=]/)) {
         var = _c3_advance()
@@ -11787,36 +11794,44 @@ function _c3_expr(    var, e, op1, op2, m2,
         # But that's the start of the value -- I need to back up over it
         # to read the value properly.
         _c3__f--
-        return syminfo_store(info, _c3_expr()+0)
+        r = _c3_expr(evalp)
+        if (evalp)
+            syminfo_store(info, r+0)
+        return r
     }
 
-    e = _c3_rel()
+    r = e = _c3_rel(evalp)
     # Only one relational operator allowed: 1<2<3 is a syntax error
     if ((m2 = ((op2 = substr(_c3__Sexpr, _c3__f, 2)) ~ /<=|==|!=|>=/))  ||
               ((op1 = substr(_c3__Sexpr, _c3__f, 1)) ~ /<|>/)) {
         if (m2) {
             _c3__f += 2             # Use +0 to force numeric comparison
-            if (op2 == "<=") return e+0 <= _c3_rel()+0
-            if (op2 == "==") return e+0 == _c3_rel()+0
-            if (op2 == "!=") return e+0 != _c3_rel()+0
-            if (op2 == ">=") return e+0 >= _c3_rel()+0
+            e2 = _c3_rel(evalp)
+            if (op2 == "<=") r = e+0 <= e2+0
+            if (op2 == "==") r = e+0 == e2+0
+            if (op2 == "!=") r = e+0 != e2+0
+            if (op2 == ">=") r = e+0 >= e2+0
         } else {
             _c3__f += 1
-            if (op1 == "<")  return e+0 <  _c3_rel()+0
-            if (op1 == ">")  return e+0 >  _c3_rel()+0
+            e2 = _c3_rel(evalp)
+            if (op1 == "<")  r = e+0 <  e2+0
+            if (op1 == ">")  r = e+0 >  e2+0
         }
     }
-    return e
+    return r
 }
 
 
 # term | term [+-] term
-function _c3_rel(    e, op)
+function _c3_rel(evalp,
+                 e, e2, op)
 {
-    e = _c3_term()
+    e = _c3_term(evalp)
     while ((op = substr(_c3__Sexpr, _c3__f, 1)) ~ /[+-]/) {
         _c3__f++
-        e = op == "+" ? e + _c3_term() : e - _c3_term()
+        e2 = _c3_term(evalp)
+        if (evalp)
+            e = op == "+" ? e + e2 : e - e2
     }
     return e
 }
@@ -11828,20 +11843,23 @@ function _c3_rel(    e, op)
 # returned prematurely, even when another op of equal precedence was
 # encountered.  This results in "1*2*3" being rejected at the second `*'.
 # The correction is to continue the while loop instead of returning.
-function _c3_term(    e, op, f)
+function _c3_term(evalp,
+                  e, op, f)
 {
-    e = _c3_factor()
+    e = _c3_factor(evalp)
     while ((op = substr(_c3__Sexpr, _c3__f, 1)) ~ /[*\/%]/) {
         _c3__f++
-        f = _c3_factor()
-        if (op == "*")
-            e = e * f
-        else {
-            if (f == 0)         # Ugh
-                error(sprintf("%s: Division by zero%s",
-                              "@expr " _c3__Sexpr "@",
-                              VERBOSE() ? TOK_NEWLINE __ship_text : EMPTY))
-            e = (op == "/") ? e / f : e % f
+        f = _c3_factor(evalp)
+        if (evalp) {
+            if (op == "*")
+                e = e * f
+            else {
+                if (f == 0)         # Ugh
+                    error(sprintf("%s: Division by zero%s",
+                                  "@expr " _c3__Sexpr "@",
+                                  VERBOSE() ? TOK_NEWLINE __ship_text : EMPTY))
+                e = (op == "/") ? e / f : e % f
+            }
         }
     }
     return e
@@ -11849,32 +11867,43 @@ function _c3_term(    e, op, f)
 
 
 # factor2 | factor2 ^ factor
-function _c3_factor(    e)
+function _c3_factor(evalp,
+                    e, e2, r)
 {
-    e = _c3_factor2()
-    if (substr(_c3__Sexpr, _c3__f, 1) != "^") return e
-    _c3__f++
-    return e ^ _c3_factor()
+    r = e = _c3_factor2(evalp)
+    if (substr(_c3__Sexpr, _c3__f, 1) == "^") {
+        _c3__f++
+        e2 = _c3_factor(evalp)
+        if (evalp)
+            r = e ^ e2
+    }
+    return r
 }
 
 
 # [+-]?factor3 | !*factor2
-function _c3_factor2(    e)
+function _c3_factor2(evalp,
+                     e, e2, r)
 {
-    e = substr(_c3__Sexpr, _c3__f)
+    r = e = substr(_c3__Sexpr, _c3__f)
     if (e ~ /^[-+!]/) {      #unary operators [+-!]
         _c3__f++
-        if (e ~ /^\+/) return +_c3_factor3() # only one unary + allowed
-        if (e ~ /^-/)  return -_c3_factor3() # only one unary - allowed
-        if (e ~ /^!/)  return !(_c3_factor2()+0) # unary ! may repeat
+        e2 = _c3_factor3(evalp)
+        if (evalp) {
+            if (e ~ /^\+/) r = +e2 # only one unary + allowed
+            if (e ~ /^-/)  r = -e2 # only one unary - allowed
+            if (e ~ /^!/)  r = !(e2+0) # unary ! may repeat
+        }
+        return r
     }
-    return _c3_factor3()
+    return _c3_factor3(evalp)
 }
 
 
 # number | varname | (expr) | function(...)
-function _c3_factor3(    e, fun, e2,
-                         info, level, paren)
+function _c3_factor3(evalp,
+                     e, fun, e2, e3, info, level, paren, which,
+                     retval, still_evaluating)
 {
     e = substr(_c3__Sexpr, _c3__f)
 
@@ -11886,38 +11915,85 @@ function _c3_factor3(    e, fun, e2,
     # function"()", i.e., zero arguments
     if (match(e, /^([A-Za-z#_][A-Za-z#_0-9]+)?\(\)/)) {
         fun = _c3_advance()
-        if (fun ~ /^srand()/) return srand()
+        if (fun ~ /^and()/)   return TRUE
+        if (fun ~ /^or()/)    return FALSE
         if (fun ~ /^rand()/)  return rand()
-        error(sprintf("Unknown function '%s':@expr %s@",
-                      (last(fun) == "(") ? chop(fun) : fun, _c3__Sexpr))
+        if (fun ~ /^srand()/) return srand()
+        error(sprintf("@expr %s@: Unknown zero-arg math function '%s'",
+                      _c3__Sexpr, (last(fun) == "(") ? chop(fun) : fun))
     }
 
-    # (expr) | function(expr) | function(expr,expr)
+    # (expr) | function(expr) | function(expr,expr) | function(expr,expr,expr)f
     if (match(e, /^([A-Za-z#_][A-Za-z#_0-9]+)?\(/)) {
         fun = _c3_advance()
         # These are for *1 argument* numeric functions only, not strings/symbols
-        if (fun ~ /^(abs|acos|asin|ceil|cos|deg|exp|floor|int|lg|ln|log(10)?|odd|rad|randint|round|sign|sin|sqrt|srand|tan)?\(/) {
-            e = _c3_expr()
-            e = _c3_calculate_function(fun, e)
+        if (fun ~ /^(abs|acos|asin|ceil|cos|deg|exp|fact|floor|int|lg|ln|log(10)?|odd|rad|randint|round|sign|sin|sqrt|srand|tan)?\(/) {
+            e = _c3_expr(evalp)
+            if (evalp)
+                e = _c3_calculate_function(fun, e)
         } else if (fun ~ /^defined\(/) {
             e2 = substr(e, 9, length(e)-9)
             if ((paren = index(e2, TOK_RPAREN)) > 0)
                 e2 = substr(e2, 1, paren - 1)
             dbg__print("expr", 7, sprintf("defined(): e2='%s'", e2))
             _c3__f += length(e2)
-            info__create_from_text(e2, info)
-            e = info__get(info, "defined")
+            if (evalp) {
+                info__create_from_text(e2, info)
+                e = info__get(info, "defined")
+            }
         # These are two arg numeric functions
-        } else if (fun ~ /^(atan2|gcd|hypot|lcm|max|min|pow)\(/) {
-            e = _c3_expr()
+        } else if (fun ~ /^(atan2|comb|gcd|hypot|lcm|max|min|perm|pow)\(/) {
+            e = _c3_expr(evalp)
             if (substr(_c3__Sexpr, _c3__f, 1) != ",")
                 error(sprintf("Missing ',' at '%s'", substr(_c3__Sexpr, _c3__f)))
             _c3__f++
-            e2 = _c3_expr()
-            e = _c3_calculate_function2(fun, e, e2)
+            e2 = _c3_expr(evalp)
+            if (evalp)
+                e = _c3_calculate_function2(fun, e, e2)
+        # select(t,e1,e2) is a three arg function
+        } else if (fun ~ /^(select)\(/) {
+            e = _c3_expr(evalp) # cond
+            if (substr(_c3__Sexpr, _c3__f, 1) != ",")
+                error(sprintf("Missing ',' at '%s'", substr(_c3__Sexpr, _c3__f)))
+            _c3__f++
+
+            which = evalp ? (e ? 2 : 3) : 0
+            e2 = _c3_expr(evalp && which == 2)
+            if (substr(_c3__Sexpr, _c3__f, 1) != ",")
+                error(sprintf("Missing ',' at '%s'", substr(_c3__Sexpr, _c3__f)))
+            _c3__f++
+
+            e3 = _c3_expr(evalp && which == 3)
+            e = evalp ? (which == 2) ? e2 : e3 : UNKNOWN
+        } else if (fun ~ /^(and|or)\(/) {
+            # We have to look at every argument so advancement works
+            # properly.  Whether we evaluate them or not is a different
+            # story.  There must be at least one to start with because
+            # the zero-arg case is caught above.
+            still_evaluating = TRUE
+            do {
+                e = _c3_expr(evalp && still_evaluating)
+                if (evalp && still_evaluating) {
+                    if (fun == "and(" && e == 0 ||
+                        fun == "or("  && e != 0) {
+                        retval = e
+                        still_evaluating = FALSE
+                    }
+                }
+                if (substr(_c3__Sexpr, _c3__f, 1) == ")")
+                    break
+                if (substr(_c3__Sexpr, _c3__f, 1) == ",") {
+                    _c3__f++
+                    continue
+                }
+                error(sprintf("Missing ',' at '%s'", substr(_c3__Sexpr, _c3__f)))
+            } while (TRUE)
+            if (still_evaluating)
+                retval = e
+            e = retval
         } else
-            error(sprintf("Unknown function '%s':@expr %s@",
-                          (last(fun) == "(") ? chop(fun) : fun, _c3__Sexpr))
+            error(sprintf("@expr %s@: Unknown math function '%s'",
+                          _c3__Sexpr, (last(fun) == "(") ? chop(fun) : fun))
 
         if (substr(_c3__Sexpr, _c3__f++, 1) != ")")
             error(sprintf("Missing ')' at '%s'", substr(_c3__Sexpr, _c3__f)))
@@ -11927,6 +12003,8 @@ function _c3_factor3(    e, fun, e2,
     # predefined, symbol, or sequence name
     if (match(e, /^[A-Za-z#_][A-Za-z#_0-9]*/)) {
         e2 = _c3_advance()
+        if (! evalp)
+            return
         level = info__create_from_text(e2, info)
         # print_stderr("e2 => " e2)
         if      (e2 == "e")   return EULER
@@ -11968,6 +12046,9 @@ function _c3_calculate_function(fun, e,
     if (fun == "cos(")     { return cos(e) }
     if (fun == "deg(")     { return e * (360 / TAU) }
     if (fun == "exp(")     { return exp(e) }
+    if (fun == "fact(")    { if (e < 0)
+                                 error(sprintf("%s%g): Math expression error", fun, e))
+                             return mth__factorial(e) }
     if (fun == "floor(")   { c = int(e)
                              return e < c ? c-1 : c }
     if (fun == "int(")     { return int(e) }
@@ -11994,8 +12075,8 @@ function _c3_calculate_function(fun, e,
                              return sqrt(e) }
     if (fun == "srand(")   { return srand(e) }
     if (fun == "tan(")     { return mth__tan(e) }
-    error(sprintf("@expr: Unknown function '%s'",
-                  (last(fun) == "(") ? chop(fun) : fun))
+    error(sprintf("@expr %s@: Unknown one-arg math function '%s'",
+                  _c3__Sexpr, (last(fun) == "(") ? chop(fun) : fun))
 }
 
 
@@ -12004,6 +12085,7 @@ function _c3_calculate_function2(fun, e, e2,
                                  hmax, hmin, hr)
 {
     if (fun == "atan2(")   return atan2(e, e2)
+    if (fun == "comb(")    return mth__comb(int(e), int(e2))
     if (fun == "gcd(")     return mth__gcd(e, e2)
     if (fun == "hypot(")   { # Dangerous due to potentional overflow:
                              #    return sqrt(e^2 + e2^2)
@@ -12018,9 +12100,10 @@ function _c3_calculate_function2(fun, e, e2,
     if (fun == "lcm(")     return mth__lcm(e, e2)
     if (fun == "max(")     return e > e2 ? e : e2
     if (fun == "min(")     return e < e2 ? e : e2
+    if (fun == "perm(")    return mth__perm(int(e), int(e2))
     if (fun == "pow(")     return e ^ e2
-    error(sprintf("@expr: Unknown function '%s'",
-                  (last(fun) == "(") ? chop(fun) : fun))
+    error(sprintf("@expr %s@: Unknown two-arg math function '%s'",
+                  _c3__Sexpr, (last(fun) == "(") ? chop(fun) : fun))
 }
 
 
@@ -12031,19 +12114,34 @@ function _c3_advance(    tmp)
     return tmp
 }
 
+# Combinations: nCr
+function mth__comb(n, r,
+                   i, retval)
+{
+    if (r < 0 || r > n)
+        return 0
+    if (r > n - r)
+        r = n - r
+
+    retval = 1
+    for (i = 1; i <= r; i++)
+        retval = retval * (n - i + 1) / i
+    return retval
+}
+
 # convert degrees to radians
 function mth__deg2rad(e)
 {
     return e * DEG_RADIANS
 }
 
-# tangent
-function mth__tan(e,    c)
+function mth__factorial(n,
+                        i, retval)
 {
-    c = cos(e)
-    if (c == 0)
-        error(sprintf("tan(%g): Math expression error", e))
-    return sin(e) / c
+    n = int(n); retval = 1
+    for (i = 2; i <= n; i++)
+        retval *= i
+    return retval
 }
 
 # greatest common divisor
@@ -12058,6 +12156,29 @@ function mth__lcm(e, e2)
 {
     return (e == 0 || e2 == 0) ? 0 \
         : abs(e * e2 / mth__gcd(e, e2))
+}
+
+# Permutation: nPr
+function mth__perm(n, r,
+                   i, retval, factor)
+{
+    if (r < 0 || r > n)
+        return 0
+    retval = 1
+    for (i = 0; i < r; i++) {
+        factor = n - i
+        retval *= factor
+    }
+    return retval
+}
+
+# tangent
+function mth__tan(e,    c)
+{
+    c = cos(e)
+    if (c == 0)
+        error(sprintf("tan(%g): Math expression error", e))
+    return sin(e) / c
 }
 # = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 

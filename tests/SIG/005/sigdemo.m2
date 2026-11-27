@@ -1,12 +1,13 @@
-@newcmd sigdemo { ACTION LUCKY:int :repeat :opt items }
-I see @items@ objects to @ACTION@@ifx{items > 0}{:}{.}@
-@foreach this items
-@format{#%d = '%s'}{@{this}}{@{items[@{this}]}}@
-@next this
-Lucky number @LUCKY@
+@newcmd sigdemo { ACTION LUCKY:int :repeat :opt ITEMS }
+I see @ITEMS@ object@ifelse{@{ITEMS}}{1}{}{s}@ to @ACTION@@ifx{ITEMS > 0}{:}{.}@
+@foreach itm ITEMS
+@format{#%d = '%s'}{@{itm}}{@{_ITEMS_VAL_}}@
+@next itm
+Lucky number: @LUCKY@
 ---
 @endcmd
 @;
-@sigdemo{Contemplate the nothingness of}{7}
-@sigdemo{Beat}{42}{It}{The clock}{Your high score}
+@sigdemo{Contemplate the nothingness of}{42}
+@sigdemo{seek}{3}{The Holy Grail}
+@sigdemo{Beat}{7}{It}{The clock}{Your high score}
 @sigdemo{Whoops}{BAD INT}{@{expr 1/0}}{Not evaluated}
